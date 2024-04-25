@@ -8,16 +8,46 @@
 #if 1
 #define TRAMP_DEBUG(x...) (void)0
 #else
-#define TRAMP_DEBUG(x...) EFRM_NOTICE(x...)
+#define TRAMP_DEBUG(x...) EFRM_NOTICE(x)
 #endif
 
 void** efrm_syscall_table = NULL;
 EXPORT_SYMBOL(efrm_syscall_table);
 void *efrm_entry_SYSCALL_64_addr = NULL;
-EXPORT_SYMBOL(efrm_entry_SYSCALL_64_addr);
+syscall_fn_t efrm_x64_sys_call = NULL;
+EXPORT_SYMBOL(efrm_x64_sys_call);
+
+static void* find_entry_SYSCALL_64(void)
+{
+  unsigned long result = 0;
+
+  /* linux<4.2:
+   *   MSR_LSTAR points to system_call(); we are returning this address.
+   * 4.3<=linux<5.0:
+   *   MSR_LSTAR points to per-cpu SYSCALL64_entry_trampoline variable,
+   *   which is a wrapper for entry_SYSCALL_64_trampoline(),
+   *   which is a wrapper for entry_SYSCALL_64_stage2(),
+   *   which is a wrapper for entry_SYSCALL_64().
+   *   We need the entry_SYSCALL_64() address to parse the content of this
+   *   function.
+   * 5.1<=linux:
+   *   MSR_LSTAR points to entry_SYSCALL_64().
+   */
+#ifdef EFRM_HAVE_NEW_KALLSYMS
+  void *ret = efrm_find_ksym("entry_SYSCALL_64");
+  if( ret != NULL )
+    return ret;
+#endif
+
+  /* This won't work for future CPUs that support FRED. Currently none are known
+   * to exist, and upstream kernel patch have only been run on simulators.
+   */
+  rdmsrl(MSR_LSTAR, result);
+  return (void*)result;
+}
 
 
-#ifdef CONFIG_RETPOLINE
+#if defined(CONFIG_RETPOLINE) || defined(CONFIG_MITIGATION_RETPOLINE)
 /*
  * Test whether p points to something like
  *                            mov    0x0(,%rNN,8),%rax
@@ -85,7 +115,7 @@ static bool is_callq_indirect_8(const unsigned char *p)
 {
   return p[0] == 0xff && p[1] == 0x14 && (p[2] & 0xc7) == 0xc5;
 }
-#endif /* CONFIG_RETPOLINE */
+#endif /* CONFIG_RETPOLINE || CONFIG_MITIGATION_RETPOLINE */
 
 /*
  * Test whether p points to something like
@@ -108,15 +138,49 @@ static bool is_movq_to_rdi(const unsigned char *p)
   return (p[0] & 0xf9) == 0x48 && p[1] == 0x89 && (p[2] & 0xc7) == 0xc7;
 }
 
-
-static unsigned char*
-find_syscall_table_from_do_syscall_64(unsigned char *my_do_syscall_64)
+/*
+ * Test whether p points to something like
+ *                  mov    %rNN,%esi
+ * On Debian12 linux-6.1.0-20 and Ubuntu22.04 linux-5.15.156 it was seen as
+ *    89 c6         mov    %eax,%esi
+ * On Ubuntu23.10 6.9.0-rc5 it was seen as
+ *    44 89 ee      mov    %r13d,%esi
+ * We can ignore REX.r prefix since it only affects the source operand.
+ * This gives us:
+ *    89 ee      mov    %r13d,%esi
+ *
+ * We assume:
+ *    89         c6
+ * 1000 1001  1100 0110
+ * xxxx xxxx  xx!! !xxx
+ * (x means must-match and ! means don't-care)
+ */
+static bool is_movl_to_esi(const unsigned char *p)
 {
-  unsigned char *p = my_do_syscall_64;
-  unsigned char *pend;
-  unsigned long result;
+  return p[0] == 0x89 && (p[1] & 0xc6) == 0xc6;
+}
 
-  TRAMP_DEBUG("try do_syscall_64=%px", p);
+/*
+ * Test whether p points to something like
+ *                  and    %rNN,%esi
+ * On Debian12 linux-6.1.0-20 and Ubuntu22.04 linux-5.15.156 it was seen as
+ *    21 d6         and    %edx,%esi
+ * On Ubuntu23.10 6.9.0-rc5 it was seen as
+ *    21 de         and    %ebx,%esi
+ *
+ * We assume:
+ *    21         c6
+ * 0010 0001  1100 0110
+ * xxxx xxxx  xx!! !xxx
+ * (x means must-match and ! means don't-care)
+ */
+static bool is_andl_to_esi(const unsigned char *p)
+{
+  return p[0] == 0x21 && (p[1] & 0xc6) == 0xc6;
+}
+
+static void *is_syscall_table(const unsigned char *p)
+{
   /* For linux>=4.6 do_syscall_64() resides in
    * linux/arch/x86/entry/common.c:
    * regs->ax = sys_call_table[nr](regs);
@@ -134,8 +198,80 @@ find_syscall_table_from_do_syscall_64(unsigned char *my_do_syscall_64)
    *    48 89 ef             	mov    %rbp,%rdi
    *    ff 14 c5 XX XX XX XX 	callq  *0x0(,%rax,8)
    */
+  unsigned long result = 0;
+#if defined(CONFIG_RETPOLINE) || defined(CONFIG_MITIGATION_RETPOLINE)
+  if( is_movq_indirect_8(p) ) {
+    if( (is_movq_to_rdi(p + 8) && is_callq_indirect_reg(p + 11)) ||
+        (is_movq_to_rdi(p-3) && is_callq_indirect_reg(p + 8)) ) {
+      s32 addr = p[4] | (p[5] << 8) | (p[6] << 16) | (p[7] << 24);
+      result = (long)addr;
+      TRAMP_DEBUG("sys_call_table=%lx", result);
+      return (void*)result;
+    }
+  }
+#else
+  if( is_callq_indirect_8(p) ) {
+    if( is_movq_to_rdi(p-3) ) {
+      s32 addr = p[3] | (p[4] << 8) | (p[5] << 16) | (p[6] << 24);
+      result = (long)addr;
+      TRAMP_DEBUG("sys_call_table=%lx", result);
+      return (void*)result;
+    }
+  }
+#endif
+  return NULL;
+}
+
+static void *is_syscall_func(unsigned char *p)
+{
+  /* For linux>=4.6 do_syscall_64() resides in
+   * linux/arch/x86/entry/common.c:
+   * regs->ax = x64_sys_call(regs, unr);
+   * Debian linux-6.1.0-20 (based on mainline kernel 6.1.85) has the following:
+   *    89 c6                   mov    %eax,%esi
+   *    48 89 df                mov    %rbx,%rdi
+   *    21 d6                   and    %edx,%esi
+   *    e8 YY YY YY YY          call   x64_sys_call
+   *
+   * Ubuntu 22.04 5.15.156 has the following:
+   *    89 c6                   mov    %eax,%esi
+   *    4c 89 e7                mov    %r12,%rdi
+   *    21 d6                   and    %edx,%esi
+   *    e8 YY YY YY YY          call   x64_sys_call
+   *
+   * Ubuntu 23.10 6.9.0-rc5 has the following:
+   *    44 89 ee                mov    %r13d,%esi
+   *    4c 89 e7                mov    %r12,%rdi
+   *    21 de                   and    %ebx,%esi
+   *    e8 YY YY YY YY          call   x64_sys_call
+   *
+   * Note: We can essentially treat the first mov instruction as a two byte
+   * instruction (ignoring the REX prefix)
+   */
+
+  s32 offset;
+  if( *p == 0xe8 ) {
+    if(
+        is_movl_to_esi(p-7) &&              /* mov %rXX,%esi */
+        is_movq_to_rdi(p-5) &&              /* mov %rXX,%rdi */
+        is_andl_to_esi(p-2)                 /* and %rXX,%esi */
+      ) {
+      offset = p[1] | (p[2] << 8) | (p[3] << 16) | (p[4] << 24);
+      TRAMP_DEBUG("sys_call_func=%lx", (long unsigned int)(p + 5) + offset);
+      return (p + 5) + offset;
+    }
+  }
+  return NULL;
+}
+
+
+static bool find_syscall_from_do_syscall_64(unsigned char *my_do_syscall_64)
+{
+  unsigned char *p = my_do_syscall_64;
+  unsigned char *pend;
+
+  TRAMP_DEBUG("try do_syscall_64=%px", p);
   p += 0x20; /* skip the first part of do_syscall_64() */
-  result = 0;
   pend = p + 1024 - 12;
 #if 0
   printk("%px: %02x %02x %02x %02x %02x %02x %02x %02x %02x\n"
@@ -158,33 +294,26 @@ find_syscall_table_from_do_syscall_64(unsigned char *my_do_syscall_64)
 #endif
 
   while (p < pend) {
-#ifdef CONFIG_RETPOLINE
-    if( is_movq_indirect_8(p) ) {
-      if( (is_movq_to_rdi(p + 8) && is_callq_indirect_reg(p + 11)) ||
-          (is_movq_to_rdi(p-3) && is_callq_indirect_reg(p + 8)) ) {
-        s32 addr = p[4] | (p[5] << 8) | (p[6] << 16) | (p[7] << 24);
-        result = (long)addr;
-        TRAMP_DEBUG("sys_call_table=%lx", result);
-        return (void*)result;
-      }
+    void *syscall_table, *syscall_func;
+    if( (syscall_table = is_syscall_table(p)) != NULL ) {
+      efrm_syscall_table = syscall_table;
+      return true;
+    } else if( (syscall_func = is_syscall_func(p)) != NULL) {
+      efrm_x64_sys_call = syscall_func;
+      return true;
     }
-#else
-    if( is_callq_indirect_8(p) ) {
-      if( is_movq_to_rdi(p-3) ) {
-        s32 addr = p[3] | (p[4] << 8) | (p[5] << 16) | (p[6] << 24);
-        result = (long)addr;
-        return (void*)result;
-      }
-    }
-#endif
     p++;
   }
 
   /* This pointer does not look like do_syscall_64 */
-  return NULL;
+  return false;
 }
 
-void** find_syscall_table(void)
+/* Finds either the syscall table or, for new linux versions, a function calling
+ * the right syscall implementation.
+ * Returns true if either the table or function were found and updates the
+ * corresponding global variable, false if neither were found. */
+static bool find_syscall(void)
 {
   unsigned char *p = NULL;
   unsigned long result;
@@ -192,20 +321,26 @@ void** find_syscall_table(void)
 
   /* First see if it is in kallsyms */
 #ifdef EFRM_HAVE_NEW_KALLSYMS
+  p = efrm_find_ksym("x64_sys_call");
+  if( p != NULL ) {
+    TRAMP_DEBUG("syscall function ksym at %px", (unsigned long*)p);
+    efrm_x64_sys_call = (syscall_fn_t)p;
+    return true;
+  }
   /* It works with CONFIG_KALLSYMS_ALL=y only. */
   p = efrm_find_ksym("sys_call_table");
-#endif
   if( p != NULL ) {
     TRAMP_DEBUG("syscall table ksym at %px", (unsigned long*)p);
-    return (void**)p;
+    efrm_syscall_table = (void**)p;
+    return true;
   }
+#endif
 
   /* If kallsyms lookup failed, fall back to looking at some assembly
    * code that we know references the syscall table.
    */
-  if( efrm_entry_SYSCALL_64_addr == NULL )
-    return NULL;
-  p = efrm_entry_SYSCALL_64_addr;
+  if( (p = find_entry_SYSCALL_64()) == NULL )
+    return false;
 
   TRAMP_DEBUG("entry_SYSCALL_64=%px", p);
   /* linux>=4.17 has following layout:
@@ -229,6 +364,7 @@ void** find_syscall_table(void)
    * movslq	%eax, %rsi
    *    48 63 f0
    * linux>=5.18.14: "clobbers %rax" with IBRS in the middle
+   * linux>=6.9(+backports): CLEAR_BRANCH_HISTORY
    * call	do_syscall_64
    *    e8 XX XX XX XX
    *
@@ -242,6 +378,11 @@ void** find_syscall_table(void)
    * this.  However it is hard to find a better solution, because these
    * 2 macros depends on the kernel config option, and then the asm code is
    * hot-patched at load time depending on CPU properties.
+   *
+   * CLEAR_BRANCH_HISTORY: On CPUs that don't have hardware support for clearing
+   * the branch history this will call into a function (clear_bhp_loop). When
+   * testing on Debian12 6.1.0-20 this didn't affect the ability to find the
+   * syscall function, it was just an extra point to test before continuing.
    */
   p += 0x40; /* skip the first part of entry_SYSCALL_64() */
   result = 0;
@@ -259,61 +400,38 @@ void** find_syscall_table(void)
          (p[2] == 0xe7 && p[4] == 0x63 && p[5] == 0xf0)) ) {
       /* Skip IBRS: search for the nearest "call", 0xe8. */
       unsigned char *p1 = p + 6;
-      unsigned char *ret;
+      bool ret;
       do {
         while( *p1 != 0xe8 )
           p1++;
         result = (unsigned long)p1 + 5;
         result += p1[1] | (p1[2] << 8) | (p1[3] << 16) | (p1[4] << 24);
 
-        ret = find_syscall_table_from_do_syscall_64((void*)result);
-        if( ret != NULL )
-          return (void**)ret;
+        ret = find_syscall_from_do_syscall_64((void*)result);
+        if( ret )
+          return true;
         p1 += 5; /* skip this e8 XX XX XX XX instruction */
       } while( p1 < pend );
     }
     p++;
   }
 
-  TRAMP_DEBUG("didn't find syscall table address");
-  return NULL;
+  TRAMP_DEBUG("didn't find syscall table address%c",'!');
+  return false;
 }
 
-
-static void* find_entry_SYSCALL_64(void)
+/* Used as a backup when we don't have x64_sys_call() */
+long efrm_syscall_table_call(const struct pt_regs *regs, unsigned int nr)
 {
-  unsigned long result = 0;
+  long (*syscall_fn)(const struct pt_regs *regs) = efrm_syscall_table[nr];
+  return syscall_fn(regs);
+};
+EXPORT_SYMBOL(efrm_syscall_table_call);
 
-  /* linux<4.2:
-   *   MSR_LSTAR points to system_call(); we are returning this address.
-   * 4.3<=linux<5.0:
-   *   MSR_LSTAR points to per-cpu SYSCALL64_entry_trampoline variable,
-   *   which is a wrapper for entry_SYSCALL_64_trampoline(),
-   *   which is a wrapper for entry_SYSCALL_64_stage2(),
-   *   which is a wrapper for entry_SYSCALL_64().
-   *   We need the entry_SYSCALL_64() address to parse the content of this
-   *   function.
-   * 5.1<=linux:
-   *   MSR_LSTAR points to entry_SYSCALL_64().
-   */
-#ifdef EFRM_HAVE_NEW_KALLSYMS
-  void *ret = efrm_find_ksym("entry_SYSCALL_64");
-  if( ret != NULL )
-    return ret;
-#endif
-
-  rdmsrl(MSR_LSTAR, result);
-  return (void*)result;
-}
-
-
+/* The syscall table isn't as important as it once was due to the new trampoline
+ * implementation, but it is still needed in a few locations (specifically epoll
+ * and bpf) */
 int efrm_syscall_ctor(void)
 {
-  efrm_entry_SYSCALL_64_addr = find_entry_SYSCALL_64();
-  if( efrm_entry_SYSCALL_64_addr == NULL )
-    return -ENOENT;
-  efrm_syscall_table = find_syscall_table();
-  if( efrm_syscall_table == NULL )
-    return -ENOENT;
-  return 0;
+  return find_syscall() ? 0 : -ENOENT;
 }

@@ -624,7 +624,7 @@ static int oo_epoll1_setup_shared(struct oo_epoll1_private* priv)
   return 0;
 
 fail2:
-  efab_linux_sys_close(priv->sh->epfd);
+  ci_close_fd(priv->sh->epfd);
 fail1:
   priv->sh = NULL;
   __free_page(priv->page);
