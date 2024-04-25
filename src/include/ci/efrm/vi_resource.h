@@ -206,6 +206,12 @@ extern int efrm_vi_is_hw_rx_loopback_supported(struct efrm_vi *virs);
  */
 extern int efrm_vi_is_hw_drop_filter_supported(struct efrm_vi *virs);
 
+
+/**
+ * Return the number of queue entries or a negative number on failure.
+ */
+extern int efrm_vi_n_q_entries(int size_rq, unsigned sizes);
+
 /**
  * Returns information about the size of a DMA or event queue.
  *

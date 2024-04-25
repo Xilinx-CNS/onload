@@ -649,7 +649,7 @@ static int efrm_vi_q_bytes(struct efrm_vi *virs, enum efhw_q_type q_type,
 }
 
 
-static int choose_size(int size_rq, unsigned sizes)
+int efrm_vi_n_q_entries(int size_rq, unsigned sizes)
 {
 	int size;
 
@@ -663,6 +663,7 @@ static int choose_size(int size_rq, unsigned sizes)
 		else if (size == 1 << 30)
 			return -1;
 }
+EXPORT_SYMBOL(efrm_vi_n_q_entries);
 
 
 /*************************************************************************/
@@ -1780,7 +1781,7 @@ int  efrm_vi_q_get_size(struct efrm_vi *virs, enum efhw_q_type q_type,
 {
 	struct efhw_nic *nic = virs->rs.rs_client->nic;
 
-	n_q_entries = choose_size(n_q_entries, nic->q_sizes[q_type]);
+	n_q_entries = efrm_vi_n_q_entries(n_q_entries, nic->q_sizes[q_type]);
 	if (n_q_entries <= 0)
 		return -EINVAL;
 
@@ -1831,7 +1832,7 @@ efrm_vi_q_init_common(struct efrm_vi *virs, enum efhw_q_type q_type,
 		return -EINVAL;
 	}
 
-	if (n_q_entries != choose_size(n_q_entries, nic->q_sizes[q_type]))
+	if (n_q_entries != efrm_vi_n_q_entries(n_q_entries, nic->q_sizes[q_type]))
 		return -EINVAL;
 	efrm_vi_q_get_size(virs, q_type, n_q_entries, &qsize);
 
