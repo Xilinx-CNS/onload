@@ -132,6 +132,47 @@ static bool is_movq_to_rdi(const unsigned char *p)
   return (p[0] & 0xf9) == 0x48 && p[1] == 0x89 && (p[2] & 0xc7) == 0xc7;
 }
 
+/*
+ * Test whether p points to something like
+ *                  mov    %rNN,%esi
+ * On Debian12 linux-6.1.0-20 and Ubuntu22.04 linux-5.15.156 it was seen as
+ *    89 c6         mov    %eax,%esi
+ * On Ubuntu23.10 6.9.0-rc5 it was seen as
+ *    44 89 ee      mov    %r13d,%esi
+ * We can ignore REX.r prefix since it only affects the source operand.
+ * This gives us:
+ *    89 ee      mov    %r13d,%esi
+ *
+ * We assume:
+ *    89         c6
+ * 1000 1001  1100 0110
+ * xxxx xxxx  xx!! !xxx
+ * (x means must-match and ! means don't-care)
+ */
+static bool is_movl_to_esi(const unsigned char *p)
+{
+  return p[0] == 0x89 && (p[1] & 0xc6) == 0xc6;
+}
+
+/*
+ * Test whether p points to something like
+ *                  and    %rNN,%esi
+ * On Debian12 linux-6.1.0-20 and Ubuntu22.04 linux-5.15.156 it was seen as
+ *    21 d6         and    %edx,%esi
+ * On Ubuntu23.10 6.9.0-rc5 it was seen as
+ *    21 de         and    %ebx,%esi
+ *
+ * We assume:
+ *    21         c6
+ * 0010 0001  1100 0110
+ * xxxx xxxx  xx!! !xxx
+ * (x means must-match and ! means don't-care)
+ */
+static bool is_andl_to_esi(const unsigned char *p)
+{
+  return p[0] == 0x21 && (p[1] & 0xc6) == 0xc6;
+}
+
 static void *is_syscall_table(const unsigned char *p)
 {
   /* For linux>=4.6 do_syscall_64() resides in
@@ -191,14 +232,23 @@ static void *is_syscall_func(unsigned char *p)
    *    4c 89 e7                mov    %r12,%rdi
    *    21 d6                   and    %edx,%esi
    *    e8 YY YY YY YY          call   x64_sys_call
+   *
+   * Ubuntu 23.10 6.9.0-rc5 has the following:
+   *    44 89 ee                mov    %r13d,%esi
+   *    4c 89 e7                mov    %r12,%rdi
+   *    21 de                   and    %ebx,%esi
+   *    e8 YY YY YY YY          call   x64_sys_call
+   *
+   * Note: We can essentially treat the first mov instruction as a two byte
+   * instruction (ignoring the REX prefix)
    */
 
   s32 offset;
   if( *p == 0xe8 ) {
     if(
-        (p[-7] == 0x89 && p[-6] == 0xc6) && /* mov %eax,%esi */
+        is_movl_to_esi(p-7) &&              /* mov %rXX,%esi */
         is_movq_to_rdi(p-5) &&              /* mov %rXX,%rdi */
-        (p[-2] == 0x21 && p[-1] == 0xd6)    /* and %edx,%esi */
+        is_andl_to_esi(p-2)                 /* and %rXX,%esi */
       ) {
       offset = p[1] | (p[2] << 8) | (p[3] << 16) | (p[4] << 24);
       TRAMP_DEBUG("sys_call_func=%lx", (long unsigned int)(p + 5) + offset);
