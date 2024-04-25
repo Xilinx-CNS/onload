@@ -208,14 +208,8 @@ extern int efrm_vi_is_hw_rx_loopback_supported(struct efrm_vi *virs);
  */
 extern int efrm_vi_is_hw_drop_filter_supported(struct efrm_vi *virs);
 
-#define EFRM_VI_Q_GET_SIZE_CURRENT  -123
-
 /**
  * Returns information about the size of a DMA or event queue.
- *
- * If [n_q_entries == EFRM_VI_Q_GET_SIZE_CURRENT]: If the queue is already
- * initialised, then return the size of the existing queue.  Else return
- * -EINVAL.
  *
  * If [n_q_entries > 0]: Return the size of a queue that has the given
  * number of entries.  If [n_q_entries] is not a supported queue size, then

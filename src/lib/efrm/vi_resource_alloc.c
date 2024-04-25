@@ -1782,10 +1782,8 @@ int  efrm_vi_q_get_size(struct efrm_vi *virs, enum efhw_q_type q_type,
 
 	/* We return [q_sizes_supported] even if we fail. */
 	qso->q_sizes_supported = nic->q_sizes[q_type];
-	if (n_q_entries == EFRM_VI_Q_GET_SIZE_CURRENT)
-		n_q_entries = virs->q[q_type].capacity;
-	else
-		n_q_entries = choose_size(n_q_entries, nic->q_sizes[q_type]);
+
+	n_q_entries = choose_size(n_q_entries, nic->q_sizes[q_type]);
 	if (n_q_entries <= 0)
 		return -EINVAL;
 
