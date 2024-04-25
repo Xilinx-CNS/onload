@@ -1968,7 +1968,7 @@ int efx_sfctool_get_rxfh(struct efx_nic *efx, u32 *indir, u8 *key,
 			 u8 *hfunc)
 {
 #endif
-	struct ethtool_rxfh_param rxfh = {};
+	struct ethtool_rxfh_param rxfh = {.indir = indir, .key = key};
 	int rc;
 
 	rc = _efx_ethtool_get_rxfh(efx->net_dev, &rxfh);
@@ -1977,10 +1977,6 @@ int efx_sfctool_get_rxfh(struct efx_nic *efx, u32 *indir, u8 *key,
 
 	if (hfunc)
 		*hfunc = rxfh.hfunc;
-	if (indir)
-		memcpy(indir, rxfh.indir, rxfh.indir_size);
-	if (key)
-		memcpy(key, rxfh.key, rxfh.key_size);
 	return 0;
 }
 

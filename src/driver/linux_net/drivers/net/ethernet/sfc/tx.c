@@ -598,17 +598,14 @@ netdev_tx_t efx_hard_start_xmit(struct sk_buff *skb,
 #if defined(CONFIG_SFC_PTP)
 	/*
 	 * PTP "event" packet
+	 * It is possible that the PTP channel does not exist. If the
+	 * PTP channel does not exist, try to xmit PTP packet via the
+	 * normal queue.
 	 */
 	if (unlikely(efx_xmit_with_hwtstamp(skb)) &&
+	    likely(efx_ptp_channel(efx)) &&
 	    ((efx_ptp_use_mac_tx_timestamps(efx) && efx->ptp_data) ||
 	     unlikely(efx_ptp_is_ptp_tx(efx, skb)))) {
-		/* It is possible that the PTP channel does not exist. If the
-		 * PTP channel does not exist, return NETDEV_TX_OK to signal
-		 * that the driver has taken care of the packet i.e. dropped
-		 * it.
-		 */
-		if (unlikely(!efx_ptp_channel(efx)))
-			return NETDEV_TX_OK;
 
 		/* There may be existing transmits on the channel that are
 		 * waiting for this packet to trigger the doorbell write.
