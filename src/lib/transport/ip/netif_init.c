@@ -2640,6 +2640,7 @@ void ci_netif_send_plugin_app_ctrl(ci_netif* ni, int nic_index,
                                    ci_ip_pkt_fmt* pkt,
                                    const void* payload, size_t paylen)
 {
+  size_t pkt_dma_start_offset = CI_MEMBER_OFFSET(ci_ip_pkt_fmt, dma_start);
   pkt->intf_i = nic_index;
   pkt->q_id = CI_Q_ID_TCP_APP;
   pkt->pay_len = ETH_HLEN + paylen;
@@ -2648,7 +2649,7 @@ void ci_netif_send_plugin_app_ctrl(ci_netif* ni, int nic_index,
   pkt->pkt_start_off = 0;
   pkt->pkt_eth_payload_off = 0;
   pkt->pkt_outer_l3_off = 0;
-  memset(pkt->dma_start, 0, ETH_HLEN);
+  memset((void*)((ci_uintptr_t)pkt + pkt_dma_start_offset), 0, ETH_HLEN);
 
   pkt->n_buffers = 1;
   pkt->buf_len = ETH_HLEN + paylen;
