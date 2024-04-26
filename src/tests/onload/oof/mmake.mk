@@ -40,15 +40,15 @@ clean:
 	@$(MakeClean)
 
 ifdef UNIT_TEST_OUTPUT
-PROVE_FLAGS += --merge --timer --formatter TAP::Formatter::JUnit
+PROVE_FLAGS += --merge --timer
 UNIT_TEST_OUTPUT_DIR = $(UNIT_TEST_OUTPUT)
-PROVE_REDIRECT = > $(UNIT_TEST_OUTPUT)/$@.xml
+PROVE_REDIRECT = >> $(UNIT_TEST_OUTPUT)
 
 tests: $(UNIT_TEST_OUTPUT_DIR)
 
 $(UNIT_TEST_OUTPUT_DIR):
-	mkdir -p $(UNIT_TEST_OUTPUT_DIR)
-	rm -rf $(UNIT_TEST_OUTPUT)/*.xml
+	mkdir -p $$(dirname $(UNIT_TEST_OUTPUT_DIR))
+	touch $(UNIT_TEST_OUTPUT_DIR)
 endif # UNIT_TEST_OUTPUT
 
 HARNESS_TIME_OUT=240

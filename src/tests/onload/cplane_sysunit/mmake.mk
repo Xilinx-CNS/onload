@@ -147,16 +147,14 @@ clean:
 
 ifdef UNIT_TEST_OUTPUT
 UNIT_TEST_OUTPUT_DIR = $(UNIT_TEST_OUTPUT)
-SANITIZER_OUTPUT_PREFIX := $(UNIT_TEST_OUTPUT)/
-PYTEST_JUNIT_XML_FILE = $(UNIT_TEST_OUTPUT_DIR)/testresults.xml
-PYTEST_JUNIT_XML_OPT = --junit-xml $(PYTEST_JUNIT_XML_FILE)
+UNIT_TEST_REDIRECT = >> $(UNIT_TEST_OUTPUT)
 
 test: $(UNIT_TEST_OUTPUT_DIR)
 
 $(UNIT_TEST_OUTPUT_DIR):
-	mkdir -p $(UNIT_TEST_OUTPUT_DIR) && \
-	  chmod a+rwx $(UNIT_TEST_OUTPUT_DIR)
-	rm -rf $(UNIT_TEST_OUTPUT)/*.xml
+	mkdir -p $$(dirname $(UNIT_TEST_OUTPUT_DIR))
+	touch $(UNIT_TEST_OUTPUT_DIR)
+	chmod a+rwx $(UNIT_TEST_OUTPUT_DIR)
 endif # UNIT_TEST_OUTPUT
 
 ifdef UNIT_TEST_SELECT
@@ -205,10 +203,8 @@ HARNESS_TIME_OUT=240
 
 .PHONY: test
 test: $(TARGETS)
-	touch $(PYTEST_JUNIT_XML_FILE) ; \
-	chmod a+rw $(PYTEST_JUNIT_XML_FILE) ; \
 	sudo /usr/bin/timeout $(HARNESS_TIME_OUT) \
 	  env $(UNIT_TEST_ENV_VARS) \
 	  python3 -B $(shell which py.test) -p no:cacheprovider \
-	    $(PYTEST_JUNIT_XML_OPT) $(PYTEST_SELECT_OPT); \
+	    $(PYTEST_SELECT_OPT) $(UNIT_TEST_REDIRECT); \
 	sudo pkill -s 0 shim_cp_server || true
