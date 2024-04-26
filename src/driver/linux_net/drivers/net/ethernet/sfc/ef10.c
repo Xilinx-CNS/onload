@@ -974,8 +974,8 @@ static int efx_ef10_alloc_vis(struct efx_nic *efx,
 
 	return efx_mcdi_alloc_vis(efx, min_vis, max_vis,
 #if defined(EFX_NOT_UPSTREAM)
-				  &efx->vi_resources.vi_base,
-				  &efx->vi_resources.vi_shift,
+				  &efx->ef10_resources.vi_base,
+				  &efx->ef10_resources.vi_shift,
 #else
 				  NULL, NULL,
 #endif
