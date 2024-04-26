@@ -23,8 +23,10 @@ efx_next_guaranteed_ringsize(struct efx_nic *efx, unsigned long entries,
 			     bool fallback_to_supported);
 int efx_init_io(struct efx_nic *efx, int bar, dma_addr_t dma_mask, unsigned int mem_map_size);
 void efx_fini_io(struct efx_nic *efx);
-int efx_init_struct(struct efx_nic *efx, struct pci_dev *pci_dev);
-void efx_fini_struct(struct efx_nic *efx);
+int efx_init_probe_data(struct pci_dev *pci_dev,
+			const struct efx_nic_type *nic_type,
+			struct efx_probe_data **pd);
+void efx_fini_probe_data(struct efx_probe_data *probe_data);
 
 int efx_probe_common(struct efx_nic *efx);
 void efx_remove_common(struct efx_nic *efx);
@@ -94,6 +96,10 @@ struct efx_vport *efx_find_vport_entry(struct efx_nic *efx, u16 id);
 void efx_free_vport_entry(struct efx_vport *ctx);
 int efx_vport_add(struct efx_nic *efx, u16 vlan, bool vlan_restrict);
 int efx_vport_del(struct efx_nic *efx, u16 port_user_id);
+
+int efx_set_multicast_loopback_suppression(struct efx_nic *efx,
+					   bool suppress, u16 vport_id,
+					   u8 stack_id);
 
 int efx_mac_reconfigure(struct efx_nic *efx, bool mtu_only);
 void efx_link_status_changed(struct efx_nic *efx);

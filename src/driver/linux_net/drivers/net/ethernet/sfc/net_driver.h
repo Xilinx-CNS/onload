@@ -81,6 +81,8 @@
 #include "bitfield.h"
 #ifdef EFX_NOT_UPSTREAM
 #include "sfctool.h" /* Provides missing 'struct ethtool_*' declarations */
+#include "efx_client.h"
+#include <linux/sfc/efx_auxbus.h>
 #if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 #define EFX_DRIVERLINK_API_VERSION_MINOR EFX_DRIVERLINK_API_VERSION_MINOR_MAX
 #include "driverlink_api.h" /* Indirectly includes filter.h */
@@ -97,7 +99,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"5.3.18.1011"
+#define EFX_DRIVER_VERSION	"6.0.0.1000"
 #endif
 
 #ifdef DEBUG
@@ -769,6 +771,7 @@ enum efx_sync_events_state {
 };
 #endif
 
+#define EFX_RX_KEY_LEN	40
 /* The reserved RSS context value */
 #define EFX_MCDI_RSS_CONTEXT_INVALID	0xffffffff
 /**
@@ -794,7 +797,7 @@ struct efx_rss_context {
 	 */
 	u8 num_queues;
 #endif
-	u8 rx_hash_key[40];
+	u8 rx_hash_key[EFX_RX_KEY_LEN];
 	u32 rx_indir_table[128];
 };
 
@@ -1248,7 +1251,6 @@ struct efx_nic_errors {
 };
 
 struct vfdi_status;
-struct sfc_rdma_dev;
 
 /* Useful collections of RSS flags.  Caller needs mcdi_pcol.h. */
 #define RSS_CONTEXT_FLAGS_DEFAULT	(1 << MC_CMD_RSS_CONTEXT_GET_FLAGS_OUT_TOEPLITZ_IPV4_EN_LBN |\
@@ -1606,7 +1608,6 @@ struct efx_nic {
 #endif
 	resource_size_t membase_phys;
 	void __iomem *membase;
-	struct sfc_rdma_dev *rdev;
 
 	unsigned int vi_stride;
 
@@ -1657,6 +1658,8 @@ struct efx_nic {
 	unsigned int rx_dc_base;
 	unsigned int sram_lim_qw;
 #ifdef EFX_NOT_UPSTREAM
+	/** @vi_resources: general VI resource values */
+	struct efx_auxdev_dl_vi_resources vi_resources;
 #if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	/** @n_dl_irqs: Number of IRQs to reserve for driverlink */
 	int n_dl_irqs;
@@ -1823,17 +1826,15 @@ struct efx_nic {
 #if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	/** @dl_nic: Efx driverlink nic */
 	struct efx_dl_nic dl_nic;
-	/**
-	 * @dl_block_kernel_mutex: Mutex protecting @dl_block_kernel_count
+#endif
+	/* @block_kernel_mutex: Mutex protecting @block_kernel_count
 	 *	and corresponding per-client state
 	 */
-	struct mutex dl_block_kernel_mutex;
-	/**
-	 * @dl_block_kernel_count: Number of times Driverlink clients are
-	 *	blocking the kernel stack from receiving packets
+	struct mutex block_kernel_mutex;
+	/* @block_kernel_count: Number of times clients are blocking the
+	 *	kernel stack from receiving packets
 	 */
-	unsigned int dl_block_kernel_count[EFX_DL_FILTER_BLOCK_KERNEL_MAX];
-#endif
+	unsigned int block_kernel_count[EFX_FILTER_BLOCK_KERNEL_MAX];
 #endif
 
 #ifdef CONFIG_DEBUG_FS
@@ -1910,13 +1911,38 @@ struct efx_nic {
 
 /**
  * struct efx_probe_data - State after hardware probe
- * @pci_dev: The PCI device
  * @efx: Efx NIC details
+ * @pci_dev: The PCI device
  */
 struct efx_probe_data {
-	struct pci_dev *pci_dev;
 	struct efx_nic efx;
+	struct pci_dev *pci_dev;
+#ifdef EFX_NOT_UPSTREAM
+#if !defined(EFX_USE_KCOMPAT) || defined (EFX_HAVE_XARRAY)
+	/**
+	 * @client_type: Data for each type of client. Non-NULL if a
+	 *	type is supported and enabled.
+	 */
+	struct efx_client_type_data *client_type[_EFX_CLIENT_MAX];
+	/**
+	 * @fw_client_support_probed: Set if firmware support for client
+	 *	handles has been determined
+	 */
+	bool fw_client_support_probed;
+	/**
+	 * @fw_client_supported: Set if the firmware supports client handles.
+	 *	This attribute is only valid when @fw_client_support_probed
+	 *	is %true
+	 */
+	bool fw_client_supported;
+#endif
+#endif
 };
+
+static inline struct efx_probe_data *efx_nic_to_probe_data(struct efx_nic *efx)
+{
+	return container_of(efx, struct efx_probe_data, efx);
+}
 
 static inline struct efx_nic *efx_netdev_priv(struct net_device *dev)
 {
@@ -2208,7 +2234,6 @@ struct mae_mport_desc;
  *	features implemented in hardware
  * @mcdi_max_ver: Maximum MCDI version supported
  * @hwtstamp_filters: Mask of hardware timestamp filter types supported
- * @rx_hash_key_size: Size of RSS hash key in bytes
  */
 struct efx_nic_type {
 	bool is_vf;
@@ -2357,21 +2382,22 @@ struct efx_nic_type {
 	 */
 	int (*filter_redirect)(struct efx_nic *efx, u32 filter_id,
 			       u32 *rss_context, int rxq_i, int stack_id);
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	/**
 	 * @filter_block_kernel: Block kernel from receiving packets except
 	 *	through explicit configuration, i.e. remove and disable
 	 *	filters with priority < MANUAL
 	 */
 	int (*filter_block_kernel)(struct efx_nic *efx,
-				   enum efx_dl_filter_block_kernel_type type);
+				   enum efx_filter_block_kernel_type type);
 	/**
 	 * @filter_unblock_kernel: Unblock kernel, i.e. enable automatic
 	 *	and hint filters
 	 */
 	void (*filter_unblock_kernel)(struct efx_nic *efx, enum
-				      efx_dl_filter_block_kernel_type type);
-#endif
+				      efx_filter_block_kernel_type type);
+	/** @client_supported: check if a client type is supported */
+	bool (*client_supported)(struct efx_nic *efx,
+				 enum efx_client_type type);
 #endif
 	/** @regionmap_buffer: Check if buffer is in accessible region */
 	int (*regionmap_buffer)(struct efx_nic *efx, dma_addr_t *dma_addr);
@@ -2480,7 +2506,6 @@ struct efx_nic_type {
 	netdev_features_t offload_features;
 	int mcdi_max_ver;
 	u32 hwtstamp_filters;
-	unsigned int rx_hash_key_size;
 };
 
 /**************************************************************************

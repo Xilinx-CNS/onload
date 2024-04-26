@@ -199,7 +199,6 @@ EFX_HAVE_INDIRECT_CALL_WRAPPERS		file				include/linux/indirect_call_wrapper.h
 EFX_HAVE_NEW_KFIFO			symbol kfifo_out		include/linux/kfifo.h
 EFX_HAVE_NETFILTER_INDIRECT_SKB		memtype	struct_nf_hook_ops	hook	include/linux/netfilter.h	unsigned int(*)(unsigned int, struct sk_buff **, const struct net_device *, const struct net_device *, int (*)(struct sk_buff *))
 EFX_HAVE_NFPROTO_CONSTANTS		symbol	NFPROTO_NUMPROTO	include/linux/netfilter.h
-EFX_HAVE___REGISTER_CHRDEV		symbol __register_chrdev	include/linux/fs.h
 EFX_HAVE_MSIX_CAP			symbol	msix_cap		include/linux/pci.h
 EFX_NEED_PCI_ENABLE_MSIX_RANGE          nsymbol pci_enable_msix_range include/linux/pci.h
 EFX_NEED_PCI_MSIX_VEC_COUNT		nsymbol	pci_msix_vec_count	include/linux/pci.h
@@ -398,6 +397,8 @@ EFX_NEED_TIMESPEC64_TO_NS_SIGNED	custom
 EFX_HAVE_KOBJECT_DEFAULT_GROUPS		member	struct_kobj_type	default_groups	include/linux/kobject.h
 EFX_NEED_REFCOUNT_T			nsymbol	refcount_t		include/linux/refcount.h
 EFX_NEED_DEBUGFS_LOOKUP_AND_REMOVE	nsymbol	debugfs_lookup_and_remove	include/linux/debugfs.h
+EFX_HAVE_XARRAY				symbol	xa_limit		include/linux/xarray.h
+EFX_HAVE_AUXILIARY_BUS			file	include/linux/auxiliary_bus.h
 EFX_HAVE_NET_RPS_H                     file       include/net/rps.h
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }

@@ -30,5 +30,9 @@ int efx_fini_dmaq(struct efx_nic *efx);
 int efx_mcdi_window_mode_to_stride(struct efx_nic *efx, u8 vi_window_mode);
 int efx_get_fn_info(struct efx_nic *efx, unsigned int *pf_index,
 		    unsigned int *vf_index);
+#ifdef EFX_NOT_UPSTREAM
+int efx_mcdi_client_alloc(struct efx_nic *efx, u32 parent, u32 *client_id);
+void efx_mcdi_client_free(struct efx_nic *efx, u32 client_id);
+#endif
 
 #endif

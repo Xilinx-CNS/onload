@@ -28,11 +28,14 @@
 #include "mcdi_pcol.h"
 #include "tc.h"
 #include "xdp.h"
+#include "mcdi_functions.h"
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_ADD_VXLAN_PORT) || defined(EFX_HAVE_NDO_UDP_TUNNEL_ADD) || defined(EFX_HAVE_UDP_TUNNEL_NIC_INFO)
 #include <net/gre.h>
 #endif
 #ifdef EFX_NOT_UPSTREAM
 #include "ef100_dump.h"
+#include "efx_client.h"
+#include "efx_auxbus_internal.h"
 #endif
 #ifdef CONFIG_SFC_VDPA
 #include "ef100_vdpa.h"
@@ -129,6 +132,16 @@ const char *const efx_loopback_mode_names[] = {
 #if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 static struct efx_dl_ops efx_driverlink_ops;
 #endif
+
+static void efx_send_event(struct efx_nic *efx,
+			   enum efx_auxdev_event_type type, bool value)
+{
+	struct efx_auxdev_event ev = {};
+
+	ev.type = type;
+	ev.value = value;
+	efx_auxbus_send_events(efx_nic_to_probe_data(efx), &ev);
+}
 #endif
 
 /* Reset workqueue. If any NIC has a hardware failure then a reset will be
@@ -250,6 +263,10 @@ void efx_link_status_changed(struct efx_nic *efx)
 	struct efx_link_state *link_state = &efx->link_state;
 	bool kernel_link_up;
 
+#ifdef EFX_NOT_UPSTREAM
+	efx_send_event(efx, EFX_AUXDEV_EVENT_LINK_CHANGE, link_state->up);
+
+#endif
 	/* SFC Bug 5356: A net_dev notifier is registered, so we must ensure
 	 * that no events are triggered between unregister_netdev() and the
 	 * driver unloading. A more general condition is that NETDEV_CHANGE
@@ -914,6 +931,11 @@ void efx_reset_down(struct efx_nic *efx, enum reset_type method)
 {
 	EFX_ASSERT_RESET_SERIALISED(efx);
 
+#ifdef EFX_NOT_UPSTREAM
+	/* Inform other drivers this device is gone. */
+	efx_send_event(efx, EFX_AUXDEV_EVENT_IN_RESET, 1);
+
+#endif
 	if (method == RESET_TYPE_MCDI_TIMEOUT)
 		efx->type->prepare_flr(efx);
 
@@ -1042,7 +1064,11 @@ int efx_reset_up(struct efx_nic *efx, enum reset_type method, bool ok)
 		if (efx->type->pps_reset(efx))
 			netif_warn(efx, drv, efx->net_dev, "failed to reset PPS");
 #endif
+#ifdef EFX_NOT_UPSTREAM
+	/* Inform other drivers this device is back. */
+	efx_send_event(efx, EFX_AUXDEV_EVENT_IN_RESET, 0);
 
+#endif
 	return 0;
 
 fail:
@@ -1184,7 +1210,10 @@ int efx_reset(struct efx_nic *efx, enum reset_type method)
 		if (PCI_FUNC(efx->pci_dev->devfn) == 0)
 			efx_mcdi_log_puts(efx, efx_reset_type_names[method]);
 	}
+
 #ifdef EFX_NOT_UPSTREAM
+	if (disabled)
+		efx_client_fini(efx_nic_to_probe_data(efx));
 #if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	efx_dl_reset_resume(&efx->dl_nic, !disabled);
 #endif
@@ -1230,7 +1259,7 @@ static void efx_reset_work(struct work_struct *data)
 	pending = READ_ONCE(efx->reset_pending);
 	method = fls(pending) - 1;
 
-#ifdef EFX_NOT_UPSTREAM
+#if defined(EFX_NOT_UPSTREAM) && IS_ENABLED(CONFIG_SFC_EF100)
 	if (method == RESET_TYPE_TX_WATCHDOG &&
 	    efx_nic_rev(efx) == EFX_REV_EF100) {
 		WARN_ON(efx->state == STATE_VDPA);
@@ -1359,7 +1388,7 @@ void efx_port_dummy_op_void(struct efx_nic *efx) {}
  * Data housekeeping
  *
  **************************************************************************/
-void efx_fini_struct(struct efx_nic *efx)
+static void efx_fini_struct(struct efx_nic *efx)
 {
 	efx_filter_clear_ntuple(efx);
 #ifdef CONFIG_RFS_ACCEL
@@ -1451,7 +1480,7 @@ efx_next_guaranteed_ringsize(struct efx_nic *efx, unsigned long entries,
 /* This zeroes out and then fills in the invariants in a struct
  * efx_nic (including all sub-structures).
  */
-int efx_init_struct(struct efx_nic *efx, struct pci_dev *pci_dev)
+static int efx_init_struct(struct efx_nic *efx, struct pci_dev *pci_dev)
 {
 	/* Initialise common structures */
 	spin_lock_init(&efx->biu_lock);
@@ -1512,6 +1541,10 @@ int efx_init_struct(struct efx_nic *efx, struct pci_dev *pci_dev)
 #endif
 	INIT_WORK(&efx->mac_work, efx_mac_work);
 	init_waitqueue_head(&efx->flush_wq);
+
+#ifdef EFX_NOT_UPSTREAM
+	mutex_init(&efx->block_kernel_mutex);
+#endif
 
 #ifdef CONFIG_DEBUG_FS
 	mutex_init(&efx->debugfs_symlink_mutex);
@@ -1625,6 +1658,35 @@ void efx_fini_io(struct efx_nic *efx)
 	}
 }
 
+int efx_init_probe_data(struct pci_dev *pci_dev,
+			const struct efx_nic_type *nic_type,
+			struct efx_probe_data **pd)
+{
+	struct efx_probe_data *probe_data;
+	struct efx_nic *efx;
+
+	/* Allocate probe data and struct efx_nic */
+	probe_data = kzalloc(sizeof(*probe_data), GFP_KERNEL);
+	if (!probe_data)
+		return -ENOMEM;
+
+	probe_data->pci_dev = pci_dev;
+	efx = &probe_data->efx;
+	efx->pci_dev = pci_dev;
+	pci_set_drvdata(pci_dev, efx);
+	efx->type = nic_type;
+
+	*pd = probe_data;
+	return efx_init_struct(efx, pci_dev);
+}
+
+void efx_fini_probe_data(struct efx_probe_data *probe_data)
+{
+	pci_set_drvdata(probe_data->pci_dev, NULL);
+	efx_fini_struct(&probe_data->efx);
+	kfree(probe_data);
+}
+
 int efx_probe_common(struct efx_nic *efx)
 {
 	int rc = efx_mcdi_init(efx);
@@ -1662,6 +1724,12 @@ int efx_probe_common(struct efx_nic *efx)
 
 void efx_remove_common(struct efx_nic *efx)
 {
+#ifdef EFX_NOT_UPSTREAM
+	struct efx_probe_data *probe_data;
+
+	probe_data = efx_nic_to_probe_data(efx);
+	efx_client_fini(probe_data);
+#endif
 #ifdef CONFIG_DEBUG_FS
 	mutex_lock(&efx->debugfs_symlink_mutex);
 	efx_fini_debugfs_nic(efx);
@@ -1911,6 +1979,42 @@ int efx_vport_del(struct efx_nic *efx, u16 port_user_id)
 	rc = efx->type->vport_del(efx, vpx->vport_id);
 	if (!rc)
 		efx_free_vport_entry(vpx);
+out_unlock:
+	mutex_unlock(&efx->vport_lock);
+	return rc;
+}
+
+int efx_set_multicast_loopback_suppression(struct efx_nic *efx,
+					   bool suppress, u16 vport_id,
+					   u8 stack_id)
+{
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_SET_PARSER_DISP_CONFIG_IN_LEN(1));
+	struct efx_vport *vpx;
+	u32 port_id;
+	int rc;
+
+	mutex_lock(&efx->vport_lock);
+	/* look up vport, convert to hw ID, and OR in stack_id */
+	if (vport_id == 0)
+		vpx = &efx->vport;
+	else
+		vpx = efx_find_vport_entry(efx, vport_id);
+	if (!vpx) {
+		rc = -ENOENT;
+		goto out_unlock;
+	}
+	if (vpx->vport_id == EVB_PORT_ID_NULL) {
+		rc = -EOPNOTSUPP;
+		goto out_unlock;
+	}
+	port_id = vpx->vport_id | EVB_STACK_ID(stack_id);
+
+	MCDI_SET_DWORD(inbuf, SET_PARSER_DISP_CONFIG_IN_TYPE,
+		       MC_CMD_SET_PARSER_DISP_CONFIG_IN_VADAPTOR_SUPPRESS_SELF_TX);
+	MCDI_SET_DWORD(inbuf, SET_PARSER_DISP_CONFIG_IN_ENTITY, port_id);
+	MCDI_SET_DWORD(inbuf, SET_PARSER_DISP_CONFIG_IN_VALUE, !!suppress);
+	rc = efx_mcdi_rpc(efx, MC_CMD_SET_PARSER_DISP_CONFIG,
+			  inbuf, sizeof(inbuf), NULL, 0, NULL);
 out_unlock:
 	mutex_unlock(&efx->vport_lock);
 	return rc;
@@ -2313,7 +2417,7 @@ static int __efx_dl_rss_context_new(struct efx_dl_device *efx_dev,
 		goto out_unlock;
 	}
 	if (!indir) {
-		efx_set_default_rx_indir_table(efx, ctx);
+		efx_set_default_rx_indir_table(ctx, efx->rss_spread);
 		indir = ctx->rx_indir_table;
 	}
 	if (!key) {
@@ -2398,12 +2502,6 @@ out_unlock:
 	mutex_unlock(&efx->rss_lock);
 	return rc;
 }
-
-/* We additionally include priority in the filter ID so that we
- * can pass it back into efx_filter_remove_id_safe().
- */
-#define EFX_FILTER_PRI_SHIFT    28
-#define EFX_FILTER_ID_MASK      ((1 << EFX_FILTER_PRI_SHIFT) - 1)
 
 static int __efx_dl_filter_insert(struct efx_dl_device *efx_dev,
 				  const struct efx_filter_spec *spec,
@@ -2595,37 +2693,9 @@ int __efx_dl_set_multicast_loopback_suppression(struct efx_dl_device *efx_dev,
 						bool suppress, u16 vport_id,
 						u8 stack_id)
 {
-	MCDI_DECLARE_BUF(inbuf, MC_CMD_SET_PARSER_DISP_CONFIG_IN_LEN(1));
 	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
-	struct efx_vport *vpx;
-	u32 port_id;
-	int rc;
-
-	mutex_lock(&efx->vport_lock);
-	/* look up vport, convert to hw ID, and OR in stack_id */
-	if (vport_id == 0)
-		vpx = &efx->vport;
-	else
-		vpx = efx_find_vport_entry(efx, vport_id);
-	if (!vpx) {
-		rc = -ENOENT;
-		goto out_unlock;
-	}
-	if (vpx->vport_id == EVB_PORT_ID_NULL) {
-		rc = -EOPNOTSUPP;
-		goto out_unlock;
-	}
-	port_id = vpx->vport_id | EVB_STACK_ID(stack_id);
-
-	MCDI_SET_DWORD(inbuf, SET_PARSER_DISP_CONFIG_IN_TYPE,
-		       MC_CMD_SET_PARSER_DISP_CONFIG_IN_VADAPTOR_SUPPRESS_SELF_TX);
-	MCDI_SET_DWORD(inbuf, SET_PARSER_DISP_CONFIG_IN_ENTITY, port_id);
-	MCDI_SET_DWORD(inbuf, SET_PARSER_DISP_CONFIG_IN_VALUE, !!suppress);
-	rc = efx_mcdi_rpc(efx, MC_CMD_SET_PARSER_DISP_CONFIG,
-			  inbuf, sizeof(inbuf), NULL, 0, NULL);
-out_unlock:
-	mutex_unlock(&efx->vport_lock);
-	return rc;
+	return efx_set_multicast_loopback_suppression(efx, suppress, vport_id,
+						      stack_id);
 }
 
 static int __efx_dl_mcdi_rpc(struct efx_dl_device *efx_dev, unsigned int cmd,
@@ -2647,37 +2717,37 @@ static int __efx_dl_mcdi_rpc(struct efx_dl_device *efx_dev, unsigned int cmd,
 }
 
 static int __efx_dl_filter_block_kernel(struct efx_dl_device *efx_dev,
-					enum efx_dl_filter_block_kernel_type type)
+					enum efx_filter_block_kernel_type type)
 {
 	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
 	int rc = 0;
 
-	mutex_lock(&efx->dl_block_kernel_mutex);
+	mutex_lock(&efx->block_kernel_mutex);
 
-	if (efx->dl_block_kernel_count[type] == 0) {
+	if (efx->block_kernel_count[type] == 0) {
 		rc = efx->type->filter_block_kernel(efx, type);
 		if (rc)
 			goto unlock;
 	}
-	++efx->dl_block_kernel_count[type];
+	++efx->block_kernel_count[type];
 
 unlock:
-	mutex_unlock(&efx->dl_block_kernel_mutex);
+	mutex_unlock(&efx->block_kernel_mutex);
 
 	return rc;
 }
 
 static void __efx_dl_filter_unblock_kernel(struct efx_dl_device *efx_dev,
-					   enum efx_dl_filter_block_kernel_type type)
+					   enum efx_filter_block_kernel_type type)
 {
 	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
 
-	mutex_lock(&efx->dl_block_kernel_mutex);
+	mutex_lock(&efx->block_kernel_mutex);
 
-	if (--efx->dl_block_kernel_count[type] == 0)
+	if (--efx->block_kernel_count[type] == 0)
 		efx->type->filter_unblock_kernel(efx, type);
 
-	mutex_unlock(&efx->dl_block_kernel_mutex);
+	mutex_unlock(&efx->block_kernel_mutex);
 }
 
 static long __efx_dl_dma_xlate(struct efx_dl_device *efx_dev,
@@ -2722,27 +2792,17 @@ static int __efx_dl_mcdi_rpc_client(struct efx_dl_device *efx_dev,
 static int __efx_dl_client_alloc(struct efx_dl_device *efx_dev, u32 parent,
                                  u32 *id)
 {
-	MCDI_DECLARE_BUF(outbuf, MC_CMD_CLIENT_ALLOC_OUT_LEN);
 	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
-	int rc;
 
-	BUILD_BUG_ON(MC_CMD_CLIENT_ALLOC_IN_LEN != 0);
-	rc = efx_mcdi_rpc_client(efx, parent, MC_CMD_CLIENT_ALLOC,
-				 NULL, 0, outbuf, sizeof(outbuf), NULL);
-	if (rc)
-		return rc;
-	*id = MCDI_DWORD(outbuf, CLIENT_ALLOC_OUT_CLIENT_ID);
-	return 0;
+	return efx_mcdi_client_alloc(efx, parent, id);
 }
 
 static int __efx_dl_client_free(struct efx_dl_device *efx_dev, u32 id)
 {
-	MCDI_DECLARE_BUF(inbuf, MC_CMD_CLIENT_FREE_IN_LEN);
 	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
 
-	MCDI_SET_DWORD(inbuf, CLIENT_FREE_IN_CLIENT_ID, id);
-	return efx_mcdi_rpc(efx, MC_CMD_CLIENT_FREE,
-	                    inbuf, sizeof(inbuf), NULL, 0, NULL);
+	efx_mcdi_client_free(efx, id);
+	return 0;
 }
 
 static int __efx_dl_vi_set_user(struct efx_dl_device *efx_dev,
@@ -2794,7 +2854,7 @@ static struct efx_dl_ops efx_driverlink_ops = {
 
 void efx_dl_probe(struct efx_nic *efx)
 {
-	mutex_init(&efx->dl_block_kernel_mutex);
+	mutex_init(&efx->block_kernel_mutex);
 	efx->dl_nic.pci_dev = efx->pci_dev;
 	efx->dl_nic.net_dev = efx->net_dev;
 	efx->dl_nic.ops = &efx_driverlink_ops;

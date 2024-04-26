@@ -1732,12 +1732,9 @@ u32 efx_ethtool_get_rxfh_indir_size(struct net_device *net_dev)
 	return ARRAY_SIZE(efx->rss_context.rx_indir_table);
 }
 
-
-u32 efx_ethtool_get_rxfh_key_size(struct net_device *net_dev)
+u32 efx_ethtool_get_rxfh_key_size(struct net_device *net_dev __always_unused)
 {
-	struct efx_nic *efx = efx_netdev_priv(net_dev);
-
-	return efx->type->rx_hash_key_size;
+	return EFX_RX_KEY_LEN;
 }
 
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_RXFH_CONTEXT)
@@ -1785,8 +1782,7 @@ static int _efx_ethtool_get_rxfh_context(struct net_device *net_dev,
 		memcpy(rxfh->indir, ctx->rx_indir_table,
 		       sizeof(ctx->rx_indir_table));
 	if (rxfh->key)
-		memcpy(rxfh->key, ctx->rx_hash_key,
-		       efx->type->rx_hash_key_size);
+		memcpy(rxfh->key, ctx->rx_hash_key, EFX_RX_KEY_LEN);
 out_unlock:
 	mutex_unlock(&efx->rss_lock);
 	return rc;
@@ -1818,8 +1814,7 @@ static int _efx_ethtool_get_rxfh(struct net_device *net_dev,
 		memcpy(rxfh->indir, efx->rss_context.rx_indir_table,
 		       sizeof(efx->rss_context.rx_indir_table));
 	if (rxfh->key)
-		memcpy(rxfh->key, efx->rss_context.rx_hash_key,
-		       efx->type->rx_hash_key_size);
+		memcpy(rxfh->key, efx->rss_context.rx_hash_key, EFX_RX_KEY_LEN);
 	return 0;
 }
 
@@ -1857,7 +1852,7 @@ static int _efx_ethtool_set_rxfh_context(struct net_device *net_dev,
 		}
 		ctx->context_id = EFX_MCDI_RSS_CONTEXT_INVALID;
 		/* Initialise indir table and key to defaults */
-		efx_set_default_rx_indir_table(efx, ctx);
+		efx_set_default_rx_indir_table(ctx, efx->rss_spread);
 		netdev_rss_key_fill(ctx->rx_hash_key, sizeof(ctx->rx_hash_key));
 		allocated = true;
 	} else {

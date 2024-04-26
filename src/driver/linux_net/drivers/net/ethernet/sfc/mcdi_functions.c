@@ -461,3 +461,36 @@ int efx_get_fn_info(struct efx_nic *efx, unsigned int *pf_index,
 		*vf_index = MCDI_DWORD(outbuf, GET_FUNCTION_INFO_OUT_VF);
 	return 0;
 }
+
+#ifdef EFX_NOT_UPSTREAM
+int efx_mcdi_client_alloc(struct efx_nic *efx, u32 parent, u32 *client_id)
+{
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_CLIENT_ALLOC_OUT_LEN);
+	size_t outlen;
+	int rc;
+
+	BUILD_BUG_ON(MC_CMD_CLIENT_ALLOC_IN_LEN != 0);
+	rc = efx_mcdi_rpc_client_quiet(efx, parent, MC_CMD_CLIENT_ALLOC, NULL,
+				       0, outbuf, sizeof(outbuf), &outlen);
+	if (rc) {
+		if (rc != -ENOSYS && rc != -EPERM)
+			efx_mcdi_display_error(efx, MC_CMD_CLIENT_ALLOC, 0,
+					       outbuf, outlen, rc);
+		return rc;
+	}
+	if (outlen < sizeof(outbuf))
+		return -EIO;
+
+	*client_id = MCDI_DWORD(outbuf, CLIENT_ALLOC_OUT_CLIENT_ID);
+	return 0;
+}
+
+void efx_mcdi_client_free(struct efx_nic *efx, u32 client_id)
+{
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_CLIENT_FREE_IN_LEN);
+
+	MCDI_SET_DWORD(inbuf, CLIENT_FREE_IN_CLIENT_ID, client_id);
+	efx_mcdi_rpc(efx, MC_CMD_CLIENT_FREE,
+		     inbuf, sizeof(inbuf), NULL, 0, NULL);
+}
+#endif

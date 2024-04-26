@@ -34,7 +34,8 @@ export CONFIG_SFC_TRACING :=
 export CONFIG_SFC_MCDI_LOGGING := y
 export CONFIG_SFC_DRIVERLINK := m
 export CONFIG_SFC_BUSYPOLL := n
-export CONFIG_SFC_VDPA := y
+export CONFIG_SFC_EF100 := n
+export CONFIG_SFC_VDPA := n
 
 ifndef CONFIG_SFC_SIENA
 export CONFIG_SFC_SIENA :=
@@ -90,6 +91,9 @@ endif
 ifndef CONFIG_SFC_MCDI_LOGGING
 $(warning => MCDI tracing will not be supported)
 endif
+ifeq ($(CONFIG_SFC_EF100),n)
+override CONFIG_SFC_VDPA :=
+endif
 ifdef CONFIG_SFC_VDPA
 ifndef CONFIG_VDPA
 $(warning Kernel does not support vDPA)
@@ -137,12 +141,7 @@ sfc-y			:= efx.o efx_common.o efx_channels.o nic.o ef10.o \
 			   selftest.o ethtool_common.o ethtool.o \
 			   mcdi.o mcdi_port.o mcdi_port_common.o mcdi_functions.o \
 			   mcdi_filters.o ef10_sriov.o tx_tso.o \
-			   efx_devlink.o xdp.o \
-			   ef100.o ef100_nic.o ef100_netdev.o ef100_ethtool.o \
-			   ef100_rx.o ef100_tx.o ef100_sriov.o ef100_rep.o \
-			   tc.o tc_bindings.o tc_encap_actions.o tc_counters.o \
-			   tc_conntrack.o tc_debugfs.o mae.o \
-			   ef100_bsp.o efx_reflash.o
+			   efx_devlink.o xdp.o efx_reflash.o
 
 sfc_driverlink-y	:= driverlink.o
 
@@ -150,8 +149,12 @@ sfc-$(CONFIG_SFC_SRIOV)	+= sriov.o
 sfc-$(CONFIG_SFC_MCDI_MON) += mcdi_mon.o
 sfc-$(CONFIG_SFC_PTP)	+= ptp.o
 sfc-$(CONFIG_SFC_MTD)	+= mtd.o
+sfc-$(CONFIG_SFC_EF100) += ef100.o ef100_nic.o ef100_netdev.o ef100_ethtool.o \
+			   ef100_rx.o ef100_tx.o ef100_sriov.o ef100_rep.o \
+			   tc.o tc_bindings.o tc_encap_actions.o tc_counters.o \
+			   tc_conntrack.o tc_debugfs.o mae.o \
+			   ef100_bsp.o
 sfc-$(CONFIG_SFC_VDPA) += ef100_vdpa.o ef100_vdpa_ops.o mcdi_vdpa.o
-sfc-$(CONFIG_AUXILIARY_BUS)	+= efx_auxbus.o
 sfc-$(CONFIG_DEBUG_FS) += debugfs.o
 ifndef EFX_NO_KCOMPAT
 ifneq ($(MAKECMDGOALS),export)
@@ -165,7 +168,9 @@ endif # !EFX_NO_KCOMPAT
 ifndef EFX_UPSTREAM
 ifeq ($(filter export export-xen,$(MAKECMDGOALS)),)
 ifndef EFX_FOR_UPSTREAM
-sfc-y			+= sfctool.o ef100_dump.o
+sfc-y			+= sfctool.o efx_client.o
+sfc-$(CONFIG_AUXILIARY_BUS)	+= efx_auxbus.o
+sfc-$(CONFIG_SFC_EF100)	+= ef100_dump.o
 sfc-$(CONFIG_SFC_VDPA)	+= ef100_vdpa_dbg.o
 endif # !EFX_FOR_UPSTREAM
 sfc-$(CONFIG_SFC_DUMP) += dump.o
@@ -326,15 +331,15 @@ endif # EFX_NOT_EXPORTED
 
 # Export into kernel tree
 export:
-	$(EXPORT_CMD) $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) efx_auxbus.c debugfs.c
+	$(EXPORT_CMD) $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) debugfs.c
 	$(MAKE) -C siena $@
 
 export-resolve-kcompat:
-	$(EXPORT_CMD) -k -kk $(KDIR) $(sfc-y:%.o=%.c) efx_auxbus.c debugfs.c
+	$(EXPORT_CMD) -k -kk $(KDIR) $(sfc-y:%.o=%.c) debugfs.c
 
 # Export into a Xen kernel tree
 export-xen:
-	$(EXPORT_CMD) -k -kk --suffix=xen $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) efx_auxbus.c debugfs.c
+	$(EXPORT_CMD) -k -kk --suffix=xen $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) debugfs.c
 
 # Export for SRPM
 export-srpm:

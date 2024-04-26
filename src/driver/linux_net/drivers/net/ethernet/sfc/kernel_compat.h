@@ -486,7 +486,7 @@
 	#define ETHTOOL_GET_TS_INFO	0x00000041 /* Get time stamping and PHC info */
 #endif
 
-#ifndef EFX_HAVE_ETHTOOL_RXFH_PARAM
+#ifndef RXH_XFRM_SYM_XOR
 /* We want to use this struct even if older kernels do not have it, so old
  * APIs can use it.
  */
@@ -500,6 +500,8 @@ struct ethtool_rxfh_param {
 	u8	rss_delete;
 	u8	input_xfrm;
 };
+
+#define RXH_XFRM_SYM_XOR	BIT(0)
 #endif
 
 #ifndef PORT_DA

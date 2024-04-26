@@ -258,6 +258,9 @@ int efx_ef10_licensed_app_state(struct efx_nic *efx,
 extern const struct efx_nic_type efx_hunt_a0_nic_type;
 extern const struct efx_nic_type efx_hunt_a0_vf_nic_type __attribute__((weak));
 
+extern const struct efx_nic_type efx_x4_nic_type;
+extern const struct efx_nic_type efx_x4_vf_nic_type __attribute__((weak));
+
 /* Only safe to call if protected against rep create/destroy */
 static inline struct net_device *efx_get_vf_rep(struct efx_nic *efx, unsigned int vf)
 {

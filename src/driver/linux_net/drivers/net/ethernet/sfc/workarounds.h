@@ -41,4 +41,14 @@
 #define EFX_EF10_WORKAROUND_61265(efx)					\
 	((struct efx_ef10_nic_data *)efx->nic_data)->workaround_61265
 
+#define EFX_WORKAROUND_X4(efx) (efx_nic_rev(efx) == EFX_REV_X4)
+
+/* X4 development firmware does not support periodic stats */
+#define EFX_WORKAROUND_5316(efx) EFX_WORKAROUND_X4(efx)
+
+/* X4 development models report KX4 phy media type, which will
+ * not be true in production.
+ */
+#define EFX_WORKAROUND_3130(efx) EFX_WORKAROUND_X4(efx)
+
 #endif /* EFX_WORKAROUNDS_H */

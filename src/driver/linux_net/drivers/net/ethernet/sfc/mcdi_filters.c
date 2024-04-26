@@ -95,9 +95,7 @@ struct efx_mcdi_filter_table {
 	bool rss_context_exclusive;
 	bool additional_rss_modes;
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
-	bool kernel_blocked[EFX_DL_FILTER_BLOCK_KERNEL_MAX];
-#endif
+	bool kernel_blocked[EFX_FILTER_BLOCK_KERNEL_MAX];
 #endif
 };
 
@@ -221,10 +219,8 @@ static const struct efx_debugfs_parameter filter_debugfs[] = {
 	EFX_BOOL_PARAMETER(struct efx_mcdi_filter_table, mc_overflow),
 	EFX_BOOL_PARAMETER(struct efx_mcdi_filter_table, mc_chaining),
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	_EFX_PARAMETER(struct efx_mcdi_filter_table, kernel_blocked,
 		       efx_debugfs_read_kernel_blocked),
-#endif
 #endif
 	{NULL}
 };
@@ -793,15 +789,13 @@ static s32 efx_mcdi_filter_insert_locked(struct efx_nic *efx,
 	 * else a free slot to insert at.
 	 */
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	if (spec->priority <= EFX_FILTER_PRI_AUTO &&
 	    table->kernel_blocked[is_mc_recip ?
-				  EFX_DL_FILTER_BLOCK_KERNEL_MCAST :
-				  EFX_DL_FILTER_BLOCK_KERNEL_UCAST]) {
+				  EFX_FILTER_BLOCK_KERNEL_MCAST :
+				  EFX_FILTER_BLOCK_KERNEL_UCAST]) {
 		rc = -EPERM;
 		goto out_unlock;
 	}
-#endif
 #endif
 
 	for (depth = 1; depth < EFX_MCDI_FILTER_SEARCH_LIMIT; depth++) {
@@ -1193,9 +1187,7 @@ static int efx_mcdi_filter_insert_addr_list(struct efx_nic *efx,
 	}
 
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
-	if (!table->kernel_blocked[EFX_DL_FILTER_BLOCK_KERNEL_MCAST])
-#endif
+	if (!table->kernel_blocked[EFX_FILTER_BLOCK_KERNEL_MCAST])
 #endif
 	if (multicast && rollback) {
 		/* Also need an Ethernet broadcast filter */
@@ -1240,11 +1232,9 @@ static int efx_mcdi_filter_insert_def(struct efx_nic *efx,
 	u16 *id;
 
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
-	if (table->kernel_blocked[multicast ? EFX_DL_FILTER_BLOCK_KERNEL_MCAST :
-					      EFX_DL_FILTER_BLOCK_KERNEL_UCAST])
+	if (table->kernel_blocked[multicast ? EFX_FILTER_BLOCK_KERNEL_MCAST :
+					      EFX_FILTER_BLOCK_KERNEL_UCAST])
 		return 0;
-#endif
 #endif
 
 	filter_flags = efx_rss_active(&efx->rss_context) ?
@@ -1500,10 +1490,10 @@ static void efx_mcdi_filter_vlan_sync_rx_mode(struct efx_nic *efx,
 				   true, false);
 
 	n_filters = efx_mcdi_filter_vlan_count_filters(efx, vlan);
-#if defined(EFX_NOT_UPSTREAM) && IS_MODULE(CONFIG_SFC_DRIVERLINK)
+#if defined(EFX_NOT_UPSTREAM)
 	if (n_filters == 0 && vlan->warn_on_zero_filters &&
-	    !(table->kernel_blocked[EFX_DL_FILTER_BLOCK_KERNEL_UCAST] &&
-	      table->kernel_blocked[EFX_DL_FILTER_BLOCK_KERNEL_MCAST])) {
+	    !(table->kernel_blocked[EFX_FILTER_BLOCK_KERNEL_UCAST] &&
+	      table->kernel_blocked[EFX_FILTER_BLOCK_KERNEL_MCAST])) {
 #else
 	if (n_filters == 0 && vlan->warn_on_zero_filters) {
 #endif
@@ -1845,12 +1835,10 @@ static void efx_mcdi_filter_netdev_uc_addrs(struct efx_nic *efx,
 	struct netdev_hw_addr *uc;
 
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	struct efx_mcdi_filter_table *table = efx->filter_state;
 
-	if (table->kernel_blocked[EFX_DL_FILTER_BLOCK_KERNEL_UCAST])
+	if (table->kernel_blocked[EFX_FILTER_BLOCK_KERNEL_UCAST])
 		return;
-#endif
 #endif
 
 	/* Copy/convert the address lists; add the primary station
@@ -1878,12 +1866,10 @@ static void efx_mcdi_filter_netdev_mc_addrs(struct efx_nic *efx,
 #endif
 
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	struct efx_mcdi_filter_table *table = efx->filter_state;
 
-	if (table->kernel_blocked[EFX_DL_FILTER_BLOCK_KERNEL_MCAST])
+	if (table->kernel_blocked[EFX_FILTER_BLOCK_KERNEL_MCAST])
 		return;
-#endif
 #endif
 
 	*mc_promisc = !!(net_dev->flags & (IFF_PROMISC | IFF_ALLMULTI));
@@ -2756,9 +2742,8 @@ out_unlock:
 #endif /* CONFIG_RFS_ACCEL*/
 
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 int efx_mcdi_filter_block_kernel(struct efx_nic *efx,
-				 enum efx_dl_filter_block_kernel_type type)
+				 enum efx_filter_block_kernel_type type)
 {
 	struct efx_mcdi_filter_table *table;
 	int rc = 0;
@@ -2776,7 +2761,7 @@ int efx_mcdi_filter_block_kernel(struct efx_nic *efx,
 
 	efx_mcdi_filter_sync_rx_mode(efx);
 
-	if (type == EFX_DL_FILTER_BLOCK_KERNEL_UCAST)
+	if (type == EFX_FILTER_BLOCK_KERNEL_UCAST)
 		rc = efx_mcdi_filter_clear_rx(efx, EFX_FILTER_PRI_HINT);
 out:
 	up_read(&efx->filter_sem);
@@ -2785,7 +2770,7 @@ out:
 }
 
 void efx_mcdi_filter_unblock_kernel(struct efx_nic *efx,
-				    enum efx_dl_filter_block_kernel_type type)
+				    enum efx_filter_block_kernel_type type)
 {
 	struct efx_mcdi_filter_table *table;
 
@@ -2803,7 +2788,6 @@ out:
 	up_read(&efx->filter_sem);
 	mutex_unlock(&efx->mac_lock);
 }
-#endif /* CONFIG_SFC_DRIVERLINK */
 #endif /* EFX_NOT_UPSTREAM */
 
 u32 efx_mcdi_get_default_rss_flags(struct efx_nic *efx)
@@ -3032,7 +3016,7 @@ int efx_mcdi_rx_push_shared_rss_config(struct efx_nic *efx,
 	efx_mcdi_init_rss_flags(efx);
 	efx_mcdi_get_rss_context_flags(efx, &efx->rss_context);
 	table->rss_context_exclusive = false;
-	efx_set_default_rx_indir_table(efx, &efx->rss_context);
+	efx_set_default_rx_indir_table(&efx->rss_context, efx->rss_spread);
 	return 0;
 }
 
@@ -3066,8 +3050,7 @@ static int efx_mcdi_filter_rx_push_exclusive_rss_config(struct efx_nic *efx,
 		memcpy(efx->rss_context.rx_indir_table, rx_indir_table,
 		       sizeof(efx->rss_context.rx_indir_table));
 	if (key != efx->rss_context.rx_hash_key)
-		memcpy(efx->rss_context.rx_hash_key, key,
-		       efx->type->rx_hash_key_size);
+		memcpy(efx->rss_context.rx_hash_key, key, EFX_RX_KEY_LEN);
 
 	return 0;
 
@@ -3115,7 +3098,7 @@ int efx_mcdi_rx_push_rss_context_config(struct efx_nic *efx,
 
 	memcpy(ctx->rx_indir_table, rx_indir_table,
 	       sizeof(efx->rss_context.rx_indir_table));
-	memcpy(ctx->rx_hash_key, key, efx->type->rx_hash_key_size);
+	memcpy(ctx->rx_hash_key, key, EFX_RX_KEY_LEN);
 
 	return 0;
 }
@@ -3291,7 +3274,7 @@ int efx_mcdi_push_default_indir_table(struct efx_nic *efx,
 
 	efx_mcdi_rx_free_indir_table(efx);
 	if (rss_spread > 1) {
-		efx_set_default_rx_indir_table(efx, &efx->rss_context);
+		efx_set_default_rx_indir_table(&efx->rss_context, rss_spread);
 		rc = efx->type->rx_push_rss_config(efx, false,
 				   efx->rss_context.rx_indir_table, NULL);
 	}

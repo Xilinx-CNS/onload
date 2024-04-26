@@ -96,6 +96,7 @@ static inline u32 efx_rx_buf_hash(struct efx_nic *efx, const u8 *eh)
 #endif
 }
 
+void efx_set_default_rx_indir_table(struct efx_rss_context *ctx, u32 spread);
 void efx_fast_push_rx_descriptors(struct efx_rx_queue *rx_queue, bool atomic);
 
 void

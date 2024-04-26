@@ -31,14 +31,14 @@ static LIST_HEAD(efx_nic_list);
  * @driver_node: per-driver list node
  * @publish_count: Number of external stacks that have published this handle
  * @block_kernel_count: Number of times client has requested each kernel block,
- *     indexed by enum efx_dl_filter_block_kernel_type
+ *     indexed by enum efx_filter_block_kernel_type
  */
 struct efx_dl_handle {
 	struct efx_dl_device efx_dev;
 	struct list_head nic_node;
 	struct list_head driver_node;
 	unsigned int publish_count;
-	unsigned int block_kernel_count[EFX_DL_FILTER_BLOCK_KERNEL_MAX];
+	unsigned int block_kernel_count[EFX_FILTER_BLOCK_KERNEL_MAX];
 };
 
 static struct efx_dl_handle *efx_dl_handle(struct efx_dl_device *efx_dev)
@@ -102,7 +102,7 @@ static void efx_dl_del_device(struct efx_dl_device *efx_dev)
 	nic->ops->resume(efx_dev);
 
 	/* Remove this client's kernel blocks */
-	for (type = 0; type < EFX_DL_FILTER_BLOCK_KERNEL_MAX; type++)
+	for (type = 0; type < EFX_FILTER_BLOCK_KERNEL_MAX; type++)
 		while (efx_handle->block_kernel_count[type])
 			efx_dl_filter_unblock_kernel(efx_dev, type);
 
@@ -412,7 +412,7 @@ int efx_dl_handle_event(struct efx_dl_nic *nic, void *event, int budget)
 EXPORT_SYMBOL(efx_dl_handle_event);
 
 int efx_dl_filter_block_kernel(struct efx_dl_device *dl_dev,
-			       enum efx_dl_filter_block_kernel_type type)
+			       enum efx_filter_block_kernel_type type)
 {
 	struct efx_dl_handle *handle = efx_dl_handle(dl_dev);
 	int rc = 0;
@@ -426,7 +426,7 @@ int efx_dl_filter_block_kernel(struct efx_dl_device *dl_dev,
 EXPORT_SYMBOL(efx_dl_filter_block_kernel);
 
 void efx_dl_filter_unblock_kernel(struct efx_dl_device *dl_dev,
-				  enum efx_dl_filter_block_kernel_type type)
+				  enum efx_filter_block_kernel_type type)
 {
 	struct efx_dl_handle *handle = efx_dl_handle(dl_dev);
 

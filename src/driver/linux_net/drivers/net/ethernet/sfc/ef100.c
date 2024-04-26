@@ -14,7 +14,6 @@
 #endif
 #include "efx_common.h"
 #include "efx_channels.h"
-#include "efx_auxbus.h"
 #include "debugfs.h"
 #include "io.h"
 #include "ef100_nic.h"
@@ -472,7 +471,6 @@ static void ef100_pci_remove(struct pci_dev *pci_dev)
 		return;
 
 	efx_ef100_set_bar_config(efx, EF100_BAR_CONFIG_NONE);
-	efx_auxbus_unregister(efx);
 	efx_fini_struct_tc(efx);
 	ef100_remove(efx);
 	efx_fini_io(efx);
@@ -482,10 +480,8 @@ static void ef100_pci_remove(struct pci_dev *pci_dev)
 	pci_disable_pcie_error_reporting(pci_dev);
 
 #endif
-	pci_set_drvdata(pci_dev, NULL);
-	probe_data = container_of(efx, struct efx_probe_data, efx);
-	efx_fini_struct(efx);
-	kfree(probe_data);
+	probe_data = efx_nic_to_probe_data(efx);
+	efx_fini_probe_data(probe_data);
 };
 
 static int efx_check_func_ctl_magic(struct efx_nic *efx)
@@ -503,24 +499,18 @@ static int ef100_pci_probe(struct pci_dev *pci_dev,
 			   const struct pci_device_id *entry)
 {
 	struct ef100_func_ctl_window fcw = { 0 };
+	const struct efx_nic_type *nic_type;
 	struct efx_probe_data *probe_data;
 	struct efx_nic *efx;
 	int rc;
 
-	/* Allocate probe data and struct efx_nic */
-	probe_data = kzalloc(sizeof(*probe_data), GFP_KERNEL);
-	if (!probe_data)
-		return -ENOMEM;
-	probe_data->pci_dev = pci_dev;
-	efx = &probe_data->efx;
-
-	efx->type = (const struct efx_nic_type *)entry->driver_data;
-	efx->pci_dev = pci_dev;
-	efx->client_id = MC_CMD_CLIENT_ID_SELF;
-	pci_set_drvdata(pci_dev, efx);
-	rc = efx_init_struct(efx, pci_dev);
+	nic_type = (const struct efx_nic_type *)entry->driver_data;
+	rc = efx_init_probe_data(pci_dev, nic_type, &probe_data);
 	if (rc)
 		goto fail;
+
+	efx = &probe_data->efx;
+	efx->client_id = MC_CMD_CLIENT_ID_SELF;
 
 	efx->vi_stride = EF100_DEFAULT_VI_STRIDE;
 	pci_info(pci_dev, "Solarflare EF100 NIC detected\n");
@@ -567,14 +557,9 @@ static int ef100_pci_probe(struct pci_dev *pci_dev,
 	rc = ef100_bsp_init(efx);
 	if (rc)
 		goto fail;
-	rc = efx_auxbus_register(efx);
-	if (rc)
-		pci_warn(pci_dev,
-			 "Unable to register auxiliary bus driver (%d)\n", rc);
 
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_PCI_ENABLE_PCIE_ERROR_REPORTING)
 	(void)pci_enable_pcie_error_reporting(pci_dev);
-
 #endif
 	efx->state = STATE_PROBED;
 	rc = efx_ef100_set_bar_config(efx, EF100_BAR_CONFIG_EF100);

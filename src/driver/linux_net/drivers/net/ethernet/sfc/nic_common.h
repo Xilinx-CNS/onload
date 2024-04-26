@@ -22,6 +22,7 @@ enum {
 	EFX_REV_SIENA_A0 = 3,
 	EFX_REV_HUNT_A0 = 4,
 	EFX_REV_EF100 = 5,
+	EFX_REV_X4 = 6,
 };
 
 static inline int efx_nic_rev(struct efx_nic *efx)
@@ -280,6 +281,17 @@ void efx_nic_update_stats(const struct efx_hw_stat_desc *desc, size_t count,
 			  const unsigned long *mask, u64 *stats,
 			  const void *mc_initial_stats, const void *mc_stats);
 void efx_nic_fix_nodesc_drop_stat(struct efx_nic *efx, u64 *stat);
+
+#ifdef EFX_NOT_UPSTREAM
+static inline
+bool efx_nic_client_supported(struct efx_nic *efx, enum efx_client_type type)
+{
+	if (efx->type->client_supported)
+		return efx->type->client_supported(efx, type);
+	/* Legacy NICs support an ethernet device and Onload stacks */
+	return (type == EFX_CLIENT_ETH || type == EFX_CLIENT_ONLOAD);
+}
+#endif
 
 #define EFX_MAX_FLUSH_TIME 5000
 

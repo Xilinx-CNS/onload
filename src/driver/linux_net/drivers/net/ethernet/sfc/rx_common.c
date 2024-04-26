@@ -1208,7 +1208,7 @@ struct efx_rss_context *efx_alloc_rss_context_entry(struct efx_nic *efx)
 	}
 
 	/* Create the new entry */
-	new = kmalloc(sizeof(struct efx_rss_context), GFP_KERNEL);
+	new = kzalloc(sizeof(struct efx_rss_context), GFP_KERNEL);
 	if (!new)
 		return NULL;
 	new->context_id = EFX_MCDI_RSS_CONTEXT_INVALID;
@@ -1242,14 +1242,13 @@ void efx_free_rss_context_entry(struct efx_rss_context *ctx)
 	kfree(ctx);
 }
 
-void efx_set_default_rx_indir_table(struct efx_nic *efx,
-		struct efx_rss_context *ctx)
+void efx_set_default_rx_indir_table(struct efx_rss_context *ctx, u32 spread)
 {
 	size_t i;
 
 	for (i = 0; i < ARRAY_SIZE(ctx->rx_indir_table); i++)
 		ctx->rx_indir_table[i] =
-			ethtool_rxfh_indir_default(i, efx->rss_spread);
+			ethtool_rxfh_indir_default(i, spread);
 }
 
 /**

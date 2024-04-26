@@ -14,6 +14,7 @@
 #include "efx_common.h"
 #include "mcdi_port_common.h"
 #include "debugfs.h"
+#include "efx_auxbus_internal.h"
 
 static int efx_mcdi_phy_diag_type(struct efx_nic *efx);
 static int efx_mcdi_phy_sff_8472_level(struct efx_nic *efx);
@@ -387,6 +388,16 @@ void mcdi_to_ethtool_linkset(struct efx_nic *efx, u32 media, u32 cap,
 			SET_CAP(10000baseKX4_Full);
 		if (CHECK_CAP(40000FDX))
 			SET_CAP(40000baseKR4_Full);
+#if !defined (EFX_USE_KCOMPAT) || defined (EFX_HAVE_LINK_MODE_25_50_100)
+		if (!EFX_WORKAROUND_3130(efx))
+			break;
+		if (CHECK_CAP(100000FDX))
+			SET_CAP(100000baseKR4_Full);
+		if (CHECK_CAP(25000FDX))
+			SET_CAP(25000baseKR_Full);
+		if (CHECK_CAP(50000FDX))
+			SET_CAP(50000baseKR2_Full);
+#endif
 		break;
 
 	case MC_CMD_MEDIA_XFP:
@@ -1269,6 +1280,9 @@ static int efx_mcdi_mac_stats(struct efx_nic *efx,
 	else if (action == EFX_STATS_DISABLE)
 		efx->stats_enabled = false;
 
+	if (EFX_WORKAROUND_5316(efx))
+		return -EOPNOTSUPP;
+
 	dma = action == EFX_STATS_PULL || efx->stats_enabled;
 	change = action != EFX_STATS_PULL;
 
@@ -1291,12 +1305,12 @@ static int efx_mcdi_mac_stats(struct efx_nic *efx,
 		MCDI_SET_DWORD(inbuf, MAC_STATS_IN_PORT_ID,
 			       efx->vport.vport_id);
 
-	rc = efx_mcdi_rpc_quiet(efx, MC_CMD_MAC_STATS, inbuf, sizeof(inbuf),
-				NULL, 0, NULL);
+	rc = efx_mcdi_rpc_quiet(efx, MC_CMD_MAC_STATS, inbuf,
+				sizeof(inbuf), NULL, 0, NULL);
 	/* Expect ENOENT if DMA queues have not been set up */
 	if (rc && (rc != -ENOENT || atomic_read(&efx->active_queues)))
-		efx_mcdi_display_error(efx, MC_CMD_MAC_STATS, sizeof(inbuf),
-				       NULL, 0, rc);
+		efx_mcdi_display_error(efx, MC_CMD_MAC_STATS,
+				       sizeof(inbuf), NULL, 0, rc);
 	return rc;
 }
 
@@ -1305,6 +1319,9 @@ static int efx_mcdi_mac_stats(struct efx_nic *efx,
 static void efx_mac_stats_schedule_monitor_work(struct efx_nic *efx)
 {
 	unsigned int period_ms = max(500u, efx->stats_period_ms * 2);
+
+	if (EFX_WORKAROUND_5316(efx))
+		return;
 
 	/* Only run the check when regular DMA is expected */
 	if (efx->stats_period_ms > 0)
@@ -1580,6 +1597,24 @@ static void efx_handle_drain_event(struct efx_nic *efx)
 	WARN_ON(atomic_read(&efx->active_queues) < 0);
 }
 
+#ifdef EFX_NOT_UPSTREAM
+static int efx_handle_flush_event(struct efx_nic *efx, int channel,
+				  efx_qword_t *event, int budget)
+{
+	int count = efx_auxbus_send_poll_event(efx_nic_to_probe_data(efx),
+					       channel, event, budget);
+
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
+	/* Fall back to driverlink if there were no legacy Onload clients
+	 * on the auxiliary bus.
+	 */
+	if (count == -ENODEV)
+		count = efx_dl_handle_event(&efx->dl_nic, event, budget);
+#endif
+	return count;
+}
+#endif
+
 bool efx_mcdi_port_process_event_common(struct efx_channel *channel,
 					efx_qword_t *event, int *rc, int budget)
 {
@@ -1610,10 +1645,9 @@ bool efx_mcdi_port_process_event_common(struct efx_channel *channel,
 		if (!MCDI_EVENT_FIELD(*event, TX_FLUSH_TO_DRIVER))
 			efx_handle_drain_event(efx);
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 		else
-			*rc = efx_dl_handle_event(&efx->dl_nic, event, budget);
-#endif
+			*rc = efx_handle_flush_event(efx, channel->channel,
+						     event, budget);
 #endif
 		return true;
 	case MCDI_EVENT_CODE_SENSOREVT:

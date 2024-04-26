@@ -40,6 +40,13 @@
 #ifdef EFX_NOT_UPSTREAM
 #if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 #include "io.h"
+
+#ifdef EFX_C_MODEL
+#define EF100_ONLOAD_VIS 4
+#else
+#define EF100_ONLOAD_VIS 64
+#endif
+#define EF100_ONLOAD_IRQS 8
 #endif
 #endif
 
@@ -51,37 +58,40 @@ static void ef100_update_name(struct efx_nic *efx)
 
 static int ef100_alloc_vis(struct efx_nic *efx, unsigned int *allocated_vis)
 {
-	unsigned int rx_vis = efx_rx_channels(efx);
 	unsigned int tx_vis = efx_tx_channels(efx) * efx->tx_queues_per_channel;
-	unsigned int min_vis, max_vis;
+	unsigned int min_vis, channel_vis;
 	int rc;
 
-	tx_vis += efx_xdp_channels(efx) * efx->xdp_tx_per_channel;
-
-	max_vis = max(rx_vis, tx_vis);
 	min_vis = efx->tx_queues_per_channel;
+	tx_vis += efx_xdp_channels(efx) * efx->xdp_tx_per_channel;
+	channel_vis = min_t(unsigned int, max(efx_rx_channels(efx), tx_vis),
+			    efx->max_vis);
 #ifdef EFX_NOT_UPSTREAM
+	efx->vi_resources.vi_min = channel_vis;
 #if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	/* We will consume all VIs with IDs less than the current value of
-	 * max_vis, so report that as the ID of the first VI available to the
-	 * driverlink client, and then bump the requested number of VIs by the
-	 * number that the client would like. */
-	efx->ef10_resources.vi_min = max_vis;
-	max_vis += EF100_ONLOAD_VIS;
+	 * channel_vis, so report that as the ID of the first VI available
+	 * to the driverlink client.
+	 */
+	efx->ef10_resources.vi_min = channel_vis;
+	channel_vis += EF100_ONLOAD_VIS;
 #endif
 #endif
-	rc = efx_mcdi_alloc_vis(efx, min_vis, max_vis,
-#if defined(EFX_NOT_UPSTREAM) && IS_MODULE(CONFIG_SFC_DRIVERLINK)
-				&efx->ef10_resources.vi_base,
-				&efx->ef10_resources.vi_shift,
+
+	rc = efx_mcdi_alloc_vis(efx, min_vis, channel_vis,
+#if defined(EFX_NOT_UPSTREAM)
+				&efx->vi_resources.vi_base,
+				&efx->vi_resources.vi_shift,
 #else
 				NULL, NULL,
 #endif
 				allocated_vis);
 	if (rc)
 		return rc;
-	if ((*allocated_vis >= min_vis) && (*allocated_vis < max_vis))
+	if ((*allocated_vis >= min_vis) && (*allocated_vis < channel_vis))
 		rc = -EAGAIN;
+	/* Update how many actual VIs we have in total */
+	efx->max_vis = *allocated_vis;
 
 	return rc;
 }
@@ -323,7 +333,6 @@ int ef100_net_alloc(struct efx_nic *efx)
 				efx_fini_channels(efx);
 
 				ef100_adjust_channels(efx, allocated_vis);
-				efx->max_vis = allocated_vis;
 			}
 		}
 	} while (rc == -EAGAIN);
@@ -372,6 +381,9 @@ int ef100_net_alloc(struct efx_nic *efx)
 		return rc;
 
 #ifdef EFX_NOT_UPSTREAM
+	efx->vi_resources.vi_lim = allocated_vis;
+	efx->vi_resources.rss_channel_count = efx->rss_spread;
+	efx->vi_resources.vi_stride = efx->vi_stride;
 #if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	/* Register with driverlink layer */
 	efx->ef10_resources.vi_lim = allocated_vis;

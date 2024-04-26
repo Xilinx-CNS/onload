@@ -282,18 +282,6 @@ struct efx_dl_irq_resources {
 };
 
 /**
- * enum efx_dl_filter_block_kernel_type - filter types
- * @EFX_DL_FILTER_BLOCK_KERNEL_UCAST: Unicast
- * @EFX_DL_FILTER_BLOCK_KERNEL_MCAST: Multicast
- */
-enum efx_dl_filter_block_kernel_type {
-	EFX_DL_FILTER_BLOCK_KERNEL_UCAST = 0,
-	EFX_DL_FILTER_BLOCK_KERNEL_MCAST,
-	/** @EFX_DL_FILTER_BLOCK_KERNEL_MAX: Limit of enum values */
-	EFX_DL_FILTER_BLOCK_KERNEL_MAX,
-};
-
-/**
  * struct efx_dl_ops - Operations for driverlink clients to use
  *	on a driverlink nic.
  * @hw_unavailable: Return %true if hardware is uninitialised or disabled.
@@ -369,9 +357,9 @@ struct efx_dl_ops {
 						  bool suppress, u16 vport_id,
 						  u8 stack_id);
 	int (*filter_block_kernel)(struct efx_dl_device *dl_dev,
-				   enum efx_dl_filter_block_kernel_type block);
+				   enum efx_filter_block_kernel_type block);
 	void (*filter_unblock_kernel)(struct efx_dl_device *dl_dev,
-				      enum efx_dl_filter_block_kernel_type type);
+				      enum efx_filter_block_kernel_type type);
 	int (*mcdi_rpc)(struct efx_dl_device *dl_dev,
 			unsigned int cmd, size_t inlen, size_t outlen,
 			size_t *outlen_actual,
@@ -783,7 +771,7 @@ int efx_dl_set_multicast_loopback_suppression(struct efx_dl_device *efx_dev,
  * Return: a negative error code or 0 on success.
  */
 int efx_dl_filter_block_kernel(struct efx_dl_device *dl_dev,
-			       enum efx_dl_filter_block_kernel_type type);
+			       enum efx_filter_block_kernel_type type);
 
 /**
  * efx_dl_filter_unblock_kernel - Reverse efx_filter_block_kernel()
@@ -793,7 +781,7 @@ int efx_dl_filter_block_kernel(struct efx_dl_device *dl_dev,
  * This decrements the kernel block count for the client.
  */
 void efx_dl_filter_unblock_kernel(struct efx_dl_device *dl_dev,
-				  enum efx_dl_filter_block_kernel_type type);
+				  enum efx_filter_block_kernel_type type);
 
 /**
  * efx_dl_mcdi_rpc - Issue an MCDI command and wait for completion

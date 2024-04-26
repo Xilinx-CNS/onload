@@ -50,9 +50,13 @@ int __efx_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb);
 
 static inline int efx_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb)
 {
+#if IS_ENABLED(CONFIG_SFC_EF100)
 	return INDIRECT_CALL_2(tx_queue->efx->type->tx_enqueue,
 			       ef100_enqueue_skb, __efx_enqueue_skb,
 			       tx_queue, skb);
+#else
+	return __efx_enqueue_skb(tx_queue, skb);
+#endif
 }
 
 void efx_xmit_done_single(struct efx_tx_queue *tx_queue);
@@ -60,8 +64,6 @@ extern unsigned int efx_piobuf_size;
 extern bool separate_tx_channels;
 
 /* RX */
-void efx_set_default_rx_indir_table(struct efx_nic *efx,
-				    struct efx_rss_context *ctx);
 void __efx_rx_packet(struct efx_rx_queue *rx_queue);
 void efx_rx_packet(struct efx_rx_queue *rx_queue, unsigned int index,
 		   unsigned int n_frags, unsigned int len, u16 flags);
@@ -69,17 +71,23 @@ void efx_rx_packet(struct efx_rx_queue *rx_queue, unsigned int index,
 static inline void efx_rx_flush_packet(struct efx_rx_queue *rx_queue)
 {
 	if (rx_queue->rx_pkt_n_frags)
+#if IS_ENABLED(CONFIG_SFC_EF100)
 		INDIRECT_CALL_2(rx_queue->efx->type->rx_packet,
 				__ef100_rx_packet, __efx_rx_packet,
 				rx_queue);
+#else
+		__efx_rx_packet(rx_queue);
+#endif
 }
 
 static inline bool efx_rx_buf_hash_valid(struct efx_nic *efx, const u8 *prefix)
 {
+#if IS_ENABLED(CONFIG_SFC_EF100)
 	if (efx->type->rx_buf_hash_valid)
 		return INDIRECT_CALL_1(efx->type->rx_buf_hash_valid,
 				       ef100_rx_buf_hash_valid,
 				       prefix);
+#endif
 	return true;
 }
 
@@ -179,6 +187,12 @@ static inline void efx_ssr_end_of_burst(struct efx_rx_queue *rx_queue)
 #endif /* EFX_USE_SFC_LRO */
 
 /* Filters */
+/* For auxiliary bus clients we additionally include the priority in the
+ * filter ID so that we can pass it back into efx_filter_remove_id_safe().
+ */
+#define EFX_FILTER_PRI_SHIFT    28
+#define EFX_FILTER_ID_MASK      GENMASK(EFX_FILTER_PRI_SHIFT - 1, 0)
+
 /**
  * efx_filter_insert_filter - add or replace a filter
  * @efx: NIC in which to insert the filter
@@ -339,9 +353,6 @@ int efx_init_irq_moderation(struct efx_nic *efx, unsigned int tx_usecs,
 			    bool rx_may_override_tx);
 int efx_get_irq_moderation(struct efx_nic *efx, unsigned int *tx_usecs,
 			    unsigned int *rx_usecs, bool *rx_adaptive);
-#ifdef EFX_NOT_UPSTREAM
-extern int efx_target_num_vis;
-#endif
 
 /* Update the generic software stats in the passed stats array */
 void efx_update_sw_stats(struct efx_nic *efx, u64 *stats);

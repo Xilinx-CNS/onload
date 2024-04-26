@@ -595,7 +595,6 @@ static int get_net_config(struct ef100_vdpa_nic *vdpa_nic)
 		return rc;
 	}
 	vdpa_nic->net_config.status = cpu_to_efx_vdpa16(vdpa_nic, link_up);
-	vdpa_nic->net_config.speed = cpu_to_efx_vdpa32(vdpa_nic, speed);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VIRTIO_NET_SPEED_LE32)
 	vdpa_nic->net_config.speed = cpu_to_le32(speed);
 #else

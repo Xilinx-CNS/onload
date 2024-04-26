@@ -176,4 +176,28 @@ enum reset_type {
 	RESET_TYPE_MAX,
 };
 
+#ifdef EFX_NOT_UPSTREAM
+/**
+ * enum efx_client_type - The type of NIC client.
+ *
+ * A client type represents a group of resources that needs to be managed
+ * by the driver, and possibly by the firmware as well. Older devices will
+ * typically have a specific purpose and only support a single client type,
+ * but newer devices can have multiple roles.
+ *
+ * This enum allows for the single sfc.ko module to support all client types.
+ * A given device will typically only have hardware/firmware support for
+ * a specific set of client types.
+ *
+ * @EFX_CLIENT_ETH: The client is an ethernet device managed directly by sfc.ko.
+ * @EFX_CLIENT_ONLOAD: The client is an Onload stack using the full-featured
+ *	datapath.
+ * @_EFX_CLIENT_MAX: Internal enum to allow looping over the type.
+ */
+enum efx_client_type {
+	EFX_CLIENT_ETH,
+	EFX_CLIENT_ONLOAD,
+	_EFX_CLIENT_MAX
+};
+#endif
 #endif /* EFX_ENUM_H */

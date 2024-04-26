@@ -692,6 +692,9 @@ static inline void efx_mcdi_dynamic_sensor_event(struct efx_nic *efx, efx_qword_
 #define MCDI_VAR_ARRAY_LEN(_len, _field)				\
 	min_t(size_t, MC_CMD_ ## _field ## _MAXNUM,			\
 	      ((_len) - MC_CMD_ ## _field ## _OFST) / MC_CMD_ ## _field ## _LEN)
+#define MCDI_ARRAY_BYTE(_buf, _field, _index)				\
+	(BUILD_BUG_ON_ZERO(MC_CMD_ ## _field ## _LEN != 1) +		\
+	 *(__force const u8 *)_MCDI_ARRAY_PTR(_buf, _field, _index, 1))
 #define MCDI_ARRAY_WORD(_buf, _field, _index)				\
 	(BUILD_BUG_ON_ZERO(MC_CMD_ ## _field ## _LEN != 2) +		\
 	 le16_to_cpu(*(__force const __le16 *)				\

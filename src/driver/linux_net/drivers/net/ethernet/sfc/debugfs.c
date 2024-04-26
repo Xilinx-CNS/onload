@@ -1097,17 +1097,15 @@ void efx_fini_debugfs(void)
 }
 
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 int efx_debugfs_read_kernel_blocked(struct seq_file *file, void *data)
 {
 	unsigned int i;
 	bool *kernel_blocked = data;
 
-	for (i = 0; i < EFX_DL_FILTER_BLOCK_KERNEL_MAX; i++)
+	for (i = 0; i < EFX_FILTER_BLOCK_KERNEL_MAX; i++)
 		seq_printf(file, "%u:%d\n", i, kernel_blocked[i]);
 	return 0;
 }
-#endif
 #endif
 
 void efx_debugfs_print_filter(char *s, size_t l, struct efx_filter_spec *spec)

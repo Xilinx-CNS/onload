@@ -212,6 +212,7 @@ int efx_ef100_init_datapath_caps(struct efx_nic *efx)
 	struct ef100_nic_data *nic_data = efx->nic_data;
 	u8 vi_window_mode;
 	size_t outlen;
+	u16 port;
 	int rc;
 
 	BUILD_BUG_ON(MC_CMD_GET_CAPABILITIES_IN_LEN != 0);
@@ -280,6 +281,15 @@ int efx_ef100_init_datapath_caps(struct efx_nic *efx)
 			MCDI_DWORD(outbuf,
 				   GET_CAPABILITIES_V10_OUT_GUARANTEED_QUEUE_SIZES);
 	}
+	efx->max_vis = EFX_MAX_CHANNELS; /* What the driver can handle */
+	port = MCDI_ARRAY_BYTE(outbuf,
+			       GET_CAPABILITIES_V2_OUT_PFS_TO_PORTS_ASSIGNMENT,
+			       nic_data->pf_index);
+	if (port < MC_CMD_GET_CAPABILITIES_V2_OUT_INCOMPATIBLE_ASSIGNMENT)
+		efx->max_vis = MCDI_ARRAY_WORD(outbuf,
+				GET_CAPABILITIES_V2_OUT_NUM_VIS_PER_PORT,
+				port);
+
 	pci_dbg(efx->pci_dev,
 		"firmware reports num_mac_stats = %u\n",
 		efx->num_mac_stats);
@@ -1947,7 +1957,6 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.rx_prefix_size = ESE_GZ_RX_PKT_PREFIX_LEN,
 	.rx_hash_offset = ESF_GZ_RX_PREFIX_RSS_HASH_LBN / 8,
 	.rx_ts_offset = ESF_GZ_RX_PREFIX_PARTIAL_TSTAMP_LBN / 8,
-	.rx_hash_key_size = 40,
 	.rx_pull_rss_config = efx_mcdi_rx_pull_rss_config,
 	.rx_push_rss_config = efx_ef100_rx_push_rss_config,
 	.rx_push_rss_context_config = efx_mcdi_rx_push_rss_context_config,
@@ -2080,7 +2089,6 @@ const struct efx_nic_type ef100_vf_nic_type = {
 	.rx_prefix_size = ESE_GZ_RX_PKT_PREFIX_LEN,
 	.rx_hash_offset = ESF_GZ_RX_PREFIX_RSS_HASH_LBN / 8,
 	.rx_ts_offset = ESF_GZ_RX_PREFIX_PARTIAL_TSTAMP_LBN / 8,
-	.rx_hash_key_size = 40,
 	.rx_pull_rss_config = efx_mcdi_rx_pull_rss_config,
 	.rx_push_rss_config = efx_ef100_rx_push_rss_config,
 	.rx_restore_rss_contexts = efx_mcdi_rx_restore_rss_contexts,
