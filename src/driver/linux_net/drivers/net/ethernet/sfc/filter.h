@@ -35,7 +35,6 @@ static inline void efx_ether_addr_copy(u8 *dst, const u8 *src)
 #define ether_addr_copy efx_ether_addr_copy
 #endif
 
-#ifdef EFX_NOT_UPSTREAM
 /**
  * enum efx_filter_block_kernel_type - filter types
  * @EFX_FILTER_BLOCK_KERNEL_UCAST: Unicast
@@ -47,7 +46,6 @@ enum efx_filter_block_kernel_type {
 	EFX_FILTER_BLOCK_KERNEL_MCAST,
 	EFX_FILTER_BLOCK_KERNEL_MAX,
 };
-#endif
 
 /**
  * enum efx_filter_match_flags - Flags for hardware filter match type
