@@ -20,7 +20,8 @@ jobs:
       - name: Install Onload Deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y libcap-dev libmnl-dev
+          sudo apt-get install -y libcap-dev libmnl-dev python3 python3-pip
+          sudo pip3 install pytest pyroute2
 
       - name: setup Env
         run: |
@@ -31,14 +32,6 @@ jobs:
           cd $GITHUB_WORKSPACE/onload_internal
           mmakebuildtree --user
 
-      - name: build DEBUG driver
-        run: |
-          make -C "$(mmaketool --toppath)" -j $(nproc)
-
-      - name: build DEBUG user
-        run: |
-          make -C "$(mmaketool --toppath)/build/$(mmaketool --userbuild)" -j $(nproc)
-
       - name: build NDEBUG driver
         run: |
           make -C "$(mmaketool --toppath)" -j $(nproc) NDEBUG=1
@@ -46,3 +39,67 @@ jobs:
       - name: build NDEBUG user
         run: |
           make -C "$(mmaketool --toppath)/build/$(mmaketool --userbuild)" -j $(nproc) NDEBUG=1
+
+      - name: Remake mmake buildtrees
+        run: |
+          cd $GITHUB_WORKSPACE/onload_internal
+          rm -rf build
+          mmakebuildtree --user
+
+      - name: build DEBUG driver (cloud)
+        env:
+          TRANSPORT_CONFIG_OPT_HDR: ci/internal/transport_config_opt_cloud.h
+        run: |
+          make -C "$(mmaketool --toppath)" -j $(nproc)
+
+      - name: build DEBUG user (cloud)
+        id: cloud_build_user
+        env:
+          TRANSPORT_CONFIG_OPT_HDR: ci/internal/transport_config_opt_cloud.h
+        run: |
+          make -C "$(mmaketool --toppath)/build/$(mmaketool --userbuild)" -j $(nproc)
+
+      - name: cplane unit tests
+        if: ${{ ! cancelled() && steps.cloud_build_user.conclusion == 'success' }}
+        run: |
+          cd $GITHUB_WORKSPACE/onload_internal/build/gnu_x86_64
+          {
+            echo "# Test Summary"
+            echo "## CPlane Unit Tests"
+            echo "\`\`\`"
+          } >> $GITHUB_STEP_SUMMARY
+          make -C tests/onload/cplane_unit test UNIT_TEST_OUTPUT=$GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: cplane system tests
+        if: ${{ ! cancelled() && steps.cloud_build_user.conclusion == 'success' }}
+        run: |
+          cd $GITHUB_WORKSPACE/onload_internal/build/gnu_x86_64
+          {
+            echo "## CPlane System Tests"
+            echo "\`\`\`"
+          } >> $GITHUB_STEP_SUMMARY
+          make -C tests/onload/cplane_sysunit test UNIT_TEST_OUTPUT=$GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: orm tests
+        if: ${{ ! cancelled() && steps.cloud_build_user.conclusion == 'success' }}
+        run: |
+          cd $GITHUB_WORKSPACE/onload_internal/build/gnu_x86_64
+          {
+            echo "## Onload Remote Monitor Unit Tests"
+            echo "\`\`\`"
+          } >> $GITHUB_STEP_SUMMARY
+          make -C tests/onload/onload_remote_monitor/internal_tests test UNIT_TEST_OUTPUT=$GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: oof tests
+        if: ${{ ! cancelled() && steps.cloud_build_user.conclusion == 'success' }}
+        run: |
+          cd $GITHUB_WORKSPACE/onload_internal/build/gnu_x86_64
+          {
+            echo "## OOF Unit Tests"
+            echo "\`\`\`"
+          } >> $GITHUB_STEP_SUMMARY
+          make -C tests/onload/oof tests UNIT_TEST_OUTPUT=$GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
