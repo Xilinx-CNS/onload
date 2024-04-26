@@ -2429,10 +2429,10 @@ ef10_ef100_multicast_block(struct efhw_nic *nic, bool block)
 		return -ENETDOWN;
 	if( block )
 		rc = efx_dl_filter_block_kernel(efx_dev,
-					    EFX_DL_FILTER_BLOCK_KERNEL_MCAST);
+					    EFX_FILTER_BLOCK_KERNEL_MCAST);
 	else
 		efx_dl_filter_unblock_kernel(efx_dev,
-					    EFX_DL_FILTER_BLOCK_KERNEL_MCAST);
+					    EFX_FILTER_BLOCK_KERNEL_MCAST);
 	efhw_nic_release_dl_device(nic, efx_dev);
 	return rc;
 }
@@ -2447,10 +2447,10 @@ ef10_ef100_unicast_block(struct efhw_nic *nic, bool block)
 		return -ENETDOWN;
 	if( block )
 		rc = efx_dl_filter_block_kernel(efx_dev,
-					    EFX_DL_FILTER_BLOCK_KERNEL_UCAST);
+					    EFX_FILTER_BLOCK_KERNEL_UCAST);
 	else
 		efx_dl_filter_unblock_kernel(efx_dev,
-					    EFX_DL_FILTER_BLOCK_KERNEL_UCAST);
+					    EFX_FILTER_BLOCK_KERNEL_UCAST);
 	efhw_nic_release_dl_device(nic, efx_dev);
 	return rc;
 }
