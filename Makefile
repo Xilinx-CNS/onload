@@ -239,12 +239,12 @@ ONLOAD_CFLAGS += -Werror
 endif
 
 # TODO Address these in the source code.
-ONLOAD_CFLAGS += -Wno-missing-prototypes -Wno-missing-declarations
+ONLOAD_CFLAGS += -Wno-missing-prototypes -Wno-missing-declarations -DEFX_NOT_UPSTREAM=1
 
 ONLOAD_MAKEFLAGS ?=
 
 ifeq ($(HAVE_SFC),1)
-  ONLOAD_CFLAGS += -DCI_HAVE_SFC=1 -DEFX_NOT_UPSTREAM=1
+  ONLOAD_CFLAGS += -DCI_HAVE_SFC=1
   # This code base does not support Solarflare Siena.
   ONLOAD_MAKEFLAGS += CONFIG_SFC_SIENA=
 else
