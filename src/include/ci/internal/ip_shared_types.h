@@ -144,7 +144,7 @@ typedef struct {
 typedef ci_uint16 oo_ts_flags_t;
 
 /* Timestamp structure including fractional nanoseconds and the sync
- * flags that apply to the timetamp. Equivalent to ef_precisetime. */
+ * flags that apply to the timestamp. Equivalent to ef_precisetime. */
 struct oo_timespec {
   ci_int64 tv_sec;
   ci_uint32 tv_nsec;
@@ -239,9 +239,6 @@ typedef union {
     oo_pkt_p          block_end;     /* end of the current (un)sacked block */
     oo_sp             sock_id;       /* The socket this pkt is tx'd on:
                                       * used in oo_deferred_arp_failed() */
-#if CI_CFG_TIMESTAMPING
-    struct oo_timespec first_tx_hw_stamp; /* Timestamp of the first transmit */
-#endif
     ci_user_ptr_t     next CI_ALIGN(8);   /* for ci_tcp_sendmsg() local use only! */
   } tcp_tx CI_ALIGN(8);
   struct {
@@ -276,8 +273,28 @@ struct ci_ip_pkt_fmt_s {
    * latency). The speculation is that the cause of the slowdown is cache
    * associativity set contention. Ideas for removing this wasted space
    * include non-power-of-2 packet buffers and split metadata/payload of
-   * packet buffers. */
-  char                  unused_padding[CI_CACHE_LINE_SIZE];
+   * packet buffers.
+   *
+   * Share said wasted space with expanded timestamp structure */
+  union {
+    char                  unused_padding[CI_CACHE_LINE_SIZE];
+
+#if CI_CFG_TIMESTAMPING
+    struct {
+      /*! Timestamp of the first TCP transmit */
+      struct oo_timespec    first_tx_hw_stamp;
+
+      /*! UTC time we were sent or received according to hw */
+      struct oo_timespec    hw_stamp;
+
+      /*! Key for SOF_TIMESTAMPING_OPT_ID */
+      ci_uint32             ts_key;
+    };
+#endif
+  };
+
+  /* N.B. The first member after the above padding is the subject of
+   * a static assertion defined after this struct. */
 
   /* For use by transport layer to form linked lists. */
   oo_pkt_p              next;
@@ -342,14 +359,6 @@ struct ci_ip_pkt_fmt_s {
 
   /*! Length of data from base_addr used in this buffer. */
   ci_int16              buf_len;
-
-#if CI_CFG_TIMESTAMPING
-  /*! UTC time we were sent or received according to hw */
-  struct oo_timespec    hw_stamp;
-
-  /*! Key for SOF_TIMESTAMPING_OPT_ID */
-  ci_uint32             ts_key;
-#endif
 
   union {
     struct {
@@ -462,6 +471,7 @@ struct ci_ip_pkt_fmt_s {
   ci_uint8              dma_start[1]  CI_ALIGN(EF_VI_DMA_ALIGN);
 };
 
+CI_BUILD_ASSERT(offsetof(struct ci_ip_pkt_fmt_s, next) == CI_CACHE_LINE_SIZE);
 
 #define CI_PKT_ZC_PAYLOAD_ALIGN    8
 struct ci_pkt_zc_payload {

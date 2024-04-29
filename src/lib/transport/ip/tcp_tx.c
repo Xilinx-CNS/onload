@@ -974,7 +974,7 @@ int ci_tcp_retrans_one(ci_tcp_state* ts, ci_netif* netif, ci_ip_pkt_fmt* pkt)
 #if CI_CFG_TIMESTAMPING
   if( (pkt->flags & (CI_PKT_FLAG_RTQ_RETRANS | CI_PKT_FLAG_TX_TIMESTAMPED)) ==
       CI_PKT_FLAG_TX_TIMESTAMPED )
-    pkt->pf.tcp_tx.first_tx_hw_stamp = pkt->hw_stamp;
+    pkt->first_tx_hw_stamp = pkt->hw_stamp;
 #endif
   ci_tcp_tx_maybe_do_striping(pkt, ts);
   __ci_ip_send_tcp(netif, pkt, ts);

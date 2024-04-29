@@ -160,10 +160,10 @@ static inline int ci_ip_tx_timestamping_to_cmsg(int proto, ci_netif* ni,
       OO_TS_FLAG_ACCEPTABLE;
 
     if( pkt->flags & CI_PKT_FLAG_RTQ_RETRANS ) {
-      if( pkt->pf.tcp_tx.first_tx_hw_stamp.tv_flags &
+      if( pkt->first_tx_hw_stamp.tv_flags &
           OO_TS_FLAG_ACCEPTABLE ) {
-        stamps.first_sent.tv_sec = pkt->pf.tcp_tx.first_tx_hw_stamp.tv_sec;
-        stamps.first_sent.tv_nsec = pkt->pf.tcp_tx.first_tx_hw_stamp.tv_nsec;
+        stamps.first_sent.tv_sec = pkt->first_tx_hw_stamp.tv_sec;
+        stamps.first_sent.tv_nsec = pkt->first_tx_hw_stamp.tv_nsec;
       }
       if( tx_hw_stamp_in_sync ) {
         stamps.last_sent.tv_sec = pkt->hw_stamp.tv_sec;
