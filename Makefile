@@ -244,7 +244,7 @@ ONLOAD_CFLAGS += -Wno-missing-prototypes -Wno-missing-declarations
 ONLOAD_MAKEFLAGS ?=
 
 ifeq ($(HAVE_SFC),1)
-  ONLOAD_CFLAGS += -DCI_HAVE_SFC=1
+  ONLOAD_CFLAGS += -DCI_HAVE_SFC=1 -DEFX_NOT_UPSTREAM=1
   # This code base does not support Solarflare Siena.
   ONLOAD_MAKEFLAGS += CONFIG_SFC_SIENA=
 else
