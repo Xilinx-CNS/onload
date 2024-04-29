@@ -145,7 +145,8 @@ static inline int ci_ip_tx_timestamping_to_cmsg(int proto, ci_netif* ni,
        * with the 24-bit fractional nanoseconds value in onload extension. */
       struct onload_timestamp ts = {pkt->hw_stamp.tv_sec,
                                     pkt->hw_stamp.tv_nsec,
-                                    ((uint32_t) pkt->hw_stamp.tv_nsec_frac) << 8};
+                                    ((uint32_t) pkt->hw_stamp.tv_nsec_frac) << 8,
+                                    pkt->hw_stamp.tv_flags};
       ci_put_cmsg(cmsg_state, SOL_SOCKET, ONLOAD_SCM_TIMESTAMPING,
                   sizeof(ts), &ts);
     }
