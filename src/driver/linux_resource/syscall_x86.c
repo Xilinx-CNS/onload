@@ -241,14 +241,22 @@ static void *is_syscall_func(unsigned char *p)
    *
    * Note: We can essentially treat the first mov instruction as a two byte
    * instruction (ignoring the REX prefix)
+   *
+   * RHEL9 6.8.7-1.el9.elrepo.x86_64 has the following:
+   *    44 21 e6                and    %r12d,%esi
+   *    48 89 df                mov    %rbx,%rdi
+   *    e8 YY YY YY YY          callq  x64_sys_call
    */
 
   s32 offset;
   if( *p == 0xe8 ) {
     if(
-        is_movl_to_esi(p-7) &&              /* mov %rXX,%esi */
-        is_movq_to_rdi(p-5) &&              /* mov %rXX,%rdi */
-        is_andl_to_esi(p-2)                 /* and %rXX,%esi */
+        (is_movl_to_esi(p-7) &&              /* mov %rXX,%esi */
+         is_movq_to_rdi(p-5) &&              /* mov %rXX,%rdi */
+         is_andl_to_esi(p-2))                /* and %rXX,%esi */
+        ||
+        (is_andl_to_esi(p-5) &&              /* and %rXX,%esi */
+         is_movq_to_rdi(p-3))                /* mov %rXX,%rdi */
       ) {
       offset = p[1] | (p[2] << 8) | (p[3] << 16) | (p[4] << 24);
       TRAMP_DEBUG("sys_call_func=%lx", (long unsigned int)(p + 5) + offset);
