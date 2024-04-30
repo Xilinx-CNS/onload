@@ -1865,10 +1865,7 @@ int citp_epoll_wait(citp_fdinfo* fdi, struct epoll_event*__restrict__ events,
       int timeout_ms = timeout_hr_to_ms(timeout_hr);
       if( timeout_ms )
         ep->blocking = 1;
-      if( sigmask != NULL )
-        rc = ci_sys_epoll_pwait(fdi->fd, events, maxevents, timeout_ms, sigmask);
-      else
-        rc = ci_sys_epoll_wait(fdi->fd, events, maxevents, timeout_ms);
+      rc = ci_sys_epoll_pwait(fdi->fd, events, maxevents, timeout_ms, sigmask);
     }
 
     /* We don't have valid timestamps for events grabbed via the kernel, so

@@ -1470,8 +1470,15 @@ error:
 }
 
 
-OO_INTERCEPT(int, epoll_wait,
-             (int epfd, struct epoll_event*events, int maxevents, int timeout))
+/* This acts as a common code path for epoll_wait, epoll_pwait and
+ * epoll_pwait2. Some behaviour is modulated based on whether @ts or @sigmask
+ * are NULL and we are to pass though the call to the kernel.
+ * sigmask == NULL -> dispatch to ci_sys_epoll_wait
+ * sigmask != NULL && ts == NULL -> dispatch to ci_sys_epoll_pwait
+ * sigmask != NULL && ts != NULL -> dispatch to ci_sys_epoll_pwait2 */
+static int do_epoll_wait(int epfd, struct epoll_event* events, int maxevents,
+                         ci_uint64 timeout_hr, const struct timespec* ts,
+                         const sigset_t *sigmask)
 {
   citp_lib_context_t lib_context;
   citp_fdinfo* fdi;
@@ -1484,21 +1491,18 @@ OO_INTERCEPT(int, epoll_wait,
     goto pass_through;
 
   citp_enter_lib(&lib_context);
-  Log_CALL(ci_log("%s(%d, %p, %d, %d)", __FUNCTION__, epfd, events,
-                  maxevents, timeout));
 
   if( (fdi=citp_fdtable_lookup(epfd)) ) {
     int rc = CI_SOCKET_HANDOVER;
     if( fdi->protocol->type == CITP_EPOLL_FD ) {
       /* NB. citp_epoll_wait() calls citp_exit_lib(). */
       rc = citp_epoll_wait(fdi, events, NULL, maxevents,
-                           oo_epoll_ms_to_frc(timeout), NULL, NULL,
-                           &lib_context);
+                           timeout_hr, sigmask, ts, &lib_context);
       citp_reenter_lib(&lib_context);
     }
 #if CI_CFG_EPOLL2
     else if (fdi->protocol->type == CITP_EPOLLB_FD ) {
-      rc = citp_epollb_wait(fdi, events, maxevents, timeout, NULL, NULL,
+      rc = citp_epollb_wait(fdi, events, maxevents, timeout_hr, sigmask, ts,
                             &lib_context);
     }
 #endif
@@ -1514,61 +1518,37 @@ OO_INTERCEPT(int, epoll_wait,
   }
 
 error:
-  Log_PT(log("PT: sys_epoll_wait(%d, %p, %d, %d)", epfd, events,
-             maxevents, timeout));
- pass_through:
-  return ci_sys_epoll_wait(epfd, events, maxevents, timeout);
+  Log_PT(log("PT: sys_epoll_wait(%d, %p, %d, {%lld, %ld}, %p)", epfd, events,
+             maxevents, (long long) (ts ? ts->tv_sec : -1),
+             ts ? ts->tv_nsec : -1, sigmask));
+pass_through:
+#if CI_LIBC_HAS_epoll_pwait2
+  if( ts != NULL )
+    return ci_sys_epoll_pwait2(epfd, events, maxevents, ts, sigmask);
+  else
+#endif /* CI_LIBC_HAS_epoll_pwait2 */
+    return ci_sys_epoll_pwait(epfd, events, maxevents,
+                              timeout_hr_to_ms(timeout_hr), sigmask);
+}
+
+
+OO_INTERCEPT(int, epoll_wait,
+             (int epfd, struct epoll_event*events, int maxevents, int timeout))
+{
+  Log_CALL(ci_log("%s(%d, %p, %d, %d)", __FUNCTION__, epfd, events,
+                  maxevents, timeout));
+  return do_epoll_wait(epfd, events, maxevents, oo_epoll_ms_to_frc(timeout),
+                       NULL, NULL);
 }
 
 OO_INTERCEPT(int, epoll_pwait,
              (int epfd, struct epoll_event*events, int maxevents, int timeout,
               const sigset_t *sigmask))
 {
-  citp_lib_context_t lib_context;
-  citp_fdinfo* fdi;
-
-  if(CI_UNLIKELY( citp.init_level < CITP_INIT_ALL )) {
-    citp_do_init(CITP_INIT_SYSCALLS);
-    goto pass_through;
-  }
-  if( ! CITP_OPTS.ul_epoll )
-    goto pass_through;
-
-  citp_enter_lib(&lib_context);
   Log_CALL(ci_log("%s(%d, %p, %d, %d, %p)", __FUNCTION__, epfd, events,
                   maxevents, timeout, sigmask));
-
-  if( (fdi=citp_fdtable_lookup(epfd)) ) {
-    int rc = CI_SOCKET_HANDOVER;
-    if( fdi->protocol->type == CITP_EPOLL_FD ) {
-      /* NB. citp_epoll_wait() calls citp_exit_lib(). */
-      rc = citp_epoll_wait(fdi, events, NULL, maxevents,
-                           oo_epoll_ms_to_frc(timeout), sigmask, NULL,
-                           &lib_context);
-      citp_reenter_lib(&lib_context);
-    }
-#if CI_CFG_EPOLL2
-    else if (fdi->protocol->type == CITP_EPOLLB_FD ) {
-      rc = citp_epollb_wait(fdi, events, maxevents, timeout, sigmask, NULL,
-                            &lib_context);
-    }
-#endif
-    citp_fdinfo_release_ref(fdi, 0);
-    citp_exit_lib(&lib_context, rc >= 0);
-    if( rc == CI_SOCKET_HANDOVER )
-      goto error;
-    Log_CALL_RESULT(rc);
-    return rc;
-  }
-  else {
-    citp_exit_lib(&lib_context, TRUE);
-  }
-
-error:
-  Log_PT(log("PT: sys_epoll_pwait(%d, %p, %d, %d, %p)", epfd, events,
-             maxevents, timeout, sigmask));
- pass_through:
-  return ci_sys_epoll_pwait(epfd, events, maxevents, timeout, sigmask);
+  return do_epoll_wait(epfd, events, maxevents, oo_epoll_ms_to_frc(timeout),
+                       NULL, sigmask);
 }
 
 #if CI_LIBC_HAS_epoll_pwait2
@@ -1576,52 +1556,11 @@ OO_INTERCEPT(int, epoll_pwait2,
              (int epfd, struct epoll_event* events, int maxevents,
               const struct timespec* ts, const sigset_t *sigmask))
 {
-  citp_lib_context_t lib_context;
-  citp_fdinfo* fdi;
-
-  if(CI_UNLIKELY( citp.init_level < CITP_INIT_ALL )) {
-    citp_do_init(CITP_INIT_SYSCALLS);
-    goto pass_through;
-  }
-  if( ! CITP_OPTS.ul_epoll )
-    goto pass_through;
-
-  citp_enter_lib(&lib_context);
   Log_CALL(ci_log("%s(%d, %p, %d, {%lld, %ld}, %p)", __FUNCTION__, epfd,
                   events, maxevents, (long long) (ts ? ts->tv_sec : -1),
                   ts ? ts->tv_nsec : -1, sigmask));
-
-  if( (fdi=citp_fdtable_lookup(epfd)) ) {
-    int rc = CI_SOCKET_HANDOVER;
-    if( fdi->protocol->type == CITP_EPOLL_FD ) {
-      /* NB. citp_epoll_wait() calls citp_exit_lib(). */
-      rc = citp_epoll_wait(fdi, events, NULL, maxevents,
-                           oo_epoll_ts_to_frc(ts), sigmask, ts, &lib_context);
-      citp_reenter_lib(&lib_context);
-    }
-#if CI_CFG_EPOLL2
-    else if (fdi->protocol->type == CITP_EPOLLB_FD ) {
-      rc = citp_epollb_wait(fdi, events, maxevents, oo_epoll_ts_to_frc(ts),
-                            sigmask, ts, &lib_context);
-    }
-#endif
-    citp_fdinfo_release_ref(fdi, 0);
-    citp_exit_lib(&lib_context, rc >= 0);
-    if( rc == CI_SOCKET_HANDOVER )
-      goto error;
-    Log_CALL_RESULT(rc);
-    return rc;
-  }
-  else {
-    citp_exit_lib(&lib_context, TRUE);
-  }
-
-error:
-  Log_PT(log("PT: sys_epoll_pwait2(%d, %p, %d, {%lld, %ld}, %p)", epfd, events,
-             maxevents, (long long) (ts ? ts->tv_sec : -1),
-             ts ? ts->tv_nsec : -1, sigmask));
- pass_through:
-  return ci_sys_epoll_pwait2(epfd, events, maxevents, ts, sigmask);
+  return do_epoll_wait(epfd, events, maxevents, oo_epoll_ts_to_frc(ts), ts,
+                       sigmask);
 }
 #endif /* CI_LIBC_HAS_epoll_pwait2 */
 
