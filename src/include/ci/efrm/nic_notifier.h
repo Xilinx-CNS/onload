@@ -17,5 +17,7 @@ struct efrm_nic_notifier {
 extern void efrm_register_nic_notifier(struct efrm_nic_notifier* notifier);
 extern void efrm_unregister_nic_notifier(struct efrm_nic_notifier* notifier);
 
+extern int efrm_register_netdev_notifier(void);
+extern void efrm_unregister_netdev_notifier(void);
 
 #endif /* CI_EFRM_NIC_NOTIFIER_H */

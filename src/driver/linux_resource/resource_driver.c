@@ -61,6 +61,7 @@
 #include <ci/efrm/buffer_table.h>
 #include <ci/efrm/vi_resource_private.h>
 #include <ci/efrm/driver_private.h>
+#include <ci/efrm/nic_notifier.h>
 #include <ci/efrm/pd.h>
 #include <ci/efrm/efrm_filter.h>
 #include <ci/efrm/syscall.h>
@@ -687,12 +688,18 @@ static int init_sfc_resource(void)
 	if (rc < 0)
 		goto failed_auxbus;
 
+	rc = efrm_register_netdev_notifier();
+	if (rc < 0)
+		goto failed_notifier;
+
 	efrm_nondl_init();
 	efrm_install_sysfs_entries();
 	efrm_nondl_register();
 
 	return 0;
 
+failed_notifier:
+	efrm_auxbus_unregister();
 failed_auxbus:
 #if CI_HAVE_SFC
 	efrm_driverlink_unregister();
@@ -718,6 +725,7 @@ static void cleanup_sfc_resource(void)
 	efrm_nondl_unregister();
 	efrm_remove_sysfs_entries();
 	efrm_nondl_shutdown();
+	efrm_unregister_netdev_notifier();
 	efrm_auxbus_unregister();
 #if CI_HAVE_SFC
 	/* Unregister from driverlink first, free

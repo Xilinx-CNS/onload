@@ -4,6 +4,8 @@
 
 #include <linux/rtnetlink.h>
 #include <ci/efhw/nic.h>
+#include <ci/efrm/efrm_client.h>
+#include <ci/efrm/efrm_filter.h>
 #include <ci/efrm/nic_notifier.h>
 #include <ci/efrm/nic_table.h>
 #include "linux_resource_internal.h"
@@ -11,6 +13,12 @@
 
 static struct efrm_nic_notifier *registered_notifier;
 
+static int efrm_netdev_event(struct notifier_block *this,
+			     unsigned long event, void *ptr);
+
+static struct notifier_block efrm_netdev_notifier = {
+	.notifier_call = efrm_netdev_event,
+};
 
 struct nic_dev {
   struct efhw_nic* nic;
@@ -112,4 +120,38 @@ void efrm_notify_nic_remove(const struct efhw_nic* nic)
 {
   if( registered_notifier )
     registered_notifier->remove(nic);
+}
+
+
+static int efrm_netdev_event(struct notifier_block *this,
+                             unsigned long event, void *ptr)
+{
+  struct net_device *net_dev = netdev_notifier_info_to_dev(ptr);
+  struct efhw_nic *nic;
+
+  if (event == NETDEV_CHANGEMTU) {
+    nic = efhw_nic_find(net_dev);
+    if (nic) {
+      EFRM_TRACE("%s: old=%d new=%d", __func__,
+                 nic->mtu, net_dev->mtu + ETH_HLEN);
+      nic->mtu = net_dev->mtu + ETH_HLEN; /* ? + ETH_VLAN_HLEN */
+    }
+  }
+  if (event == NETDEV_CHANGENAME) {
+    nic = efhw_nic_find(net_dev);
+    if (nic)
+      efrm_filter_rename(nic, net_dev);
+  }
+
+  return NOTIFY_DONE;
+}
+
+int efrm_register_netdev_notifier(void)
+{
+	return register_netdevice_notifier(&efrm_netdev_notifier);
+}
+
+void efrm_unregister_netdev_notifier(void)
+{
+	unregister_netdevice_notifier(&efrm_netdev_notifier);
 }

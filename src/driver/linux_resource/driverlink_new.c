@@ -44,7 +44,6 @@
 #include <linux/netdevice.h>
 #include <linux/notifier.h>
 #include <net/net_namespace.h>
-#include <ci/efrm/efrm_filter.h>
 #include <ci/efrm/nic_table.h>
 #include <ci/efhw/ef10.h>
 #include <ci/efhw/nic.h>
@@ -66,12 +65,6 @@ static void efrm_dl_reset_suspend(struct efx_dl_device *efrm_dev);
 
 static void efrm_dl_reset_resume(struct efx_dl_device *efrm_dev, int ok);
 
-static int efrm_netdev_event(struct notifier_block *this,
-			     unsigned long event, void *ptr);
-
-static struct notifier_block efrm_netdev_notifier = {
-	.notifier_call = efrm_netdev_event,
-};
 
 static int
 efrm_dl_event(struct efx_dl_device *efx_dev, void *p_event, int budget);
@@ -87,18 +80,6 @@ static struct efx_dl_driver efrm_dl_driver = {
 	.handle_event = efrm_dl_event,
 };
 
-
-static inline struct efhw_nic *
-efhw_nic_from_netdev(
-			const struct net_device *net_dev,
-			struct efx_dl_driver *driver)
-{
-	struct efx_dl_device *dl_dev;
-	dl_dev = efx_dl_dev_from_netdev(net_dev, &efrm_dl_driver);
-	if (dl_dev && dl_dev->priv)
-		return (struct efhw_nic *) dl_dev->priv;
-	return NULL;
-}
 
 static void
 init_vi_resource_dimensions(struct vi_resource_dimensions *rd,
@@ -484,28 +465,15 @@ static void efrm_dl_reset_resume(struct efx_dl_device *efrm_dev, int ok)
 
 int efrm_driverlink_register(void)
 {
-	int rc;
-
 	EFRM_TRACE("%s:", __func__);
 
-	rc = efx_dl_register_driver(&efrm_dl_driver);
-	if (rc)
-		return rc;
-
-	rc = register_netdevice_notifier(&efrm_netdev_notifier);
-	if (rc) {
-		efx_dl_unregister_driver(&efrm_dl_driver);
-		return rc;
-	}
-
-	return 0;
+	return efx_dl_register_driver(&efrm_dl_driver);
 }
 
 void efrm_driverlink_unregister(void)
 {
 	EFRM_TRACE("%s:", __func__);
 
-	unregister_netdevice_notifier(&efrm_netdev_notifier);
 	efx_dl_unregister_driver(&efrm_dl_driver);
 }
 
@@ -546,31 +514,6 @@ unsigned efrm_driverlink_generation(struct efhw_nic* nic)
 {
 	struct efrm_nic *rnic = efrm_nic(nic);
 	return READ_ONCE(rnic->driverlink_generation);
-}
-
-
-static int efrm_netdev_event(struct notifier_block *this,
-			     unsigned long event, void *ptr)
-{
-	struct net_device *net_dev = netdev_notifier_info_to_dev(ptr);
-	struct efhw_nic *nic;
-
-	if (event == NETDEV_CHANGEMTU) {
-		nic = efhw_nic_from_netdev(net_dev, &efrm_dl_driver);
-		if (nic) {
-			EFRM_TRACE("%s: old=%d new=%d", __func__,
-				   nic->mtu, net_dev->mtu + ETH_HLEN);
-			nic->mtu = net_dev->mtu + ETH_HLEN; /* ? + ETH_VLAN_HLEN */
-		}
-	}
-	if (event == NETDEV_CHANGENAME) {
-		nic = efhw_nic_from_netdev(net_dev, &efrm_dl_driver);
-		if (nic) {
-			efrm_filter_rename(nic, net_dev);
-		}
-	}
-
-	return NOTIFY_DONE;
 }
 
 
