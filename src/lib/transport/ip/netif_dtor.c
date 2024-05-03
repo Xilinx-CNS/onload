@@ -46,6 +46,34 @@ static int is_expecting_events(ci_netif* ni)
   return 0;
 }
 
+static void inspect_events(ci_netif* ni)
+{
+  int intf_i;
+  ci_log("poll_work_outstanding = %s, loop_pkts = %s",
+         ni->state->poll_work_outstanding ? "true" : "false",
+         OO_PP_NOT_NULL(ni->state->looppkts) ? "true" : "false");
+
+  OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
+    int evs_hi = 0x7fffffff;
+    int evs_lo = 0;
+    ci_netif_state_nic_t* nic = &ni->state->nic[intf_i];
+
+    ef_vi* vi = ci_netif_vi(ni, intf_i);
+    ci_log("%s: evq_capacity = %d, tx_dmaq_insert_seq = %u "
+           "tx_dmaq_done_seq = %u", nic->dev_name, ef_eventq_capacity(vi),
+           nic->tx_dmaq_insert_seq, nic->tx_dmaq_done_seq);
+    /* binary search for the number of events in the queue */
+    while(evs_hi > evs_lo) {
+      int evs_mid = (evs_hi + evs_lo) / 2;
+
+      if( ef_eventq_has_many_events(vi, evs_mid) )
+        evs_lo = evs_mid + 1;
+      else
+        evs_hi = evs_mid - 1;
+    }
+    ci_log("There are %d events remaining", evs_lo);
+  }
+}
 
 #ifdef __KERNEL__
 #include <onload/tcp_helper_fns.h>
@@ -57,6 +85,7 @@ static int is_expecting_events(ci_netif* ni)
 void oo_netif_dtor_pkts(ci_netif* ni)
 {
   ci_uint64 start = ci_frc64_get();
+  ci_uint64 ev_count= 0;
 
   if( ni->error_flags )
     return;
@@ -66,10 +95,15 @@ void oo_netif_dtor_pkts(ci_netif* ni)
   /* If we have some events or wait for TX complete events,
    * we should handle them all. */
   while( is_expecting_events(ni) ) {
-    ci_netif_poll(ni);
+    ev_count += ci_netif_poll(ni);
     if( ci_frc64_get() - start > KHZ(ni) ) {
+      /* It is not only TX complete events we are waiting for and
+       * this warning has been seen from running udpswallow. Keep
+       * the message to track this bug. */
       ci_log("%s: WARNING: [%d] Failed to get TX complete events "
              "for some packets", __func__, NI_ID(ni));
+      ci_log("Events processed in 1ms: %llu", ev_count);;
+      inspect_events(ni);
       return;
     }
   }
