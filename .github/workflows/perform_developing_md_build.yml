@@ -29,12 +29,11 @@ jobs:
       - name: mmake buildtrees
         run: |
           cd $GITHUB_WORKSPACE/onload_internal
-          mmakebuildtree --driver
           mmakebuildtree --user
 
       - name: build DEBUG driver
         run: |
-          make -C "$(mmaketool --toppath)/build/$(mmaketool --driverbuild)" -j $(nproc)
+          make -C "$(mmaketool --toppath)" -j $(nproc)
 
       - name: build DEBUG user
         run: |
@@ -42,13 +41,8 @@ jobs:
 
       - name: build NDEBUG driver
         run: |
-          make -C "$(mmaketool --toppath)/build/$(mmaketool --driverbuild)" -j $(nproc) NDEBUG=1
+          make -C "$(mmaketool --toppath)" -j $(nproc) NDEBUG=1
 
       - name: build NDEBUG user
         run: |
           make -C "$(mmaketool --toppath)/build/$(mmaketool --userbuild)" -j $(nproc) NDEBUG=1
-
-      - name: NEW Make build check
-        run: |
-          rm -rf "$(mmaketool --toppath)/build"
-          make -C "$(mmaketool --toppath)" -j $(nproc)
