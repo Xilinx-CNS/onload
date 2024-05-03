@@ -971,15 +971,24 @@ static int efx_ef10_alloc_vis(struct efx_nic *efx,
 			      unsigned int min_vis, unsigned int max_vis)
 {
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
-
-	return efx_mcdi_alloc_vis(efx, min_vis, max_vis,
+	int rc = efx_mcdi_alloc_vis(efx, min_vis, max_vis,
 #if defined(EFX_NOT_UPSTREAM)
-				  &efx->ef10_resources.vi_base,
-				  &efx->ef10_resources.vi_shift,
+				    &efx->vi_resources.vi_base,
+				    &efx->vi_resources.vi_shift,
 #else
-				  NULL, NULL,
+				    NULL, NULL,
 #endif
-				  &nic_data->n_allocated_vis);
+				    &nic_data->n_allocated_vis);
+
+#if defined(EFX_NOT_UPSTREAM) && IS_MODULE(CONFIG_SFC_DRIVERLINK)
+	/* Keep ef10_resources (used for DL) and vi_resources (used for AUX)
+	 * in sync until we have removed the DL support.
+	 */
+	efx->ef10_resources.vi_base = efx->vi_resources.vi_base;
+	efx->ef10_resources.vi_shift = efx->vi_resources.vi_shift;
+#endif
+
+	return rc;
 }
 
 static void efx_ef10_free_resources(struct efx_nic *efx)

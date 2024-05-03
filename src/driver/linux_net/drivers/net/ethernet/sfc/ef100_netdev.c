@@ -86,6 +86,14 @@ static int ef100_alloc_vis(struct efx_nic *efx, unsigned int *allocated_vis)
 				NULL, NULL,
 #endif
 				allocated_vis);
+
+#if defined(EFX_NOT_UPSTREAM) && IS_MODULE(CONFIG_SFC_DRIVERLINK)
+	/* Keep ef10_resources (used for DL) and vi_resources (used for AUX)
+	 * in sync until we have removed the DL support.
+	 */
+	efx->ef10_resources.vi_base = efx->vi_resources.vi_base;
+	efx->ef10_resources.vi_shift = efx->vi_resources.vi_shift;
+#endif
 	if (rc)
 		return rc;
 	if ((*allocated_vis >= min_vis) && (*allocated_vis < channel_vis))

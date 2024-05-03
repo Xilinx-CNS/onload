@@ -40,7 +40,7 @@ export CONFIG_SFC_VDPA := n
 ifndef CONFIG_SFC_SIENA
 export CONFIG_SFC_SIENA :=
 endif
-else
+else # KERNELRELEASE
 export CONFIG_SFC_SIENA :=
 endif
 
@@ -219,7 +219,7 @@ TOPDIR = $(src)/../../../..
 include $(TOPDIR)/scripts/Makefile.common
 
 define filechk_config.h
-	printf "$(foreach name,SFC SFC_DUMP SFC_MCDI_MON SFC_MTD SFC_SIENA SFC_SRIOV SFC_PTP SFC_PPS SFC_TRACING SFC_MCDI_LOGGING SFC_DRIVERLINK SFC_BUSYPOLL SFC_VDPA,$(if $(filter y,$(CONFIG_$(name))),#undef CONFIG_$(name)\n#define CONFIG_$(name) 1\n,$(if $(filter m,$(CONFIG_$(name))),#undef CONFIG_$(name)_MODULE\n#define CONFIG_$(name)_MODULE 1\n,#undef CONFIG_$(name)\n#undef CONFIG_$(name)_MODULE\n)))"
+	printf "$(foreach name,SFC SFC_DUMP SFC_MCDI_MON SFC_MTD SFC_SIENA SFC_SRIOV SFC_PTP SFC_PPS SFC_TRACING SFC_MCDI_LOGGING SFC_DRIVERLINK SFC_BUSYPOLL SFC_EF100 SFC_VDPA,$(if $(filter y,$(CONFIG_$(name))),#undef CONFIG_$(name)\n#define CONFIG_$(name) 1\n,$(if $(filter m,$(CONFIG_$(name))),#undef CONFIG_$(name)_MODULE\n#define CONFIG_$(name)_MODULE 1\n,#undef CONFIG_$(name)\n#undef CONFIG_$(name)_MODULE\n)))"
 endef
 
 $(obj)/config.h: $(src)/Makefile FORCE
