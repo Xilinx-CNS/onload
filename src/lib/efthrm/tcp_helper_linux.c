@@ -20,6 +20,14 @@
 #include <linux/spinlock.h>
 #include <driver/linux_resource/autocompat.h>
 
+/* Common base handler used for for file_operations {read,write}_iter and
+ * read/write/aio_read/aio_write callbacks.
+ * See usage in DEFINE_FOP_* macros. */
+typedef ssize_t(*fop_rw_base_handler)(struct file *filp,
+                                      const struct iovec *iov,
+                                      unsigned long iovlen,
+                                      ci_addr_spc_t addr_spc);
+
 #if ! CI_CFG_UL_INTERRUPT_HELPER
 /* CI_CFG_UL_INTERRUPT_HELPER mode does not support sendfile() and/or OS
  * read()-write().  Yet.
@@ -49,9 +57,9 @@
   do {                                                                  \
     if( iter_is_ubuf(v) ) {                                             \
       struct iovec iov = { .iov_base = v->ubuf, .iov_len = v->count };  \
-      return base_handler(iocb->ki_filp, &iov, 1);                      \
+      return base_handler(iocb->ki_filp, &iov, 1, CI_ADDR_SPC_CURRENT); \
     }                                                                   \
-    return base_handler(iocb->ki_filp, iter_iov(v), v->nr_segs);        \
+    return base_handler(iocb->ki_filp, iter_iov(v), v->nr_segs, CI_ADDR_SPC_CURRENT); \
   } while (0);
 
 #else
@@ -60,15 +68,42 @@
 
 #define FOP_RW_ITER_CALL_BASE_HANDLER(base_handler, iocb, iter)         \
   do {                                                                  \
-    return base_handler(iocb->ki_filp, iter_iov(v), v->nr_segs);        \
+    return base_handler(iocb->ki_filp, iter_iov(v), v->nr_segs, CI_ADDR_SPC_CURRENT); \
   } while (0);
 
 #endif /* EFRM_HAVE_ITER_UBUF */
+
+static ssize_t rw_iter_bvec_handler(fop_rw_base_handler base_handler,
+                                    struct kiocb *iocb, struct iov_iter *v)
+{
+  struct iovec* iov = CI_ALLOC_ARRAY(typeof(*iov), v->nr_segs);
+  ssize_t rc;
+  int i;
+
+  if( !iov )
+    return -ENOMEM;
+
+  for( i = 0; i < v->nr_segs; ++i ) {
+    iov[i].iov_base = kmap(v->bvec[i].bv_page) + v->bvec[i].bv_offset;
+    iov[i].iov_len = v->bvec[i].bv_len;
+  }
+
+  rc = base_handler(iocb->ki_filp, iov, v->nr_segs, CI_ADDR_SPC_KERNEL);
+
+  for( i = 0; i < v->nr_segs; ++i )
+    kunmap(iov[i].iov_base);
+  ci_free(iov);
+
+  return rc;
+}
 
 #define DEFINE_FOP_RW_ITER(base_handler, rw_iter_handler) \
   static ssize_t rw_iter_handler(struct kiocb *iocb, struct iov_iter *v)    \
   { if (!is_sync_kiocb(iocb))                                               \
       return -EOPNOTSUPP;                                                   \
+    if( iov_iter_is_bvec(v) ) {                                             \
+      return rw_iter_bvec_handler(base_handler, iocb, v);                   \
+    }                                                                       \
     if( !iov_iter_type_supported(v) )                                       \
       return -EOPNOTSUPP;                                                   \
     FOP_RW_ITER_CALL_BASE_HANDLER(base_handler, iocb, v); }
@@ -199,7 +234,8 @@ efab_fop_poll__prime_if_needed(tcp_helper_resource_t* trs,
 #if ! CI_CFG_UL_INTERRUPT_HELPER
 static ssize_t linux_tcp_helper_fop_read_iov_pipe(struct file *filp,
                                                   const struct iovec *iov,
-                                                  unsigned long iovlen)
+                                                  unsigned long iovlen,
+                                                  ci_addr_spc_t addr_spc)
 {
   ci_private_t* priv = filp->private_data;
   tcp_helper_resource_t* trs = efab_priv_to_thr(priv);
@@ -209,7 +245,8 @@ static ssize_t linux_tcp_helper_fop_read_iov_pipe(struct file *filp,
 }
 static ssize_t linux_tcp_helper_fop_write_iov_pipe(struct file *filp,
                                                    const struct iovec *iov,
-                                                   unsigned long iovlen)
+                                                   unsigned long iovlen,
+                                                   ci_addr_spc_t addr_spc)
 {
   ci_private_t* priv = filp->private_data;
   tcp_helper_resource_t* trs = efab_priv_to_thr(priv);
@@ -533,7 +570,8 @@ fix_nonblock_flag(struct file *filp, ci_sock_cmn* s)
  */
 static ssize_t linux_tcp_helper_fop_write_iov_tcp(struct file *filp,
                                                   const struct iovec *iov,
-                                                  unsigned long iovlen)
+                                                  unsigned long iovlen,
+                                                  ci_addr_spc_t addr_spc)
 {
   ci_private_t* priv = filp->private_data;
   tcp_helper_resource_t* trs = efab_priv_to_thr(priv);
@@ -546,7 +584,7 @@ static ssize_t linux_tcp_helper_fop_write_iov_tcp(struct file *filp,
   if( s->b.state != CI_TCP_LISTEN )
     return ci_tcp_sendmsg(&trs->netif, SOCK_TO_TCP(s), iov, iovlen,
                           (s->b.sb_aflags & CI_SB_AFLAG_O_NONBLOCK),
-                          CI_ADDR_SPC_CURRENT);
+                          addr_spc);
 
   CI_SET_ERROR(rc, s->tx_errno);
   return rc;
@@ -571,7 +609,8 @@ DEFINE_FOP_AIO_RW(linux_tcp_helper_fop_write_iov_tcp, \
  */
 static ssize_t linux_tcp_helper_fop_write_iov_udp(struct file *filp,
                                                   const struct iovec *iov,
-                                                  unsigned long iovlen)
+                                                  unsigned long iovlen,
+                                                  ci_addr_spc_t addr_spc)
 {
   ci_private_t* priv = filp->private_data;
   tcp_helper_resource_t* trs = efab_priv_to_thr(priv);
@@ -589,7 +628,7 @@ static ssize_t linux_tcp_helper_fop_write_iov_udp(struct file *filp,
   a.us = SOCK_TO_UDP(s);
 
   return ci_udp_sendmsg(&a, &m, (s->b.sb_aflags & CI_SB_AFLAG_O_NONBLOCK),
-                        CI_ADDR_SPC_CURRENT);
+                        addr_spc);
 }
 #ifdef EFRM_HAVE_FOP_READ_ITER
 DEFINE_FOP_RW_ITER(linux_tcp_helper_fop_write_iov_udp, \
@@ -612,7 +651,8 @@ DEFINE_FOP_AIO_RW(linux_tcp_helper_fop_write_iov_udp, \
  */
 static ssize_t linux_tcp_helper_fop_read_iov_tcp(struct file *filp,
                                                  const struct iovec *iov,
-                                                 unsigned long iovlen)
+                                                 unsigned long iovlen,
+                                                 ci_addr_spc_t addr_spc)
 {
   ci_private_t* priv = filp->private_data;
   tcp_helper_resource_t* trs = efab_priv_to_thr(priv);
@@ -633,7 +673,7 @@ static ssize_t linux_tcp_helper_fop_read_iov_tcp(struct file *filp,
      */
     a.flags = s->b.sb_aflags & CI_SB_AFLAG_O_NONBLOCK;
     ci_tcp_recvmsg_args_init(&a, &trs->netif, SOCK_TO_TCP(s), &m, a.flags);
-    return ci_tcp_recvmsg(&a, CI_ADDR_SPC_CURRENT);
+    return ci_tcp_recvmsg(&a, addr_spc);
   }
 
   CI_SET_ERROR(rc, ENOTCONN);
@@ -659,7 +699,8 @@ DEFINE_FOP_AIO_RW(linux_tcp_helper_fop_read_iov_tcp, \
  */
 static ssize_t linux_tcp_helper_fop_read_iov_udp(struct file *filp,
                                                  const struct iovec *iov,
-                                                 unsigned long iovlen)
+                                                 unsigned long iovlen,
+                                                 ci_addr_spc_t addr_spc)
 {
   ci_private_t* priv = filp->private_data;
   tcp_helper_resource_t* trs = efab_priv_to_thr(priv);
@@ -678,7 +719,7 @@ static ssize_t linux_tcp_helper_fop_read_iov_udp(struct file *filp,
   a.filp = filp;
 
   return ci_udp_recvmsg(&a, &m, (s->b.sb_aflags & CI_SB_AFLAG_O_NONBLOCK),
-                        CI_ADDR_SPC_CURRENT);
+                        addr_spc);
 }
 #ifdef EFRM_HAVE_FOP_READ_ITER
 DEFINE_FOP_RW_ITER(linux_tcp_helper_fop_read_iov_udp, \
