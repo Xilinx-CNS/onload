@@ -588,7 +588,8 @@ static ssize_t linux_tcp_helper_fop_write_iov_udp(struct file *filp,
   a.ni = &trs->netif;
   a.us = SOCK_TO_UDP(s);
 
-  return ci_udp_sendmsg(&a, &m, (s->b.sb_aflags & CI_SB_AFLAG_O_NONBLOCK));
+  return ci_udp_sendmsg(&a, &m, (s->b.sb_aflags & CI_SB_AFLAG_O_NONBLOCK),
+                        CI_ADDR_SPC_CURRENT);
 }
 #ifdef EFRM_HAVE_FOP_READ_ITER
 DEFINE_FOP_RW_ITER(linux_tcp_helper_fop_write_iov_udp, \
@@ -632,7 +633,7 @@ static ssize_t linux_tcp_helper_fop_read_iov_tcp(struct file *filp,
      */
     a.flags = s->b.sb_aflags & CI_SB_AFLAG_O_NONBLOCK;
     ci_tcp_recvmsg_args_init(&a, &trs->netif, SOCK_TO_TCP(s), &m, a.flags);
-    return ci_tcp_recvmsg(&a);
+    return ci_tcp_recvmsg(&a, CI_ADDR_SPC_CURRENT);
   }
 
   CI_SET_ERROR(rc, ENOTCONN);
@@ -676,7 +677,8 @@ static ssize_t linux_tcp_helper_fop_read_iov_udp(struct file *filp,
   a.us = SOCK_TO_UDP(s);
   a.filp = filp;
 
-  return ci_udp_recvmsg(&a, &m, (s->b.sb_aflags & CI_SB_AFLAG_O_NONBLOCK));
+  return ci_udp_recvmsg(&a, &m, (s->b.sb_aflags & CI_SB_AFLAG_O_NONBLOCK),
+                        CI_ADDR_SPC_CURRENT);
 }
 #ifdef EFRM_HAVE_FOP_READ_ITER
 DEFINE_FOP_RW_ITER(linux_tcp_helper_fop_read_iov_udp, \

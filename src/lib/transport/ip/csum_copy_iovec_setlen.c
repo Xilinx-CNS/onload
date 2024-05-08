@@ -81,42 +81,37 @@ done:
 }
 
 
-#ifdef __KERNEL__
-ssize_t
-__ci_ip_copy_pkt_to_user(ci_netif* ni, ci_iovec* iov, ci_ip_pkt_fmt* pkt,
-                         int peek_off)
+ci_inline int do_copy_to_user(void* to, const void* from, int n_bytes
+                      CI_KERNEL_ARG(ci_addr_spc_t addr_spc))
 {
-  int len;
-
-    len = CI_MIN((size_t)oo_offbuf_left(&pkt->buf) - peek_off, iov->iov_len);
-    if( copy_to_user(CI_IOVEC_BASE(iov),
-                     oo_offbuf_ptr(&pkt->buf) + peek_off, len) ) {
-      ci_log("%s: faulted", __FUNCTION__);
-      return -EFAULT;
-    }
-    CI_IOVEC_BASE(iov) = (char *)CI_IOVEC_BASE(iov) + len;
-    CI_IOVEC_LEN(iov) -= len;
-    return len;
+#ifdef __KERNEL__
+  if( addr_spc != CI_ADDR_SPC_KERNEL )
+    return copy_to_user(to, from, n_bytes);
+#endif
+  memcpy(to, from, n_bytes);
+  return 0;
 }
 
-#else /* ifdef __KERNEL__ ... else */
 ssize_t
-__ci_ip_copy_pkt_to_user(ci_netif* ni, ci_iovec* iov,
-                         ci_ip_pkt_fmt* pkt, int peek_off)
+__ci_ip_copy_pkt_to_user(ci_netif* ni, ci_iovec* iov, ci_ip_pkt_fmt* pkt,
+                         int peek_off CI_KERNEL_ARG(ci_addr_spc_t addr_spc))
 {
   size_t len;
 
   len = oo_offbuf_left(&pkt->buf) - peek_off;
   len = CI_MIN(len, CI_IOVEC_LEN(iov));
 
-  memcpy(CI_IOVEC_BASE(iov), oo_offbuf_ptr(&pkt->buf) + peek_off, len);
+  if( do_copy_to_user(CI_IOVEC_BASE(iov), oo_offbuf_ptr(&pkt->buf) + peek_off,
+                      len CI_KERNEL_ARG(addr_spc)) ) {
+    ci_log("%s: faulted", __FUNCTION__);
+    return -EFAULT;
+  }
 
   CI_IOVEC_BASE(iov) = (char *)CI_IOVEC_BASE(iov) + len;
   CI_IOVEC_LEN(iov) -= len;
 
   return len;
 }
-#endif  /* __KERNEL__ */
 
 
 #ifdef __KERNEL__
