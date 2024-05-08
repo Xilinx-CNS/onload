@@ -3,7 +3,10 @@
 
 name: "perform_developing_md_build"
 
-on: push
+on:
+  push:
+  pull_request:
+    types: [opened]
 
 jobs:
   perform_developing_md_build:
