@@ -140,6 +140,17 @@ void ef10ct_eventq_timer_zero(struct ef_vi *vi) {
     ef10ct_unsupported_msg(__func__);
 }
 
+static int ef10ct_eventq_has_event(const struct ef_vi *vi) {
+    ef10ct_unsupported_msg(__func__);
+    return -EOPNOTSUPP;
+}
+
+static int ef10ct_eventq_has_many_events(const struct ef_vi *vi,
+                                         int n_events) {
+    ef10ct_unsupported_msg(__func__);
+    return -EOPNOTSUPP;
+}
+
 int ef10ct_transmitv_init_extra(struct ef_vi *vi,
                                 const struct ef_vi_tx_extra *extra,
                                 const ef_remote_iovec *iov, int iov_len,
@@ -265,6 +276,8 @@ static void ef10ct_initialise_ops(ef_vi *vi) {
     vi->ops.eventq_timer_run            = ef10ct_eventq_timer_run;
     vi->ops.eventq_timer_clear          = ef10ct_eventq_timer_clear;
     vi->ops.eventq_timer_zero           = ef10ct_eventq_timer_zero;
+    vi->ops.eventq_has_many_events      = ef10ct_eventq_has_many_events;
+    vi->ops.eventq_has_event            = ef10ct_eventq_has_event;
     vi->ops.transmitv_init_extra        = ef10ct_transmitv_init_extra;
     vi->ops.transmit_ctpio_fallback     = ef10ct_transmit_ctpio_fallback;
     vi->ops.transmitv_ctpio_fallback    = ef10ct_transmitv_ctpio_fallback;

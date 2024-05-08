@@ -1172,6 +1172,10 @@ typedef struct ef_vi {
     void (*eventq_timer_clear)(struct ef_vi*);
     /** Prime an event queue timer to expire immediately */
     void (*eventq_timer_zero)(struct ef_vi*);
+    /** Check if the eventq contains any events */
+    int (*eventq_has_event)(const struct ef_vi*);
+    /** Check if the eventq contains strictly greater than n_events */
+    int (*eventq_has_many_events)(const struct ef_vi*, int n_events);
     /** Initialize TX descriptors on the TX descriptor ring, using
      * extra options and (optionally) remote buffers */
     int (*transmitv_init_extra)(struct ef_vi*, const struct ef_vi_tx_extra*,
@@ -2475,31 +2479,78 @@ ef_vi_transmit_ctpio(ef_vi* vi, const void* frame_buf, size_t frame_len,
  * Eventq interface ***************************************************
  **********************************************************************/
 
-/*! \brief Returns true if there is event in eventq.
+/*! \deprecated use ef_eventq_has_event() or
+**              ef_eventq_has_many_events() instead.
 **
 ** \param vi          The virtual interface to query.
 ** \param look_ahead  Number of event relative to the current event.
 **
-** \return True if there is event in eventq.
+** \return True if there is an event at the position specified by
+**         look_head in the eventq.
 **
-** Returns true if there is event in eventq.
+** _This function is now deprecated._ Use ef_eventq_has_event() or
+** ef_eventq_has_many_events() instead.
+**
+** Returns true if there is an event at the position specified by
+** look_head in the eventq.
 */
-extern int ef_eventq_check_event(const ef_vi* vi, int look_ahead);
+#define ef_eventq_check_event(vi, look_ahead) \
+  ef_eventq_has_many_events((vi), (look_ahead))
 
 
-/*! \brief Returns true if there is event in eventq by checking phase bit.
+/*! \deprecated use ef_eventq_has_event() or
+**              ef_eventq_has_many_events() instead.
 **
 ** \param vi          The virtual interface to query.
 ** \param look_ahead  Number of event relative to the current event.
 **
-** \return True if there is event in eventq.
+** \return True if there is an event at the position specified by
+**         look_head in the eventq.
 **
-** Returns true if there is event in eventq.
+** _This function is now deprecated._ Use ef_eventq_has_event() or
+** ef_eventq_has_many_events() instead.
+**
+** Returns true if there is an event at the position specified by
+** look_head in the eventq.
 */
-extern int ef_eventq_check_event_phase_bit(const ef_vi* vi, int look_ahead);
+#define ef_eventq_check_event_phase_bit(vi, look_ahead) \
+  ef_eventq_has_many_events((vi), (look_ahead))
 
-extern int efxdp_ef_eventq_check_event(const ef_vi* vi, int look_ahead);
-extern int efct_ef_eventq_check_event(const ef_vi* vi);
+
+/*! \brief _Deprecated:_ use ef_eventq_has_event() or
+**         ef_eventq_has_many_events() instead.
+**
+** \param vi          The virtual interface to query.
+** \param look_ahead  Number of event relative to the current event.
+**
+** \return True if there is an event at the position specified by
+**         look_head in the eventq.
+**
+** _This function is now deprecated._ Use ef_eventq_has_event() or
+** ef_eventq_has_many_events() instead.
+**
+** Returns true if there is an event at the position specified by
+** look_head in the eventq.
+*/
+#define efxdp_ef_eventq_check_event(vi, look_ahead) \
+  ef_eventq_has_many_events((vi), (look_ahead))
+
+
+/*! \deprecated use ef_eventq_has_event() instead.
+**
+** \param vi          The virtual interface to query.
+** \param look_ahead  Number of event relative to the current event.
+**
+** \return True if there is an event at the position specified by
+**         look_head in the eventq.
+**
+** _This function is now deprecated._ Use ef_eventq_has_event() instead.
+**
+** Returns true if there is an event at the position specified by
+** look_head in the eventq.
+*/
+#define efct_ef_eventq_check_event(vi) \
+  ef_eventq_has_event((vi))
 
 
 /*! \brief Returns true if ef_eventq_poll() will return event(s)
@@ -2510,21 +2561,8 @@ extern int efct_ef_eventq_check_event(const ef_vi* vi);
 **
 ** Returns true if ef_eventq_poll() will return event(s).
 */
-ef_vi_inline int
-ef_eventq_has_event(const ef_vi* vi)
-{
-  if( ! vi->evq_phase_bits )
-    return ef_eventq_check_event(vi, 0);
-
-  switch( vi->nic_type.arch ) {
-    case EF_VI_ARCH_AF_XDP:
-      return efxdp_ef_eventq_check_event(vi, 0);
-    case EF_VI_ARCH_EFCT:
-      return efct_ef_eventq_check_event(vi);
-    default:
-      return ef_eventq_check_event_phase_bit(vi, 0);
-  }
-}
+#define ef_eventq_has_event(vi) \
+  (vi)->ops.eventq_has_event((vi))
 
 
 /*! \brief Returns true if there are a given number of events in the event
@@ -2533,7 +2571,10 @@ ef_eventq_has_event(const ef_vi* vi)
 ** \param evq      The event queue to query.
 ** \param n_events Number of events to check.
 **
-** \return True if the event queue contains at least `n_events` events.
+** \return True if the event queue contains more than `n_events` events.
+**
+** \warning Querying this function with `n_events` equal to the size of
+**          the event queue (for `vi`) is undefined behaviour.
 **
 ** Returns true if there are a given number of events in the event queue.
 **
@@ -2543,19 +2584,11 @@ ef_eventq_has_event(const ef_vi* vi)
 **
 ** This function returns quickly. It is useful for an application to
 ** determine whether it is falling behind in its event processing.
+**
+** Note that for X3, an event queue only exists for TX and not RX.
 */
-ef_vi_inline int
-ef_eventq_has_many_events(const ef_vi* evq, int n_events)
-{
-  switch( evq->nic_type.arch ) {
-    case EF_VI_ARCH_EF10:
-      return ef_eventq_check_event(evq, n_events);
-    case EF_VI_ARCH_AF_XDP:
-      return efxdp_ef_eventq_check_event(evq, 0);
-    default:
-      return ef_eventq_check_event_phase_bit(evq, n_events);
-  }
-}
+#define ef_eventq_has_many_events(vi, n_events) \
+  (vi)->ops.eventq_has_many_events((vi), (n_events))
 
 
 /*! \brief Prime a virtual interface allowing you to go to sleep blocking

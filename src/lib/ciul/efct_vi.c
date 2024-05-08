@@ -29,15 +29,15 @@
     ((q)->evq_mask + 1)) != 0)
 
 
-int ef_eventq_check_event_phase_bit(const ef_vi* vi, int look_ahead)
+static int efct_ef_eventq_has_many_events(const ef_vi* vi, int n_events)
 {
   ef_vi_qword* ev;
 
   EF_VI_ASSERT(vi->evq_base);
-  EF_VI_BUG_ON(look_ahead < 0);
+  EF_VI_BUG_ON(n_events < 0);
 
-  ev = EF_VI_EVENT_PTR(vi, look_ahead);
-  return (EF_VI_EVENT_PHASE(ev) == EF_VI_EVQ_PHASE(vi, look_ahead));
+  ev = EF_VI_EVENT_PTR(vi, n_events);
+  return (EF_VI_EVENT_PHASE(ev) == EF_VI_EVQ_PHASE(vi, n_events));
 }
 
 
@@ -1289,7 +1289,7 @@ int efct_vi_rx_future_poll(ef_vi* vi, ef_event* evs, int evs_len)
   return count;
 }
 
-int efct_ef_eventq_check_event(const ef_vi* vi)
+static int efct_ef_eventq_has_event(const ef_vi* vi)
 {
   return efct_tx_check_event(vi) || efct_rx_check_event(vi);
 }
@@ -1493,6 +1493,8 @@ static void efct_vi_initialise_ops(ef_vi* vi)
   vi->ops.eventq_timer_run       = efct_ef_eventq_timer_run;
   vi->ops.eventq_timer_clear     = efct_ef_eventq_timer_clear;
   vi->ops.eventq_timer_zero      = efct_ef_eventq_timer_zero;
+  vi->ops.eventq_has_many_events = efct_ef_eventq_has_many_events;
+  vi->ops.eventq_has_event       = efct_ef_eventq_has_event;
   vi->ops.transmit_ctpio_fallback = efct_ef_vi_transmit_ctpio_fallback;
   vi->ops.transmitv_ctpio_fallback = efct_ef_vi_transmitv_ctpio_fallback;
   vi->internal_ops.design_parameters = efct_design_parameters;

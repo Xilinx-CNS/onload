@@ -259,14 +259,19 @@ static void efxdp_ef_eventq_prime(ef_vi* vi)
   // TODO
 }
 
-int efxdp_ef_eventq_check_event(const ef_vi* _vi, int look_ahead)
+static int efxdp_ef_eventq_has_many_events(const ef_vi* _vi, int n_events)
 {
   ef_vi* vi = (ef_vi*) _vi; /* drop const */
   EF_VI_ASSERT(vi->evq_base);
-  EF_VI_BUG_ON(look_ahead < 0);
+  EF_VI_BUG_ON(n_events < 0);
   return *RING_CONSUMER(vi, rx) - *RING_PRODUCER(vi, rx) +
          *RING_CONSUMER(vi, cr) - *RING_PRODUCER(vi, cr)
-         > look_ahead;
+         > n_events;
+}
+
+static int efxdp_ef_eventq_has_event(const ef_vi* vi)
+{
+  return efxdp_ef_eventq_has_many_events(vi, 0);
 }
 
 
@@ -403,6 +408,8 @@ void efxdp_vi_init(ef_vi* vi)
   vi->ops.eventq_timer_run       = efxdp_ef_eventq_timer_run;
   vi->ops.eventq_timer_clear     = efxdp_ef_eventq_timer_clear;
   vi->ops.eventq_timer_zero      = efxdp_ef_eventq_timer_zero;
+  vi->ops.eventq_has_many_events = efxdp_ef_eventq_has_many_events;
+  vi->ops.eventq_has_event       = efxdp_ef_eventq_has_event;
   if( vi->vi_flags & EF_VI_TX_CTPIO ) {
     vi->ops.transmit_ctpio_fallback = efxdp_ef_vi_transmit_ctpio_fallback;
     vi->ops.transmitv_ctpio_fallback = efxdp_ef_vi_transmitv_ctpio_fallback;
@@ -426,5 +433,4 @@ long efxdp_vi_mmap_bytes(ef_vi* vi)
 #else
 void efxdp_vi_init(ef_vi* vi) {}
 long efxdp_vi_mmap_bytes(ef_vi* vi) { return 0; }
-int efxdp_ef_eventq_check_event(const ef_vi* _vi, int look_ahead) { return 0; }
 #endif

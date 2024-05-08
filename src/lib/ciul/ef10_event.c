@@ -1167,11 +1167,11 @@ int ef_vi_packed_stream_get_params(ef_vi* vi,
   return 0;
 }
 
-int ef_eventq_check_event(const ef_vi* vi, int look_ahead)
+int ef10_ef_eventq_has_many_events(const ef_vi* vi, int n_events)
 {
   EF_VI_ASSERT(vi->evq_base);
-  EF_VI_BUG_ON(look_ahead < 0);
-  return EF_VI_IS_EVENT(EF_VI_EVENT_PTR(vi, look_ahead));
+  EF_VI_BUG_ON(n_events < 0);
+  return EF_VI_IS_EVENT(EF_VI_EVENT_PTR(vi, n_events));
 }
 
 /*! \cidoxg_end */

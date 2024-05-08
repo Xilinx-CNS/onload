@@ -765,6 +765,12 @@ static void ef10_ef_vi_receive_push(ef_vi* vi)
 }
 
 
+static int ef10_ef_eventq_has_event(const ef_vi* vi)
+{
+  return ef10_ef_eventq_has_many_events(vi, 0);
+}
+
+
 static void select_ctpio_method(ef_vi* vi)
 {
 #ifndef __KERNEL__
@@ -832,6 +838,8 @@ static void ef10_vi_initialise_ops(ef_vi* vi)
   vi->ops.eventq_timer_run       = ef10_ef_eventq_timer_run;
   vi->ops.eventq_timer_clear     = ef10_ef_eventq_timer_clear;
   vi->ops.eventq_timer_zero      = ef10_ef_eventq_timer_zero;
+  vi->ops.eventq_has_many_events = ef10_ef_eventq_has_many_events;
+  vi->ops.eventq_has_event       = ef10_ef_eventq_has_event;
   if( vi->vi_flags & EF_VI_TX_CTPIO ) {
     vi->ops.transmit_ctpio_fallback = ef10_ef_vi_transmit_ctpio_fallback;
     vi->ops.transmitv_ctpio_fallback = ef10_ef_vi_transmitv_ctpio_fallback;

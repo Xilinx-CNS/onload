@@ -216,6 +216,7 @@ extern void ef10_ef_eventq_timer_prime(ef_vi*, unsigned v);
 extern void ef10_ef_eventq_timer_run(ef_vi*, unsigned v);
 extern void ef10_ef_eventq_timer_clear(ef_vi*);
 extern void ef10_ef_eventq_timer_zero(ef_vi*);
+extern int ef10_ef_eventq_has_many_events(const ef_vi*, int);
 
 extern int ef10_receive_get_precise_timestamp(ef_vi*, const void*,
                                               ef_precisetime*);
