@@ -973,14 +973,6 @@ extern int ci_udp_setsockopt(citp_socket* ep, ci_fd_t fd, int level,
 extern int ci_udp_ioctl(citp_socket*, ci_fd_t, int request, void* arg) CI_HF;
 #endif
 
-/* Send/recv called from within kernel & user-library, so outside above #if */
-extern int ci_udp_sendmsg(ci_udp_iomsg_args *a,
-                          const ci_msghdr*, int) CI_HF;
-extern int ci_udp_recvmsg(ci_udp_iomsg_args *a, ci_msghdr*,
-                          int flags) CI_HF;
-
-extern void ci_udp_set_no_unicast(citp_socket* ep) CI_HF;
-
 #ifdef __KERNEL__
 /*! A [ci_addr_spc_t] is a context in which to interpret pointers.
 **
@@ -998,6 +990,15 @@ typedef enum {
   CI_ADDR_SPC_CURRENT = 3,
 } ci_addr_spc_t;
 #endif
+
+/* Send/recv called from within kernel & user-library, so outside above #if */
+extern int ci_udp_sendmsg(ci_udp_iomsg_args *a,
+                          const ci_msghdr*, int
+                          CI_KERNEL_ARG(ci_addr_spc_t addr_spc)) CI_HF;
+extern int ci_udp_recvmsg(ci_udp_iomsg_args *a, ci_msghdr*,
+                          int flags CI_KERNEL_ARG(ci_addr_spc_t addr_spc)) CI_HF;
+
+extern void ci_udp_set_no_unicast(citp_socket* ep) CI_HF;
 
 #ifndef __KERNEL__
 struct mmsghdr;
@@ -1985,7 +1986,8 @@ extern int ci_tcp_sync_sockopts_to_os_sock(ci_netif* ni, oo_sp sock_id,
 extern int ci_tcp_listen_init(ci_netif *ni, ci_tcp_socket_listen *tls) CI_HF;
 
 /* Send/recv called from within kernel & user-library, so outside above #if */
-extern int ci_tcp_recvmsg(const ci_tcp_recvmsg_args*) CI_HF;
+extern int ci_tcp_recvmsg(const ci_tcp_recvmsg_args*
+                          CI_KERNEL_ARG(ci_addr_spc_t addr_spc)) CI_HF;
 struct onload_zc_recv_args;
 extern int ci_tcp_zc_recvmsg(const ci_tcp_recvmsg_args*,
                              struct onload_zc_recv_args* args) CI_HF;
@@ -2206,7 +2208,8 @@ extern int __ci_copy_iovec_to_pkt(ci_netif*, ci_ip_pkt_fmt*, ci_iovec_ptr*
 
 # define ci_ip_copy_pkt_to_user         __ci_ip_copy_pkt_to_user
 extern ssize_t __ci_ip_copy_pkt_to_user(ci_netif*, ci_iovec*,
-                                        ci_ip_pkt_fmt*, int peek_off) CI_HF;
+                                        ci_ip_pkt_fmt*, int peek_off
+                                        CI_KERNEL_ARG(ci_addr_spc_t addr_spc)) CI_HF;
 
 #if defined(__KERNEL__)
 # define ci_ip_copy_pkt_from_piov  __ci_ip_copy_pkt_from_piov

@@ -77,6 +77,9 @@ struct udp_send_info {
   int                   stack_locked;
   ci_uint32             timeout;
   int                   old_ipcache_updated;
+#ifdef __KERNEL__
+  ci_addr_spc_t addr_spc;
+#endif
 };
 
 static bool ci_ipx_is_first_frag(int af, ci_ipx_hdr_t* ipx)
@@ -1291,7 +1294,7 @@ int ci_udp_sendmsg_fill(ci_netif* ni, ci_udp_state* us,
     ci_netif_pkt_hold(ni, pf->pkt);
 
     rc = oo_pkt_fill(ni, &us->s, &sinf->stack_locked, can_block, pf, piov,
-                     payload_bytes CI_KERNEL_ARG(CI_ADDR_SPC_CURRENT));
+                     payload_bytes CI_KERNEL_ARG(sinf->addr_spc));
     if( CI_UNLIKELY( rc != 0 ) )
       goto fill_failed;
 
@@ -1537,7 +1540,8 @@ static int ci_udp_sendmsg_control_os(ci_fd_t fd, ci_udp_state *us,
 #endif
 
 int ci_udp_sendmsg(ci_udp_iomsg_args *a,
-                   const ci_msghdr* msg, int flags)
+                   const ci_msghdr* msg, int flags
+                   CI_KERNEL_ARG(ci_addr_spc_t addr_spc))
 {
   ci_netif *ni = a->ni;
   ci_udp_state *us = a->us;
@@ -1553,6 +1557,9 @@ int ci_udp_sendmsg(ci_udp_iomsg_args *a,
   sinf.used_ipcache = 0;
   sinf.old_ipcache_updated = 0;
   sinf.timeout = us->s.so.sndtimeo_msec;
+#ifdef __KERNEL__
+  sinf.addr_spc = addr_spc;
+#endif
 
 #ifndef __KERNEL__
 #ifdef __i386__

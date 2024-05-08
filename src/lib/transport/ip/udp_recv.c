@@ -113,7 +113,8 @@ ci_inline void ci_udp_recvmsg_fill_msghdr(ci_netif* ni, ci_msghdr* msg,
 
 static int
 oo_copy_pkt_to_iovec_no_adv(ci_netif* ni, const ci_ip_pkt_fmt* pkt,
-                            ci_iovec_ptr* piov, int bytes_to_copy)
+                            ci_iovec_ptr* piov, int bytes_to_copy
+                            CI_KERNEL_ARG(ci_addr_spc_t addr_spc))
 {
   /* Copy data from [pkt] to [piov], following [pkt->frag_next] as
    * necessary.  Does not modify [pkt].  May or may not advance [piov].
@@ -132,7 +133,7 @@ oo_copy_pkt_to_iovec_no_adv(ci_netif* ni, const ci_ip_pkt_fmt* pkt,
   while( 1 ) {
     ocs.pkt_left = oo_offbuf_left(&(ocs.pkt->buf)) - ocs.pkt_off;
     ocs.from = oo_offbuf_ptr(&(ocs.pkt->buf));
-    rc = __oo_copy_frag_to_iovec_no_adv(ni, piov, &ocs);
+    rc = __oo_copy_frag_to_iovec_no_adv(ni, piov, &ocs CI_KERNEL_ARG(addr_spc));
     if( rc == 0 )
       return ocs.bytes_copied;
     else if( rc == 1 )
@@ -234,7 +235,8 @@ static void ci_udp_filter_kernel_pkt(ci_netif* ni, ci_udp_state* us,
 #endif /* __KERNEL__ */
 
 
-static int ci_udp_recvmsg_get(ci_udp_recv_info* rinf, ci_iovec_ptr* piov)
+static int ci_udp_recvmsg_get(ci_udp_recv_info* rinf, ci_iovec_ptr* piov
+                              CI_KERNEL_ARG(ci_addr_spc_t addr_spc))
 {
   ci_netif* ni = rinf->a->ni;
   ci_udp_state* us = rinf->a->us;
@@ -258,7 +260,8 @@ static int ci_udp_recvmsg_get(ci_udp_recv_info* rinf, ci_iovec_ptr* piov)
   us->stamp = pkt->tstamp_frc;
   us->future_intf_i = pkt->intf_i;
 
-  rc = oo_copy_pkt_to_iovec_no_adv(ni, pkt, piov, pkt->pf.udp.pay_len);
+  rc = oo_copy_pkt_to_iovec_no_adv(ni, pkt, piov, pkt->pf.udp.pay_len
+                                   CI_KERNEL_ARG(addr_spc));
 
   if(CI_LIKELY( rc >= 0 )) {
 #if HAVE_MSG_FLAGS
@@ -657,7 +660,8 @@ ci_udp_recvmsg_socklocked_spin(ci_netif* ni, ci_udp_state* us,
 
 
 static int 
-ci_udp_recvmsg_common(ci_udp_recv_info *rinf)
+ci_udp_recvmsg_common(ci_udp_recv_info *rinf
+                      CI_KERNEL_ARG(ci_addr_spc_t addr_spc))
 {
   ci_netif* ni = rinf->a->ni;
   ci_udp_state* us = rinf->a->us;
@@ -705,7 +709,7 @@ ci_udp_recvmsg_common(ci_udp_recv_info *rinf)
     goto peek_from_os;
 
  check_ul_recv_q:
-  rc = ci_udp_recvmsg_get(rinf, &piov);
+  rc = ci_udp_recvmsg_get(rinf, &piov CI_KERNEL_ARG(addr_spc));
   if( rc >= 0 )
     goto out;
 
@@ -829,7 +833,8 @@ ci_udp_recvmsg_common(ci_udp_recv_info *rinf)
 }
 
 
-int ci_udp_recvmsg(ci_udp_iomsg_args *a, ci_msghdr* msg, int flags)
+int ci_udp_recvmsg(ci_udp_iomsg_args *a, ci_msghdr* msg, int flags
+                   CI_KERNEL_ARG(ci_addr_spc_t addr_spc))
 {
   ci_netif* ni = a->ni;
   ci_udp_state* us = a->us;
@@ -841,7 +846,7 @@ int ci_udp_recvmsg(ci_udp_iomsg_args *a, ci_msghdr* msg, int flags)
   rinf.sock_locked = 0;
   rinf.flags = flags;
 
-  rc = ci_udp_recvmsg_common(&rinf);
+  rc = ci_udp_recvmsg_common(&rinf CI_KERNEL_ARG(addr_spc));
   if( rinf.sock_locked )
     ci_sock_unlock(ni, &us->s.b);
 #if HAVE_MSG_FLAGS
