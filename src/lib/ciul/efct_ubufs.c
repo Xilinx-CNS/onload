@@ -76,6 +76,21 @@ static void update_filled(ef_vi* vi, struct efct_ubufs_rxq* rxq, int qid)
   }
 }
 
+static void poison_superbuf(char *sbuf)
+{
+  int i;
+  /* Write poison value to the start of each frame. Subtract 2 to obtain a
+   * 64-bit aligned pointer.
+   */
+  char *pkt = sbuf + EFCT_RX_HEADER_NEXT_FRAME_LOC_1 - 2;
+  for(i = 0; i < EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE; i++) {
+    *((uint64_t *)pkt) = CI_EFCT_DEFAULT_POISON;
+    pkt += EFCT_PKT_STRIDE;
+  }
+  /* Ensure writes are not reordered after post. */
+  wmb();
+}
+
 static void post_buffers(ef_vi* vi, struct efct_ubufs_rxq* rxq, int qid)
 {
   while( rxq->added - rxq->filled < get_ubufs(vi)->nic_fifo_limit ) {
@@ -88,9 +103,9 @@ static void post_buffers(ef_vi* vi, struct efct_ubufs_rxq* rxq, int qid)
 
     /* We assume that the first sentinel value applies to the whole superbuf.
      * TBD: will we ever need to deal with manual rollover?
-     * TODO: write poison values to support PFTF
      */
     header = efct_superbuf_access(vi, qid, id);
+    poison_superbuf((char *)header);
 
     desc.id = id;
     desc.sentinel = ! CI_QWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL);
@@ -169,7 +184,7 @@ static int efct_ubufs_attach(ef_vi* vi, int qid, unsigned n_superbufs)
 
   map = mmap((void*)vi->efct_rxqs.q[ix].superbuf,
              n_superbufs * EFCT_RX_SUPERBUF_BYTES,
-             PROT_READ,
+             PROT_READ | PROT_WRITE,
              MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_HUGETLB |
                MAP_FIXED | MAP_POPULATE,
              -1, 0);

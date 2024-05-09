@@ -96,9 +96,7 @@ static bool get_sentinel(ef_vi* vi, int qid, int sbid)
 static void set_sentinel(ef_vi* vi, int qid, int sbid, bool sentinel)
 {
   ci_qword_t* header = (void*)get_superbuf(vi, qid, sbid);
-  mprotect(header, sizeof(ci_qword_t), PROT_WRITE);
   CI_SET_QWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL, sentinel);
-  mprotect(header, sizeof(ci_qword_t), PROT_READ);
 }
 
 static int posted_buffers[SUPERBUF_COUNT];
@@ -116,6 +114,17 @@ static int get_posted(void)
 {
   CHECK(posted_added - posted_removed, >, 0);
   return posted_buffers[posted_removed++ % SUPERBUF_COUNT];
+}
+
+static void check_poison(char *sbuf) {
+  char *pkt = sbuf + EFCT_RX_HEADER_NEXT_FRAME_LOC_1 - 2;
+  int i;
+
+  CHECK((uintptr_t)pkt % sizeof(uint64_t), ==, 0);
+  for(i = 0; i < EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE; i++) {
+    CHECK(*(uint64_t *)pkt, ==, CI_EFCT_DEFAULT_POISON);
+    pkt += EFCT_PKT_STRIDE;
+  }
 }
 
 /* Test cases */
@@ -209,9 +218,34 @@ static void test_sentinel(void)
   STATE_FREE(vi);
 }
 
+static void test_poison(void)
+{
+  bool sentinel;
+  unsigned sbseq;
+  int buf;
+  ef_vi_efct_rxq_ops* ops;
+
+  STATE_ALLOC(ef_vi, vi);
+  CHECK(efct_ubufs_init(vi), ==, 0);
+  STATE_STASH(vi);
+  ops = vi->efct_rxqs.ops;
+  ops->post = mock_post;
+  CHECK(ops->attach(vi, 0, 1), ==, 0);
+
+  buf = ops->next(vi, 0, &sentinel, &sbseq);
+  CHECK(buf, >=, 0);
+  CHECK(get_posted(), ==, buf);
+  check_poison((void *)get_superbuf(vi, 0, buf));
+
+  ops->free(vi, 0, buf);
+  ops->cleanup(vi);
+  STATE_FREE(vi);
+}
+
 int main(void)
 {
   TEST_RUN(test_efct_ubufs);
   TEST_RUN(test_sentinel);
+  TEST_RUN(test_poison);
   TEST_END();
 }
