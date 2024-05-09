@@ -1341,8 +1341,8 @@ void efct_vi_stop_transmit_warm(ef_vi* vi)
   vi->vi_txq.efct_fixed_header = qword.u64[0];
 }
 
-static const size_t sbufs_per_rxq = CI_EFCT_MAX_SUPERBUFS;
-static const size_t sbuf_bytes_per_rxq = sbufs_per_rxq * EFCT_RX_SUPERBUF_BYTES;
+static const size_t sbuf_bytes_per_rxq =
+  (size_t)CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES;
 
 int efct_superbufs_reserve(ef_vi* vi, void* space)
 {
@@ -1351,7 +1351,8 @@ int efct_superbufs_reserve(ef_vi* vi, void* space)
   vi->efct_rxqs.max_qs = EF_VI_MAX_EFCT_RXQS;
 
 #ifdef __KERNEL__
-  space = kvmalloc(sbufs_per_rxq * vi->efct_rxqs.max_qs * sizeof(const char**),
+  space = kvmalloc(CI_EFCT_MAX_SUPERBUFS * vi->efct_rxqs.max_qs
+                                         * sizeof(const char**),
                    GFP_KERNEL);
   if( space == NULL )
     return -ENOMEM;
@@ -1380,7 +1381,7 @@ int efct_superbufs_reserve(ef_vi* vi, void* space)
   for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
     ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[i];
 #ifdef __KERNEL__
-    rxq->superbufs = (const char**)space + i * sbufs_per_rxq;
+    rxq->superbufs = (const char**)space + i * CI_EFCT_MAX_SUPERBUFS;
 #else
     rxq->superbuf = (const char*)space + i * sbuf_bytes_per_rxq;
 #endif
