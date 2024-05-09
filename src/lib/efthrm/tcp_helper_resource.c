@@ -268,8 +268,8 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs,
       goto again;
 
     if( has_shared ||
-        ef_eplock_lock_or_set_flag(&trs->netif.state->lock,
-                                   CI_EPLOCK_NETIF_CLOSE_ENDPOINT) ) {
+        ef_eplock_lock_or_set_single_flag(&trs->netif.state->lock,
+                                          CI_EPLOCK_NETIF_CLOSE_ENDPOINT) ) {
       /* let's reset the shared lock flag to avoid flag ping pong */
       ef_eplock_clear_flags(&trs->netif.state->lock, CI_EPLOCK_NETIF_CLOSE_ENDPOINT);
 
@@ -307,8 +307,8 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs,
     if( ci_cas32_fail(&trs->trusted_lock, l, new_l) )
       goto again;
     if( has_shared ||
-       ef_eplock_lock_or_set_flag(&trs->netif.state->lock,
-                                   CI_EPLOCK_NETIF_NEED_WAKE) ) {
+       ef_eplock_lock_or_set_single_flag(&trs->netif.state->lock,
+                                         CI_EPLOCK_NETIF_NEED_WAKE) ) {
       /* We've got both locks, do the work now. */
       OO_DEBUG_TCPH(ci_log("%s: [%u] OS READY now",
                            __FUNCTION__, trs->id));
@@ -1014,9 +1014,9 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
       if( efab_tcp_helper_netif_lock_or_set_flags(trs,
                OO_TRUSTED_LOCK_NEED_POLL | OO_TRUSTED_LOCK_NEED_PRIME,
                CI_EPLOCK_NETIF_NEED_POLL | CI_EPLOCK_NETIF_NEED_PRIME, 0) ) {
-        ef_eplock_holder_set_flag(&trs->netif.state->lock,
-                                  CI_EPLOCK_NETIF_NEED_POLL |
-                                  CI_EPLOCK_NETIF_NEED_PRIME);
+        ef_eplock_holder_set_flags(&trs->netif.state->lock,
+                                   CI_EPLOCK_NETIF_NEED_POLL |
+                                   CI_EPLOCK_NETIF_NEED_PRIME);
         efab_tcp_helper_netif_unlock(trs, 0);
       }
     }
@@ -3265,8 +3265,8 @@ oo_inject_packets_kernel_force(ci_netif* ni)
   ci_assert(ci_netif_is_locked(ni));
   if( kernel_packets_pending(ni->state) == 0 )
     return;
-  ef_eplock_holder_set_flag(&ni->state->lock,
-                            CI_EPLOCK_NETIF_KERNEL_PACKETS);
+  ef_eplock_holder_set_single_flag(&ni->state->lock,
+                                   CI_EPLOCK_NETIF_KERNEL_PACKETS);
 }
 
 
@@ -6192,8 +6192,8 @@ int efab_tcp_helper_more_socks(tcp_helper_resource_t* trs)
   if( ni->ep_tbl_n >= ni->ep_tbl_max )  return -ENOSPC;
 
   if( ni->flags & CI_NETIF_FLAG_IN_DL_CONTEXT ) {
-    ef_eplock_holder_set_flag(&ni->state->lock,
-                              CI_EPLOCK_NETIF_NEED_SOCK_BUFS);
+    ef_eplock_holder_set_single_flag(&ni->state->lock,
+                                     CI_EPLOCK_NETIF_NEED_SOCK_BUFS);
     return -EBUSY;
   }
 
@@ -6712,8 +6712,8 @@ efab_tcp_helper_more_bufs(tcp_helper_resource_t* trs)
     return -ENOSPC;
 
   if( ni->flags & CI_NETIF_FLAG_IN_DL_CONTEXT ) {
-    ef_eplock_holder_set_flag(&ni->state->lock,
-                              CI_EPLOCK_NETIF_NEED_PKT_SET);
+    ef_eplock_holder_set_single_flag(&ni->state->lock,
+                                     CI_EPLOCK_NETIF_NEED_PKT_SET);
     return -EBUSY;
   }
 
@@ -7197,8 +7197,8 @@ static int oo_handle_wakeup_int_driven(void* context, int is_timeout,
        * into the feedback loop of repeated wakeups seen in bug42745.
        */
       ci_bit_set(&ni->state->evq_prime_deferred, tcph_nic->thn_intf_i);
-      if( ef_eplock_set_flag_if_locked(&ni->state->lock,
-                                       CI_EPLOCK_NETIF_NEED_PRIME) ) {
+      if( ef_eplock_set_single_flag_if_locked(&ni->state->lock,
+                                              CI_EPLOCK_NETIF_NEED_PRIME) ) {
         break;
       }
       else if( oo_trusted_lock_set_flags_if_locked

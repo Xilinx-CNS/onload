@@ -1628,9 +1628,11 @@ static void stack_prime(ci_netif* ni)
   int rc;
   citp_signal_info* si = citp_signal_get_specific_inited();
   libstack_defer_signals(si);
-  rc = ef_eplock_lock_or_set_flag(&ni->state->lock,CI_EPLOCK_NETIF_NEED_PRIME);
+  rc = ef_eplock_lock_or_set_single_flag(&ni->state->lock,
+                                         CI_EPLOCK_NETIF_NEED_PRIME);
   if( rc ) {
-    ef_eplock_holder_set_flag(&ni->state->lock, CI_EPLOCK_NETIF_NEED_PRIME);
+    ef_eplock_holder_set_single_flag(&ni->state->lock,
+                                     CI_EPLOCK_NETIF_NEED_PRIME);
     libstack_netif_unlock(ni);
   }
   else

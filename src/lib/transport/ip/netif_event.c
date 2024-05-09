@@ -1567,7 +1567,8 @@ static void process_post_poll_list(ci_netif* ni)
 #endif
 
   if( need_wake )
-    ef_eplock_holder_set_flag(&ni->state->lock, CI_EPLOCK_NETIF_NEED_WAKE);
+    ef_eplock_holder_set_single_flag(&ni->state->lock,
+                                     CI_EPLOCK_NETIF_NEED_WAKE);
 
 #if CI_CFG_EPOLL3
 #ifdef __KERNEL__
@@ -2373,8 +2374,8 @@ int ci_netif_poll_n(ci_netif* netif, int max_evs)
         NI_OPTS(netif).kernel_packets_batch_size ||
         frc - netif->state->kernel_packets_last_forwarded >=
         netif->state->kernel_packets_cycles )
-      ef_eplock_holder_set_flag(&netif->state->lock,
-                                CI_EPLOCK_NETIF_KERNEL_PACKETS);
+      ef_eplock_holder_set_single_flag(&netif->state->lock,
+                                       CI_EPLOCK_NETIF_KERNEL_PACKETS);
   }
 #endif
 
@@ -2390,8 +2391,8 @@ int ci_netif_poll_n(ci_netif* netif, int max_evs)
    * from the unlock hook only.
    */
   if( oo_want_proactive_socket_allocation(netif) )
-    ef_eplock_holder_set_flag(&netif->state->lock,
-                              CI_EPLOCK_NETIF_NEED_SOCK_BUFS);
+    ef_eplock_holder_set_single_flag(&netif->state->lock,
+                                     CI_EPLOCK_NETIF_NEED_SOCK_BUFS);
 
   if(CI_LIKELY( netif->state->rxq_low <= 1 ))
     netif->state->mem_pressure &= ~OO_MEM_PRESSURE_LOW;

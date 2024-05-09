@@ -484,7 +484,8 @@ citp_waitable_wake_epoll3_not_in_poll(ci_netif* ni, citp_waitable* sb)
 #ifdef __KERNEL__
         efab_tcp_helper_ready_list_wakeup(netif2tcp_helper_resource(ni), i);
 #else
-        ef_eplock_holder_set_flag(&ni->state->lock, CI_EPLOCK_NETIF_NEED_WAKE);
+        ef_eplock_holder_set_single_flag(&ni->state->lock,
+                                         CI_EPLOCK_NETIF_NEED_WAKE);
 #endif
     }
   }
@@ -516,7 +517,8 @@ void citp_waitable_wake_not_in_poll(ci_netif* ni, citp_waitable* sb,
   if( what & sb->wake_request ) {
     sb->sb_flags |= what;
     ci_netif_put_on_post_poll(ni, sb);
-    ef_eplock_holder_set_flag(&ni->state->lock, CI_EPLOCK_NETIF_NEED_WAKE);
+    ef_eplock_holder_set_single_flag(&ni->state->lock,
+                                     CI_EPLOCK_NETIF_NEED_WAKE);
   }
   else {
     citp_waitable_wake_epoll3_not_in_poll(ni, sb);

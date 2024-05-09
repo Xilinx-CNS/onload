@@ -3083,8 +3083,8 @@ ci_inline void ci_netif_pkt_set_change(ci_netif* ni, int bufset_id,
   ci_assert_equal(bufset_id, NI_PKT_SET(ni));
 
   if( ni->packets->sets_n < ni->packets->sets_max && is_underfilled )
-    ef_eplock_holder_set_flag(&ni->state->lock,
-                              CI_EPLOCK_NETIF_NEED_PKT_SET);
+    ef_eplock_holder_set_single_flag(&ni->state->lock,
+                                     CI_EPLOCK_NETIF_NEED_PKT_SET);
 
   /* When we are called from ci_netif_rx_post(), we could already consume
    * all available packets.  Let's set NEED_PKT_SET flag above and exit. */

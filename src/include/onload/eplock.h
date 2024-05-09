@@ -85,9 +85,10 @@ ci_inline int ef_eplock_lock_maybe_wedged(ci_netif *ni) {
   /*! Only call this if you hold the lock.  [flag] must have exactly one
   ** bit set.
   */
-ci_inline void ef_eplock_holder_set_flag(ci_eplock_t* l, ci_uint64 flag) {
+ci_inline void ef_eplock_holder_set_single_flag(ci_eplock_t* l, ci_uint64 flag) {
   ci_uint64 v;
   ci_assert((flag & CI_EPLOCK_LOCK_FLAGS) == 0u);
+  ci_assert(CI_IS_POW2(flag));
   do {
     v = l->lock;
     ci_assert(v & CI_EPLOCK_LOCKED);
@@ -125,9 +126,11 @@ ci_inline ci_uint64 ef_eplock_clear_flags(ci_eplock_t* l, ci_uint64 flags) {
   ** lock.  Returns 1 on success, or 0 if the lock is unlocked.  [flag]
   ** must have exactly one bit set.
   */
-ci_inline int ef_eplock_set_flag_if_locked(ci_eplock_t* l, ci_uint64 flag) {
+ci_inline int ef_eplock_set_single_flag_if_locked(ci_eplock_t* l,
+                                                  ci_uint64 flag) {
   ci_uint64 v;
   ci_assert((flag & CI_EPLOCK_LOCK_FLAGS) == 0u);
+  ci_assert(CI_IS_POW2(flag));
   do {
     v = l->lock;
     if( ! (v & CI_EPLOCK_LOCKED) )  return 0;
@@ -166,10 +169,11 @@ ci_inline int ef_eplock_trylock_and_set_flags(ci_eplock_t* l, ci_uint64 flags) {
   /*! Either obtains the lock (returning 1) or sets the flag (returning 0).
   ** [flag] must have exactly one bit set.
   */
-ci_inline int ef_eplock_lock_or_set_flag(ci_eplock_t* l, ci_uint64 flag) {
+ci_inline int ef_eplock_lock_or_set_single_flag(ci_eplock_t* l, ci_uint64 flag) {
   ci_uint64 v, new_v;
   int rc;
   ci_assert((flag  & CI_EPLOCK_LOCK_FLAGS) == 0u);
+  ci_assert(CI_IS_POW2(flag));
   do {
     if( ! ((v = l->lock) & CI_EPLOCK_LOCKED) ) {
       rc = 1;
