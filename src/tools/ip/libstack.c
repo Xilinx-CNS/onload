@@ -608,11 +608,15 @@ static int get_file_size(const char* path)
   int len = 0;
   while( 1 ) {
     ssize_t rc = read(fd, buf, 128);
-    if( rc == -1 )
+    if( rc == -1 ) {
+      close(fd);
       return -1;
+    }
     len += rc;
-    if( rc == 0 )
+    if( rc == 0 ) {
+      close(fd);
       return len;
+    }
   }
 }
 
