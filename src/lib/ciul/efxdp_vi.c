@@ -143,6 +143,19 @@ static void efxdp_ef_vi_transmit_pio_warm(ef_vi* vi)
   /* PIO is unsupported so do nothing */
 }
 
+static void efxdp_ef_vi_start_transmit_warm(ef_vi* vi,
+                                            ef_vi_tx_warm_state *saved_state,
+                                            char* warm_ctpio_mmap_ptr)
+{
+  /* Transmit warming is unsupported so do nothing */
+}
+
+static void efxdp_ef_vi_stop_transmit_warm(ef_vi* vi,
+                                           ef_vi_tx_warm_state *saved_state)
+{
+  /* Transmit warming is unsupported so do nothing */
+}
+
 static void efxdp_ef_vi_transmit_copy_pio_warm(ef_vi* vi, int pio_offset,
                                                const void* src_buf, int len)
 {
@@ -391,6 +404,8 @@ void efxdp_vi_init(ef_vi* vi)
   vi->ops.transmit_copy_pio      = efxdp_ef_vi_transmit_copy_pio;
   vi->ops.transmit_pio_warm      = efxdp_ef_vi_transmit_pio_warm;
   vi->ops.transmit_copy_pio_warm = efxdp_ef_vi_transmit_copy_pio_warm;
+  vi->ops.start_transmit_warm    = efxdp_ef_vi_start_transmit_warm;
+  vi->ops.stop_transmit_warm    = efxdp_ef_vi_stop_transmit_warm;
   vi->ops.transmitv_ctpio        = efxdp_ef_vi_transmitv_ctpio;
   vi->ops.transmitv_ctpio_copy   = efxdp_ef_vi_transmitv_ctpio_copy;
   vi->ops.transmit_alt_select    = efxdp_ef_vi_transmit_alt_select;

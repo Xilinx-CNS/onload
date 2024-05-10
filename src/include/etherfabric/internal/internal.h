@@ -66,24 +66,6 @@ extern int ef_vi_rxq_reinit(ef_vi* vi, ef_vi_reinit_callback cb, void* cb_arg);
 extern int ef_vi_txq_reinit(ef_vi* vi, ef_vi_reinit_callback cb, void* cb_arg);
 extern int ef_vi_evq_reinit(ef_vi* vi);
 
-
-/**********************************************************************
- * TX Warming *********************************************************
- **********************************************************************/
-
-typedef struct {
-  unsigned removed;
-  char* vi_ctpio_mmap_ptr;
-} ef_vi_tx_warm_state;
-
-extern ef_vi_noinline ef_vi_cold void
-  ef_vi_start_transmit_warm(ef_vi* vi, ef_vi_tx_warm_state* saved_state,
-                            char* warm_ctpio_mmap_ptr);
-
-extern ef_vi_noinline ef_vi_cold void
-  ef_vi_stop_transmit_warm(ef_vi* vi, const ef_vi_tx_warm_state* state);
-
-
 /**********************************************************************
  * Misc ***************************************************************
  **********************************************************************/

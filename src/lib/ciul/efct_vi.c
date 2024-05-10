@@ -543,6 +543,31 @@ static int efct_ef_vi_transmit_copy_pio(ef_vi* vi, int offset,
   return -EOPNOTSUPP;
 }
 
+static void efct_ef_vi_start_transmit_warm(ef_vi* vi,
+                                           ef_vi_tx_warm_state* saved_state,
+                                           char* warm_ctpio_mmap_ptr)
+{
+  ci_qword_t qword;
+  qword.u64[0] = vi->vi_txq.efct_fixed_header;
+
+  EF_VI_ASSERT(CI_QWORD_FIELD(qword, EFCT_TX_HEADER_WARM_FLAG) == 0);
+
+  CI_SET_QWORD_FIELD(qword, EFCT_TX_HEADER_WARM_FLAG, 1);
+  vi->vi_txq.efct_fixed_header = qword.u64[0];
+}
+
+static void efct_ef_vi_stop_transmit_warm(ef_vi* vi,
+                                          ef_vi_tx_warm_state* saved_state)
+{
+  ci_qword_t qword;
+  qword.u64[0] = vi->vi_txq.efct_fixed_header;
+
+  EF_VI_ASSERT(CI_QWORD_FIELD(qword, EFCT_TX_HEADER_WARM_FLAG) == 1);
+
+  CI_SET_QWORD_FIELD(qword, EFCT_TX_HEADER_WARM_FLAG, 0);
+  vi->vi_txq.efct_fixed_header = qword.u64[0];
+}
+
 static void efct_ef_vi_transmit_pio_warm(ef_vi* vi)
 {
 }
@@ -1473,6 +1498,8 @@ static void efct_vi_initialise_ops(ef_vi* vi)
   vi->ops.transmit_push          = efct_ef_vi_transmit_push;
   vi->ops.transmit_pio           = efct_ef_vi_transmit_pio;
   vi->ops.transmit_copy_pio      = efct_ef_vi_transmit_copy_pio;
+  vi->ops.start_transmit_warm    = efct_ef_vi_start_transmit_warm;
+  vi->ops.stop_transmit_warm     = efct_ef_vi_stop_transmit_warm;
   vi->ops.transmit_pio_warm      = efct_ef_vi_transmit_pio_warm;
   vi->ops.transmit_copy_pio_warm = efct_ef_vi_transmit_copy_pio_warm;
   vi->ops.transmitv_ctpio        = efct_ef_vi_transmitv_ctpio;

@@ -217,7 +217,11 @@ int efct_vi_rx_future_poll(ef_vi* vi, ef_event* evs, int evs_len);
 */
 #define EFCT_FUTURE_VALID_BYTES 62
 
-/*! \brief Start transmit warming for this VI
+/*! \brief _Deprecated:_ Start transmit warming for this VI
+**
+** \deprecated
+** This function is now deprecated in favour of using the generic function:
+**  - ef_vi_start_transmit_warm()
 **
 ** Calling transmit functions during warming will exercise the code path but
 ** will not send any data on the wire. This can potentially improve transmit
@@ -230,7 +234,11 @@ int efct_vi_rx_future_poll(ef_vi* vi, ef_event* evs, int evs_len);
 */
 void efct_vi_start_transmit_warm(ef_vi* vi);
 
-/*! \brief Stop transmit warming for this VI
+/*! \brief _Deprecated:_ Stop transmit warming for this VI
+**
+** \deprecated
+** This function is now deprecated in favour of using the generic function:
+**  - ef_vi_stop_transmit_warm()
 **
 ** Transmit functions will behave normally, attempting to send data on the
 ** wire, after warming has been stopped.

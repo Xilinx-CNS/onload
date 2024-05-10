@@ -978,6 +978,22 @@ struct ef_vi_tx_extra {
   uint16_t egress_mport;
 };
 
+/*! \brief TX state for warming transmit path
+**
+** This structure is used to save or restore the TX state when warming.
+** Used with ef_vi_start_transmit_warm() and ef_vi_stop_transmit_warm() to
+** save or restore the state of the TX descriptor ring.
+**
+** Users should not access this structure.
+*/
+typedef struct {
+  /** The descriptors removed from the ring.*/
+  unsigned removed;
+  /** Pointer to CTPIO region. */
+  char* vi_ctpio_mmap_ptr;
+} ef_vi_tx_warm_state;
+
+
 /*! \brief A virtual interface.
 **
 ** An ef_vi represents a virtual interface on a specific NIC.  A virtual
@@ -1125,6 +1141,13 @@ typedef struct ef_vi {
     int (*transmit_copy_pio)(struct ef_vi*, int pio_offset,
                              const void* src_buf, int len,
                              ef_request_id dma_id);
+    /** Start transmit warming */
+    void (*start_transmit_warm)(struct ef_vi*,
+                                ef_vi_tx_warm_state* saved_state,
+                                char* warm_ctpio_mmap_ptr);
+    /** Stop transmit warming */
+    void (*stop_transmit_warm)(struct ef_vi*,
+                               ef_vi_tx_warm_state* saved_state);
     /** Warm Programmed I/O transmit path for subsequent transmit */
     void (*transmit_pio_warm)(struct ef_vi*);
     /** Copy a packet to Programmed I/O region and warm transmit path */
@@ -1437,7 +1460,6 @@ ef_vi_inline int ef_vi_receive_capacity(const ef_vi* vi)
 ** (up to 7 of them).
 */
 #define ef_vi_receive_push(vi) (vi)->ops.receive_push((vi))
-
 
 /*! \brief Initialize an RX descriptor on the RX descriptor ring, and
 **         submit it to the NIC
@@ -2032,11 +2054,17 @@ extern int ef_vi_transmit_init(ef_vi* vi, ef_addr addr, int bytes,
                               (len), (dma_id))
 
 
-/*! \brief Warm Programmed I/O transmit path for subsequent transmit
+/*! \brief _Deprecated:_ use ef_vi_start_transmit_warm() instead.
 **
 ** \param vi     The virtual interface from which transmit is planned.
 **
 ** \return None
+**
+** \deprecated This function is now deprecated in favour of calling generic
+** warming functions:
+**  - ef_vi_start_transmit_warm()
+**  - ef_vi_transmit_pio()
+**  - ef_vi_stop_transmit_warm()
 **
 ** Warm Programmed I/O transmit path for a subsequent transmit.
 **
@@ -2053,7 +2081,7 @@ extern int ef_vi_transmit_init(ef_vi* vi, ef_addr addr, int bytes,
   (vi)->ops.transmit_pio_warm((vi))
 
 
-/*! \brief Copy a packet to Programmed I/O region and warm transmit path
+/*! \brief _Deprecated:_ use ef_vi_start_transmit_warm() instead.
 **
 ** \param vi         The virtual interface from which transmit is planned.
 ** \param pio_offset The offset within its Programmed I/O region to the
@@ -2064,6 +2092,12 @@ extern int ef_vi_transmit_init(ef_vi* vi, ef_addr addr, int bytes,
 **                   least 16 bytes.
 **
 ** \return None
+**
+** \deprecated This function is now deprecated in favour of calling generic
+** warming functions:
+**  - ef_vi_start_transmit_warm()
+**  - ef_vi_transmit_copy_pio()
+**  - ef_vi_stop_transmit_warm()
 **
 ** Copy a packet to Programmed I/O region and warm transmit path
 **
@@ -2086,6 +2120,60 @@ extern int ef_vi_transmit_init(ef_vi* vi, ef_addr addr, int bytes,
 #define ef_vi_transmit_copy_pio_warm(vi, pio_offset, src_buf, len)        \
   (vi)->ops.transmit_copy_pio_warm((vi), (pio_offset), (src_buf), (len))
 
+/*! \brief Start warming the transmit path
+**
+** \param vi         The virtual interface from which warming is planned.
+** \param saved_state Pointer to warming state to save current TXQ state.
+** \param warm_ctpio_mmap_ptr    Pointer to memory to use for warming CTPIO
+**                               transmit region.
+**
+** \return None
+**
+** Sets the TXQ of the VI into the warming configuration.
+**
+** The application can call this function in advance of calls to
+** transmit functions to reduce latency jitter caused by code and state
+** being evicted from cache during delays between transmits.
+**
+** This function sets the TXQ to appear full not allowing for sending whilst
+** in this state. Any calls to transmit function will not send bytes onto
+** the wire. Previous TXQ state is saved into saved_state variable to
+** reset the state once warming is stopped.
+**
+** When warming non-ctpio send calls the warm_ctpio_mmap_ptr can be passed as
+** NULL. For example when using ef_vi_transmit_pio() or
+** ef_vi_transmit_copy_pio() to warm subsequent pio transmits.
+**
+** If using a VI with the EFCT architecture the saved_state can also be passed
+** as NULL. EFCT architecture VIs do not need to save the state of the TXQ as
+** subsequent send calls will always raise EF_EVENT_TYPE_TX events. The events
+** need to be handled as usual and will be indicated by an invalid dma_id of
+** EF_REQUEST_ID_MASK. There will be no timestamp whether or not transmit
+** timestamping is enabled for this VI.
+*/
+#define   ef_vi_start_transmit_warm(vi, saved_state, warm_ctpio_mmap_ptr) \
+    (vi)->ops.start_transmit_warm((vi), (saved_state), (warm_ctpio_mmap_ptr))
+
+/*! \brief Stop warming the transmit path
+**
+** \param vi         The virtual interface from which warming is planned.
+** \param saved_state Pointer to warming state to restore older TXQ state.
+**                    should be same state output from start_transmit_warm
+**                    function.
+**
+** \return None
+**
+** Restores the TXQ from the warming configuration to previous state.
+**
+** Stop transmit warming on the VI, allowing packets to be transmit onto
+** the wire. Takes the state from the saved_state and restores TXQ to this
+** state.
+**
+** If using a VI with the EFCT architecture the saved_state can also be passed
+** as NULL as with ef_vi_start_transmit_warm().
+*/
+#define ef_vi_stop_transmit_warm(vi, saved_state) \
+        (vi)->ops.stop_transmit_warm((vi), (saved_state))
 
 /*! \brief Remove all TX descriptors from the TX descriptor ring that have
 **         been initialized since last transmit.
