@@ -2153,7 +2153,7 @@ static void process_dump(ci_netif* ni)
             /* Copy the counter values in array and later print them */
             strncpy(values[j], tmp, (sizeof(tmp)-1));
             /* extra safety: terminating the string */
-            values[i][sizeof(values[j]) - 1] = 0;
+            values[j][sizeof(values[j]) - 1] = 0;
           }
         }
       }
