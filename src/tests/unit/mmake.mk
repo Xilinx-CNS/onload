@@ -67,11 +67,12 @@ $(filter lib/%, $(TARGETS)): MMAKE_DIR_CFLAGS += -I$(TOPPATH)/src/$(dir $@)
 # be rebuilt if out of date. A top-level build is needed to make sure it's up
 # to date before building the tests. This sadly means we can't reliably run an
 # invididual test without waiting for several seconds of flappery first.
-$(TARGETS): MMAKE_DIR_LINKFLAGS += -Wl,--unresolved-symbols=ignore-all $(NO_PIE) -ldl
+$(TARGETS): MMAKE_DIR_LINKFLAGS += -Wl,--unresolved-symbols=ignore-all $(NO_PIE)
+$(TARGETS): MMAKE_LIBS += -ldl
 $(filter lib/%, $(TARGETS)): MMAKE_DIR_CFLAGS += -I$(TOPPATH)/src/$(dir $@)
 $(filter lib/%, $(TARGETS)): $$(call lib_object,$$@)
 $(TARGETS): %: %.o stubs.o
-	$(MMakeLinkCApp)
+	(libs=$(MMAKE_LIBS); $(MMakeLinkCApp))
 
 # The build system relies on a convoluted web of makefiles in subdirectories
 # of both source and build trees to generate the dependencies. Lets do it the
