@@ -73,6 +73,46 @@ typedef ssize_t(*fop_rw_base_handler)(struct file *filp,
 
 #endif /* EFRM_HAVE_ITER_UBUF */
 
+#ifdef EFRM_HAVE_FOP_SENDPAGE
+#define oo_fop_splice_write generic_splice_sendpage
+#define oo_fop_splice_read generic_file_splice_read
+
+static ssize_t rw_iter_pipe_handler(fop_rw_base_handler base_handler,
+                                    struct kiocb *iocb, struct iov_iter *v)
+{
+  struct iovec iov;
+  size_t len = iov_iter_count(v);
+  ssize_t rc;
+
+  iov.iov_base = kzalloc(len, GFP_KERNEL);
+  iov.iov_len = len;
+
+  rc = base_handler(iocb->ki_filp, &iov, 1, CI_ADDR_SPC_KERNEL);
+  /* This handler is called only in splice_read() case, i.e. from
+   * socket to pipe. We don't have to care about another direction,
+   * copy_to_iter() is enough. */
+  if( rc > 0 )
+    rc = copy_to_iter(iov.iov_base, rc, v);
+
+  kfree(iov.iov_base);
+  return rc;
+}
+
+#define FOP_RW_ITER_PIPE_HANDLER(base_handler, iocb, iter)              \
+  do {                                                                  \
+    if( iov_iter_is_pipe(iter) ) {                                      \
+      return rw_iter_pipe_handler(base_handler, iocb, iter);            \
+    }                                                                   \
+  } while (0);
+
+#else
+/* Linux >= 6.5 */
+#define oo_fop_splice_write iter_file_splice_write
+#define oo_fop_splice_read copy_splice_read
+
+#define FOP_RW_ITER_PIPE_HANDLER(base_handler, iocb, iter) do {} while (0);
+#endif
+
 static ssize_t rw_iter_bvec_handler(fop_rw_base_handler base_handler,
                                     struct kiocb *iocb, struct iov_iter *v)
 {
@@ -104,6 +144,7 @@ static ssize_t rw_iter_bvec_handler(fop_rw_base_handler base_handler,
     if( iov_iter_is_bvec(v) ) {                                             \
       return rw_iter_bvec_handler(base_handler, iocb, v);                   \
     }                                                                       \
+    FOP_RW_ITER_PIPE_HANDLER(base_handler, iocb, v);                        \
     if( !iov_iter_type_supported(v) )                                       \
       return -EOPNOTSUPP;                                                   \
     FOP_RW_ITER_CALL_BASE_HANDLER(base_handler, iocb, v); }
@@ -916,13 +957,6 @@ static unsigned linux_tcp_helper_fop_poll_alien(struct file* filp,
   return alien_file->f_op->poll(alien_file, wait);
 }
 
-#ifdef EFRM_HAVE_FOP_SENDPAGE
-#define oo_fop_splice_write generic_splice_sendpage
-#else
-/* Linux >= 6.5 */
-#define oo_fop_splice_write iter_file_splice_write
-#endif
-
 /* Linux file operations for TCP and UDP.
 */
 struct file_operations linux_tcp_helper_fops_tcp =
@@ -942,6 +976,7 @@ struct file_operations linux_tcp_helper_fops_tcp =
   CI_STRUCT_MBR(sendpage, linux_tcp_helper_fop_sendpage),
 #endif /* EFRM_HAVE_FOP_SENDPAGE */
   CI_STRUCT_MBR(splice_write, oo_fop_splice_write),
+  CI_STRUCT_MBR(splice_read, oo_fop_splice_read),
 #endif /* ! CI_CFG_UL_INTERRUPT_HELPER */
   CI_STRUCT_MBR(poll, linux_tcp_helper_fop_poll_tcp),
   CI_STRUCT_MBR(unlocked_ioctl, oo_fop_unlocked_ioctl),
@@ -970,6 +1005,7 @@ struct file_operations linux_tcp_helper_fops_udp =
   CI_STRUCT_MBR(sendpage, linux_tcp_helper_fop_sendpage_udp),
 #endif /* EFRM_HAVE_FOP_SENDPAGE */
   CI_STRUCT_MBR(splice_write, oo_fop_splice_write),
+  CI_STRUCT_MBR(splice_read, oo_fop_splice_read),
 #endif /* ! CI_CFG_UL_INTERRUPT_HELPER */
   CI_STRUCT_MBR(poll, linux_tcp_helper_fop_poll_udp),
   CI_STRUCT_MBR(unlocked_ioctl, oo_fop_unlocked_ioctl),
