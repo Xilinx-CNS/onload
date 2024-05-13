@@ -719,8 +719,10 @@ int stack_attach(unsigned id)
   if( ! cfg_zombie ) {
     /* Possibly, this stack was already destroyed, so do not CI_TRY here. */
     int rc = ci_netif_restore_id(&n->ni, id, true);
-    if( rc != 0 )
+    if( rc != 0 ) {
+        free(n);
         return 0;
+    }
   }
   stacks[id] = n;
   ci_dllist_push_tail(&stacks_list, &n->link);
@@ -746,7 +748,12 @@ void stack_detach(netif_t* n, int locked)
     CI_TRY(ef_onload_driver_close(fd));
     
     stacks[id] = 0;
+  } else {
+    /* Zombie stacks must not have shared state mapped. */
+    ci_assert_equal(n->ni.state, NULL);
   }
+
+  free(n);
 }
 
 
