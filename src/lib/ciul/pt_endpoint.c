@@ -414,7 +414,7 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   char *mem_mmap_ptr_orig, *mem_mmap_ptr;
   char *io_mmap_ptr;
   char* ctpio_mmap_ptr;
-  uint64_t *rx_post_buffer_mmap_ptr;
+  char *rx_post_buffer_mmap_ptr;
   ef_vi_state* state;
   int rc;
   const char* s;
@@ -542,7 +542,7 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
                    __FUNCTION__, rc));
       goto fail4;
     }
-    rx_post_buffer_mmap_ptr = (uint64_t*) p;
+    rx_post_buffer_mmap_ptr = p;
   }
 
   if( vi_flags & EF_VI_TX_CTPIO ) {

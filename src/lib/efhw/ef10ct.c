@@ -335,15 +335,14 @@ ef10ct_dmaq_tx_q_init(struct efhw_nic *nic,
 }
 
 static int
-ef10ct_superbuf_io_region(struct efhw_nic* nic, int instance, size_t* size_out,
-                          resource_size_t* addr_out)
+ef10ct_rx_buffer_post_register(struct efhw_nic* nic, int instance,
+                               resource_size_t* addr_out)
 {
   int rc;
   struct device *dev;
   struct efx_auxiliary_device* edev;
   struct efx_auxiliary_client* cli;
   union efx_auxiliary_param_value val = {.io_addr.qid_in = instance};
-  val.io_addr.qid_in = instance;
 
   EFCT_PRE(dev, edev, cli, nic, rc);
   rc = edev->ops->get_param(cli, EFX_AUXILIARY_RXQ_POST, &val);
@@ -352,10 +351,17 @@ ef10ct_superbuf_io_region(struct efhw_nic* nic, int instance, size_t* size_out,
   if( rc < 0 )
     return rc;
 
-  *size_out = sizeof(resource_size_t);
   *addr_out = val.io_addr.base;
 
   return 0;
+}
+
+static int
+ef10ct_superbuf_io_region(struct efhw_nic* nic, size_t* size_out,
+                          resource_size_t* addr_out)
+{
+  *size_out = 0x100000; // TODO from design parameters: rx_queues * rx_stride
+  return ef10ct_rx_buffer_post_register(nic, 0, addr_out);
 }
 
 static int 
@@ -371,7 +377,6 @@ ef10ct_dmaq_rx_q_init(struct efhw_nic *nic,
     .suppress_events = true, /* Do we ever want this to be false? Maybe false if int-driven */
   };
   int rc, rxq;
-  size_t io_size;
   struct efx_auxiliary_rpc dummy;
   resource_size_t register_phys_addr;
 
@@ -405,7 +410,7 @@ ef10ct_dmaq_rx_q_init(struct efhw_nic *nic,
     return -EINVAL;
   }
 
-  rc = ef10ct_superbuf_io_region(nic, rxq, &io_size, &register_phys_addr);
+  rc = ef10ct_rx_buffer_post_register(nic, rxq, &register_phys_addr);
   if( rc < 0 ) {
     EFHW_ERR("%s Failed to get rx post register. rc = %d\n", __FUNCTION__, rc);
     return rc;

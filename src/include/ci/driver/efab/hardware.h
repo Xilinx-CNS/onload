@@ -249,10 +249,9 @@
 	 (nic)->efhw_func->ctpio_addr((nic), (instance), (addr)) : -ENOSYS)
 
 /*-------------- superbufs ------------------------ */
-#define efhw_nic_superbuf_io_region(nic, instance, size_out, addr_out) \
+#define efhw_nic_superbuf_io_region(nic, size_out, addr_out) \
 	((nic)->efhw_func->superbuf_io_region ? \
-	 (nic)->efhw_func->superbuf_io_region((nic), (instance), (size_out), \
-	                                      (addr_out)) : \
+	 (nic)->efhw_func->superbuf_io_region((nic), (size_out), (addr_out)) : \
 	 -EOPNOTSUPP)
 #define efhw_nic_post_superbuf(nic, instance, addr, sentinel, rollover, owner_id) \
 	((nic)->efhw_func->post_superbuf ? \

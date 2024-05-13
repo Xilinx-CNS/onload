@@ -196,7 +196,7 @@ int ef10ct_vi_post_superbuf_direct(struct ef_vi *vi, ef_addr addr,
                                    int sentinel, int rollover)
 {
     ci_qword_t qword;
-    volatile uint64_t *reg = vi->vi_rx_post_buffer_mmap_ptr;
+    volatile uint64_t *reg = (uint64_t*)vi->vi_rx_post_buffer_mmap_ptr;
 
     EF_VI_ASSERT( reg != NULL );
 

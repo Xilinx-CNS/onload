@@ -257,12 +257,12 @@ efab_vi_rm_mmap_rx_buffer_post(struct efrm_vi *virs, unsigned long *bytes,
   if( !ci_in_egroup(phys_mode_gid) )
     return -EPERM;
 
-  rc = efhw_nic_superbuf_io_region(nic, virs->rs.rs_instance, &len, &io_addr);
+  rc = efhw_nic_superbuf_io_region(nic, &len, &io_addr);
   if( rc < 0 )
     return rc;
 
 
-  len = CI_MIN(*bytes, (unsigned long)CI_PAGE_SIZE);
+  len = CI_ROUND_UP(*bytes, (unsigned long)CI_PAGE_SIZE);
   *bytes -= len;
 
   io_page_addr = io_addr & CI_PAGE_MASK;

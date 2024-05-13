@@ -334,8 +334,7 @@ efch_vi_rm_alloc(ci_resource_alloc_t* alloc, ci_resource_table_t* rt,
   if( rc < 0 )
     goto fail4;
 
-  rc = efhw_nic_superbuf_io_region(nic, efrm_vi_qid(virs, EFHW_RXQ),
-                                   &buf_io_size, &io_addr);
+  rc = efhw_nic_superbuf_io_region(nic, &buf_io_size, &io_addr);
   if( rc < 0 && rc != -EOPNOTSUPP )
     goto fail4;
 
