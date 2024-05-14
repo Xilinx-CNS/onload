@@ -606,8 +606,11 @@ ef10ct_design_parameters(struct efhw_nic *nic,
   else if( (VALUE) != EFAB_NIC_DP_DEFAULT(PARAM) ) \
     return -ENODEV;
 
+  /* TODO get the values from the NIC */
   SET(rx_superbuf_bytes, EFCT_RX_SUPERBUF_BYTES);
   SET(rx_frame_offset, EFCT_RX_HEADER_NEXT_FRAME_LOC_1 - 2);
+  SET(rx_stride, 4096);
+  SET(rx_queues, 256);
   SET(tx_aperture_bytes, 0x1000);
   SET(tx_fifo_bytes, 0x8000);
   SET(timestamp_subnano_bits, 2);

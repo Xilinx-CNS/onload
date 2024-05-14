@@ -156,6 +156,8 @@ efct_design_parameters(struct efhw_nic *nic,
 
   SET(rx_superbuf_bytes, xp->rx_buffer_len * 4096);
   SET(rx_frame_offset, xp->frame_offset_fixed);
+  SET(rx_stride, xp->rx_stride);
+  SET(rx_queues, xp->rx_queues);
   SET(tx_aperture_bytes, xp->tx_aperture_size);
   SET(tx_fifo_bytes, xp->tx_fifo_size);
   SET(timestamp_subnano_bits, xp->ts_subnano_bit);
