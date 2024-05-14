@@ -17,6 +17,10 @@
  * triggers, the enablement of warming and the frequency of warming
  * while waiting for a trigger.
  *
+ * Option '-p' runs simple function to pollute cache on selected CPU
+ * in-order to simulate a full application where CPU might be busy with other
+ * tasks in-between sends.
+ *
  * 2017-2024 AMD Solarflare
  * Authors: Paul Emberson & Ian Beecraft
  * Date: 2017/05/09 - 2024/06/10
@@ -65,6 +69,9 @@ static int cfg_warm = 0;
 static int cfg_warm_interval_us = 400;
 static int cfg_affinity[2];
 static int cfg_ct_threshold = 64;
+static char *pollution_buf;
+static bool polluted = false;
+static unsigned long cfg_pollute = 0;
 static int ifindex;
 static int n_sent;
 volatile static int n_send_triggers;
@@ -84,6 +91,25 @@ ef_vi_tx_warm_state state;
 typedef void (*send_fn_t)(void);
 send_fn_t send_function;
 ef_addr dma_buf_addr;
+
+/* Unfortunately the gcc built-in for clearing cache is a no-op on __x86_64__
+ * therefore to 'flush/clear' the data cache we exercise a block of memory
+ * larger than the specific cache of the CPU.
+ *
+ * This certainly is not an elegant solution but does help to highlight the
+ * need and benefit of warming the send path. In an actual application you can
+ * imagine how the send operation/data can be flushed from cache.
+ *
+ * It is worth noting that if the transmit timeout is too low this can cause
+ * the calculated latency to be in-correct by delaying the send call.*/
+static void pollute_cache(void)
+{
+  int i;
+  for( i = 0; i < cfg_pollute; ++i ) {
+    pollution_buf[i] += i%0xFF;
+  }
+  polluted = true;
+}
 
 static void wait_for_completion(void)
 {
@@ -164,6 +190,7 @@ static void warming_loop(void)
   while( n_sent < cfg_iter ) {
     if( n_sent < n_send_triggers ) {
       send_function();
+      polluted = false;
       wait_for_completion();
     }
     else if( cfg_warm && usecs_since(&warm_ts) >= cfg_warm_interval_us ) {
@@ -178,6 +205,8 @@ static void warming_loop(void)
       if( n_warm % EV_POLL_BATCH_SIZE == 0 && efct )
         drain_queue();
     }
+    else if( cfg_pollute && !polluted )
+      pollute_cache();
   }
 }
 
@@ -202,6 +231,7 @@ int main(int argc, char* argv[])
   pthread_t trigger_thread_id;
   cpu_set_t cpuset;
   ef_memreg mr;
+  char pbuf[BUF_SIZE];
 
   /* set initial affinities to 0,1 */
   cfg_affinity[0] = 0;
@@ -269,6 +299,14 @@ int main(int argc, char* argv[])
     dma_buf_addr = ef_memreg_dma_addr(&mr, 0);
   }
 
+  if( cfg_pollute ) {
+    int i;
+    TEST(pollution_buf = calloc(1, cfg_pollute));
+    for (i = 0; i < cfg_pollute; ++i)
+      pollution_buf[i] = (char)i;
+  }
+  printf("cache_pollution=%d\n", cfg_pollute > 0);
+
   switch( cfg_mode ) {
     case MODE_CTPIO:
       send_function = ctpio_send;
@@ -309,7 +347,7 @@ static int parse_opts(int argc, char*argv[])
   int c;
   char *affinity_token;
 
-  while( (c = getopt(argc, argv, "n:m:s:l:a:x:c:twu:")) != -1 )
+  while( (c = getopt(argc, argv, "n:m:s:l:a:x:c:p:twu:")) != -1 )
     switch( c ) {
     case 'a':
       affinity_token = strtok(optarg, ";");
@@ -343,6 +381,11 @@ static int parse_opts(int argc, char*argv[])
         default:
           fprintf(stderr, "Unknown mode '%c'\n", optarg[0]);
       }
+      break;
+    case 'p':
+      cfg_pollute = atoi(optarg);
+      cfg_pollute = cfg_pollute > 128 ? 128 * 1024 * 1024
+                                : cfg_pollute * 1024 * 1024;
       break;
     case 's':
       cfg_usleep = atoi(optarg);
@@ -433,6 +476,7 @@ void usage(void)
   fprintf(stderr, "  -t                  - enable hardware TX timestamps\n");
   fprintf(stderr, "  -w                  - enable transmit warming\n");
   fprintf(stderr, "  -u <warm-interval>  - how often to warm (microseconds)\n");
+  fprintf(stderr, "  -p <size (MB)>      - pollute xMB of cache after sends\n");
   fprintf(stderr, "  -x <send-mode>      - method of send to warm: [c]tpio,\n");
   fprintf(stderr, "                        [p]io (default)\n");
   fprintf(stderr, "  -c <ct-threshold>   - set the ctpio ct threshold, when\n");
