@@ -1230,12 +1230,9 @@ static void ci_netif_unlock_slow(ci_netif* ni)
       CITP_STATS_NETIF_INC(ni, unlock_slow_need_prime);
       CITP_STATS_NETIF_INC(ni, unlock_slow_prime_ul);
       ci_assert(NI_OPTS(ni).int_driven);
-      /* TODO: When interrupt driven, evq_primed is never cleared, so we
-      * don't know here which subset of interfaces needs to be primed.
-      * Would be more efficient if we did.
-      */
       OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
-        ef_eventq_prime(ci_netif_vi(ni, intf_i));
+        if( ci_bit_test_and_clear(&ni->state->evq_prime_deferred, intf_i) )
+          ef_eventq_prime(ci_netif_vi(ni, intf_i));
     }
 
     /* If some flags should be handled in kernel, then there is no point in
