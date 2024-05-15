@@ -217,8 +217,8 @@ void ci_netif_set_merge_atomic_flag(ci_netif* ni)
       break;
     }
     else if(  ci_netif_trylock(ni) ) {
-      ef_eplock_holder_set_flag(&ni->state->lock,
-                                CI_EPLOCK_NETIF_MERGE_ATOMIC_COUNTERS);
+      ef_eplock_holder_set_single_flag(&ni->state->lock,
+                                       CI_EPLOCK_NETIF_MERGE_ATOMIC_COUNTERS);
       ci_netif_unlock(ni);
       break;
     }

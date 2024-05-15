@@ -1406,8 +1406,8 @@ void ci_netif_put_ready_list(ci_netif* ni, int id)
                                     ci_netif_lock(ni) ) {
     ci_atomic32_or(&ni->state->ready_list_flags[id],
                    CI_NI_READY_LIST_FLAG_PENDING_FREE);
-    if(! ef_eplock_lock_or_set_flag(&ni->state->lock,
-                                    CI_EPLOCK_NETIF_FREE_READY_LIST) ) {
+    if(! ef_eplock_lock_or_set_single_flag(&ni->state->lock,
+                                           CI_EPLOCK_NETIF_FREE_READY_LIST) ) {
       /* lock holder will release the ready list */
       return;
     }

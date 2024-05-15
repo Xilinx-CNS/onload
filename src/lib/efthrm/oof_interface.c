@@ -172,7 +172,8 @@ oof_cb_sw_filter_postpone(struct oof_socket* skf, int af_space,
   /* We are holding a spinlock, so claim to be in driverlink context here */
   if( efab_tcp_helper_netif_lock_or_set_flags(trs, OO_TRUSTED_LOCK_SWF_UPDATE,
                                               CI_EPLOCK_NETIF_SWF_UPDATE, 1) ) {
-    ef_eplock_holder_set_flag(&ni->state->lock, CI_EPLOCK_NETIF_SWF_UPDATE);
+    ef_eplock_holder_set_single_flag(&ni->state->lock,
+                                     CI_EPLOCK_NETIF_SWF_UPDATE);
     efab_tcp_helper_netif_unlock(trs, 1);
   }
 #else

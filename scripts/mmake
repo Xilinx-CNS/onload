@@ -30,6 +30,10 @@ while [ $# -gt 0 ]; do
   shift
 done
 
+# Check if 'which' exists
+which which >/dev/null 2>&1
+[ $? -eq 0 ] || fail "Cannot find 'which' command."
+
 # Use gnumake if it exists, otherwise make.
 [ -z "$MMAKE_MAKE" ] && {
   MMAKE_MAKE=gmake

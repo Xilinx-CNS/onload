@@ -157,7 +157,7 @@ static bool is_movq_to_rdi(const unsigned char *p)
  */
 static bool is_movl_to_esi(const unsigned char *p)
 {
-  return p[0] == 0x89 && (p[1] & 0xc6) == 0xc6;
+  return p[0] == 0x89 && (p[1] & 0xc7) == 0xc6;
 }
 
 /*
@@ -176,7 +176,7 @@ static bool is_movl_to_esi(const unsigned char *p)
  */
 static bool is_andl_to_esi(const unsigned char *p)
 {
-  return p[0] == 0x21 && (p[1] & 0xc6) == 0xc6;
+  return p[0] == 0x21 && (p[1] & 0xc7) == 0xc6;
 }
 
 static void *is_syscall_table(const unsigned char *p)

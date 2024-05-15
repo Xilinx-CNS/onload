@@ -123,8 +123,8 @@ void ci_ip_send_pkt_defer(ci_netif* ni, const struct oo_sock_cplane* sock_cp,
   }
 
   oo_p_dllink_add_tail(ni, oo_p_dllink_ptr(ni, &ni->state->deferred_list), lnk);
-  ef_eplock_holder_set_flag(&ni->state->lock,
-                            CI_EPLOCK_NETIF_HAS_DEFERRED_PKTS);
+  ef_eplock_holder_set_single_flag(&ni->state->lock,
+                                   CI_EPLOCK_NETIF_HAS_DEFERRED_PKTS);
   CITP_STATS_NETIF_INC(ni, tx_defer_pkt);
 }
 
