@@ -8,6 +8,7 @@
 #endif
 
 #include <sys/mman.h>
+#include <etherfabric/memreg.h>
 #include "ef_vi_internal.h"
 #include "shrub_pool.h"
 
@@ -30,6 +31,9 @@ struct efct_ubufs_rxq
   /* FIFO to record buffers posted to the NIC. */
   unsigned added, filled, removed;
   struct efct_ubufs_desc fifo[CI_EFCT_MAX_SUPERBUFS];
+
+  /* Buffer memory region */
+  ef_memreg memreg;
 };
 
 struct efct_ubufs
@@ -37,6 +41,9 @@ struct efct_ubufs
   ef_vi_efct_rxq_ops ops;
   uint64_t active_qs;
   unsigned nic_fifo_limit;
+  ef_pd* pd;
+  ef_driver_handle pd_dh;
+
   struct efct_ubufs_rxq q[EF_VI_MAX_EFCT_RXQS];
 };
 
@@ -173,6 +180,8 @@ static int efct_ubufs_attach(ef_vi* vi, int qid, unsigned n_superbufs)
   int ix, rc;
   ef_shrub_buffer_id id;
   void* map;
+  size_t map_bytes;
+  struct efct_ubufs* ubufs = get_ubufs(vi);
   struct efct_ubufs_rxq* rxq;
 
   if( n_superbufs > CI_EFCT_MAX_SUPERBUFS )
@@ -182,8 +191,9 @@ static int efct_ubufs_attach(ef_vi* vi, int qid, unsigned n_superbufs)
   if( ix < 0 )
     return ix;
 
-  map = mmap((void*)vi->efct_rxqs.q[ix].superbuf,
-             n_superbufs * EFCT_RX_SUPERBUF_BYTES,
+  map_bytes = CI_ROUND_UP((size_t)n_superbufs * EFCT_RX_SUPERBUF_BYTES,
+                          CI_HUGEPAGE_SIZE);
+  map = mmap((void*)vi->efct_rxqs.q[ix].superbuf, map_bytes,
              PROT_READ | PROT_WRITE,
              MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_HUGETLB |
                MAP_FIXED | MAP_POPULATE,
@@ -191,24 +201,32 @@ static int efct_ubufs_attach(ef_vi* vi, int qid, unsigned n_superbufs)
   if( map == MAP_FAILED )
     return -errno;
   if( map != vi->efct_rxqs.q[ix].superbuf ) {
-    munmap(map, n_superbufs * EFCT_RX_SUPERBUF_BYTES);
+    munmap(map, map_bytes);
     return -ENOMEM;
   }
 
-  rxq = &get_ubufs(vi)->q[ix];
+  rxq = &ubufs->q[ix];
   rc = ef_shrub_init_pool(n_superbufs, &rxq->buffer_pool);
   if( rc < 0 ) {
-    munmap(map, n_superbufs * EFCT_RX_SUPERBUF_BYTES);
+    munmap(map, map_bytes);
     return rc;
   }
   for( id = 0; id < n_superbufs; ++id )
     ef_shrub_free_buffer(rxq->buffer_pool, id);
-  post_buffers(vi, rxq, ix);
 
   rxq->superbuf_pkts = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
 
-  get_ubufs(vi)->active_qs |= 1 << ix;
+  rc = ef_memreg_alloc(&rxq->memreg, vi->dh, ubufs->pd, ubufs->pd_dh,
+                       map, map_bytes);
+  if( rc < 0 ) {
+    ef_shrub_fini_pool(rxq->buffer_pool);
+    munmap(map, map_bytes);
+    return rc;
+  }
+
+  ubufs->active_qs |= 1 << ix;
   efct_vi_start_rxq(vi, ix, qid);
+  post_buffers(vi, rxq, ix);
 
   return 0;
 #endif
@@ -228,22 +246,24 @@ static int efct_ubufs_refresh(ef_vi* vi, int qid)
 
 static void efct_ubufs_cleanup(ef_vi* vi)
 {
+  struct efct_ubufs* ubufs = get_ubufs(vi);
   efct_superbufs_cleanup(vi);
 
 #ifdef __KERNEL__
-  kzfree(get_ubufs(vi));
+  kzfree(ubufs);
 #else
   int i;
   for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
-    struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[i];
+    struct efct_ubufs_rxq* rxq = &ubufs->q[i];
     if( rxq->buffer_pool )
       ef_shrub_fini_pool(rxq->buffer_pool);
+    ef_memreg_free(&rxq->memreg, vi->dh);
   }
-  free(get_ubufs(vi));
+  free(ubufs);
 #endif
 }
 
-int efct_ubufs_init(ef_vi* vi)
+int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
 {
   struct efct_ubufs* ubufs;
   int i, rc;
@@ -265,13 +285,17 @@ int efct_ubufs_init(ef_vi* vi)
 
   for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
     ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[i];
+    rxq->qid = -1;
     rxq->live.superbuf_pkts = &ubufs->q[i].superbuf_pkts;
+    rxq->live.config_generation = &rxq->config_generation;
     // TODO time_sync?
   }
 
   /* TODO get this limit from the design parameter DP_RX_BUFFER_FIFO_SIZE,
    * perhaps allow configuration to a smaller value to reduce working set */
   ubufs->nic_fifo_limit = 128;
+  ubufs->pd = pd;
+  ubufs->pd_dh = pd_dh;
 
   ubufs->ops.available = efct_ubufs_available;
   ubufs->ops.next = efct_ubufs_next;

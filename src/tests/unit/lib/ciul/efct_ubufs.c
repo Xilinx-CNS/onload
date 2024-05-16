@@ -6,6 +6,7 @@
 /* Functions under test */
 #include <etherfabric/ef_vi.h>
 
+#include <etherfabric/memreg.h>
 #include <ci/efhw/common.h>
 #include <etherfabric/internal/efct_uk_api.h>
 #include "ef_vi_internal.h"
@@ -48,6 +49,18 @@ void efct_superbufs_cleanup(ef_vi* vi)
 {
   munmap((void*)vi->efct_rxqs.q[0].superbuf,
          sbuf_bytes_per_rxq * vi->efct_rxqs.max_qs);
+}
+
+int ef_memreg_alloc(ef_memreg* mr, ef_driver_handle mr_dh,
+                    struct ef_pd* pd, ef_driver_handle pd_dh,
+                    void* p_mem, size_t len_bytes)
+{
+  return 0;
+}
+
+int ef_memreg_free(ef_memreg* mr, ef_driver_handle mr_dh)
+{
+  return 0;
 }
 
 #include "shrub_pool.h"
@@ -137,7 +150,7 @@ static void test_efct_ubufs(void)
   ef_vi_efct_rxq_ops* ops;
 
   STATE_ALLOC(ef_vi, vi);
-  CHECK(efct_ubufs_init(vi), ==, 0);
+  CHECK(efct_ubufs_init(vi, NULL, 0), ==, 0);
   STATE_STASH(vi);
   ops = vi->efct_rxqs.ops;
   ops->post = mock_post;
@@ -182,7 +195,7 @@ static void test_sentinel(void)
   ef_vi_efct_rxq_ops* ops;
 
   STATE_ALLOC(ef_vi, vi);
-  CHECK(efct_ubufs_init(vi), ==, 0);
+  CHECK(efct_ubufs_init(vi, NULL, 0), ==, 0);
   STATE_STASH(vi);
   ops = vi->efct_rxqs.ops;
   ops->post = mock_post;
@@ -226,7 +239,7 @@ static void test_poison(void)
   ef_vi_efct_rxq_ops* ops;
 
   STATE_ALLOC(ef_vi, vi);
-  CHECK(efct_ubufs_init(vi), ==, 0);
+  CHECK(efct_ubufs_init(vi, NULL, 0), ==, 0);
   STATE_STASH(vi);
   ops = vi->efct_rxqs.ops;
   ops->post = mock_post;
