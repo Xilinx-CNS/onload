@@ -325,6 +325,7 @@ typedef struct ci_resource_op_s {
     } design_parameters;
     struct {
       uint64_t          user_addr;
+      uint32_t          qid;
       /*bool*/uint8_t   sentinel;
       /*bool*/uint8_t   rollover;
     } buffer_post;

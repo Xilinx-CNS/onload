@@ -11,6 +11,7 @@
 #include <etherfabric/memreg.h>
 #include "ef_vi_internal.h"
 #include "shrub_pool.h"
+#include "driver_access.h"
 
 /* TODO move CI_EFCT_MAX_SUPERBUFS somewhere more sensible, or remove
  * dependencies on it */
@@ -159,15 +160,39 @@ static bool efct_ubufs_available(const ef_vi* vi, int qid)
   return rxq->added != rxq->removed;
 }
 
-static void efct_ubufs_post(ef_vi* vi, int qid, int sbid, bool sentinel)
+static void efct_ubufs_post_direct(ef_vi* vi, int qid, int sbid, bool sentinel)
 {
-  /* TODO we'll eventually want a few implementations:
-   *  direct (user/kernel), sfc_char syscall, onload syscall
-   */
-  (void)vi;
-  (void)qid;
-  (void)sbid;
-  (void)sentinel;
+  ef_addr addr = ef_memreg_dma_addr(&get_ubufs(vi)->q[qid].memreg,
+                                    sbid * EFCT_RX_SUPERBUF_BYTES);
+  volatile uint64_t* reg =
+    (uint64_t*)(vi->vi_rx_post_buffer_mmap_ptr +
+                vi->efct_rxqs.q[qid].qid * vi->efct_rxqs.rx_stride);
+
+  ci_qword_t qword;
+  CI_POPULATE_QWORD_3(qword,
+                      EFCT_RX_BUFFER_POST_ADDRESS, addr >> 12,
+                      EFCT_RX_BUFFER_POST_SENTINEL, sentinel,
+                      EFCT_RX_BUFFER_POST_ROLLOVER, 0); // TBD support for rollover?
+
+  *reg = qword.u64[0];
+}
+
+static void efct_ubufs_post_kernel(ef_vi* vi, int qid, int sbid, bool sentinel)
+{
+  ef_addr addr = ef_memreg_dma_addr(&get_ubufs(vi)->q[qid].memreg,
+                                    sbid * EFCT_RX_SUPERBUF_BYTES);
+
+  ci_resource_op_t op = {};
+
+  op.op = CI_RSOP_RX_BUFFER_POST;
+  op.id = efch_make_resource_id(vi->vi_resource_id);
+  op.u.buffer_post.qid = vi->efct_rxqs.q[qid].qid;
+  op.u.buffer_post.user_addr = (uint64_t)addr;
+  op.u.buffer_post.sentinel = sentinel;
+  op.u.buffer_post.rollover = 0; // TBD support for rollover?
+
+  /* TBD should we handle/report errors? */
+  ci_resource_op(vi->dh, &op);
 }
 
 static int efct_ubufs_attach(ef_vi* vi, int qid, unsigned n_superbufs)
@@ -300,11 +325,15 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
   ubufs->ops.available = efct_ubufs_available;
   ubufs->ops.next = efct_ubufs_next;
   ubufs->ops.free = efct_ubufs_free;
-  ubufs->ops.post = efct_ubufs_post;
   ubufs->ops.attach = efct_ubufs_attach;
   ubufs->ops.refresh = efct_ubufs_refresh;
   ubufs->ops.prime = efct_ubufs_prime;
   ubufs->ops.cleanup = efct_ubufs_cleanup;
+
+  if( vi->vi_flags & EF_VI_RX_PHYS_ADDR )
+    ubufs->ops.post = efct_ubufs_post_direct;
+  else
+    ubufs->ops.post = efct_ubufs_post_kernel;
 
   vi->efct_rxqs.active_qs = &ubufs->active_qs;
   vi->efct_rxqs.ops = &ubufs->ops;

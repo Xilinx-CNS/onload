@@ -472,12 +472,15 @@ static int efch_vi_post_superbuf(struct efrm_vi *virs, ci_resource_op_t *op)
 {
   int rc;
   uint64_t user_addr = op->u.buffer_post.user_addr;
+  int qid = op->u.buffer_post.qid;
   bool sentinel = op->u.buffer_post.sentinel;
   bool rollover = op->u.buffer_post.rollover;
   struct efhw_nic *nic = efrm_client_get_nic(virs->rs.rs_client);
   int owner_id = efrm_pd_owner_id(virs->pd);
 
-  rc = efhw_nic_post_superbuf(nic, efrm_vi_qid(virs, EFHW_RXQ), user_addr,
+  /* TBD should we restrict access to queues assigned to this vi? */
+
+  rc = efhw_nic_post_superbuf(nic, qid, user_addr,
                               sentinel, rollover, owner_id);
 
   return rc;

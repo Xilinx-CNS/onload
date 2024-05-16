@@ -878,6 +878,8 @@ typedef struct {
   ef_vi_efct_rxq_ops*           ops;
   /** Offset (in packets) between a data packet and its associated metadata */
   uint8_t meta_offset;
+  /** Offset (in bytes) between rxq register regions */
+  uint16_t rx_stride;
 
   /** efct kernel/userspace shared queue area. Exposed for debugging.
    ** TODO provide generic access to stats and hide this */

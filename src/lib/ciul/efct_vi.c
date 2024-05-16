@@ -1148,6 +1148,7 @@ efct_design_parameters(struct ef_vi* vi, struct efab_nic_design_parameters* dp)
                              EFCT_TX_ALIGNMENT - EFCT_TX_HEADER_BYTES;
   vi->ts_subnano_bits = GET(timestamp_subnano_bits);
   vi->unsol_credit_seq_mask = GET(unsol_credit_seq_mask);
+  vi->efct_rxqs.rx_stride = GET(rx_stride);
   switch( GET(md_location) ) {
     case 0:
       vi->efct_rxqs.meta_offset = 1;
