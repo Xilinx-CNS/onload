@@ -38,6 +38,9 @@ struct tcp_recv_info {
   int msg_flags;
   struct onload_zc_recv_args* zc_args;
   size_t controllen;
+#ifdef __KERNEL__
+  ci_addr_spc_t addr_spc;
+#endif
 };
 
 #ifndef __KERNEL__
@@ -290,7 +293,8 @@ static int copy_one_pkt(ci_netif* netif, struct tcp_recv_info* rinf,
   int n;
 
   if(CI_LIKELY( ! (rinf->a->flags & MSG_TRUNC) ))
-    n = ci_ip_copy_pkt_to_user(netif, &rinf->piov.io, pkt, peek_off);
+    n = ci_ip_copy_pkt_to_user(netif, &rinf->piov.io, pkt, peek_off
+                               CI_KERNEL_ARG(rinf->addr_spc));
   else {
     /* Very strange kernel behaviour: MSG_TRUNC will consume the number
      * of bytes requested, but will not write to the user's pointer in any
@@ -583,7 +587,8 @@ static inline void ci_tcp_recvmsg_init_piov(struct tcp_recv_info* rinf)
 __attribute__((always_inline))
 static inline int ci_tcp_recvmsg_impl(const ci_tcp_recvmsg_args* a,
                                       pkt_copy_t copier,
-                                      struct onload_zc_recv_args* zc_args)
+                                      struct onload_zc_recv_args* zc_args
+                                      CI_KERNEL_ARG(ci_addr_spc_t addr_spc))
 {
   int                   have_polled;
   ci_uint64             sleep_seq;
@@ -609,6 +614,7 @@ static inline int ci_tcp_recvmsg_impl(const ci_tcp_recvmsg_args* a,
   rinf.copier = copier;
   rinf.zc_args = zc_args;
 #ifdef __KERNEL__
+  rinf.addr_spc = addr_spc;
   rinf.controllen = 0;
 #else
   rinf.controllen = a->msg->msg_controllen;
@@ -953,9 +959,10 @@ static inline int ci_tcp_recvmsg_impl(const ci_tcp_recvmsg_args* a,
 }
 
 
-int ci_tcp_recvmsg(const ci_tcp_recvmsg_args* a)
+int ci_tcp_recvmsg(const ci_tcp_recvmsg_args* a
+                   CI_KERNEL_ARG(ci_addr_spc_t addr_spc))
 {
-  int rc = ci_tcp_recvmsg_impl(a, copy_one_pkt, NULL);
+  int rc = ci_tcp_recvmsg_impl(a, copy_one_pkt, NULL CI_KERNEL_ARG(addr_spc));
   if( rc < 0 )
     CI_SET_ERROR(rc, -rc);
   return rc;

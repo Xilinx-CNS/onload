@@ -20,28 +20,31 @@ struct oo_copy_state {
   const ci_ip_pkt_fmt* pkt;
 };
 
-ci_inline int __oo_do_copy(void* to, const void* from, int n_bytes)
+ci_inline int __oo_do_copy(void* to, const void* from, int n_bytes
+                           CI_KERNEL_ARG(ci_addr_spc_t addr_spc))
 {
 #ifdef __KERNEL__
-  return copy_to_user(to, from, n_bytes);
-#else
+  if( addr_spc != CI_ADDR_SPC_KERNEL )
+    return copy_to_user(to, from, n_bytes);
+#endif
   memcpy(to, from, n_bytes);
   return 0;
-#endif
 }
 
 
 ci_inline int
 __oo_copy_frag_to_iovec_no_adv(ci_netif* ni,
                                ci_iovec_ptr* piov,
-                               struct oo_copy_state *ocs)
+                               struct oo_copy_state *ocs
+                               CI_KERNEL_ARG(ci_addr_spc_t addr_spc))
 {
   int n;
 
   n = CI_MIN((size_t)ocs->pkt_left, CI_IOVEC_LEN(&piov->io));
   n = CI_MIN(n, ocs->bytes_to_copy);
   if(CI_UNLIKELY( __oo_do_copy(CI_IOVEC_BASE(&piov->io),
-                          ocs->from + ocs->pkt_off, n) != 0 ))
+                          ocs->from + ocs->pkt_off, n
+                          CI_KERNEL_ARG(addr_spc)) != 0 ))
     return -EFAULT;
 
   ocs->bytes_copied += n;
