@@ -54,15 +54,16 @@ static void inspect_events(ci_netif* ni)
          OO_PP_NOT_NULL(ni->state->looppkts) ? "true" : "false");
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    int evs_hi = 0x7fffffff;
+    ef_vi* vi = ci_netif_vi(ni, intf_i);
+    int evq_cap = ef_eventq_capacity(vi);
+    int evs_hi = evq_cap;
     int evs_lo = 0;
     ci_netif_state_nic_t* nic = &ni->state->nic[intf_i];
 
-    ef_vi* vi = ci_netif_vi(ni, intf_i);
     ci_log("%s: evq_capacity = %d, tx_dmaq_insert_seq = %u "
-           "tx_dmaq_done_seq = %u", nic->dev_name, ef_eventq_capacity(vi),
+           "tx_dmaq_done_seq = %u", nic->dev_name, evq_cap,
            nic->tx_dmaq_insert_seq, nic->tx_dmaq_done_seq);
-    /* binary search for the number of events in the queue */
+    /* binary search for the number of events in the queue. */
     while(evs_hi > evs_lo) {
       int evs_mid = (evs_hi + evs_lo) / 2;
 
@@ -102,7 +103,7 @@ void oo_netif_dtor_pkts(ci_netif* ni)
        * the message to track this bug. */
       ci_log("%s: WARNING: [%d] Failed to get TX complete events "
              "for some packets", __func__, NI_ID(ni));
-      ci_log("Events processed in 1ms: %llu", ev_count);;
+      ci_log("Events processed in 1ms: %llu", ev_count);
       inspect_events(ni);
       return;
     }

@@ -151,25 +151,28 @@ static ssize_t rw_iter_bvec_handler(fop_rw_base_handler base_handler,
 
 #else
 
+#define oo_fop_splice_write generic_splice_sendpage
+#define oo_fop_splice_read generic_file_splice_read
+
 #define DEFINE_FOP_READ(base_handler, rw_handler) \
   static ssize_t rw_handler(struct file *filp, char *buf,                   \
                             size_t len, loff_t *off)                        \
   { struct iovec iov;                                                       \
     iov.iov_base = buf; iov.iov_len = len;                                  \
-    return base_handler(filp, &iov, 1); }
+    return base_handler(filp, &iov, 1, CI_ADDR_SPC_CURRENT); }
 #define DEFINE_FOP_WRITE(base_handler, rw_handler) \
   static ssize_t rw_handler(struct file *filp, const char *buf,             \
                             size_t len, loff_t *off)                        \
   { struct iovec iov;                                                       \
     iov.iov_base = (char *)buf; iov.iov_len = len;                          \
-    return base_handler(filp, &iov, 1); }
+    return base_handler(filp, &iov, 1, CI_ADDR_SPC_CURRENT); }
 
 #define DEFINE_FOP_AIO_RW(base_handler, aio_rw_handler) \
   static ssize_t aio_rw_handler(struct kiocb *iocb, const struct iovec *iov,\
                                 unsigned long iovlen, loff_t pos)           \
   { if (!is_sync_kiocb(iocb))                                               \
       return -EOPNOTSUPP;                                                   \
-    return base_handler(iocb->ki_filp, iov, iovlen); }
+    return base_handler(iocb->ki_filp, iov, iovlen, CI_ADDR_SPC_CURRENT); }
 
 
 static inline ssize_t oo___vfs_read(struct file *file, char __user *buf,

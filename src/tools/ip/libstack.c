@@ -608,11 +608,15 @@ static int get_file_size(const char* path)
   int len = 0;
   while( 1 ) {
     ssize_t rc = read(fd, buf, 128);
-    if( rc == -1 )
+    if( rc == -1 ) {
+      close(fd);
       return -1;
+    }
     len += rc;
-    if( rc == 0 )
+    if( rc == 0 ) {
+      close(fd);
       return len;
+    }
   }
 }
 
@@ -715,8 +719,10 @@ int stack_attach(unsigned id)
   if( ! cfg_zombie ) {
     /* Possibly, this stack was already destroyed, so do not CI_TRY here. */
     int rc = ci_netif_restore_id(&n->ni, id, true);
-    if( rc != 0 )
+    if( rc != 0 ) {
+        free(n);
         return 0;
+    }
   }
   stacks[id] = n;
   ci_dllist_push_tail(&stacks_list, &n->link);
@@ -742,7 +748,12 @@ void stack_detach(netif_t* n, int locked)
     CI_TRY(ef_onload_driver_close(fd));
     
     stacks[id] = 0;
+  } else {
+    /* Zombie stacks must not have shared state mapped. */
+    ci_assert_equal(n->ni.state, NULL);
   }
+
+  free(n);
 }
 
 
@@ -2153,7 +2164,7 @@ static void process_dump(ci_netif* ni)
             /* Copy the counter values in array and later print them */
             strncpy(values[j], tmp, (sizeof(tmp)-1));
             /* extra safety: terminating the string */
-            values[i][sizeof(values[j]) - 1] = 0;
+            values[j][sizeof(values[j]) - 1] = 0;
           }
         }
       }
