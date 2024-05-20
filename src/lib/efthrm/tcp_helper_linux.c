@@ -44,6 +44,18 @@ typedef ssize_t(*fop_rw_base_handler)(struct file *filp,
 #define iter_iov(iter) (iter)->iov
 #endif
 
+#ifndef EFRM_HAVE_IOV_ITER_IS_BVEC
+/* Linux < 4.20 */
+ci_inline bool iov_iter_is_bvec(const struct iov_iter *i)
+{
+  return (i->type & ~(READ | WRITE)) == ITER_BVEC;
+}
+ci_inline bool iov_iter_is_pipe(const struct iov_iter *i)
+{
+  return (i->type & ~(READ | WRITE)) == ITER_PIPE;
+}
+#endif
+
 #ifdef EFRM_HAVE_ITER_UBUF
 /* linux >= 6.0
  * See kernel commits

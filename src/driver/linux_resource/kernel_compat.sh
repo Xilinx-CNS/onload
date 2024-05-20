@@ -156,6 +156,7 @@ EFRM_HUGETLB_HAS_BASEPAGE_INDEX	symbol	hugetlb_basepage_index	include/linux/page
 EFRM_CLASS_CREATE_NO_MODULE symtype class_create include/linux/device/class.h struct class *(const char *)
 
 EFRM_HAVE_ITER_IOV symbol iter_iov include/linux/uio.h
+EFRM_HAVE_IOV_ITER_IS_BVEC symbol iov_iter_is_bvec include/linux/uio.h
 
 EFRM_NEED_DEBUGFS_LOOKUP_AND_REMOVE nsymbol debugfs_lookup_and_remove include/linux/debugfs.h
 
