@@ -5,7 +5,7 @@ follow the contributing guidelines to make review of changes easier.
 
 ## Submitting changes
 
-1. Fork Onload repository on https://github.com/Xilinx/onload
+1. Fork Onload repository on https://github.com/Xilinx-CNS/onload
 2. Make local short-lived branch off of public master.
 3. Develop on branch locally. Please describe the changes you have made in
 the commit messages.
@@ -37,6 +37,16 @@ if( ! conditional_expr ) {
 }
 ```
 
+## Compatibility
+
+If your change is at high risk of introducing compatibilty issues, likely
+in relation to interfaces provided by the kernel, please perform a build
+test with one of the older supported kernels or operating systems. The
+following files help with defining compatibility definitions:
+
+* `scripts/libc_compat.sh`
+* `src/include/ci/driver/kernel_compat.h`
+
 ## Copyright
 
-This file: (c) Copyright 2020 Xilinx, Inc.
+This file: (c) Copyright 2020, 2024 Advanced Micro Devices, Inc.
