@@ -2227,6 +2227,9 @@ static int efx_ptp_insert_unicast_filter(struct efx_nic *efx,
 	unsigned long expiry;
 	int rc;
 
+	if (!ptp->channel)
+		return 0;
+
 	if (!efx_ptp_valid_unicast_event_pkt(skb))
 		return -EINVAL;
 

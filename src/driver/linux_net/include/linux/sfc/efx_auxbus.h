@@ -7,10 +7,11 @@
 #ifndef _EFX_AUXBUS_H
 #define _EFX_AUXBUS_H
 
-#ifdef EFX_NOT_UPSTREAM
 /* This is part of the device name exposed in the auxiliary bus. */
+#ifdef EFX_NOT_UPSTREAM
 #define EFX_ONLOAD_DEVNAME	"onload"
 #endif
+#define EFX_LLCT_DEVNAME	"llct"
 
 /* Driver API */
 /**
@@ -341,7 +342,10 @@ struct efx_auxdev_ops {
 	 * @dl_publish: Do driverlink-compatible VI allocation. Also brings up
 	 *	the netdev interface. Each call to this function must be paired
 	 *	with a corresponding @dl_unpublish call, and this function may
-	 *	not be called again before @dl_unpublish.
+	 *	not be called again before @dl_unpublish. The returned pointer remains
+	 *	valid after %EFX_AUXDEV_EVENT_IN_RESET though the contents may
+	 *	be non-atomically updated during this event. The contents should therefore
+	 *	only be read after dl_publish or %EFX_AUXDEV_EVENT_IN_RESET.
 	 */
 	struct efx_auxdev_dl_vi_resources *
 		(*dl_publish)(struct efx_auxdev_client *handle);

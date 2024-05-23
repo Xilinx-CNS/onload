@@ -151,6 +151,11 @@ static void efx_client_add_type(struct efx_probe_data *pd,
 	efx_client_del_type(pd, type);
 }
 
+void efx_onload_client_fini(struct efx_probe_data *pd)
+{
+	efx_client_del_type(pd, EFX_CLIENT_ONLOAD);
+}
+
 void efx_client_fini(struct efx_probe_data *pd)
 {
 	enum efx_client_type type;

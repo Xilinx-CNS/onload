@@ -5864,6 +5864,24 @@ static unsigned int efx_ef10_recycle_ring_size(const struct efx_nic *efx)
 	return ret;
 }
 
+#ifdef EFX_NOT_UPSTREAM
+static bool efx_ef10_pf_client_supported(struct efx_nic *efx,
+					 enum efx_client_type type)
+{
+	return type == EFX_CLIENT_ETH || type == EFX_CLIENT_ONLOAD ||
+		(type == EFX_CLIENT_LLCT && efx->pci_dev->device == 0x0c03);
+}
+
+#ifdef CONFIG_SFC_SRIOV
+static bool efx_ef10_vf_client_supported(struct efx_nic *efx,
+					 enum efx_client_type type)
+{
+	return type == EFX_CLIENT_ETH || type == EFX_CLIENT_ONLOAD ||
+		(type == EFX_CLIENT_LLCT && efx->pci_dev->device == 0x1c03);
+}
+#endif
+#endif
+
 #define EF10_OFFLOAD_FEATURES		\
 	(NETIF_F_IP_CSUM |		\
 	 NETIF_F_HW_VLAN_CTAG_FILTER |	\
@@ -6165,6 +6183,7 @@ const struct efx_nic_type efx_x4_vf_nic_type = {
 			  EFX_DL_HASH_TOEP_TCPIP6 | EFX_DL_HASH_TOEP_IP6),
 	},
 #endif
+	.client_supported = efx_ef10_vf_client_supported,
 #endif
 	.offload_features = EF10_OFFLOAD_FEATURES,
 	.mcdi_max_ver = 2,
@@ -6558,6 +6577,7 @@ const struct efx_nic_type efx_x4_nic_type = {
 			  EFX_DL_HASH_TOEP_TCPIP6 | EFX_DL_HASH_TOEP_IP6),
 	},
 #endif
+	.client_supported = efx_ef10_pf_client_supported,
 #endif
 	.offload_features = EF10_OFFLOAD_FEATURES,
 	.mcdi_max_ver = 2,

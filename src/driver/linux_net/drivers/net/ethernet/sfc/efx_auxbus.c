@@ -38,6 +38,34 @@ struct efx_probe_data *cdev_to_probe_data(struct efx_auxdev_client *cdev)
 	return client->client_type->pd;
 }
 
+static enum efx_client_type cdev_to_client_type(struct efx_auxdev_client *cdev)
+{
+	struct efx_client *client;
+
+	if (!cdev)
+		return _EFX_CLIENT_MAX;
+	client = container_of(cdev, struct efx_client, auxiliary_info);
+	return client->client_type->type;
+}
+
+static bool client_supports_rss(struct efx_auxdev_client *cdev)
+{
+	/* No LL support for RSS contexts. */
+	return cdev_to_client_type(cdev) != EFX_CLIENT_LLCT;
+}
+
+static bool client_supports_filters(struct efx_auxdev_client *cdev)
+{
+	/* No LL support for filters yet. */
+	return cdev_to_client_type(cdev) != EFX_CLIENT_LLCT;
+}
+
+static bool client_supports_vports(struct efx_auxdev_client *cdev)
+{
+	/* No LL support for virtual ports. */
+	return cdev_to_client_type(cdev) != EFX_CLIENT_LLCT;
+}
+
 static
 struct efx_auxdev_client *efx_auxbus_open(struct auxiliary_device *auxdev,
 					  efx_auxdev_event_handler func,
@@ -154,6 +182,8 @@ static int efx_auxbus_remove_rxfh_context(struct efx_auxdev_client *cdev,
 	pd = cdev_to_probe_data(cdev);
 	if (!pd)
 		return -ENODEV;
+	if (!client_supports_rss(cdev))
+		return -EOPNOTSUPP;
 	efx = &pd->efx;
 	if (!efx->type->rx_push_rss_context_config)
 		return -EOPNOTSUPP;
@@ -179,14 +209,20 @@ static int efx_auxbus_modify_rxfh_context(struct efx_auxdev_client *cdev,
 	struct efx_rss_context *ctx;
 	struct efx_probe_data *pd;
 	struct efx_nic *efx;
+	size_t i;
 	int rc;
 
+	if (!client_supports_rss(cdev))
+		return -EOPNOTSUPP;
 	/* Hash function is Toeplitz, cannot be changed */
 	if (rxfh->hfunc != ETH_RSS_HASH_NO_CHANGE &&
 	    rxfh->hfunc != ETH_RSS_HASH_TOP)
 		return -EOPNOTSUPP;
 	/* A hash key supplied has to be the right length */
 	if (rxfh->key && rxfh->key_size != EFX_RX_KEY_LEN)
+		return -EINVAL;
+	/* An indirection table supplied must have at least one row */
+	if (rxfh->indir && !rxfh->indir_size)
 		return -EINVAL;
 
 	pd = cdev_to_probe_data(cdev);
@@ -206,18 +242,13 @@ static int efx_auxbus_modify_rxfh_context(struct efx_auxdev_client *cdev,
 		rxfh->key = ctx->rx_hash_key;
 	rxfh->key_size = sizeof(ctx->rx_hash_key);
 	if (rxfh->indir) {
-		/* Firmware always needs an indirection table containing
-		 * all entries. Auxiliary bus clients need not be aware of
-		 * this constraint, since we use the memory in the struct
-		 * efx_rss_context to pad the entries provided.
+		/* Replicate (or truncate) the supplied indirection table
+		 * to fill the full firmware indirection table size.
 		 */
-		memset(ctx->rx_indir_table, 0, sizeof(ctx->rx_indir_table));
-		memcpy(ctx->rx_indir_table, rxfh->indir,
-		       ctx->num_queues * sizeof(u32));
-	} else {
-		rxfh->indir = ctx->rx_indir_table;
+		for (i = 0; i < ARRAY_SIZE(ctx->rx_indir_table); i++)
+			ctx->rx_indir_table[i] =
+				rxfh->indir[i % rxfh->indir_size];
 	}
-	rxfh->indir_size = ctx->num_queues;
 
 	rc = efx->type->rx_push_rss_context_config(efx, ctx,
 						   ctx->rx_indir_table,
@@ -236,6 +267,8 @@ static int efx_auxbus_create_rxfh_context(struct efx_auxdev_client *cdev,
 	struct efx_nic *efx;
 	int rc;
 
+	if (!client_supports_rss(cdev))
+		return -EOPNOTSUPP;
 	if (rxfh->rss_delete)	/* create + delete == Nothing to do */
 		return -EINVAL;
 	/* num_queues=0 is used internally by the driver to represent
@@ -276,7 +309,7 @@ static int efx_auxbus_create_rxfh_context(struct efx_auxdev_client *cdev,
 	rxfh->key = ctx->rx_hash_key;
 	rxfh->key_size = sizeof(ctx->rx_hash_key);
 	rxfh->indir = ctx->rx_indir_table;
-	rxfh->indir_size = num_queues;
+	rxfh->indir_size = ARRAY_SIZE(ctx->rx_indir_table);
 	rxfh->hfunc = ETH_RSS_HASH_TOP;
 	rxfh->rss_context = ctx->user_id;
 
@@ -290,8 +323,13 @@ static int efx_auxbus_filter_insert(struct efx_auxdev_client *cdev,
 				    bool replace_equal)
 {
 	struct efx_probe_data *pd = cdev_to_probe_data(cdev);
-	s32 filter_id = efx_filter_insert_filter(&pd->efx,
-						 spec, replace_equal);
+	s32 filter_id;
+
+	if (!client_supports_filters(cdev))
+		return -EOPNOTSUPP;
+
+	filter_id = efx_filter_insert_filter(&pd->efx,
+					     spec, replace_equal);
 	if (filter_id >= 0) {
 		EFX_WARN_ON_PARANOID(filter_id & ~EFX_FILTER_ID_MASK);
 		filter_id |= spec->priority << EFX_FILTER_PRI_SHIFT;
@@ -306,6 +344,9 @@ static int efx_auxbus_filter_remove(struct efx_auxdev_client *cdev,
 
 	if (filter_id < 0)
 		return -EINVAL;
+	if (!client_supports_filters(cdev))
+		return -EOPNOTSUPP;
+
 	return efx_filter_remove_id_safe(&pd->efx,
 					 filter_id >> EFX_FILTER_PRI_SHIFT,
 					 filter_id & EFX_FILTER_ID_MASK);
@@ -319,6 +360,8 @@ static int efx_auxbus_filter_redirect(struct efx_auxdev_client *handle,
 
 	if (!handle)
 		return -EINVAL;
+	if (!client_supports_filters(handle))
+		return -EOPNOTSUPP;
 
 	pd = cdev_to_probe_data(handle);
 	if (!pd)
@@ -487,11 +530,17 @@ static int efx_auxbus_set_param(struct efx_auxdev_client *handle,
 		handle->driver_data = arg->driver_data;
 		break;
 	case EFX_PARAM_FILTER_BLOCK_KERNEL_UCAST:
+		if (!client_supports_filters(handle))
+			return -EOPNOTSUPP;
+
 		rc = efx_auxbus_filter_set_block(efx,
 						 EFX_FILTER_BLOCK_KERNEL_UCAST,
 						 arg->b);
 		break;
 	case EFX_PARAM_FILTER_BLOCK_KERNEL_MCAST:
+		if (!client_supports_filters(handle))
+			return -EOPNOTSUPP;
+
 		rc = efx_auxbus_filter_set_block(efx,
 						 EFX_FILTER_BLOCK_KERNEL_MCAST,
 						 arg->b);
@@ -514,6 +563,8 @@ efx_auxbus_dl_publish(struct efx_auxdev_client *handle)
 
 	if (!handle)
 		return ERR_PTR(-EINVAL);
+	if (cdev_to_client_type(handle) != EFX_CLIENT_ONLOAD)
+		return ERR_PTR(-EOPNOTSUPP);
 
 	client = container_of(handle, struct efx_client, auxiliary_info);
 	pd = cdev_to_probe_data(handle);
@@ -547,6 +598,8 @@ int efx_aux_set_multicast_loopback_suppression(struct efx_auxdev_client *handle,
 
 	if (!handle)
 		return -EINVAL;
+	if (!client_supports_filters(handle))
+		return -EOPNOTSUPP;
 
 	pd = cdev_to_probe_data(handle);
 	if (!pd)
@@ -567,6 +620,9 @@ static int efx_auxbus_set_rxfh_flags(struct efx_auxdev_client *cdev,
 	pd = cdev_to_probe_data(cdev);
 	if (!pd)
 		return -ENODEV;
+	/* No LL support for RSS contexts. */
+	if (!client_supports_rss(cdev))
+		return -EOPNOTSUPP;
 	efx = &pd->efx;
 	if (!efx->type->rx_set_rss_flags)
 		return -EOPNOTSUPP;
@@ -594,6 +650,8 @@ static int efx_auxbus_vport_new(struct efx_auxdev_client *handle, u16 vlan,
 
 	if (!handle)
 		return -EINVAL;
+	if (!client_supports_vports(handle))
+		return -EOPNOTSUPP;
 
 	pd = cdev_to_probe_data(handle);
 	if (!pd)
@@ -608,6 +666,8 @@ static int efx_auxbus_vport_free(struct efx_auxdev_client *handle, u16 port_id)
 
 	if (!handle)
 		return -EINVAL;
+	if (!client_supports_vports(handle))
+		return -EOPNOTSUPP;
 
 	pd = cdev_to_probe_data(handle);
 	if (!pd)
@@ -624,6 +684,8 @@ static s64 efx_auxbus_vport_id_get(struct efx_auxdev_client *handle,
 
 	if (!handle)
 		return -EINVAL;
+	if (!client_supports_vports(handle))
+		return -EOPNOTSUPP;
 
 	pd = cdev_to_probe_data(handle);
 	if (!pd)
@@ -738,6 +800,8 @@ static const char *to_auxbus_name(enum efx_client_type type)
 	switch (type) {
 	case EFX_CLIENT_ONLOAD:
 		return EFX_ONLOAD_DEVNAME;
+	case EFX_CLIENT_LLCT:
+		return EFX_LLCT_DEVNAME;
 	default:
 		return NULL;
 	}

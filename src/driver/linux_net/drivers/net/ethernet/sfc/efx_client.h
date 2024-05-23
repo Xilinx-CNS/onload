@@ -91,6 +91,13 @@ int efx_client_init(struct efx_probe_data *pd);
 void efx_client_fini(struct efx_probe_data *pd);
 
 /**
+ * efx_onload_client_fini() - Detach all Onload clients.
+ *
+ * @pd: Function affected.
+ */
+void efx_onload_client_fini(struct efx_probe_data *pd);
+
+/**
  * efx_client_add() - Add a client to the parent NIC.
  *
  * This allocates a new client, and links the client to the parent.
@@ -119,6 +126,10 @@ static inline int efx_client_init(struct efx_probe_data *pd)
 }
 
 static inline void efx_client_fini(struct efx_probe_data *pd)
+{
+}
+
+static inline void efx_onload_client_fini(struct efx_probe_data *pd)
 {
 }
 

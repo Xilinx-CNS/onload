@@ -99,7 +99,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.0.0.1001"
+#define EFX_DRIVER_VERSION	"6.0.0.1002"
 #endif
 
 #ifdef DEBUG
@@ -1739,7 +1739,7 @@ struct efx_nic {
 	struct mutex mac_lock;
 	struct work_struct mac_work;
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK) || defined(CONFIG_AUXILIARY_BUS)
 	/** @open_count: Count netdev opens */
 	u16 open_count;
 #endif

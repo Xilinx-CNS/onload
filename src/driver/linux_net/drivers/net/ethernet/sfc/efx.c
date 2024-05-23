@@ -441,7 +441,7 @@ int __efx_net_alloc(struct efx_nic *efx)
 	int rc;
 
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK) || defined(CONFIG_AUXILIARY_BUS)
 	if (efx->open_count++) {
 		netif_dbg(efx, drv, efx->net_dev,
 			  "already open, now by %hu clients\n", efx->open_count);
@@ -562,7 +562,7 @@ int efx_net_stop(struct net_device *net_dev)
 void __efx_net_dealloc(struct efx_nic *efx)
 {
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK) || defined(CONFIG_AUXILIARY_BUS)
 	if (efx->open_count && --efx->open_count) {
 		netif_dbg(efx, drv, efx->net_dev, "still open by %hu clients\n",
 			  efx->open_count);
@@ -1221,6 +1221,9 @@ static void efx_pci_remove(struct pci_dev *pci_dev)
 	/* Allow any queued efx_resets() to complete */
 	rtnl_unlock();
 	efx_flush_reset_workqueue(efx);
+#ifdef EFX_NOT_UPSTREAM
+	efx_onload_client_fini(efx_nic_to_probe_data(efx));
+#endif
 
 #if defined(CONFIG_SFC_MTD) && defined(EFX_WORKAROUND_87308)
 	if (efx->mtd_struct)

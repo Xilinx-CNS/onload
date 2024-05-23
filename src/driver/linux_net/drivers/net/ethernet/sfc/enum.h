@@ -190,12 +190,14 @@ enum reset_type {
  * a specific set of client types.
  *
  * @EFX_CLIENT_ETH: The client is an ethernet device managed directly by sfc.ko.
+ * @EFX_CLIENT_LLCT: The client uses the low-latency cut-through datapath.
  * @EFX_CLIENT_ONLOAD: The client is an Onload stack using the full-featured
  *	datapath.
  * @_EFX_CLIENT_MAX: Internal enum to allow looping over the type.
  */
 enum efx_client_type {
 	EFX_CLIENT_ETH,
+	EFX_CLIENT_LLCT,
 	EFX_CLIENT_ONLOAD,
 	_EFX_CLIENT_MAX
 };
