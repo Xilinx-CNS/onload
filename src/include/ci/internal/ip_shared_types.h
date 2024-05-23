@@ -467,7 +467,10 @@ struct ci_ip_pkt_fmt_s {
   /*! This is the aligned start of the DMA area.  Receive DMAs start here,
    * and transmits start here except when a VLAN tag is present.
    */
-  ci_uint8              dma_start[1]  CI_ALIGN(EF_VI_DMA_ALIGN);
+  union {
+    ci_uint8 padding;
+    __DECLARE_FLEX_ARRAY(ci_uint8, dma_start) CI_ALIGN(EF_VI_DMA_ALIGN);
+  };
 };
 
 
