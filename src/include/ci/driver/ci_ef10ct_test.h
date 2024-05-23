@@ -386,7 +386,6 @@ struct efx_auxiliary_txq_params {
 struct efx_auxiliary_rxq_params {
         int  evq;
         int  label;
-        int  qid;
         bool suppress_events;
 };
 

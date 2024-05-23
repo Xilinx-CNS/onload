@@ -382,7 +382,6 @@ ef10ct_dmaq_rx_q_init(struct efhw_nic *nic,
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct efx_auxiliary_rxq_params params = {
     .evq = rxq_params->evq,
-    .qid = ef10ct_evq->rxq,
     .label = rxq_params->tag, /* TODO This will be necessary for shared evqs. */
     .suppress_events = rxq_params->rx.suppress_events,
   };

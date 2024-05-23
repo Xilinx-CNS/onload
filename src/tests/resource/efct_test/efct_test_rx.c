@@ -39,10 +39,11 @@ evq_push_rx(struct efct_test_evq *evq, uint32_t pkt_cnt)
 
 void evq_push_rx_flush_complete(struct efct_test_evq *evq, int rxq)
 {
-  CI_POPULATE_QWORD_5(*evq_next_desc(evq),
+  CI_POPULATE_QWORD_6(*evq_next_desc(evq),
               EFCT_CTRL_SUBTYPE, EFCT_CTRL_EV_FLUSH,
               EFCT_EVENT_TYPE, EFCT_EVENT_TYPE_CONTROL,
               EFCT_FLUSH_TYPE, EFCT_FLUSH_TYPE_RX,
+              EFCT_FLUSH_QUEUE_ID, rxq,
               EFCT_FLUSH_LABEL, rxq,
               EFCT_EVENT_PHASE, evq_next_phase(evq));
   evq->ptr++;

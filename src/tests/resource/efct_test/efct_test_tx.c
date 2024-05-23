@@ -83,10 +83,11 @@ evq_push_tx(struct efct_test_evq *evq, uint32_t pkt_cnt)
 
 void evq_push_tx_flush_complete(struct efct_test_evq *evq, int txq)
 {
-  CI_POPULATE_QWORD_5(*evq_next_desc(evq),
+  CI_POPULATE_QWORD_6(*evq_next_desc(evq),
               EFCT_CTRL_SUBTYPE, EFCT_CTRL_EV_FLUSH,
               EFCT_EVENT_TYPE, EFCT_EVENT_TYPE_CONTROL,
               EFCT_FLUSH_TYPE, EFCT_FLUSH_TYPE_TX,
+              EFCT_FLUSH_QUEUE_ID, txq,
               EFCT_FLUSH_LABEL, txq,
               EFCT_EVENT_PHASE, evq_next_phase(evq));
   evq->ptr++;
