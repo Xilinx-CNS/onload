@@ -67,8 +67,10 @@ static int ef10ct_resource_init(struct efx_auxiliary_device *edev,
   ef10ct->rxq = vzalloc(sizeof(*ef10ct->rxq) * ef10ct->rxq_n);
   if( ! ef10ct->rxq )
     goto fail1;
-  for( i = 0; i < ef10ct->rxq_n; i++ )
+  for( i = 0; i < ef10ct->rxq_n; i++ ) {
     ef10ct->rxq[i].evq = -1;
+    ef10ct->rxq[i].q_id = -1;
+  }
 
   res_dim->irq_n_ranges = 0;
 #if 0
@@ -86,8 +88,17 @@ static int ef10ct_resource_init(struct efx_auxiliary_device *edev,
   res_dim->irq_prime_reg = val.irq_res->int_prime;
 #endif
 
+  /* Shared evqs for rx vis. Need at least one for suppressed events */
+  /* TODO: determine how many more to add for interrupt affinity */
+  ef10ct->shared_n = 1;
+  ef10ct->shared = vzalloc(sizeof(*ef10ct->shared) * ef10ct->shared_n);
+  if( ! ef10ct->shared )
+    goto fail2;
+
   return 0;
 
+fail2:
+  vfree(ef10ct->rxq);
 fail1:
   vfree(ef10ct->evq);
 fail:
@@ -127,6 +138,96 @@ static void ef10ct_vi_allocator_dtor(struct efhw_nic_ef10ct *nic)
   efhw_stack_vi_allocator_dtor(&nic->vi_allocator.rx);
 }
 
+static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid)
+{
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  struct efhw_nic_ef10ct_evq *ef10ct_evq;
+  uint n_pages = 1; /* TODO: What should the size be? */
+  struct page* page;
+  dma_addr_t dma_addr;
+  dma_addr_t *dma_addrs;
+  struct efhw_evq_params params = {};
+  int vi, rc;
+  struct ef10ct_shared_kernel_evq *shared_evq = &ef10ct->shared[qid];
+  struct efhw_vi_constraints evc = {
+    .want_txq = true, /* Setting `want_txq` will give us a real evq/vi */
+    /* Other fields are ignored for ef10ct */
+  };
+
+  vi = efhw_nic_vi_alloc(nic, &evc, 1);
+  if(vi < 0) {
+    rc = vi;
+    goto fail1;
+  }
+  EFHW_ASSERT(vi <= ef10ct->evq_n);
+
+  ef10ct_evq = &ef10ct->evq[vi];
+
+  /* TODO: We may want to use alloc_pages_node to get memory on a specific numa
+   * node. */
+  page = alloc_page(GFP_KERNEL | __GFP_ZERO);
+
+  if( page == NULL ) {
+    rc = -ENOMEM;
+    goto fail2;
+  }
+
+  /* TODO: I think we want to use something like dma_map_single here, however we
+   * don't have a pci dev for ef10ct so these function don't currently work.
+   * Instead, just get the physical address of the page */
+  dma_addr = page_to_phys(page);
+
+  /* Only allocating a single page means that dma_addrs doesn't have to be an
+   * an array. */
+  EFHW_ASSERT(n_pages == 1);
+  dma_addrs = &dma_addr;
+
+  params.evq = vi;
+  params.evq_size = (n_pages << PAGE_SHIFT) / sizeof(efhw_event_t);
+  params.dma_addrs = dma_addrs;
+  params.n_pages = n_pages;
+  /* Wakeup stuff is ignored */
+  /* Do we care about flags? */
+
+  rc = efhw_nic_event_queue_enable(nic, &params);
+  if( rc < 0 )
+    goto fail3;
+
+  shared_evq->vi = vi;
+  shared_evq->evq = &ef10ct->evq[vi];
+  shared_evq->page = page;
+
+  return 0;
+
+fail3:
+  put_page(page);
+fail2:
+  efhw_nic_vi_free(nic, vi, 1);
+fail1:
+  return rc;
+}
+
+static void ef10ct_nic_free_shared_evq(struct efhw_nic *nic, int qid)
+{
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  struct ef10ct_shared_kernel_evq *shared_evq;
+
+  EFHW_ASSERT(qid >= 0);
+  EFHW_ASSERT(qid < ef10ct->shared_n);
+  shared_evq = &ef10ct->shared[qid];
+
+  /* Neither client_id nor time_sync_events_enabled are used for ef10ct */
+  efhw_nic_event_queue_disable(nic, shared_evq->vi, 0);
+
+  efhw_nic_vi_free(nic, shared_evq->vi, 1);
+  put_page(shared_evq->page);
+
+  /* Just to be safe */
+  memset(shared_evq, 0, sizeof(*shared_evq));
+
+  return;
+}
+
 
 static int ef10ct_probe(struct auxiliary_device *auxdev,
                         const struct auxiliary_device_id *id)
@@ -139,7 +240,7 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
   struct efhw_nic_ef10ct *ef10ct = NULL;
   struct vi_resource_dimensions res_dim = {};
   union efx_auxiliary_param_value val;
-  int rc;
+  int rc, i;
 
   /* version checking here */
 
@@ -188,8 +289,21 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
   ef10ct->nic = nic;
 
   efrm_notify_nic_probe(nic, val.net_dev);
+
+  /* Init shared evqs for use with rx vis. */
+  for( i = 0; i < ef10ct->shared_n; i++ ) {
+    rc = ef10ct_nic_init_shared_evq(nic, i);
+    if( rc < 0 )
+      goto fail4;
+  }
+
   return 0;
 
+ fail4:
+  /* We failed evq reservation at `i`. Cleanup evqs in range [0..i) */
+  i--;
+  for(; i >= 0; i--)
+    ef10ct_nic_free_shared_evq(nic, i);
  fail3:
   ef10ct_vi_allocator_dtor(ef10ct);
  fail2:
@@ -208,6 +322,7 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
   struct linux_efhw_nic *lnic;
   struct efhw_nic* nic;
   struct efhw_nic_ef10ct *ef10ct;
+  int i;
 
   EFRM_TRACE("%s: %s", __func__, dev_name(&auxdev->dev));
 
@@ -227,6 +342,10 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
   /* flush all outstanding dma queues */
   efrm_nic_flush_all_queues(nic, 0);
 
+  /* Disable/free all shared evqs */
+  for(i = 0; i < ef10ct->shared_n; i++)
+    ef10ct_nic_free_shared_evq(nic, i);
+
   lnic->drv_device = NULL;
   /* Wait for all in-flight driverlink calls to finish.  Since we
    * have already cleared [lnic->drv_device], no new calls can
@@ -245,6 +364,7 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
   edev->ops->close(client);
   vfree(ef10ct->evq);
   vfree(ef10ct->rxq);
+  vfree(ef10ct->shared);
   vfree(ef10ct);
 }
 

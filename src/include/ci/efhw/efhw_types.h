@@ -144,6 +144,7 @@ struct efhw_dmaq_params {
 	uint qid_out;
 	struct {
 		uint ps_buf_size;
+		bool suppress_events; /* ef10ct specific */
 	} rx;
 };
 

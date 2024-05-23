@@ -18,18 +18,30 @@ struct efhw_nic_ef10ct_evq {
   struct delayed_work check_flushes;
   void *base;
   unsigned capacity;
+  unsigned next;
   int txq;
-  int rxq;
 };
 
 struct efhw_nic_ef10ct_rxq {
   int evq;
+  /* ID of the software vi that is bound to this hardware rxq */
+  /* TODO: Does this need to be expanded for shared rxqs? */
+  int q_id;
   uint64_t *post_buffer_addr;
+};
+
+struct ef10ct_shared_kernel_evq {
+  int vi;
+  struct efhw_nic_ef10ct_evq *evq;
+  struct page *page;
+  /* Some kind of interrupt stuff? */
 };
 
 struct efhw_nic_ef10ct {
   uint32_t evq_n;
   struct efhw_nic_ef10ct_evq *evq;
+  uint32_t shared_n;
+  struct ef10ct_shared_kernel_evq *shared;
   uint32_t rxq_n;
   struct efhw_nic_ef10ct_rxq *rxq;
   struct efx_auxiliary_device *edev;

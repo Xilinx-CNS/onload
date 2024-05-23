@@ -126,7 +126,8 @@ static void ef10ct_check_for_flushes(struct work_struct *work)
 {
   struct efhw_nic_ef10ct_evq *evq = 
     container_of(work, struct efhw_nic_ef10ct_evq, check_flushes.work);
-  ci_qword_t *event = evq->base;
+  unsigned offset = evq->next;
+  ci_qword_t *event = evq->base + offset;
   bool found_flush = false;
   int q_id;
   int i;
@@ -138,17 +139,27 @@ static void ef10ct_check_for_flushes(struct work_struct *work)
     return;
 
   for(i = 0; i < evq->capacity; i++) {
+    offset = offset + 1 >= evq->capacity ? 0 : offset + 1;
     if(CI_QWORD_FIELD(*event, EFCT_EVENT_TYPE) == EFCT_EVENT_TYPE_CONTROL &&
        CI_QWORD_FIELD(*event, EFCT_CTRL_SUBTYPE) == EFCT_CTRL_EV_FLUSH) {
       found_flush = true;
       q_id = CI_QWORD_FIELD(*event, EFCT_FLUSH_QUEUE_ID);
-      if(CI_QWORD_FIELD(*event, EFCT_FLUSH_TYPE) == EFCT_FLUSH_TYPE_TX)
+      if(CI_QWORD_FIELD(*event, EFCT_FLUSH_TYPE) == EFCT_FLUSH_TYPE_TX) {
         efhw_handle_txdmaq_flushed(evq->nic, q_id);
-      else /* EFCT_FLUSH_TYPE_RX */
+      } else /* EFCT_FLUSH_TYPE_RX */ {
+        struct efhw_nic_ef10ct *ef10ct = evq->nic->arch_extra;
+        int hw_rxq = q_id;
+
+        q_id = ef10ct->rxq[hw_rxq].q_id;
+        ef10ct->rxq[hw_rxq].q_id = -1;
         efhw_handle_rxdmaq_flushed(evq->nic, q_id, false);
+      }
+      evq->next = offset;
+      /* Clear the event so that we don't see it during the next check. */
+      memset(event, 0, sizeof(*event));
       break;
     }
-    event++;
+    event = evq->base + offset;
   }
 
   if( !found_flush || !atomic_dec_and_test(&evq->queues_flushing) ) {
@@ -369,26 +380,28 @@ ef10ct_dmaq_rx_q_init(struct efhw_nic *nic,
                       struct efhw_dmaq_params *rxq_params)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
-  struct efhw_nic_ef10ct_evq *ef10ct_evq = &ef10ct->evq[rxq_params->evq];
   struct efx_auxiliary_rxq_params params = {
     .evq = rxq_params->evq,
     .qid = ef10ct_evq->rxq,
-    .label = rxq_params->tag,
-    .suppress_events = true, /* Do we ever want this to be false? Maybe false if int-driven */
+    .label = rxq_params->tag, /* TODO This will be necessary for shared evqs. */
+    .suppress_events = rxq_params->rx.suppress_events,
   };
   int rc, rxq;
   struct efx_auxiliary_rpc dummy;
   resource_size_t register_phys_addr;
 
-  if(!(rxq_params->evq < ef10ct->evq_n)) {
-    return -EINVAL;
-  }
-  if(!(params.qid != EFCT_EVQ_NO_TXQ)) {
-    return -EINVAL;
-  }
 
-  EFHW_ASSERT(rxq_params->evq < ef10ct->evq_n);
-  EFHW_ASSERT(params.qid != EFCT_EVQ_NO_TXQ);
+  if( rxq_params->evq >= ef10ct->evq_n ) {
+    /* We are using a dummy vi, so use a shared kernel evq. */
+    /* TODO: Determine the appropriate shared evq to use */
+    if( rxq_params->rx.suppress_events ) {
+      EFHW_ASSERT(ef10ct->shared_n >= 1 );
+      params.evq = ef10ct->shared[0].vi;
+    } else {
+      /* Not supported for now */
+      return -EINVAL;
+    }
+  }
 
   dummy.cmd = MC_CMD_INIT_RXQ;
   dummy.inlen = sizeof(struct efx_auxiliary_rxq_params);
@@ -416,7 +429,13 @@ ef10ct_dmaq_rx_q_init(struct efhw_nic *nic,
     return rc;
   }
   ef10ct->rxq[rxq].post_buffer_addr = phys_to_virt(register_phys_addr);
-  ef10ct->rxq[rxq].evq = rxq_params->evq;
+
+  flush_delayed_work(&ef10ct->evq[rxq].check_flushes);
+  EFHW_ASSERT(ef10ct->rxq[rxq].evq == -1);
+  EFHW_ASSERT(ef10ct->rxq[rxq].q_id == -1);
+
+  ef10ct->rxq[rxq].evq = params.evq;
+  ef10ct->rxq[rxq].q_id = rxq_params->dmaq;
 
   return rc;
 }
@@ -480,8 +499,9 @@ ef10ct_flush_rx_dma_channel(struct efhw_nic *nic, uint dmaq)
   atomic_inc(&ef10ct_evq->queues_flushing);
   schedule_delayed_work(&ef10ct_evq->check_flushes, 0);
 
-  memset(&ef10ct->rxq[dmaq], 0, sizeof(ef10ct->rxq[dmaq]));
+  /* ef10ct->rxq[dmaq].q_id is updated in check_flushes. */
   ef10ct->rxq[dmaq].evq = -1;
+  ef10ct->rxq[dmaq].post_buffer_addr = 0;
   return rc;
 }
 

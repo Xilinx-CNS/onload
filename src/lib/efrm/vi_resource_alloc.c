@@ -866,6 +866,8 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 		break;
 	case EFHW_RXQ:
 		q_params.rx.ps_buf_size = virs->ps_buf_size;
+		/* TODO: How do we determine this? */
+		q_params.rx.suppress_events = true;
 		rc = efhw_nic_dmaq_rx_q_init(nic, &q_params);
 		if( rc >= 0 ) {
 			virs->rx_prefix_len = rc;
