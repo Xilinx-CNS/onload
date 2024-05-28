@@ -175,6 +175,13 @@ String[] list_build_profiles() {
     def files = findFiles(glob: 'ci/internal/transport_config_opt_*.h')
     for( int i = 0; i < files.size(); ++i ) {
       def profile_name = files[i].name.replaceFirst(/^transport_config_opt_/, '').replaceFirst(/\.h$/,'')
+      if( profile_name.equals("ulhelper") && !env.BRANCH_NAME.equals("master") ) {
+        continue
+      }
+
+      if ( profile_name.equals("localcrc") ) {
+        continue
+      }
 
       /* "extra" is the default profile that has already been built before
        * we ran the unit tests.  "af_xdp" requires a newer kernel that we have
