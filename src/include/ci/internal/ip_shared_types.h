@@ -1098,7 +1098,7 @@ struct ci_netif_state_s {
 #define ONLOAD_PRETTY_NAME_MAXLEN (CI_CFG_STACK_NAME_LEN + 8)
   CI_ULCONST char       pretty_name[ONLOAD_PRETTY_NAME_MAXLEN];
   CI_ULCONST ci_uint32  netif_mmap_bytes;
-  /* This is per-nic vi state bytes, so sums normal and udp_rxq vis */
+  /* This is vi state bytes, so sums normal and udp_rxq vis */
   CI_ULCONST ci_uint32  vi_state_bytes;
 
   CI_ULCONST ci_uint16  max_mss;

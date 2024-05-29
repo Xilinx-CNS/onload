@@ -2068,7 +2068,7 @@ static int netif_tcp_helper_build(ci_netif* ni)
   int rc, nic_i, size, expected_buf_ofs;
   unsigned vi_io_offset, vi_state_offset, vi_efct_shm_offset;
   char* vi_mem_ptr;
-  int vi_state_bytes;
+  int vi_state_bytes = 0;
 #if CI_CFG_PIO
   unsigned pio_io_offset = 0, pio_buf_offset = 0, vi_bar_off;
 #endif
@@ -2102,6 +2102,7 @@ static int netif_tcp_helper_build(ci_netif* ni)
     ci_netif_state_nic_t* nsn = &ns->nic[nic_i];
     ef_vi* vi = ci_netif_vi(ni, nic_i);
     struct efab_nic_design_parameters dp;
+    int vi_nic_state_bytes;
 
     /* Get interface properties. */
     rc = oo_cp_get_hwport_properties(ni->cplane, ns->intf_i_to_hwport[nic_i],
@@ -2132,17 +2133,16 @@ static int netif_tcp_helper_build(ci_netif* ni)
     if( NI_OPTS(ni).tx_push )
       ef_vi_set_tx_push_threshold(vi, NI_OPTS(ni).tx_push_thresh);
 
-    vi_state_bytes = ef_vi_calc_state_bytes(NI_OPTS(ni).rxq_size,
-                                            NI_OPTS(ni).txq_size);
+    vi_nic_state_bytes = ef_vi_calc_state_bytes(nsn->vi_rxq_size,
+                                                nsn->vi_txq_size);
     vi_io_offset += nsn->vi_io_mmap_bytes;
     vi_efct_shm_offset += nsn->vi_efct_shm_mmap_bytes;
-    vi_state_offset += vi_state_bytes;
+    vi_state_offset += vi_nic_state_bytes;
 
     vi->xdp_kick = af_xdp_kick;
     vi->xdp_kick_context = ni;
 
-    ci_assert(vi_state_bytes == ns->vi_state_bytes);
-
+    vi_state_bytes += vi_nic_state_bytes;
 
 #if CI_CFG_PIO
     if( NI_OPTS(ni).pio &&
@@ -2183,6 +2183,8 @@ static int netif_tcp_helper_build(ci_netif* ni)
   }
   ni->future_intf_mask = ci_netif_build_future_intf_mask(ni);
 
+  ci_assert_equal(vi_state_bytes, ns->vi_state_bytes);
+
 #if CI_CFG_CTPIO
   ci_assert_equal(ctpio_io_offset, ns->ctpio_mmap_bytes);
 #endif
@@ -2204,7 +2206,7 @@ static int netif_tcp_helper_build(ci_netif* ni)
 
   expected_buf_ofs = sizeof(ci_netif_state);
   expected_buf_ofs = CI_ROUND_UP(expected_buf_ofs, __alignof__(ef_vi_state));
-  expected_buf_ofs += ns->vi_state_bytes * oo_stack_intf_max(ni);
+  expected_buf_ofs += vi_state_bytes;
   expected_buf_ofs = CI_ROUND_UP(expected_buf_ofs,
                                  __alignof__(oo_pktbuf_manager));
   if( ns->buf_ofs != expected_buf_ofs ||
@@ -2217,7 +2219,7 @@ static int netif_tcp_helper_build(ci_netif* ni)
     /* Omitted check that size % sizeof(oo_pktbuf_set) == 0 because the
      * padding to nearest cache line makes it not necessarily true */
     ci_log("%d %d %d", ns->buf_ofs != sizeof(ci_netif_state) +
-      ns->vi_state_bytes * oo_stack_intf_max(ni),
+      vi_state_bytes,
       ni->packets->sets_max < 1,
       size / sizeof(oo_pktbuf_set) < ni->packets->sets_max);
     ci_log("ERROR: data structure layout mismatch between kernel and "
@@ -2225,7 +2227,7 @@ static int netif_tcp_helper_build(ci_netif* ni)
     ci_log("ns->buf_ofs=%d (expected %d)", ns->buf_ofs, expected_buf_ofs);
     ci_log("  sizeof(ci_netif_state) = %zd", sizeof(ci_netif_state));
     ci_log("  alignof(ef_vi_state) = %zd", __alignof__(ef_vi_state));
-    ci_log("  vi_state_bytes = %d", ns->vi_state_bytes);
+    ci_log("  vi_state_bytes = %d", vi_state_bytes);
     ci_log("  stack_intf_max = %d", oo_stack_intf_max(ni));
     ci_log("  alignof(oo_pktbuf_manager) = %zd",
            __alignof__(oo_pktbuf_manager));

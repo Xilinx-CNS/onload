@@ -1738,8 +1738,15 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     alloc_info.oo_vi_flags = 0;
     alloc_info.efhw_flags = base_efhw_flags;
     alloc_info.ef_vi_flags = base_ef_vi_flags;
-    alloc_info.rxq_capacity = want_rxq ? NI_OPTS(ni).rxq_size : 0;
-    alloc_info.txq_capacity = want_txq ? NI_OPTS(ni).txq_size : 0;
+    alloc_info.rxq_capacity = want_rxq ?
+      efrm_vi_n_q_entries(NI_OPTS(ni).rxq_size, nic->q_sizes[EFHW_RXQ]) : 0;
+    alloc_info.txq_capacity = want_txq ?
+      efrm_vi_n_q_entries(NI_OPTS(ni).txq_size, nic->q_sizes[EFHW_TXQ]) : 0;
+
+    if( alloc_info.rxq_capacity < 0 || alloc_info.txq_capacity < 0 ) {
+      rc = -EINVAL;
+      goto error_out;
+    }
 
     ci_assert_equal(tcp_helper_vi(trs, intf_i), NULL);
     ci_assert(trs_nic->thn_oo_nic != NULL);
@@ -1819,7 +1826,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     trs->io_mmap_bytes += alloc_info.vi_io_mmap_bytes;
     trs->efct_shm_mmap_bytes += alloc_info.vi_efct_shm_mmap_bytes;
     vi_state = (char*) vi_state +
-               ef_vi_calc_state_bytes(NI_OPTS(ni).rxq_size, NI_OPTS(ni).txq_size);
+               ef_vi_calc_state_bytes(nsn->vi_rxq_size, nsn->vi_txq_size);
 
 #if CI_CFG_CTPIO
     trs_nic->thn_ctpio_io_mmap_bytes = alloc_info.vi_ctpio_mmap_bytes;
@@ -2136,12 +2143,12 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
 {
   ci_netif* ni = &trs->netif;
   ci_netif_state* ns;
-  int i, sz, rc, no_table_entries;
+  int i, sz, rc, no_table_entries, intf_i;
 #if CI_CFG_TCP_SHARED_LOCAL_PORTS
   int no_active_wild_pools, no_active_wild_table_entries;
 #endif
   int no_seq_table_entries;
-  unsigned vi_state_bytes;
+  unsigned vi_state_bytes = 0;
   unsigned dma_addrs_bytes;
 #if CI_CFG_PIO
   unsigned pio_bufs_ofs = 0;
@@ -2192,10 +2199,46 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
   ni->pkt_sets_max =
     (NI_OPTS(ni).max_packets + PKTS_PER_SET - 1) >> CI_CFG_PKTS_PER_SET_S;
 
-
   /* Find size of netif state to allocate. */
-  vi_state_bytes = ef_vi_calc_state_bytes(NI_OPTS(ni).rxq_size,
-                                          NI_OPTS(ni).txq_size);
+  OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
+    struct efhw_nic* nic;
+    int vi_rxq_size, vi_txq_size;
+
+    ci_hwport_id_t hwport = ni->intf_i_to_hwport[intf_i];
+    cicp_hwport_mask_t hwport_mask = cp_hwport_make_mask(hwport);
+    bool want_rxq = ni->rx_hwport_mask & hwport_mask;
+    bool want_txq = ni->tx_hwport_mask & hwport_mask;
+
+    nic = efrm_client_get_nic(trs->nic[intf_i].thn_oo_nic->efrm_client);
+
+    vi_rxq_size = want_rxq ?
+      efrm_vi_n_q_entries(NI_OPTS(ni).rxq_size, nic->q_sizes[EFHW_RXQ]) : 0;
+    vi_txq_size = want_txq ?
+      efrm_vi_n_q_entries(NI_OPTS(ni).txq_size, nic->q_sizes[EFHW_TXQ]) : 0;
+
+    if( NI_OPTS(ni).rxq_size < vi_rxq_size )
+      NI_LOG(ni, CONFIG_WARNINGS,
+             "WARNING: EF_RXQ_SIZE=%d rounded up to %d for dev %s",
+             NI_OPTS(ni).rxq_size, vi_rxq_size, nic->net_dev->name);
+    if( NI_OPTS(ni).txq_size < vi_txq_size )
+      NI_LOG(ni, CONFIG_WARNINGS,
+             "WARNING: EF_TXQ_SIZE=%d rounded up to %d for dev %s",
+             NI_OPTS(ni).txq_size, vi_txq_size, nic->net_dev->name);
+
+    if( vi_rxq_size < 0 )
+      ci_log("ERROR: Unsupported EF_RXQ_SIZE=%d for dev %s",
+             NI_OPTS(ni).rxq_size, nic->net_dev->name);
+    if( vi_txq_size < 0 )
+      ci_log("ERROR: Unsupported EF_TXQ_SIZE=%d for dev %s",
+             NI_OPTS(ni).txq_size, nic->net_dev->name);
+
+    if( vi_rxq_size < 0 || vi_txq_size < 0 ) {
+      rc = -EINVAL;
+      goto fail1;
+    }
+
+    vi_state_bytes += ef_vi_calc_state_bytes(vi_rxq_size, vi_txq_size);
+  }
 
 #if CI_CFG_TCP_SHARED_LOCAL_PORTS
   if( ci_netif_should_allocate_tcp_shared_local_ports(ni) ) {
@@ -2236,7 +2279,7 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
   ci_assert_le(NI_OPTS(ni).max_ep_bufs, CI_CFG_NETIF_MAX_ENDPOINTS_MAX);
   sz = sizeof(ci_netif_state);
   sz = CI_ROUND_UP(sz, __alignof__(ef_vi_state));
-  sz += vi_state_bytes * trs->netif.nic_n;
+  sz += vi_state_bytes;
   sz = CI_ROUND_UP(sz, __alignof__(oo_pktbuf_manager));
   sz += sizeof(oo_pktbuf_manager);
   sz = CI_ROUND_UP(sz, __alignof__(oo_pktbuf_set));
@@ -2343,7 +2386,7 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
 
   ns_ofs = sizeof(ci_netif_state);
   ns_ofs = CI_ROUND_UP(ns_ofs, __alignof__(ef_vi_state));
-  ns_ofs += vi_state_bytes * trs->netif.nic_n;
+  ns_ofs += vi_state_bytes;
 
   ns_ofs = CI_ROUND_UP(ns_ofs, __alignof__(oo_pktbuf_manager));
   ns->buf_ofs = ns_ofs;
