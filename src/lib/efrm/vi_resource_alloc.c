@@ -1780,9 +1780,6 @@ int  efrm_vi_q_get_size(struct efrm_vi *virs, enum efhw_q_type q_type,
 {
 	struct efhw_nic *nic = virs->rs.rs_client->nic;
 
-	/* We return [q_sizes_supported] even if we fail. */
-	qso->q_sizes_supported = nic->q_sizes[q_type];
-
 	n_q_entries = choose_size(n_q_entries, nic->q_sizes[q_type]);
 	if (n_q_entries <= 0)
 		return -EINVAL;

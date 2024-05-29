@@ -67,8 +67,6 @@ struct efrm_vi_q_size {
 	int  q_len_bytes;
 	/** log2 of the number of 4K pages required. */
 	int  q_len_page_order;
-	/** Bitmask of the queue sizes supported. */
-	int  q_sizes_supported;
 };
 
 
@@ -215,9 +213,6 @@ extern int efrm_vi_is_hw_drop_filter_supported(struct efrm_vi *virs);
  * number of entries.  If [n_q_entries] is not a supported queue size, then
  * it is rounded up to the nearest supported size.  If [n_q_entries] is
  * larger than the max supported size, return -EINVAL.
- *
- * [q_size_out->q_sizes_supported] is always initialised, even if an error
- * code is returned.
  */
 extern int  efrm_vi_q_get_size(struct efrm_vi *virs, enum efhw_q_type q_type,
 			       int n_q_entries,
