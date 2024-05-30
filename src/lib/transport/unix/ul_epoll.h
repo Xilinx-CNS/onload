@@ -157,6 +157,9 @@ struct citp_epoll_fd {
   ci_dllist             oo_stack_sockets;
   ci_dllist             oo_stack_not_ready_sockets;
   int                   oo_stack_sockets_n;
+
+  /* list of [citp_epoll_fdi] structures associated with this epoll set. */
+  ci_dllist epi_list;
 #endif
 
   /* List of onload sockets in non-home stack (struct citp_epoll_member) */
@@ -209,6 +212,10 @@ struct citp_epoll_fd {
 typedef struct {
   citp_fdinfo           fdinfo;
   struct citp_epoll_fd* epoll;
+#if CI_CFG_EPOLL3
+  /* link for citp_epoll_fd::epi_list list */
+  ci_dllink dllink;
+#endif
 } citp_epoll_fdi;
 
 #define fdi_to_epoll_fdi(fdi)  CI_CONTAINER(citp_epoll_fdi, fdinfo, (fdi))

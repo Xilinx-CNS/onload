@@ -451,6 +451,22 @@ static void citp_epoll_cleanup_home_sock_list(struct citp_epoll_fd* ep,
     oo_wqlock_unlock(&ep->dead_stack_lock, NULL);
   }
 }
+
+static void citp_epoll_update_eitems_epoll_fd(ci_dllist *list, int epoll_fd,
+                                              int new_epoll_fd,
+                                              int new_epoll_fd_seq)
+{
+  struct citp_epoll_member* eitem;
+  citp_fdinfo *fd_fdi;
+
+  CI_DLLIST_FOR_EACH2(struct citp_epoll_member, eitem, dllink, list) {
+    fd_fdi = citp_ul_epoll_member_to_fdi(eitem);
+    if( fd_fdi && fd_fdi->epoll_fd == epoll_fd ) {
+      fd_fdi->epoll_fd = new_epoll_fd;
+      fd_fdi->epoll_fd_seq = new_epoll_fd_seq;
+    }
+  }
+}
 #endif
 
 static void citp_epoll_purge_other_socks(struct citp_epoll_fd* ep)
@@ -467,8 +483,25 @@ static void citp_epoll_dtor(citp_fdinfo* fdi, int fdt_locked)
 {
   struct citp_epoll_fd* ep = fdi_to_epoll(fdi);
 
-  if (!oo_atomic_dec_and_test(&ep->refcount))
+#if CI_CFG_EPOLL3
+  ci_dllist_remove(&fdi_to_epoll_fdi(fdi)->dllink);
+#endif
+
+  if (!oo_atomic_dec_and_test(&ep->refcount)) {
+#if CI_CFG_EPOLL3
+    /* We're closing epoll fd but there are still more open fds associated with
+     * this epoll set. Find all the sockets referring to this epoll fd and
+     * change it to the next valid fd from epi_list. */
+    citp_epoll_fdi *next_epi = CI_CONTAINER(citp_epoll_fdi, dllink,
+                                            ci_dllist_start(&ep->epi_list));
+
+    citp_epoll_update_eitems_epoll_fd(&ep->oo_stack_sockets, fdi->fd,
+                                      next_epi->fdinfo.fd, next_epi->fdinfo.seq);
+    citp_epoll_update_eitems_epoll_fd(&ep->oo_stack_not_ready_sockets, fdi->fd,
+                                      next_epi->fdinfo.fd, next_epi->fdinfo.seq);
+#endif
     return;
+  }
 
   ep->closing = 1;
 
@@ -521,6 +554,9 @@ static citp_fdinfo* citp_epoll_dup(citp_fdinfo* orig_fdi)
   fdi = &epi->fdinfo;
   citp_fdinfo_init(fdi, &citp_epoll_protocol_impl);
   epi->epoll = ep;
+#if CI_CFG_EPOLL3
+  ci_dllist_push(&ep->epi_list, &epi->dllink);
+#endif
   oo_atomic_inc(&ep->refcount);
   return fdi;
 }
@@ -636,6 +672,8 @@ int citp_epoll_create(int size, int flags)
   ci_dllist_init(&ep->dead_stack_sockets);
   ep->home_stack = NULL;
   ep->ready_list = -1;
+  ci_dllist_init(&ep->epi_list);
+  ci_dllist_push(&ep->epi_list, &epi->dllink);
 #endif
   ci_dllist_init(&ep->oo_sockets);
   ep->oo_sockets_n = 0;
