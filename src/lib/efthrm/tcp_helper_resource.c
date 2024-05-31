@@ -7730,7 +7730,8 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
                              __FUNCTION__, thr->id));
 
         /* set flags in case we get deferred */
-        ef_eplock_holder_set_flags(&ni->state->lock, flags_set);
+        ef_eplock_holder_set_flags(&ni->state->lock,
+                                   flags_set | after_unlock_flags);
 
         /* lets clear IN_DL_CONTEXT flag as expected by oo_trusted_lock_drop */
         if( in_dl_context )
@@ -7761,7 +7762,8 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
       OO_DEBUG_TCPH(ci_log("%s: [%u] defer to workitem, flags %llx",
                            __FUNCTION__, thr->id, lock_val));
       /* set flags so work item can pick up the work */
-      ef_eplock_holder_set_flags(&ni->state->lock, flags_set);
+      ef_eplock_holder_set_flags(&ni->state->lock,
+                                 flags_set | after_unlock_flags);
       tcp_helper_defer_dl2work(thr, OO_THR_AFLAG_UNLOCK_UNTRUSTED);
       return 0;
     }
