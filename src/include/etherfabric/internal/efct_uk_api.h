@@ -4,6 +4,7 @@
 #define	EFCT_HW_DEFS_H
 
 #include <ci/driver/efab/hardware/efct.h>
+#include <ci/tools/sysdep.h>
 
 /* Increment this when the layout of efab_efct_rxq_uk_shm_base changes. It's
  * passed to the kernel in struct efch_efct_rxq_alloc */
@@ -68,7 +69,7 @@ struct efab_efct_rxq_uk_shm_base {
    * queue and are synchronised with each other. Either may be used, with the
    * choice usually being made according to cache locality considerations */
   uint64_t active_qs;   /* Bitmask, same indices as 'q' */
-  struct efab_efct_rxq_uk_shm_q q[0];
+  __DECLARE_FLEX_ARRAY(struct efab_efct_rxq_uk_shm_q, q);
 };
 
 #define CI_EFCT_SHM_BYTES(max_qs)  \
