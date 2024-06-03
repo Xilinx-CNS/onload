@@ -30,9 +30,7 @@ static int memreg_alloc(ef_driver_handle mr_dh,
   if( pd->pd_cluster_sock != -1 )
     pd_dh = pd->pd_cluster_dh;
 
-  memset(&ra, 0, sizeof(ra));
-  ef_vi_set_intf_ver(ra.intf_ver, sizeof(ra.intf_ver));
-  ra.ra_type = EFRM_RESOURCE_MEMREG;
+  ef_vi_init_resource_alloc(&ra, EFRM_RESOURCE_MEMREG);
   ra.u.memreg.in_vi_or_pd_id = efch_make_resource_id(pd->pd_resource_id);
   ra.u.memreg.in_vi_or_pd_fd = pd_dh;
   ra.u.memreg.in_mem_ptr = (uintptr_t) chunk_start;

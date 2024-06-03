@@ -66,9 +66,7 @@ static int __ef_pd_alloc(ef_pd* pd, ef_driver_handle pd_dh,
   if( flags & EF_PD_VF )
     flags |= EF_PD_PHYS_MODE;
 
-  memset(&ra, 0, sizeof(ra));
-  ef_vi_set_intf_ver(ra.intf_ver, sizeof(ra.intf_ver));
-  ra.ra_type = EFRM_RESOURCE_PD;
+  ef_vi_init_resource_alloc(&ra, EFRM_RESOURCE_PD);
   ra.u.pd.in_ifindex = ifindex;
   ra.u.pd.in_flags = 0;
   if( flags & EF_PD_VF )

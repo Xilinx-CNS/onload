@@ -187,9 +187,7 @@ static int efct_kbufs_attach(ef_vi* vi, int qid, unsigned n_superbufs)
     }
   }
 
-  memset(&ra, 0, sizeof(ra));
-  ef_vi_set_intf_ver(ra.intf_ver, sizeof(ra.intf_ver));
-  ra.ra_type = EFRM_RESOURCE_EFCT_RXQ;
+  ef_vi_init_resource_alloc(&ra, EFRM_RESOURCE_EFCT_RXQ);
   ra.u.rxq.in_abi_version = CI_EFCT_SWRXQ_ABI_VERSION;
   ra.u.rxq.in_flags = 0;
   ra.u.rxq.in_qid = qid;

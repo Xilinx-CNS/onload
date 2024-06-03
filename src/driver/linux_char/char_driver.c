@@ -66,10 +66,18 @@ ioctl_resource_alloc (ci_private_char_t *priv, ulong arg)
 {
   int rc;
   ci_resource_alloc_t local;
+  uint8_t in_struct_size;
   copy_from_user_ret(&local, (caddr_t) arg, sizeof(local), -EFAULT);
+  in_struct_size = local.in_struct_size + CI_RESOURCE_ALLOC_BASE_SIZE;
+  if(in_struct_size > sizeof(ci_resource_alloc_t)) {
+    printk(KERN_ERR "%s Bad input size for ci_resource_alloc_t."
+           " Expected <= %lu, got = %u\n",
+           __func__, sizeof(ci_resource_alloc_t), in_struct_size);
+    return -EINVAL;
+  }
   rc = efch_resource_alloc(&priv->rt, &local);
   if( rc < 0 )  return rc;
-  copy_to_user_ret((caddr_t) arg, &local, sizeof(local), -EFAULT);
+  copy_to_user_ret((caddr_t) arg, &local, in_struct_size, -EFAULT);
   return rc;
 }
 

@@ -351,7 +351,7 @@ int ef_vi_transmit_alt_query_overhead(ef_vi* vi,
 
 /****************************************************************************/
 
-void ef_vi_set_intf_ver(char* intf_ver, size_t len)
+static void ef_vi_set_intf_ver(char* intf_ver, size_t len)
 {
   /* Bodge interface requested to match the one used in
    * openonload-201405-u1.  The interface has changed since then, but in
@@ -359,7 +359,8 @@ void ef_vi_set_intf_ver(char* intf_ver, size_t len)
    * openonload-201405-u1.  (This is almost true: The exception is addition
    * of EFCH_PD_FLAG_MCAST_LOOP).
    */
-  strncpy(intf_ver, "1518b4f7ec6834a578c7a807736097ce", len);
+  if(intf_ver != NULL)
+    strncpy(intf_ver, "1518b4f7ec6834a578c7a807736097ce", len);
 
   /* This comparison exists as an extra review gate to ensure that we
    * carefully check that the API is backward-compatible, since the above
@@ -373,10 +374,19 @@ void ef_vi_set_intf_ver(char* intf_ver, size_t len)
    * It'd also be possible to enhance the checksum computation to be smarter
    * (e.g. by ignoring comments, etc.).
    */
-  if( strcmp(EFCH_INTF_VER, "ed64fd076d48d035f72fe6378d7bc324") ) {
+  if( strcmp(EFCH_INTF_VER, "6e6ee9419c8d26fca9bff2b6c30b0596") ) {
     fprintf(stderr, "ef_vi: ERROR: char interface has changed\n");
     abort();
   }
+}
+
+void ef_vi_init_resource_alloc(ci_resource_alloc_t *alloc, uint32_t type)
+{
+  memset(alloc, 0, sizeof(*alloc));
+  ef_vi_set_intf_ver(alloc->intf_ver, sizeof(alloc->intf_ver));
+  alloc->ra_type = type;
+  EF_VI_BUILD_ASSERT(sizeof(*alloc) >= CI_RESOURCE_ALLOC_BASE_SIZE);
+  alloc->in_struct_size = sizeof(*alloc) - CI_RESOURCE_ALLOC_BASE_SIZE;
 }
 
 static int init_design_parameters(ef_vi* vi)
@@ -468,9 +478,7 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
     evq_capacity = 32768;
 
   /* Allocate resource and mmap. */
-  memset(&ra, 0, sizeof(ra));
-  ef_vi_set_intf_ver(ra.intf_ver, sizeof(ra.intf_ver));
-  ra.ra_type = EFRM_RESOURCE_VI;
+  ef_vi_init_resource_alloc(&ra, EFRM_RESOURCE_VI);
   ra.u.vi_in.pd_or_vi_set_fd = pd_or_vi_set_dh;
   ra.u.vi_in.pd_or_vi_set_rs_id = pd_or_vi_set_id;
   ra.u.vi_in.vi_set_instance = index_in_vi_set;
@@ -534,7 +542,8 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   }
 
   if( ra.u.vi_out.rx_post_buffer_mmap_bytes &&
-      vi_flags & EF_VI_RX_PHYS_ADDR ) {
+      vi_flags & EF_VI_RX_PHYS_ADDR &&
+      ra.u.vi_out.out_flags & EFHW_VI_POST_BUF_SIZE_SET ) {
     rc = ci_resource_mmap(vi_dh, ra.out_id.index, EFCH_VI_MMAP_RX_BUFFER_POST,
                           ra.u.vi_out.rx_post_buffer_mmap_bytes, &p);
     if( rc < 0 ) {

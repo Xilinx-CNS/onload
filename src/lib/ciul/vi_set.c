@@ -25,9 +25,7 @@ static int __ef_vi_set_alloc(ef_vi_set* viset, ef_driver_handle dh,
   ci_resource_alloc_t ra;
   int rc;
 
-  memset(&ra, 0, sizeof(ra));
-  ef_vi_set_intf_ver(ra.intf_ver, sizeof(ra.intf_ver));
-  ra.ra_type = EFRM_RESOURCE_VI_SET;
+  ef_vi_init_resource_alloc(&ra, EFRM_RESOURCE_VI_SET);
   ra.u.vi_set.in_n_vis = n_vis;
   ra.u.vi_set.in_flags = 0;
   if( pd != NULL ) {

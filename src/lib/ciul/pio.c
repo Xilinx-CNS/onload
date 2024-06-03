@@ -50,9 +50,7 @@ int ef_pio_alloc(ef_pio* pio, ef_driver_handle pio_dh, ef_pd* pd,
     return -ENOMEM;
   }
 
-  memset(&ra, 0, sizeof(ra));
-  ef_vi_set_intf_ver(ra.intf_ver, sizeof(ra.intf_ver));
-  ra.ra_type = EFRM_RESOURCE_PIO;
+  ef_vi_init_resource_alloc(&ra, EFRM_RESOURCE_PIO);
   ra.u.pio.in_pd_fd = pd_dh;
   ra.u.pio.in_pd_id = efch_make_resource_id(pd->pd_resource_id);
 

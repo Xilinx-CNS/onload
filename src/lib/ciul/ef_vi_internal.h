@@ -22,6 +22,7 @@
 #include <ci/driver/efab/hardware/efct.h> /* EFCT_RX_SUPERBUF_BYTES */
 #include "sysdep.h"
 #include "ef_vi_ef10.h"
+#include <ci/efch/op_types.h>
 
 
 /**********************************************************************
@@ -253,7 +254,7 @@ extern int ef_pd_cluster_free(ef_pd*, ef_driver_handle);
 
 extern void ef_vi_packed_stream_update_credit(ef_vi* vi);
 
-extern void ef_vi_set_intf_ver(char* intf_ver, size_t len);
+extern void ef_vi_init_resource_alloc(ci_resource_alloc_t *alloc, uint32_t type);
 
 extern int ef_vi_filter_is_block_only(const struct ef_filter_cookie* cookie);
 

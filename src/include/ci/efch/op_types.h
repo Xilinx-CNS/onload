@@ -139,11 +139,22 @@ struct efch_efct_rxq_alloc {
   int32_t             in_memfd;
 };
 
+/* Old size of ci_resource_alloc_t, maintained for backwards compatibility with
+ * old ef_vi applications. Used with in_struct_size to check the size of the
+ * struct as reported by the user application. A value of 0 for in_struct_size
+ * means that the user application would report sizeof(ci_resource_alloc_t) = 88
+ */
+/* TODO: Is there better way to do this without hardcoding? using sizeof() could
+ *       be influenced by future changes */
+#define CI_RESOURCE_ALLOC_BASE_SIZE 88
 
 typedef struct ci_resource_alloc_s {
   char               intf_ver[EFCH_INTF_VER_LEN];
   uint32_t           ra_type;
-  efch_resource_id_t out_id;
+  union {
+    efch_resource_id_t out_id;
+    uint8_t            in_struct_size;
+  };
   union {
     struct efch_vi_alloc_in    vi_in;
     struct efch_vi_alloc_out   vi_out;
