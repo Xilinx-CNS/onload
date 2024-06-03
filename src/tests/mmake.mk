@@ -9,6 +9,7 @@ SUBDIRS		:=     driver \
                    syscalls \
                    tap \
 		   trade_sim \
+		   compat \
 
 OTHER_SUBDIRS	:=
 
