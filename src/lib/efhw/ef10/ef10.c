@@ -2387,14 +2387,15 @@ ef10_filter_redirect(struct efhw_nic *nic, int filter_id,
   struct efx_auxdev *auxdev;
   struct efx_auxdev_client *cli;
   int stack_id = spec->flags & EFX_FILTER_FLAG_STACK_ID ?  spec->stack_id : 0;
-  /* If the RSS flag is not set the value of this field is ignored */
-  unsigned rss_context = (spec->flags & EFX_FILTER_FLAG_RX_RSS ) ?
-                          spec->rss_context : 0;
+  /* If the RSS flag is not set we can pass NULL to indicate that we don't
+   * want a context, otherwise use the value from the spec. */
+  unsigned *rss_context = (spec->flags & EFX_FILTER_FLAG_RX_RSS ) ?
+                           &spec->rss_context : NULL;
 
 
   AUX_PRE(dev, auxdev, cli, nic, rc);
   rc = auxdev->ops->filter_redirect(cli, filter_id, spec->dmaq_id,
-                                    &rss_context, stack_id);
+                                    rss_context, stack_id);
   AUX_POST(dev, auxdev, cli, nic, rc);
 
   return rc;
