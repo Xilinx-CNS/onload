@@ -252,8 +252,6 @@ static inline const void* efct_superbuf_access(const ef_vi* vi, int qid, size_t 
 #endif
 }
 
-extern void ef10ct_vi_init(ef_vi*) EF_VI_HF;
-
 extern int ef_pd_cluster_free(ef_pd*, ef_driver_handle);
 
 extern void ef_vi_packed_stream_update_credit(ef_vi* vi);

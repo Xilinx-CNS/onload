@@ -119,10 +119,6 @@ static int check_nic_compatibility(unsigned vi_flags, enum ef_vi_arch ef_vi_arch
     }
     return 0;
 
-  case EF_VI_ARCH_EF10CT:
-    /* TODO EF10CT Allow everything -- Maybe this should be the same as EFCT */
-    return 0;
-
   default:
     return -EINVAL;
   }
@@ -573,19 +569,13 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   nic_type.nic_flags = ra.u.vi_out.nic_flags;
 
   rc = check_nic_compatibility(vi_flags, nic_type.arch);
-  if( rc != 0 ) {
-    LOGVV(ef_log("%s: check_nic_compatibility(%x, %d) %d", __FUNCTION__, vi_flags, nic_type.arch, rc));
+  if( rc != 0 )
     goto fail5;
-  }
 
   ids = (void*) (state + 1);
 
-  rc = ef_vi_init(vi, nic_type.arch, nic_type.variant, nic_type.revision,
+  ef_vi_init(vi, nic_type.arch, nic_type.variant, nic_type.revision,
 	     vi_flags, nic_type.nic_flags, state);
-  if( rc < 0 ) {
-    LOGVV(ef_log("%s: ef_vi_init failed (%d)", __func__, rc));
-    goto fail5;
-  }
   ef_vi_init_out_flags(vi, (ra.u.vi_out.out_flags & EFHW_VI_CLOCK_SYNC_STATUS) ?
                        EF_VI_OUT_CLOCK_SYNC_STATUS : 0);
   ef_vi_init_io(vi, io_mmap_ptr);

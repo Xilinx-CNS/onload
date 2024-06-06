@@ -2,7 +2,6 @@
 /* X-SPDX-Copyright-Text: (c) Copyright 2021 Xilinx, Inc. */
 
 #include "ef_vi_internal.h"
-#include "efct_vi.h"
 #include "logging.h"
 #include <etherfabric/vi.h>
 #include <etherfabric/efct_vi.h>
@@ -263,7 +262,7 @@ struct efct_tx_state
 };
 
 /* generic tx header */
-uint64_t efct_tx_header(unsigned packet_length, unsigned ct_thresh,
+ci_inline uint64_t efct_tx_header(unsigned packet_length, unsigned ct_thresh,
                                unsigned timestamp_flag, unsigned warm_flag,
                                unsigned action)
 {
@@ -397,7 +396,7 @@ ci_inline void efct_tx_complete(ef_vi* vi, struct efct_tx_state* tx, uint32_t dm
 }
 
 /* get a tx completion event, or null if no valid event available */
-ci_qword_t* efct_tx_get_event(const ef_vi* vi, uint32_t evq_ptr)
+ci_inline ci_qword_t* efct_tx_get_event(const ef_vi* vi, uint32_t evq_ptr)
 {
   ci_qword_t* event = (ci_qword_t*)(vi->evq_base + (evq_ptr & vi->evq_mask));
 
@@ -433,7 +432,7 @@ static void efct_grant_unsol_credit(ef_vi* vi, bool clear_overflow, uint32_t cre
 }
 
 /* handle a tx completion event */
-void efct_tx_handle_event(ef_vi* vi, ci_qword_t event, ef_event* ev_out)
+static void efct_tx_handle_event(ef_vi* vi, ci_qword_t event, ef_event* ev_out)
 {
   ef_vi_txq* q = &vi->vi_txq;
   ef_vi_txq_state* qs = &vi->ep_state->txq;
@@ -486,7 +485,7 @@ void efct_tx_handle_event(ef_vi* vi, ci_qword_t event, ef_event* ev_out)
   }
 }
 
-int efct_ef_vi_transmit(ef_vi* vi, ef_addr base, int len,
+static int efct_ef_vi_transmit(ef_vi* vi, ef_addr base, int len,
                                ef_request_id dma_id)
 {
   /* TODO need to avoid calling this with CTPIO fallback buffers */
@@ -503,7 +502,7 @@ int efct_ef_vi_transmit(ef_vi* vi, ef_addr base, int len,
   return 0;
 }
 
-int efct_ef_vi_transmitv(ef_vi* vi, const ef_iovec* iov, int iov_len,
+static int efct_ef_vi_transmitv(ef_vi* vi, const ef_iovec* iov, int iov_len,
                                 ef_request_id dma_id)
 {
   struct efct_tx_state tx;
@@ -527,7 +526,7 @@ int efct_ef_vi_transmitv(ef_vi* vi, const ef_iovec* iov, int iov_len,
   return 0;
 }
 
-void efct_ef_vi_transmit_push(ef_vi* vi)
+static void efct_ef_vi_transmit_push(ef_vi* vi)
 {
 }
 
