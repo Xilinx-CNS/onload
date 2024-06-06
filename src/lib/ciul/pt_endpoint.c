@@ -417,7 +417,8 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
                   int index_in_vi_set, int evq_capacity,
                   int rxq_capacity, int txq_capacity,
                   ef_vi* evq, ef_driver_handle evq_dh,
-                  int vi_clustered, enum ef_vi_flags vi_flags)
+                  int vi_clustered, enum ef_vi_flags vi_flags,
+                  struct ef_pd *pd)
 {
   struct ef_vi_nic_type nic_type;
   ci_resource_alloc_t ra;
@@ -599,7 +600,11 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
     goto fail5;
 
   if( vi->efct_rxqs.active_qs && rxq_capacity != 0 ) {
-    rc = efct_kbufs_init(vi);
+    /* Could also use nic_type.variant instead. */
+    if( ra.u.vi_out.nic_arch == EFHW_ARCH_EFCT )
+      rc = efct_kbufs_init(vi);
+    else if ( ra.u.vi_out.nic_arch == EFHW_ARCH_EF10CT )
+      rc = efct_ubufs_init(vi, pd, pd_or_vi_set_dh);
     if( rc ) {
       LOGVV(ef_log("%s: mmap (efct reserve) %d", __FUNCTION__, rc));
       goto fail5;
@@ -706,7 +711,7 @@ int ef_vi_alloc_from_pd(ef_vi* vi, ef_driver_handle vi_dh,
   }
   return __ef_vi_alloc(vi, vi_dh, res_id, pd_dh, index_in_vi_set, evq_capacity,
                        rxq_capacity, txq_capacity,
-                       evq_opt, evq_dh, vi_clustered, flags);
+                       evq_opt, evq_dh, vi_clustered, flags, pd);
 }
 
 
@@ -725,7 +730,7 @@ int ef_vi_alloc_from_set(ef_vi* vi, ef_driver_handle vi_dh,
                        efch_make_resource_id(vi_set->vis_res_id),
                        vi_set_dh, index_in_vi_set,
                        evq_capacity, rxq_capacity, txq_capacity,
-                       evq_opt, evq_dh, 0, flags);
+                       evq_opt, evq_dh, 0, flags, vi_set->vis_pd);
 }
 
 
@@ -841,11 +846,10 @@ int ef_vi_arch_from_efhw_arch(int efhw_arch)
   case EFHW_ARCH_EF10:
     return EF_VI_ARCH_EF10;
   case EFHW_ARCH_EFCT:
+  case EFHW_ARCH_EF10CT:
     return EF_VI_ARCH_EFCT;
   case EFHW_ARCH_AF_XDP:
     return EF_VI_ARCH_AF_XDP;
-  case EFHW_ARCH_EF10CT:
-    return EF_VI_ARCH_EF10CT;
   default:
     return -1;
   }
