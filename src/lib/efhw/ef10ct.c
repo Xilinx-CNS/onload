@@ -539,6 +539,23 @@ ef10ct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
                      int *rxq, unsigned pd_excl_token,
                      const struct cpumask *mask, unsigned flags)
 {
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  int i;
+  bool found;
+
+  /* We want to find the hw rxq given the dummy vi number in the spec */
+  /* For now, just loop over the rxqs to check if the vi is attached
+   * TODO: Will this have to handle multiple vis connected to the same rxq? */
+  for( i = 0; i < ef10ct->rxq_n; i++ ) {
+    if( ef10ct->rxq[i].q_id == spec->dmaq_id ) {
+      *rxq = i;
+      found = true;
+      break;
+    }
+  }
+
+  if( !found )
+    return -EINVAL;
   return 0;
 }
 
