@@ -154,10 +154,17 @@ efct_design_parameters(struct efhw_nic *nic,
   else if( (VALUE) != EFAB_NIC_DP_DEFAULT(PARAM) ) \
     return -ENODEV;
 
+  /* Use this with care when ef_vi has never made assumptions about the value,
+   * to avoid over-zealous failures if non-default values exist in the wild.
+   */
+#define SET_NO_CHECK(PARAM, VALUE) \
+  if( EFAB_NIC_DP_KNOWN(*dp, PARAM) ) \
+    dp->PARAM = (VALUE);
+
   SET(rx_superbuf_bytes, xp->rx_buffer_len * 4096);
   SET(rx_frame_offset, xp->frame_offset_fixed);
-  SET(rx_stride, xp->rx_stride);
-  SET(rx_queues, xp->rx_queues);
+  SET_NO_CHECK(rx_stride, xp->rx_stride);
+  SET_NO_CHECK(rx_queues, xp->rx_queues);
   SET(tx_aperture_bytes, xp->tx_aperture_size);
   SET(tx_fifo_bytes, xp->tx_fifo_size);
   SET(timestamp_subnano_bits, xp->ts_subnano_bit);
