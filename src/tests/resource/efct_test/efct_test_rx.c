@@ -214,6 +214,11 @@ enum hrtimer_restart efct_rx_tick(struct hrtimer *hr)
     memset(old_buff, 0, sizeof(struct efct_test_suberbuf));
   }
 
+  if( rxq->pkt >= EFCT_TEST_PKTS_PER_SUPERBUF ) {
+    do_rollover(rxq, 0);
+    goto out;
+  }
+
   /* Write a packet */
   if( !write_fake_packet(rxq) ) {
     printk(KERN_ERR "%s failed to write the fake packet."
@@ -235,10 +240,6 @@ enum hrtimer_restart efct_rx_tick(struct hrtimer *hr)
   * increment pkt, otherwise the frame and the metadata would end up in
   * different packet buffers */
   rxq->pkt++;
-
-  if( rxq->pkt >= EFCT_TEST_PKTS_PER_SUPERBUF ) {
-    do_rollover(rxq, 0);
-  }
 
   rxq->curr_pkts++;
 
