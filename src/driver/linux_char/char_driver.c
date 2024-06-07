@@ -44,6 +44,14 @@ MODULE_PARM_DESC(phys_mode_gid,
                  "0 is default.  "
 		 "-1 means \"any user may use physical buffer mode\".  "
 		 "-2 means means \"physical buffer mode forbidden\".");
+int mac_filters_gid = 0;
+module_param(mac_filters_gid, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(mac_filters_gid,
+		 "Group id of ef_vi apps which may use MAC, Ethertype, "
+		 "or IP protocol filters.  "
+		 "0 is default (only users with CAP_NET_ADMIN).  "
+		 "-1 means \"any user may use these filters\".  "
+		 "-2 means \"forbidden, only IP/port filters permitted\".");
 
 
 MODULE_AUTHOR("Solarflare Communications");

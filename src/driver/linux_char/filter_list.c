@@ -11,6 +11,7 @@
 #include "efch.h"
 #include <ci/efch/op_types.h>
 #include "filter_list.h"
+#include "char_internal.h"
 #include <ci/driver/driverlink_api.h>
 
 
@@ -599,7 +600,8 @@ int efch_filter_list_add(struct efrm_resource *rs, struct efrm_pd *pd,
   struct efrm_vi_set *vi_set;
   int rss_context = 0;
 
-  if( ! capable(CAP_NET_ADMIN) ) {
+  if( ! (mac_filters_gid ? ci_in_egroup(mac_filters_gid) :
+         capable(CAP_NET_ADMIN)) ) {
     if( (filter_add->in.fields & (CI_FILTER_FIELD_LOC_HOST |
                                   CI_FILTER_FIELD_LOC_PORT)) !=
         (CI_FILTER_FIELD_LOC_HOST | CI_FILTER_FIELD_LOC_PORT) )
