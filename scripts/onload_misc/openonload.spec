@@ -159,11 +159,33 @@ Provides	: sfc-kmod-symvers = %{kernel}
 AutoReqProv	: no
 
 %if 0%{?have_efct:%have_efct}
-BuildRequires	: kernel-module-xilinx-efct-%{dist}-%{kernel} >= 1.4.0.0
+%{!?efct_disttag: %global efct_disttag %(
+efct_disttag() {
+  if [ -f /etc/redhat-release ]; then
+    awk '
+      /Red Hat Linux release/ { gsub(/\\./,""); printf "RH%s\\n", $5; exit }
+      /Red Hat Enterprise Linux release/ { printf "RHEL%s\\n", substr($6, 1, 1); exit }
+      /Red Hat Enterprise Linux (WS|Server|Client|Workstation)/ { printf "RHEL%s\\n", substr($7, 1, 1); exit }
+      /CentOS Linux release 7/ { printf "RHEL7\\n"; exit }
+    ' /etc/redhat-release
+  elif [ -x "$(command -v hostnamectl)" ]; then
+    hostnamectl | awk '
+      /SUSE Linux Enterprise Server/ { printf "SLES%s\\n", $7; exit }
+    '
+  else
+    echo "unsupportedOS"
+    return 1
+  fi
+  return 0
+}
+echo -n $(efct_disttag)
+)}
+
+BuildRequires	: kernel-module-xilinx-efct-%{efct_disttag}-%{kernel} >= 1.5.3.0
 
 %if "%{dist}" == ".el7"
-BuildRequires	: kernel-module-auxiliary-%{dist}-%{kernel} >= 1.0.3.0
-Requires	: kernel-module-auxiliary-%{dist}-%{kernel} >= 1.0.3.0
+BuildRequires	: kernel-module-auxiliary-%{efct_disttag}-%{kernel} >= 1.0.4.0
+Requires	: kernel-module-auxiliary-%{efct_disttag}-%{kernel} >= 1.0.4.0
 %endif
 %endif
 
