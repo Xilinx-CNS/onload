@@ -23,7 +23,6 @@
 #include <linux/poll.h>
 #include <linux/unistd.h> /* for __NR_epoll_pwait */
 #include <linux/time64.h>
-#include <linux/time_types.h>
 #include "onload_internal.h"
 
 
@@ -313,15 +312,6 @@ static int oo_epoll2_apply_ctl(struct oo_epoll_private *priv,
   return rc;
 }
 
-static inline void timeout_hr_to_ts(ci_int64 hr, struct __kernel_timespec *ts)
-{
-  ci_int64 nanos = (hr / oo_timesync_cpu_khz) * NSEC_PER_MSEC +
-                   ((hr % oo_timesync_cpu_khz) * NSEC_PER_MSEC)
-                    / oo_timesync_cpu_khz;
-  ts->tv_sec = nanos / NSEC_PER_SEC;
-  ts->tv_nsec = nanos % NSEC_PER_SEC;
-}
-
 static void oo_epoll2_wait(struct oo_epoll_private *priv,
                            struct oo_epoll2_action_arg *op)
 {
@@ -456,7 +446,7 @@ static void oo_epoll2_wait(struct oo_epoll_private *priv,
 #ifdef EFRM_HAVE_EPOLL_PWAIT2
   {
     struct __kernel_timespec ts;
-    timeout_hr_to_ts(timeout_hr, &ts);
+    oo_epoll_frc_to_ts(timeout_hr, &ts);
     op->rc = efab_linux_sys_epoll_pwait2(op->kepfd, CI_USER_PTR_GET(op->events),
                                          op->maxevents, &ts, NULL);
   }
@@ -518,7 +508,7 @@ static int oo_epoll2_action(struct oo_epoll_private *priv,
     else {
 #ifdef EFRM_HAVE_EPOLL_PWAIT2
       struct __kernel_timespec ts;
-      timeout_hr_to_ts(op->timeout_hr, &ts);
+      oo_epoll_frc_to_ts(op->timeout_hr, &ts);
       op->rc = efab_linux_sys_epoll_pwait2(op->kepfd,
                                            CI_USER_PTR_GET(op->events),
                                            op->maxevents, &ts, NULL);

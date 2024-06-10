@@ -1528,7 +1528,7 @@ pass_through:
   else
 #endif /* CI_LIBC_HAS_epoll_pwait2 */
     return ci_sys_epoll_pwait(epfd, events, maxevents,
-                              timeout_hr_to_ms(timeout_hr), sigmask);
+                              oo_epoll_frc_to_ms(timeout_hr), sigmask);
 }
 
 

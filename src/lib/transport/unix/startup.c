@@ -590,6 +590,9 @@ citp_transport_init(void)
   }
 
   citp_oo_get_cpu_khz(&citp.cpu_khz);
+  /* Multiplying a timeout in cycles by this will give ns * 2^44. Shift by
+   * 44 so (1<<44) * 1000000 does not overflow. */
+  citp.epoll_frc_to_ns_magic = ((ci_uint64)1ull << 44) * 1000000 / citp.cpu_khz;
   citp.spin_cycles = citp_usec_to_cycles64(CITP_OPTS.ul_spin_usec);
   citp.poll_nonblock_fast_cycles = 
     citp_usec_to_cycles64(CITP_OPTS.ul_poll_nonblock_fast_usec);

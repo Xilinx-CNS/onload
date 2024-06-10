@@ -1780,15 +1780,6 @@ citp_epoll_find_timeout(ci_int64* timeout_hr, ci_uint64* poll_start_frc)
 }
 
 
-static ci_uint64 timeout_hr_to_ns(ci_int64 hr)
-{
-  ci_assert_ge(hr, 0);
-  ci_assert_le((ci_uint64)hr, OO_EPOLL_MAX_TIMEOUT_HR);
-  /* Ensure that a huge hr-timeout is converted to huge ns-timeout */
-  return (hr / citp.cpu_khz) * 1000000 +
-         ((hr % citp.cpu_khz) * 1000000) / citp.cpu_khz;
-}
-
 /* Synchronise state to kernel if:
    - EF_EPOLL_CTL_FAST=0;
    - or we are going to block (timeout != 0 && rc == 0) */
@@ -1816,7 +1807,7 @@ int citp_epoll_wait(citp_fdinfo* fdi, struct epoll_event*__restrict__ events,
   int have_spin = 0;
 
   ci_assert_ge(timeout_hr, 0);
-  ci_assert_le(timeout_hr, OO_EPOLL_MAX_TIMEOUT_HR);
+  ci_assert_le(timeout_hr, OO_EPOLL_MAX_TIMEOUT_FRC);
 
   /* Because we may spin or block while polling we need to report back to
    * onload_ordered_epoll_wait() on the timeout it should use if it polls
@@ -1862,7 +1853,7 @@ int citp_epoll_wait(citp_fdinfo* fdi, struct epoll_event*__restrict__ events,
     else
 #endif /* CI_LIBC_HAS_epoll_pwait2 */
     {
-      int timeout_ms = timeout_hr_to_ms(timeout_hr);
+      int timeout_ms = oo_epoll_frc_to_ms(timeout_hr);
       if( timeout_ms )
         ep->blocking = 1;
       rc = ci_sys_epoll_pwait(fdi->fd, events, maxevents, timeout_ms, sigmask);
@@ -2098,7 +2089,7 @@ no_events:
     if( CITP_OPTS.sleep_spin_usec ) {
       struct oo_epoll1_spin_on_arg op = {};
       op.epoll_fd = fdi->fd;
-      op.timeout_ns = timeout_hr_to_ns(timeout_hr);
+      op.timeout_ns = oo_epoll_frc_to_ns(timeout_hr);
       op.sleep_iter_ns = CITP_OPTS.sleep_spin_usec * 1000;
 
       citp_epoll_ctl_try_sync(ep, fdi, timeout_hr, 0);
@@ -2174,7 +2165,7 @@ no_events:
      * precise nanosecond amount in this epoll3 case. This avoids the whole
      * function call blocking for slightly longer than expected when we have
      * already spun for a bit. */
-    op.timeout_ns = timeout_hr_to_ns(timeout_hr);
+    op.timeout_ns = oo_epoll_frc_to_ns(timeout_hr);
     rc = ci_sys_ioctl(ep->epfd_os, OO_EPOLL1_IOC_BLOCK_ON, &op);
 
     ep->blocking = 0;

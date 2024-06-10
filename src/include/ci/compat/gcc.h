@@ -92,6 +92,10 @@ typedef uintptr_t             ci_uintptr_t;
 
 #endif
 
+#ifdef __SIZEOF_INT128__
+typedef unsigned __int128     ci_uint128;
+typedef __int128              ci_int128;
+#endif /* __SIZEOF_INT128__ */
 
 typedef ci_uint64                       ci_fixed_descriptor_t;
 

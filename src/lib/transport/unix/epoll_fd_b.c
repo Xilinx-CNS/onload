@@ -586,7 +586,7 @@ int citp_epollb_wait(citp_fdinfo* fdi, struct epoll_event *events,
       /* We can always call ci_sys_epoll_pwait, but not every kernel has it.
        * And from UL, there is no way to find the truth, since libc may know
        * about epoll_pwait(). */
-      int timeout_ms = timeout_hr_to_ms(timeout_hr);
+      int timeout_ms = oo_epoll_frc_to_ms(timeout_hr);
       if( sigmask )
         return ci_sys_epoll_pwait(epi->kepfd, events, maxevents, timeout_ms,
                                   sigmask);

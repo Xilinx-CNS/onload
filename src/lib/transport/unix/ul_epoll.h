@@ -272,29 +272,32 @@ struct oo_ul_epoll_state {
 
 /* Maximum timeout_hr we can handle.
  * timeout=-1 is converted to this value. */
-#define OO_EPOLL_MAX_TIMEOUT_HR 0x7fffffffffffffffULL
+#define OO_EPOLL_MAX_TIMEOUT_FRC INT64_MAX
 
+/* Convert a ms timeout to one in cycles. */
 static inline ci_int64 oo_epoll_ms_to_frc(int ms_timeout)
 {
   if( ms_timeout < 0 )
-    return OO_EPOLL_MAX_TIMEOUT_HR;
+    return OO_EPOLL_MAX_TIMEOUT_FRC;
   else
     return (ci_int64)ms_timeout * citp.cpu_khz;
 }
 
 /* Maximum timeout in seconds we could have if running on a 10GHz processor */
-#define OO_EPOLL_MAX_TV_SEC ((OO_EPOLL_MAX_TIMEOUT_HR \
+#define OO_EPOLL_MAX_TV_SEC ((OO_EPOLL_MAX_TIMEOUT_FRC \
                              / (10ULL*1000*1000*1000)) - 1)
 
+/* Convert a timespec to a timeout in cycles */
 static inline ci_int64 oo_epoll_ts_to_frc(const struct timespec *ts)
 {
   if( ts == NULL || ts->tv_sec > OO_EPOLL_MAX_TV_SEC )
-    return OO_EPOLL_MAX_TIMEOUT_HR;
+    return OO_EPOLL_MAX_TIMEOUT_FRC;
   return ts->tv_sec * 1000 * citp.cpu_khz +
          ((ts->tv_nsec * citp.cpu_khz) / 1000000);
 }
 
-static inline int timeout_hr_to_ms(ci_int64 hr)
+/* Convert a in cycles to one in ms. */
+static inline int oo_epoll_frc_to_ms(ci_int64 hr)
 {
   ci_int64 ret;
   if( hr < 0 )
@@ -303,6 +306,18 @@ static inline int timeout_hr_to_ms(ci_int64 hr)
   return CI_MIN(0x7fffffff, ret);
 }
 
+/* Maximum timeout in ns we could have if running on a 10GHz processor */
+#define OO_EPOLL_MAX_TIMEOUT_NS INT64_MAX
+
+/* Convert a timeout in cycles to one in ns. */
+static inline ci_uint64 oo_epoll_frc_to_ns(ci_int64 hr)
+{
+  ci_assert_ge(hr, 0);
+  ci_assert_le((ci_uint64)hr, OO_EPOLL_MAX_TIMEOUT_FRC);
+  /* Ensure that a huge hr-timeout is converted to huge ns-timeout */
+  ci_uint128 ns = (ci_uint128)hr * (ci_uint128)citp.epoll_frc_to_ns_magic >> 44;
+  return (ns > OO_EPOLL_MAX_TIMEOUT_NS) ? OO_EPOLL_MAX_TIMEOUT_NS : (ci_uint64)ns;
+}
 
 extern int citp_epoll_create(int size, int flags) CI_HF;
 extern int citp_epoll_ctl(citp_fdinfo* fdi, int op, int fd,

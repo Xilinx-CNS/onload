@@ -16,14 +16,34 @@
 
 #include <ci/internal/transport_config_opt.h>
 
-
 //#include <onload/primitive_types.h>
 #include <onload/common.h>
-#ifdef __KERNEL__
+
+/* Allow this kernel function to be tested in ul_epoll.c unit tests */
+#if defined(__KERNEL__) || defined(UNIT_TEST_EPOLL)
+
+#if !defined(UNIT_TEST_EPOLL)
 #include <linux/eventpoll.h>
 #else
+#define NSEC_PER_MSEC 1000000L
+#define NSEC_PER_SEC  1000000000L
+#endif /* !defined(UNIT_TEST_EPOLL) */
+
+#include <linux/time_types.h>
+
+/* Convert timeout in cycles to a kernel timespec. */
+static inline void oo_epoll_frc_to_ts(ci_int64 hr, struct __kernel_timespec *ts)
+{
+  ci_int64 nanos = (hr / oo_timesync_cpu_khz) * NSEC_PER_MSEC +
+                   ((hr % oo_timesync_cpu_khz) * NSEC_PER_MSEC)
+                    / oo_timesync_cpu_khz;
+  ts->tv_sec = nanos / NSEC_PER_SEC;
+  ts->tv_nsec = nanos % NSEC_PER_SEC;
+}
+
+#else
 #include <sys/epoll.h>
-#endif
+#endif /* defined(__KERNEL__) || defined(UNIT_TEST_EPOLL) */
 
 /* Array of such structures is used to pass postponed epoll_ctl operations */
 struct oo_epoll_item {

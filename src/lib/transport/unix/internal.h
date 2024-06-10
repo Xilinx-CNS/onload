@@ -62,6 +62,7 @@ typedef struct {
   ci_uint64             poll_fast_cycles;
   ci_uint64             select_nonblock_fast_cycles;
   ci_uint64             select_fast_cycles;
+  ci_uint64             epoll_frc_to_ns_magic;
   ci_uint32             cpu_khz;
 
   enum {
