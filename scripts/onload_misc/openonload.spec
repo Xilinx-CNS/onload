@@ -159,18 +159,11 @@ Provides	: sfc-kmod-symvers = %{kernel}
 AutoReqProv	: no
 
 %if 0%{?have_efct:%have_efct}
-
-%{!?efct_disttag: %global efct_disttag %(
-	# Figure out the right disttag with a script from the Onload source tarball.
-	source <(tar Oxzf %{SOURCE0} %{name}-%{pkgversion}/scripts/shell-fns/disttag)
-	echo -n $(efct_disttag)
-)}
-
-BuildRequires	: kernel-module-xilinx-efct-%{efct_disttag}-%{kernel} >= 1.5.3.0
+BuildRequires	: kernel-module-xilinx-efct-%{dist}-%{kernel} >= 1.4.0.0
 
 %if "%{dist}" == ".el7"
-BuildRequires	: kernel-module-auxiliary-%{efct_disttag}-%{kernel} >= 1.0.4.0
-Requires	: kernel-module-auxiliary-%{efct_disttag}-%{kernel} >= 1.0.4.0
+BuildRequires	: kernel-module-auxiliary-%{dist}-%{kernel} >= 1.0.3.0
+Requires	: kernel-module-auxiliary-%{dist}-%{kernel} >= 1.0.3.0
 %endif
 %endif
 
