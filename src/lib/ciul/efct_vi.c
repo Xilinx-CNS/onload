@@ -464,8 +464,10 @@ void efct_tx_handle_event(ef_vi* vi, ci_qword_t event, ef_event* ev_out)
       ev_out->tx_timestamp.ts_sec++;
     } 
     ev_out->tx_timestamp.ts_nsec = (ptstamp & 0xFFFFFFFF) >> vi->ts_subnano_bits;
-    ev_out->tx_timestamp.ts_nsec &= ~EF_EVENT_TX_WITH_TIMESTAMP_SYNC_MASK;
-    ev_out->tx_timestamp.ts_nsec |= vi->ep_state->evq.sync_flags;
+    ev_out->tx_timestamp.ts_nsec_frac =
+                  ptstamp << (EF_VI_TX_TS_FRAC_NS_BITS - vi->ts_subnano_bits);
+    ev_out->tx_timestamp.ts_flags = vi->ep_state->evq.sync_flags;
+    EF_VI_ASSERT(EF_VI_TX_TS_FRAC_NS_BITS >= vi->ts_subnano_bits);
     ev_out->tx_timestamp.type = EF_EVENT_TYPE_TX_WITH_TIMESTAMP;
     ev_out->tx_timestamp.rq_id = q->ids[(qs->previous - 1) & q->mask];
     ev_out->tx_timestamp.flags = EF_EVENT_FLAG_CTPIO;
