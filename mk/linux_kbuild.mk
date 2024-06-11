@@ -99,10 +99,3 @@ EXTRA_AFLAGS += $(EXTRA_CPPFLAGS)
 ifdef M_NO_OUTLINE_ATOMICS
 EXTRA_CFLAGS += -mno-outline-atomics
 endif
-
-# Linux 4.6 added some object-file validation, which was also merged into
-# RHEL 7.3.  Unfortunately, it assumes that all functions that don't end with
-# a return or a jump are recorded in a hard-coded table inside objtool.  That
-# is not of much use to an out-of-tree driver, and we have far too many such
-# functions to rewrite them, so we turn off the checks.
-OBJECT_FILES_NON_STANDARD := y
