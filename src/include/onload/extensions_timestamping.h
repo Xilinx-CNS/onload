@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
-/* X-SPDX-Copyright-Text: (c) Copyright 2019 Xilinx, Inc. */
+/* SPDX-FileCopyrightText: (c) Copyright 2019-2024 Advanced Micro Devices, Inc. */
 #ifndef __ONLOAD_EXTENSIONS_TIMESTAMPING_H__
 #define __ONLOAD_EXTENSIONS_TIMESTAMPING_H__
 
@@ -8,6 +8,8 @@ extern "C" {
 #endif
 
 /**********************************************************************
+ * Version 1 of Onload extension timestamping.
+ *
  * onload_timestamping_request: request enhanced packet timestamps
  *
  * This can be called instead of setsockopt(SO_TIMESTAMPING) to enable packet
@@ -70,6 +72,77 @@ enum onload_ts_flags {
 };
 
 extern int onload_timestamping_request(int fd, unsigned flags);
+
+/**********************************************************************
+ * Version 2 of Onload extension timestamping.
+ *
+ * Timestamping is set using the Onload custom socket option with
+ * standard flags plus additional Onload extension flag if trailer
+ * timestamps are required.
+ *
+ * The custom ONLOAD_SOF_TIMESTAMPING_STREAM stream timestamping method
+ * is not compatible with v2 Onload extension timestamping; use standard
+ * TCP timestamping instead if extension timestamping benefits are required.
+ *
+ * struct so_timestamping val = {
+ *   .flags = SOF_TIMESTAMPING_TX_HARDWARE
+ *          | SOF_TIMESTAMPING_RX_HARDWARE
+ *          | SOF_TIMESTAMPING_RAW_HARDWARE
+ *          | SOF_TIMESTAMPING_OOEXT_TRAILER
+ * };
+ * setsockopt(fd, SOL_SOCKET, SO_TIMESTAMPING_OOEXT, &val, sizeof val);
+ *
+ * Timestamps are read out of a CMSG packet of type SCM_TIMESTAMPING_OOEXT:
+ *
+ * void handle_cmsg(uint8_t *data, size_t length) {
+ *   struct scm_timestamping_ooext *t, *tend;
+ *
+ *   t = (struct scm_timestamping_ooext *) data;
+ *   tend = t + length / sizeof *t;
+ *
+ *   for (; t != tend; t++) {
+ *     switch (t->type) {
+ *     case SOF_TIMESTAMPING_RX_HARDWARE | SOF_TIMESTAMPING_RAW_HARDWARE:
+ *       handle_rx_oo_ts(t->timestamp);
+ *       // ...
+ *     }
+ *   }
+ * }
+ */
+
+/* Extension socket option type */
+#define SO_OOEXT_BASE 0x000F5300
+#define SO_TIMESTAMPING_OOEXT ((SO_OOEXT_BASE) + 0)
+
+/* Extension CMSG types */
+#define SCM_TIMESTAMPING_OOEXT SO_TIMESTAMPING_OOEXT
+
+/* Extension timestamping option flags.
+ * These fit in an 'int' bitfield. They also need to be stable, so
+ * cannot be allocate up from last known standard flag, therefore
+ * allocate down from top of the word. */
+#define SOF_TIMESTAMPING_OOEXT_LAST    (1U << 31)
+#define SOF_TIMESTAMPING_OOEXT_TRAILER (1U << 31)
+#define SOF_TIMESTAMPING_OOEXT_FIRST   (1U << 31)
+#define SOF_TIMESTAMPING_OOEXT_MASK ((((SOF_TIMESTAMPING_OOEXT_LAST) << 1) - 1) \
+                                     - ((SOF_TIMESTAMPING_OOEXT_FIRST) - 1))
+
+/* Repeated structure within extension CMSG for each type present */
+struct scm_timestamping_ooext {
+  /* Flags indicating which timestamp is represented,
+   * e.g. SOF_TIMESTAMPING_TX_HARDWARE | SOF_TIMESTAMPING_RAW_HARDWARE,
+   *      SOF_TIMESTAMPING_RX_SOFTWARE | SOF_TIMESTAMPING_SOFTWARE or
+   *      SOF_TIMESTAMPING_RX_HARDWARE | SOF_TIMESTAMPING_OOEXT_TRAILER
+   */
+  uint32_t type;
+
+  /* Padding */
+  uint32_t padding;
+
+  /* Onload extension timestamp */
+  struct onload_timestamp timestamp;
+};
+
 
 #ifdef __cplusplus
 }

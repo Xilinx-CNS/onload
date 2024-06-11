@@ -52,6 +52,44 @@ the granularity of timestamping clock is hardware-dependent and
 coarser than the timestamp resolution now available through the API.
 
 
+Revised Onload Extensions API (v2) for timestamping
+---------------------------------------------------
+
+A new version of the Onload Extensions API for timestamping has been added
+to enable applications to interpret extension and standard timestamps
+reliably irrespective of runtime configuration changes by presenting the
+extended timestamps in a new, distinct, CMSG type. The old (v1) form of
+extension timestamping continues to work as before.
+
+To enable the new form, pass standard SO_TIMESTAMPING-style
+SOF_TIMESTAMPING_* flags to a new SO_TIMETAMPING_OOEXT setsockopt option.
+Trailer timestamps can be enabled using the extended flag
+SOF_TIMESTAMPING_OOEXT_TRAILER. For example:
+
+  struct so_timestamping val = {
+    .flags = SOF_TIMESTAMPING_TX_HARDWARE
+           | SOF_TIMESTAMPING_RX_HARDWARE
+           | SOF_TIMESTAMPING_RAW_HARDWARE
+           | SOF_TIMESTAMPING_OOEXT_TRAILER
+  };
+  setsockopt(fd, SOL_SOCKET, SO_TIMESTAMPING_OOEXT, &val, sizeof val);
+
+Timestamps are delivered with a CMSG of type SCM_TIMESTAMPING_OOEXT. Each
+available timestamp in the payload is provided in a
+'struct scm_timestamping_ooext' where the 'type' field has a combination of
+the elemental SOF_TIMESTAMPING_* flags to indicate what it is and the
+'timestamp' field is the sub-nanosecond precision timestamp with sync
+flags of the form 'struct onload_timestamp'. The possible retrieved timestamp
+types are:
+
+  SOF_TIMESTAMPING_RX_SOFTWARE | SOF_TIMESTAMPING_SOFTWARE
+  SOF_TIMESTAMPING_RX_HARDWARE | SOF_TIMESTAMPING_SYS_HARDWARE
+  SOF_TIMESTAMPING_RX_HARDWARE | SOF_TIMESTAMPING_RAW_HARDWARE
+  SOF_TIMESTAMPING_RX_HARDWARE | SOF_TIMESTAMPING_OOEXT_TRAILER
+  SOF_TIMESTAMPING_TX_HARDWARE | SOF_TIMESTAMPING_SYS_HARDWARE
+  SOF_TIMESTAMPING_TX_HARDWARE | SOF_TIMESTAMPING_RAW_HARDWARE
+
+
 Unsupported SN1000 functionality removed
 ----------------------------------------
 

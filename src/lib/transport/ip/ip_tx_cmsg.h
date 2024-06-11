@@ -109,6 +109,16 @@ ci_timestamp_q_pkt_to_iovec(ci_netif* ni, const ci_ip_pkt_fmt* pkt,
   }
 }
 
+static inline struct onload_timestamp ci_oo_ext_timestamp(struct oo_timespec ts)
+{
+  return (struct onload_timestamp) {
+    .sec       = ts.tv_sec,
+    .nsec      = ts.tv_nsec,
+    /* Shift internal fractional 16-bit fractional nanoseconds value to left-
+     * align with the 24-bit fractional nanoseconds of extension interface */
+    .nsec_frac = ((uint32_t) ts.tv_nsec_frac) << 8,
+    .flags     = ts.tv_flags};
+}
 
 static inline int ci_ip_tx_timestamping_to_cmsg(int proto, ci_netif* ni,
                                                   ci_ip_pkt_fmt* pkt,
@@ -141,12 +151,7 @@ static inline int ci_ip_tx_timestamping_to_cmsg(int proto, ci_netif* ni,
       return -EAGAIN;
     }
     else {
-      /* Shift fractional 16-bit fractional nanoseconds value to left align
-       * with the 24-bit fractional nanoseconds value in onload extension. */
-      struct onload_timestamp ts = {pkt->hw_stamp.tv_sec,
-                                    pkt->hw_stamp.tv_nsec,
-                                    ((uint32_t) pkt->hw_stamp.tv_nsec_frac) << 8,
-                                    pkt->hw_stamp.tv_flags};
+      struct onload_timestamp ts = ci_oo_ext_timestamp(pkt->hw_stamp);
       ci_put_cmsg(cmsg_state, SOL_SOCKET, ONLOAD_SCM_TIMESTAMPING,
                   sizeof(ts), &ts);
     }
@@ -187,10 +192,31 @@ static inline int ci_ip_tx_timestamping_to_cmsg(int proto, ci_netif* ni,
      * and don't add additional sections e.g. OPT_ID / CMSG */
     return 0;
   }
+  else if( (s->timestamping_flags & ONLOAD_SOF_TIMESTAMPING_ONLOAD_V2) ) {
+    struct scm_timestamping_ooext ts[ONLOAD_TIMESTAMPING_V2_FLAG_TX_COUNT];
+    int n = 0;
+
+    memset(ts, 0, sizeof(ts));
+    if( (s->timestamping_flags & ONLOAD_SOF_TIMESTAMPING_SYS_HARDWARE) &&
+        (pkt->hw_stamp.tv_flags & OO_TS_FLAG_ACCEPTABLE) ) {
+      ci_assert_lt(n, ONLOAD_TIMESTAMPING_V2_FLAG_TX_COUNT);
+      ts[n].timestamp = ci_oo_ext_timestamp(pkt->hw_stamp);
+      ts[n++].type = ONLOAD_SOF_TIMESTAMPING_TX_HARDWARE
+                   | ONLOAD_SOF_TIMESTAMPING_SYS_HARDWARE;
+    }
+    if( s->timestamping_flags & ONLOAD_SOF_TIMESTAMPING_RAW_HARDWARE ) {
+      ci_assert_lt(n, ONLOAD_TIMESTAMPING_V2_FLAG_TX_COUNT);
+      ts[n].timestamp = ci_oo_ext_timestamp(pkt->hw_stamp);
+      ts[n++].type = ONLOAD_SOF_TIMESTAMPING_TX_HARDWARE
+                   | ONLOAD_SOF_TIMESTAMPING_RAW_HARDWARE;
+    }
+    ci_put_cmsg(cmsg_state, SOL_SOCKET, SCM_TIMESTAMPING_OOEXT,
+                n * sizeof(*ts), &ts);
+  }
   else {
     struct timespec ts[3];
-    memset(ts, 0, sizeof(ts));
 
+    memset(ts, 0, sizeof(ts));
     if( s->timestamping_flags & ONLOAD_SOF_TIMESTAMPING_RAW_HARDWARE ) {
       ts[2].tv_sec = pkt->hw_stamp.tv_sec;
       ts[2].tv_nsec = pkt->hw_stamp.tv_nsec;

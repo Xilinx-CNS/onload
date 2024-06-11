@@ -75,7 +75,8 @@ extern "C" {
 #define ONLOAD_SOF_TIMESTAMPING_STREAM (1 << 23)
 
 /* Use ONLOAD_SCM_TIMESTAMPING_STREAM when decoding error queue from TCP
- * socket.
+ * socket. This is an anomalous definition as typically the SCM_* constants
+ * are equivalent to SO_* options, not SOF_* flags.
  */
 #define ONLOAD_SCM_TIMESTAMPING_STREAM ONLOAD_SOF_TIMESTAMPING_STREAM
 

@@ -16,6 +16,9 @@
 #include "ip_internal.h"
 #include <ci/internal/ip_timestamp.h>
 
+#ifndef __KERNEL__
+#include <linux/errqueue.h>
+#endif
 
 #define LPF "IP CMSG "
 
@@ -320,54 +323,110 @@ void ip_cmsg_recv_timestampns(ci_netif *ni, ci_uint64 timestamp,
 
 #if CI_CFG_TIMESTAMPING
 /**
- * Put a SO_TIMESTAMPING control message into msg ancillary data buffer.
+ * Put a SO_TIMESTAMPING or SO_TIMESTAMPING_OOEXT control message into
+ * msg ancillary data buffer.
  */
 void ip_cmsg_recv_timestamping(ci_netif *ni, const ci_ip_pkt_fmt *pkt,
                                int flags, struct cmsg_state *cmsg_state)
 {
+  struct onload_timestamp trailertime = { 0 };
+  struct onload_timestamp hwtime = { 0 };
+  struct timespec swtime = { 0 };
+
+  /* Get hardware timestamp if required. */
+  if( (flags & ONLOAD_SOF_TIMESTAMPING_ONLOAD &&
+       (flags & ONLOAD_TIMESTAMPING_FLAG_RX_NIC)) ||
+      (flags & (ONLOAD_SOF_TIMESTAMPING_RAW_HARDWARE |
+                ONLOAD_SOF_TIMESTAMPING_SYS_HARDWARE)) )
+    ci_rx_pkt_timestamp_nic(pkt, &hwtime);
+
+  /* Get software timestamp if required. */
+  if( !(flags & ONLOAD_SOF_TIMESTAMPING_ONLOAD) &&
+      flags & ONLOAD_SOF_TIMESTAMPING_SOFTWARE &&
+      pkt->tstamp_frc != 0 )
+    ci_udp_compute_stamp(ni, pkt->tstamp_frc, &swtime);
+
+  /* Get trailer timestamp if required. */
+  if( (flags & ONLOAD_SOF_TIMESTAMPING_ONLOAD &&
+       flags & ONLOAD_TIMESTAMPING_FLAG_RX_CPACKET) ||
+      (flags & ONLOAD_SOF_TIMESTAMPING_ONLOAD_V2 &&
+       flags & ONLOAD_SOF_TIMESTAMPING_TRAILER) )
+    ci_rx_pkt_timestamp_trailer(pkt, &trailertime,
+                                NI_OPTS(ni).rx_timestamping_trailer_fmt);
+
+  /* Populate extension API v1 timestamps */
   if( flags & ONLOAD_SOF_TIMESTAMPING_ONLOAD ) {
     struct onload_timestamp ts[ONLOAD_TIMESTAMPING_FLAG_RX_COUNT];
     int n = 0;
 
     if( flags & ONLOAD_TIMESTAMPING_FLAG_RX_NIC ) {
       ci_assert_lt(n, ONLOAD_TIMESTAMPING_FLAG_RX_COUNT);
-      ci_rx_pkt_timestamp_nic(pkt, &ts[n++]);
+      ts[n++] = hwtime;
     }
     if( flags & ONLOAD_TIMESTAMPING_FLAG_RX_CPACKET ) {
       ci_assert_lt(n, ONLOAD_TIMESTAMPING_FLAG_RX_COUNT);
-      ci_rx_pkt_timestamp_trailer(pkt, &ts[n++],
-                                  NI_OPTS(ni).rx_timestamping_trailer_fmt);
+      ts[n++] = trailertime;
     }
 
-    ci_put_cmsg(cmsg_state, SOL_SOCKET, ONLOAD_SO_TIMESTAMPING,
+    ci_put_cmsg(cmsg_state, SOL_SOCKET, ONLOAD_SCM_TIMESTAMPING,
                 n * sizeof(ts[0]), &ts);
   }
+  /* Populate extension API v2 timestamps */
+  else if( (flags & ONLOAD_SOF_TIMESTAMPING_ONLOAD_V2) ) {
+    struct scm_timestamping_ooext ts[ONLOAD_TIMESTAMPING_V2_FLAG_RX_COUNT];
+    int n = 0;
+
+    memset(ts, 0, sizeof(ts));
+    if( swtime.tv_sec != 0 ) {
+      ci_assert_lt(n, ONLOAD_TIMESTAMPING_V2_FLAG_RX_COUNT);
+      ts[n].timestamp.sec = swtime.tv_sec;
+      ts[n].timestamp.nsec = swtime.tv_nsec;
+      ts[n++].type = ONLOAD_SOF_TIMESTAMPING_RX_SOFTWARE
+                   | ONLOAD_SOF_TIMESTAMPING_SOFTWARE;
+    }
+    if( flags & ONLOAD_SOF_TIMESTAMPING_SYS_HARDWARE &&
+        hwtime.sec != 0 &&
+        hwtime.flags & OO_TS_FLAG_ACCEPTABLE ) {
+      ci_assert_lt(n, ONLOAD_TIMESTAMPING_V2_FLAG_RX_COUNT);
+      ts[n].timestamp = hwtime;
+      ts[n++].type = ONLOAD_SOF_TIMESTAMPING_RX_HARDWARE
+                   | ONLOAD_SOF_TIMESTAMPING_SYS_HARDWARE;
+    }
+    if( flags & ONLOAD_SOF_TIMESTAMPING_RAW_HARDWARE &&
+        hwtime.sec != 0 ) {
+      ci_assert_lt(n, ONLOAD_TIMESTAMPING_V2_FLAG_RX_COUNT);
+      ts[n].timestamp = hwtime;
+      ts[n++].type = ONLOAD_SOF_TIMESTAMPING_RX_HARDWARE
+                   | ONLOAD_SOF_TIMESTAMPING_RAW_HARDWARE;
+    }
+    if( flags & ONLOAD_SOF_TIMESTAMPING_TRAILER &&
+        trailertime.sec != 0) {
+      ci_assert_lt(n, ONLOAD_TIMESTAMPING_V2_FLAG_RX_COUNT);
+      ts[n].timestamp = trailertime;
+      ts[n++].type = ONLOAD_SOF_TIMESTAMPING_RX_HARDWARE
+                   | ONLOAD_SOF_TIMESTAMPING_TRAILER;
+    }
+
+    ci_put_cmsg(cmsg_state, SOL_SOCKET, SCM_TIMESTAMPING_OOEXT,
+                n * sizeof *ts, &ts);
+  }
+  /* Populate standard SO_TIMESTAMPING timestamps */
   else if( (flags & (ONLOAD_SOF_TIMESTAMPING_RAW_HARDWARE |
                      ONLOAD_SOF_TIMESTAMPING_SYS_HARDWARE |
                      ONLOAD_SOF_TIMESTAMPING_SOFTWARE)) ) {
-    struct {
-      struct timespec swtime;
-      struct timespec hwtimesys;
-      struct timespec hwtimeraw;
-    } ts;
-
-    memset(&ts, 0, sizeof(ts));
-    if( flags & ONLOAD_SOF_TIMESTAMPING_SOFTWARE && pkt->tstamp_frc != 0 )
-      ci_udp_compute_stamp(ni, pkt->tstamp_frc, &ts.swtime);
-
-    struct onload_timestamp ots;
+    struct scm_timestamping ts = {{ [0] = swtime }};
     struct timespec nic;
-    ci_rx_pkt_timestamp_nic(pkt, &ots);
-    onload_timestamp_to_timespec(&ots, &nic);
+
+    onload_timestamp_to_timespec(&hwtime, &nic);
 
     if( flags & ONLOAD_SOF_TIMESTAMPING_SYS_HARDWARE &&
-        ots.flags & OO_TS_FLAG_ACCEPTABLE )
-      ts.hwtimesys = nic;
+        hwtime.flags & OO_TS_FLAG_ACCEPTABLE )
+      ts.ts[1] = nic;
 
     if( flags & ONLOAD_SOF_TIMESTAMPING_RAW_HARDWARE )
-      ts.hwtimeraw = nic;
+      ts.ts[2] = nic;
 
-    ci_put_cmsg(cmsg_state, SOL_SOCKET, ONLOAD_SO_TIMESTAMPING, sizeof(ts), &ts);
+    ci_put_cmsg(cmsg_state, SOL_SOCKET, ONLOAD_SCM_TIMESTAMPING, sizeof(ts), &ts);
   }
 
   if( flags & ONLOAD_SOF_TIMESTAMPING_OPT_PKTINFO ) {

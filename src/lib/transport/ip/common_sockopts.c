@@ -678,13 +678,19 @@ int ci_get_sol_socket( ci_netif* netif, ci_sock_cmn* s,
 
 #if CI_CFG_TIMESTAMPING
   case ONLOAD_SO_TIMESTAMPING:
+  case SO_TIMESTAMPING_OOEXT:
     u = s->timestamping_flags;
+
     /* Only report the flags if they were set with `setsockopt`. If the
      * behaviour was overridden with `onload_timestamping_request` then the
      * flags have different meanings which might cause confusion.
      */
     if( u & ONLOAD_SOF_TIMESTAMPING_ONLOAD )
       u = 0;
+
+    /* Clear internal flags */
+    u &= ~ONLOAD_SOF_TIMESTAMPING_ONLOAD_MASK;
+
     goto u_out;
 #endif
 
@@ -1720,12 +1726,14 @@ int ci_set_sol_socket(ci_netif* netif, ci_sock_cmn* s,
 
 #if CI_CFG_TIMESTAMPING
   case ONLOAD_SO_TIMESTAMPING:
+  case SO_TIMESTAMPING_OOEXT:
     if( (rc = opt_not_ok(optval, optlen, unsigned)) )
       goto fail_inval;
     v = ci_get_optval(optval, optlen);
     rc = -EINVAL;
     if( v & ~(ONLOAD_SOF_TIMESTAMPING_MASK |
-              ONLOAD_SOF_TIMESTAMPING_STREAM) )
+              ONLOAD_SOF_TIMESTAMPING_STREAM |
+              SOF_TIMESTAMPING_OOEXT_MASK) )
       goto fail_inval;
     /* We don't currently support any of these */
     if( v & (ONLOAD_SOF_TIMESTAMPING_OPT_STATS |
@@ -1738,6 +1746,9 @@ int ci_set_sol_socket(ci_netif* netif, ci_sock_cmn* s,
     if( (v & ONLOAD_SOF_TIMESTAMPING_STREAM) &&
         ( ! (s->b.state & CI_TCP_STATE_TCP) ||
           ! (v & ONLOAD_SOF_TIMESTAMPING_TX_HARDWARE) ) )
+      goto fail_inval;
+    if( (v & ONLOAD_SOF_TIMESTAMPING_STREAM) &&
+        (optname == SO_TIMESTAMPING_OOEXT) )
       goto fail_inval;
 
     if( (v & ONLOAD_SOF_TIMESTAMPING_TX_HARDWARE) ) {
@@ -1796,6 +1807,9 @@ int ci_set_sol_socket(ci_netif* netif, ci_sock_cmn* s,
 
       ci_wmb(); /* atomic update */
     }
+
+    if( optname == SO_TIMESTAMPING_OOEXT )
+      v |= ONLOAD_SOF_TIMESTAMPING_ONLOAD_V2;
 
     rc = 0;
     s->timestamping_flags = v;

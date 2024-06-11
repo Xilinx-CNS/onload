@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-/* X-SPDX-Copyright-Text: (c) Copyright 2014-2019 Xilinx, Inc. */
+/* X-SPDX-Copyright-Text: (c) Copyright 2014-2024 Xilinx, Inc. */
 /**************************************************************************\
 *//*! \file
 ** <L5_PRIVATE L5_SOURCE>
@@ -90,6 +90,10 @@
 #define TIME_FMT "%" PRIu64 ".%.9" PRIu64 " "
 #define OTIME_FMT "%" PRIu64 ".%.9" PRIu32 " "
 
+/* Picosecond resolution format */
+#define SUBNS_TIME_FMT "%" PRIu64 ".%.9" PRIu32 "%03" PRIu64
+#define SUBNS_TIME_SCALE 1000
+
 /* Assert-like macros */
 #define TEST(x)                                                 \
   do {                                                          \
@@ -117,7 +121,7 @@ struct configuration {
   unsigned short cfg_port;      /* listen port */
   int            cfg_protocol;  /* udp or tcp? */
   unsigned int   cfg_max_packets; /* Stop after this many (0=forever) */
-  int            cfg_ext;       /* Use extension API? */
+  int            cfg_ext;       /* Use extension API? Which version, 1 or 2? */
 };
 
 /* Commandline options, configuration etc. */
@@ -134,7 +138,8 @@ void print_help(void)
          "\t--max\t<num>\tStop after n packets.  "
            "Default: Run forever\n"
 #ifdef ONLOADEXT_AVAILABLE
-         "\t--ext\t\tUse extensions API rather than SO_TIMESTAMPING.\n"
+         "\t--ext\t\tUse extensions API v1 rather than SO_TIMESTAMPING.\n"
+         "\t--ext2\t\tUse extensions API v2 rather than SO_TIMESTAMPING.\n"
 #endif
         );
   exit(-1);
@@ -167,9 +172,10 @@ static void parse_options( int argc, char** argv, struct configuration* cfg )
     { "proto", required_argument, 0, 'P' },
     { "max", required_argument, 0, 'n' },
     { "ext", no_argument, 0, 'e' },
+    { "ext2", no_argument, 0, 'E' },
     { 0, no_argument, 0, 0 }
   };
-  const char* optstring = "i:p:P:n:";
+  const char* optstring = "i:p:P:n:eE";
 
   /* Defaults */
   bzero(cfg, sizeof(struct configuration));
@@ -194,6 +200,9 @@ static void parse_options( int argc, char** argv, struct configuration* cfg )
 #ifdef ONLOADEXT_AVAILABLE
       case 'e':
         cfg->cfg_ext = 1;
+        break;
+      case 'E':
+        cfg->cfg_ext = 2;
         break;
 #endif
       default:
@@ -267,19 +276,28 @@ static void do_ioctl(struct configuration* cfg, int sock)
 /* This routine selects the correct socket option to enable timestamping. */
 static void do_ts_sockopt(struct configuration* cfg, int sock)
 {
+  struct so_timestamping enable = {
+    .flags = SOF_TIMESTAMPING_RX_HARDWARE |
+             SOF_TIMESTAMPING_RAW_HARDWARE |
+             SOF_TIMESTAMPING_SYS_HARDWARE |
+             SOF_TIMESTAMPING_SOFTWARE
+  };
+  int optname = SO_TIMESTAMPING;
+
   printf("Selecting hardware timestamping mode.\n");
 
 #ifdef ONLOADEXT_AVAILABLE
-  if( cfg->cfg_ext )
+  if( cfg->cfg_ext == 2 ) {
+    enable.flags |= SOF_TIMESTAMPING_OOEXT_TRAILER;
+    optname = SO_TIMESTAMPING_OOEXT;
+  }
+
+  if( cfg->cfg_ext == 1 )
     TRY(onload_timestamping_request(sock, ONLOAD_TIMESTAMPING_FLAG_RX_NIC |
                                           ONLOAD_TIMESTAMPING_FLAG_RX_CPACKET));
   else
 #endif
-  {
-    int enable = SOF_TIMESTAMPING_RX_HARDWARE | SOF_TIMESTAMPING_RAW_HARDWARE |
-                 SOF_TIMESTAMPING_SYS_HARDWARE | SOF_TIMESTAMPING_SOFTWARE;
-    TRY(setsockopt(sock, SOL_SOCKET, SO_TIMESTAMPING, &enable, sizeof(int)));
-  }
+    TRY(setsockopt(sock, SOL_SOCKET, optname, &enable, sizeof enable));
 }
 
 static int add_socket(struct configuration* cfg)
@@ -339,6 +357,50 @@ static void print_time(struct timespec* ts)
 }
 
 
+#ifdef ONLOADEXT_AVAILABLE
+static const char *sof_ts_dir(int sof)
+{
+  if( sof & (SOF_TIMESTAMPING_RX_HARDWARE |
+             SOF_TIMESTAMPING_RX_SOFTWARE) )
+    return "rx";
+  else if( sof & (SOF_TIMESTAMPING_TX_HARDWARE |
+                  SOF_TIMESTAMPING_TX_SOFTWARE) )
+    return "tx";
+  else
+    return "?x";
+}
+
+static const char *sof_ts_type(int sof)
+{
+  if( sof & SOF_TIMESTAMPING_SOFTWARE )
+    return "sw";
+  else if( sof & SOF_TIMESTAMPING_SYS_HARDWARE )
+    return "xfrm";
+  else if( sof & SOF_TIMESTAMPING_RAW_HARDWARE )
+    return "hw";
+  else if( sof & SOF_TIMESTAMPING_OOEXT_TRAILER )
+    return "trailer";
+  else
+    return "?";
+}
+
+/* Render extension v2 timestamp */
+static void print_time_ext2(struct scm_timestamping_ooext* ts)
+{
+  printf(" %s.%s " SUBNS_TIME_FMT " %c%c%s",
+         sof_ts_dir(ts->type),
+         sof_ts_type(ts->type),
+         ts->timestamp.sec,
+         ts->timestamp.nsec,
+         (SUBNS_TIME_SCALE * ((uint64_t) ts->timestamp.nsec_frac)) >> 24,
+         ts->timestamp.flags & ONLOAD_TS_FLAG_CLOCK_SET     ? 's' : '-',
+         ts->timestamp.flags & ONLOAD_TS_FLAG_CLOCK_IN_SYNC ? 'S' : '-',
+         ts->timestamp.flags & ONLOAD_TS_FLAG_ACCEPTABLE    ?
+           u8"\u2714" : u8"\u2718");
+}
+#endif
+
+
 /* Given a packet, extract the timestamp(s) */
 static void handle_time(struct msghdr* msg, struct configuration* cfg)
 {
@@ -355,15 +417,26 @@ static void handle_time(struct msghdr* msg, struct configuration* cfg)
       break;
     case SO_TIMESTAMPING:
 #ifdef ONLOADEXT_AVAILABLE
-      if( cfg->cfg_ext ) {
+      if( cfg->cfg_ext == 1 ) {
         struct onload_timestamp* ts = (struct onload_timestamp*) CMSG_DATA(cmsg);
-        printf("timestamps " OTIME_FMT OTIME_FMT "\n",
+        printf("ext v1 timestamps " OTIME_FMT OTIME_FMT "\n",
           ts[0].sec, ts[0].nsec, ts[1].sec, ts[1].nsec);
         return;
       }
 #endif
       ts = (struct timespec*) CMSG_DATA(cmsg);
       break;
+#ifdef ONLOADEXT_AVAILABLE
+    case SO_TIMESTAMPING_OOEXT:
+      struct scm_timestamping_ooext *t, *tend;
+      t = (struct scm_timestamping_ooext *) CMSG_DATA(cmsg);
+      tend = t + cmsg->cmsg_len / sizeof *t;
+      printf("ext v2 timestamps");
+      for (; t != tend; t++)
+        print_time_ext2(t);
+      printf("\n");
+      return;
+#endif
     default:
       /* Ignore other cmsg options */
       break;

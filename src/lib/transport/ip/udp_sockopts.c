@@ -659,6 +659,33 @@ ci_inline int __set_socket_opt(citp_socket* ep, ci_fd_t sock, int level,
     ci_sys_setsockopt(sock, level, name, v, len) : -1;
 }
 
+ci_inline int ci_udp_set_filtered_socket_opt(citp_socket* ep, ci_fd_t sock, int level,
+                                             int name, const void* v, socklen_t len )
+{
+  union {
+    struct {
+      int flags;
+      int bind_phc;
+    } so_timestamping;
+  } filtered_val;
+
+  if( len <= sizeof filtered_val ) {
+    if( name == SO_TIMESTAMPING_OOEXT &&
+        len >= sizeof filtered_val.so_timestamping.flags ) {
+
+      /* Remove v2 extension options for kernel */
+      memcpy(&filtered_val, v, len);
+      filtered_val.so_timestamping.flags &= ~(
+        ONLOAD_SOF_TIMESTAMPING_ONLOAD_MASK |
+        SOF_TIMESTAMPING_OOEXT_MASK);
+      v = &filtered_val;
+      name = SO_TIMESTAMPING;
+    }
+  }
+
+  return __set_socket_opt(ep, sock, level, name, v, len);
+}
+
 int ci_udp_setsockopt(citp_socket* ep, ci_fd_t fd, int level,
 		      int optname, const void *optval, socklen_t optlen )
 {
@@ -674,7 +701,7 @@ int ci_udp_setsockopt(citp_socket* ep, ci_fd_t fd, int level,
   ** on a per-call basis if necessary. */
   os_sock = ci_get_os_sock_fd(fd);
   ci_assert(CI_IS_VALID_SOCKET(os_sock));
-  rc = __set_socket_opt(ep, os_sock, level, optname, optval, optlen);
+  rc = ci_udp_set_filtered_socket_opt(ep, os_sock, level, optname, optval, optlen);
   if( rc == CI_SOCKET_ERROR &&
       ! ci_setsockopt_os_fail_ignore(ep->netif, ep->s, errno, level,
                                      optname, optval, optlen) ) {

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Copyright 2019-2020 Xilinx, Inc. */
+/* SPDX-FileCopyrightText: (c) Copyright 2019-2024 Advanced Micro Devices, Inc. */
 #ifndef __CI_INTERNAL_IP_TIMESTAMP_H__
 #define __CI_INTERNAL_IP_TIMESTAMP_H__
 
@@ -7,10 +7,11 @@
 #include <onload/extensions_timestamping.h>
 
 #if CI_CFG_TIMESTAMPING
-/* The following values need to match their counterparts in
- * linux kernel header linux/net_tstamp.h
- */
 enum {
+  /* PART 1
+   * The following values need to match their counterparts in
+   * linux kernel header linux/net_tstamp.h
+   */
   ONLOAD_SOF_TIMESTAMPING_TX_HARDWARE = (1<<0),
   ONLOAD_SOF_TIMESTAMPING_TX_SOFTWARE = (1<<1),
   ONLOAD_SOF_TIMESTAMPING_RX_HARDWARE = (1<<2),
@@ -30,15 +31,53 @@ enum {
   ONLOAD_SOF_TIMESTAMPING_OPT_ID_TCP = (1<<16),
 
   ONLOAD_SOF_TIMESTAMPING_LAST = ONLOAD_SOF_TIMESTAMPING_OPT_ID_TCP,
+  /* All bits used in part 1 */
   ONLOAD_SOF_TIMESTAMPING_MASK = (ONLOAD_SOF_TIMESTAMPING_LAST << 1) - 1,
+
+  /* PART 2
+   * The following values control how timestamping option flags are handled,
+   * and what they mean.
+   */
 
   /* Indicates that the behaviour has been overridden by the extension API,
    * onload_timestamping_request(). If set, then the lower bits contain
    * onload_timestamping_flags values, not the ONLOAD_SOF_* values defined here.
    */
   ONLOAD_SOF_TIMESTAMPING_ONLOAD = (ONLOAD_SOF_TIMESTAMPING_LAST << 1),
+
+  /* Indicates that Onload extension API v2 timestamps have been requested.
+   * The timestamps will use the extended CMSG format but option bits will
+   * otherwise be treated as found above.
+   */
+  ONLOAD_SOF_TIMESTAMPING_ONLOAD_V2 = (ONLOAD_SOF_TIMESTAMPING_LAST << 2),
+
+  ONLOAD_SOF_TIMESTAMPING_ONLOAD_LAST = ONLOAD_SOF_TIMESTAMPING_ONLOAD_V2,
+   /* All bits used in part 2 */
+  ONLOAD_SOF_TIMESTAMPING_ONLOAD_MASK = (((ONLOAD_SOF_TIMESTAMPING_ONLOAD_LAST << 1) - 1)
+                                         & (~(ONLOAD_SOF_TIMESTAMPING_MASK))),
+
+  /* PART 3
+   * Onload extension flags. Used with extension API v2.
+   */
+  ONLOAD_SOF_TIMESTAMPING_TRAILER = SOF_TIMESTAMPING_OOEXT_TRAILER,
 };
 
+/* Ensure no overlapping bits from three parts of flags. */
+CI_BUILD_ASSERT((ONLOAD_SOF_TIMESTAMPING_ONLOAD_MASK & SOF_TIMESTAMPING_OOEXT_MASK) == 0);
+CI_BUILD_ASSERT((ONLOAD_SOF_TIMESTAMPING_ONLOAD_MASK & ONLOAD_SOF_TIMESTAMPING_MASK) == 0);
+CI_BUILD_ASSERT((SOF_TIMESTAMPING_OOEXT_MASK & ONLOAD_SOF_TIMESTAMPING_MASK) == 0);
+
+/* ... or the STREAM timestamping option. */
+CI_BUILD_ASSERT(((ONLOAD_SOF_TIMESTAMPING_ONLOAD_MASK |
+                  ONLOAD_SOF_TIMESTAMPING_MASK |
+                  SOF_TIMESTAMPING_OOEXT_MASK) & ONLOAD_SOF_TIMESTAMPING_STREAM) == 0);
+
+/* Ideally also check that all the kernel flags are covered,
+ * but we don't include the definitions currently. */
+/* CI_BUILD_ASSERT((ONLOAD_SOF_TIMESTAMPING_MASK & SOF_TIMESTAMPING_MASK) == \
+ *                 SOF_TIMESTAMPING_MASK); */
+
+/* Constants to suport v1 Onload extension API implementation. */
 enum {
   ONLOAD_TIMESTAMPING_FLAG_TX_MASK = ONLOAD_TIMESTAMPING_FLAG_TX_NIC,
   ONLOAD_TIMESTAMPING_FLAG_RX_MASK = ONLOAD_TIMESTAMPING_FLAG_RX_NIC |
@@ -50,6 +89,26 @@ enum {
 
   ONLOAD_TIMESTAMPING_FLAG_TX_COUNT = 1,
   ONLOAD_TIMESTAMPING_FLAG_RX_COUNT = 2,
+};
+
+/* Constants to suport v2 Onload extension API implementation. */
+
+/* Meaningful receive flag combinations:
+     RX software timestamp
+     RX hardware timestamp
+     RX hardware timestamp gated by validity sync flags
+     RX trailer timestamp
+ */
+enum {
+  ONLOAD_TIMESTAMPING_V2_FLAG_RX_COUNT = 4,
+};
+
+/* Meaningful and supported transmit flag combinations:
+     TX hardware timestamp
+     TX hardware timestamp gated by validity sync flags
+ */
+enum {
+  ONLOAD_TIMESTAMPING_V2_FLAG_TX_COUNT = 2,
 };
 
 struct ci_scm_ts_pktinfo {
