@@ -1,249 +1,63 @@
-Onload-8.1.3.40
-===============
+Onload-9.0.0
+============
 
- This is an update release of Onload to fix various bugs in
- OpenOnload-8.1.2.26, add version 5.3.18.1012 of the sfc net driver
- and update the supported operating system list.
+ These release notes are a work in progress and have no validity prior to
+ forming part of an Onload release.
 
- Please see the ChangeLog for a full list of changes.
+ This is a feature release of Onload with modernised internal interfaces
+ between software components (control plane, TCPDirect and sfc net driver),
+ adding new features and support for new operating systems and kernels since
+ the earlier OpenOnload-8.1.x releases.
 
-
-Linux distribution support
---------------------------
-
- This package can be installed on:
- - Red Hat Enterprise Linux 7.9
- - Red Hat Enterprise Linux 8.4 - 8.10
- - Red Hat Enterprise Linux 9.0 - 9.4
- - Canonical Ubuntu Server LTS 20.04, 22.04 and 24.04
- - Debian 11 "Bullseye"
- - Debian 12 "Bookworm"
- - Linux kernels 4.15 - 6.9
-
-
-Notice of removal of unsupported SN1000 functionality
------------------------------------------------------
-
-Future feature releases of onload will no longer include the unsupported
-SN1000 functionality or the SN1000-specific experimental onload extensions
-hlrx API defined in extensions_zc_hlrx.h.
-
-
-Alveo X3522 net driver version
-------------------------------
-
-X3522 users should upgrade the X3522 net driver to v1.6.3, which is
-the only version supported with this version of Onload.
-
-
-Onload Operator for Kubernetes and OpenShift
---------------------------------------------
-
-A major new version of the Onload Operator for Kubernetes and OpenShift has
-been released. Version 3.0 of the operator should be used for orchestrating
-the deployment of Onloaded workloads in supported environments with the Multus
-CNI. Version 2.0 and earlier are obsolete. Release notes area available at
-<https://github.com/Xilinx-CNS/kubernetes-onload/blob/master/ReleaseNotes.md>.
-
-
-Onload-8.1.2.26
-===============
-
- This is an update release of Onload to fix various bugs in
- OpenOnload-8.1.1.17, add version 5.3.16.1004 of the sfc net driver
- and support recent operating system updates.
+ An updated version 6.0.0.1000 of the sfc net driver is included for
+ X2-based network cards.
 
 
 Linux distribution support
 --------------------------
 
  This package can be installed on:
- - Red Hat Enterprise Linux 7.9
- - Red Hat Enterprise Linux 8.4 - 8.9
- - Red Hat Enterprise Linux 9.0 - 9.3
- - SuSE Linux Enterprise Server 15 SP4 - SP5
- - Canonical Ubuntu Server LTS 20.04 and 22.04
- - Debian 11 "Bullseye"
+ - Red Hat Enterprise Linux 8.6 - 8.10
+ - Red Hat Enterprise Linux 9.2 - 9.4
+ - Canonical Ubuntu Server LTS 22.04 and 24.04
  - Debian 12 "Bookworm"
- - Linux kernels 4.15 - 6.4
+ - Linux kernels 5.11 - 6.9
 
 
-Deprecation of Red Hat Enterprise Linux 7
------------------------------------------
+Sub-nanosecond timestamp resolution
+-----------------------------------
 
-Future feature releases of Onload will not be supported on version 7.x of
-Red Hat Enterprise Linux. RHEL 7 users are advised to migrate to
-EnterpriseOnload 8.1 for long term support on RHEL 7.9. Please contact
-your sales representative or <nic-sales@amd.com> for more information.
+Onload and ef_vi now internally process hardware timestamps with
+sub-nanosecond resolution.
 
+Timestamps retrieved via the Onload Extensions API now have the fractional
+nanosecond part populated for hardware timestamps and an additional field
+providing the associated timestamping flags. See extensions_timestamping.h
+for details.
 
-Interface names may change (but not since Onload 8.x)
------------------------------------------------------
+For ef_vi applications using timestamps:
+ - ef_vi_receive_get_precise_timestamp() is the new preferred interface to
+   obtain receive timestamps for all NICs. This populates an ef_precisetime
+   object that includes a fractional nanosecond part and sync flags.
+ - The sync flags associated with a transmit timestamp should continue to
+   be accessed with the EF_EVENT_TX_TIMESTAMP_SYNC_FLAGS macro but it will
+   no longer be possible to read the low order nanosecond bits to obtain the
+   same flags as they now contain the full integral nanoseconds part.
+ - The EF_EVENT_TX_WITH_TIMESTAMP_NSEC_FRAC16 macro provides access to the
+   fractional nanosecond part of an event as a 16-bit quantity. For example,
+   (uint16_t) 0x8000 represents half a nanosecond.
 
-Onload 8.x includes the v5.x sfc net driver. When updating from the in-tree
-sfc driver or an earlier Onload release (7.x or earlier), some OS
-configurations may result in interface names changing.
-For more details please see
-<https://support.xilinx.com/s/article/000034471?language=en_US>
-
-
-Onload-8.1.1.17
-===============
-
- This is an update release of Onload to fix various bugs in
- OpenOnload-8.1.0.15 and extend support for new kernels.
-
-
-Linux distribution support
---------------------------
-
- This package can be installed on:
- - Red Hat Enterprise Linux 7.9
- - Red Hat Enterprise Linux 8.4 - 8.8
- - Red Hat Enterprise Linux 9.0 - 9.2
- - SuSE Linux Enterprise Server 15 SP4 - SP5
- - Canonical Ubuntu Server LTS 20.04 and 22.04
- - Debian 11 "Bullseye"
- - Debian 12 "Bookworm"
- - Linux kernels 4.15 - 6.4
+For X2 and X3 the resolution of the timestamp value is 1/4 ns but note that
+the granularity of timestamping clock is hardware-dependent and
+coarser than the timestamp resolution now available through the API.
 
 
-kernel.org Linux kernels 6.2 - 6.4
-----------------------------------
+Unsupported SN1000 functionality removed
+----------------------------------------
 
- In addition to suporting new Linux kernel 6.4, this update includes
- support for kernels 6.2 and 6.3 which was intended for but not present
- in the Onload-8.1.0.15 release.
-
-
-Querying X3 queue exclusivity status
-------------------------------------
-
- The ef_vi_filter_query API now gives the exclusivity status of a given filter.
- This is done via the EF_FILTER_IS_EXCLUSIVE flag.
+Functionality for the unsupported SN1000 adapter and SN1000-specific
+experimental onload extensions hlrx API defined in extensions_zc_hlrx.h have
+been removed.
 
 
-Onload-8.1.0.15
-===============
-
- This is a feature release of Onload with extended support for the
- Alveo™ XtremeScale™ X3522 low latency network adapter and added support for
- new operating systems and kernels.
-
- Various features and fixes since OpenOnload-8.0.2.51 are included and
- version 5.3.14.1019 of the sfc net driver for X2-based network cards.
-
-
-Linux distribution support
---------------------------
-
- This package can be installed on:
- - Red Hat Enterprise Linux 7.9
- - Red Hat Enterprise Linux 8.4 - 8.8
- - Red Hat Enterprise Linux 9.0 - 9.2
- - SuSE Linux Enterprise Server 15 SP4 - SP5
- - Canonical Ubuntu Server LTS 20.04 and 22.04
- - Debian 11 "Bullseye"
- - Debian 12 "Bookworm"
- - Linux kernels 4.15 - 6.3
-
-
-Alveo X3522
------------
-
-Onload on the Alveo X3522 requires a compatible net driver version from
-https://www.xilinx.com/products/boards-and-kits/alveo/x3.html#software such
-as v1.5.2.0 at the time of writing. Older kernels such as on RHEL 7.9 and
-RHEL 8.4 also require the auxiliary bus driver to be installed (available
-from the same download page). See X3522 released notes and documentation.
-
-
-Controlling exclusive access to X3 Rx queues
---------------------------------------------
-
-Onload-8.1 introduces a new mechanism for enabling users to reserve
-a hardware receive queue for a given singular application. This
-mechanism is currently only supported on X3522 Network Cards.
-
-This is via a new filter flag (EF_FILTER_FLAG_EXCLUSIVE_RXQ)
-that is applied via ef_filter_spec_init. With this change,
-users can ensure the following properties for their application.
-
-1) Other applications will be unable to snoop on traffic filtered to this
-   application.
-2) This application can guarantee that it will not receive any packets
-   for which it did not explicitly add a filter.
-
-In addition, this version of Onload introduces a new function,
-ef_filter_spec_set_dest(). This API enables the user to specify which hardware
-receive queue an application can listen on.
-
-Due to the additional granularity afforded by the above granular controls,
-this version has necessitated the deprecation of the following broader EF_VI
-application flags.
-
-- EF_VI_EFCT_UNIQUEUE
-- EF_VI_RX_EXCLUSIVE
-
-Further details of specific exclusivity conditions can be found under the
-EF_FILTER_FLAG_EXCLUSIVE_RXQ documentation.
-
-
-Hardware filter IDs on X3522
-----------------------------
-
-New features have been added to ef_vi to allow applications to reuse the result
-of the hardware packet parsing and filtering which X3 has done on rx. The new
-ef_vi_filter_query() will return the ID which the NIC has allocated for a
-previously-added filter, which will match the ef_event.rx_ref.filter_id field
-returned by an ef_vi_poll() call.
-
-Note that ef_vi will not always use on-NIC filtering to satisfy a call to
-ef_vi_filter_add(), and so ef_vi_filter_query() has the ability to report that
-no filter ID is available; applications should be written to be robust to this
-scenario.
-
-
-IPv6 on X3522
--------------
-
-When using IPv6 with an onload accelerated socket on X3522 received IPv6
-fragments will be dropped.
-
-
-Transmit path warming on X3522
-------------------------------
-
-Onload-8.1 adds new features to allow the transmit code path to be exercised
-without sending any data on the wire. This can potentially improve latency when
-transmitting after a period of inactivity, as recently executed code is more
-likely to be cached. This functionality is available via both ef_vi and
-TCPDirect APIs.
-
-ef_vi: Use efct_vi_start_transmit_warm() and efct_vi_stop_transmit_warm() to
-start and stop warming. Call transmit functions while warming to exercise the
-code. These functions are only usable for EFCT (X3) NICs.
-
-TCPDirect: Use zft_send_single_warm() and zfut_send_single_warm(). These
-functions are not new, but Onload-8.1 extends them to be usable for any NIC
-architecture including EFCT (X3).
-
-
-TCPDirect
----------
-
-Since v8.0.0, TCPDirect has been provided in a separately released package
-sharing the same base version number (x.y.z) as the Onload version with which
-it must be used.
-
-
-Deprecation of RHEL 7
----------------------
-
-Future feature releases of OpenOnload may not include support for Red Hat
-Enterprise Linux 7.x. Long Term Support for Onload 8.1 including on RHEL 7.9
-will be available in the form of EnterpriseOnload 8.1. Please ask your sales
-representative for details.
-
-
-(c) Copyright 2023-2024 Advanced Micro Devices, Inc.
+(c) Copyright 2024 Advanced Micro Devices, Inc.

@@ -29,7 +29,7 @@ Status of this file
 Supported platforms
 ===================
 
- Linux kernels from 4.15.
+ Linux kernels from 5.11.
 
  The following processor architecture is supported:
  - amd64/em64t (support for AMD processors prior to Zen is deprecated)
