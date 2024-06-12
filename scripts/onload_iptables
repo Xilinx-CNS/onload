@@ -238,7 +238,8 @@ def GetBits( bits ):
 def ComprehensibleIpRule( d, strict, swap ):
 	''' Turn a map of iptable rule pieces into a map which includes all our fields for enforcment, or raise a ValueError if it cannot be done. '''
 	global use_verbose_iptables
-	understood = [ 'tcp', 'udp', '/*' ]
+        # We accept either the textual name of the proto or the numeric id
+	understood = [ 'tcp', 'udp', '6', '17', '/*' ]
 	# The common error case of no action provided raises a more comprehensible
 	# error message from SysFsAction than the one that would be raised here - so check ift first
 	SysFsAction( d['action'] )

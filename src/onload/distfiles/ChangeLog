@@ -1,5 +1,374 @@
-This is an unsupported version of Onload from https://github.com/Xilinx-CNS/onload
-----------------------------------------------------------------------------------
+onload-8.1.3.40
+---------------
+
+Update sfc net driver to v5.3.18.1012
+
+Add support for:
+ - Red Hat Enterprise Linux 8.10
+ - Red Hat Enterprise Linux 9.4
+ - Canonical Ubuntu Server LTS 24.04
+ - recent kernel.org Linux kernels (up to 6.9)
+
+The following operating system becomes untested and unsupported:
+ - SuSE Linux Enterprise Server
+
+Changes:
+
+#178: fix possible rare issue with packet injection to kernel
+#182: match listen() backlog handling to recent kernels, adding somaxconn
+#188/189: various TCP fixes affecting performance
+#197: fix nginx profile to parse for -s option
+#198: align behaviour with kernel for 0xFFFF TCP and UDP checksums
+#220: extend scope of splice() support
+ON-4046: allow HW timestamps to be enabled in onload_tcpdump
+ON-14055: fix stack creation after NIC unplug
+ON-14128: fix use of special filter types with ef_vi and RSS
+ON-14321: X3: provide receive queue stats through debugfs
+ON-14322: X3: show count of skipped superbufs in stackdump
+ON-14758: check for presence of 'which' command before use in scripts
+ON-15198: X3: keep superbuf references if application sleeps, avoiding crash
+ON-15234: X3: use software filtering when hw filters exhausted
+ON-15353: avoid intercepting close() of memfd files, affecting DNS lookups
+ON-15416: retry Onload stack allocation if non-fatal signal interrupts it
+ON-15450: fix missing CMSG section for matching onload extension Tx timestamps
+ON-15478: avoid potential context switch with RCU lock held
+ON-15484: fix link paths for solar_clusterd
+ON-15514: X3: fix net driver module RPM dependency name
+ON-15515: treat failure to read process env as non-fatal in stackdump
+ON-15546: fix segfault on process exit in some cases
+ON-15566: use exclusive context with ef_vi RSS set when available
+ON-15590: fix issue preventing onload from identifying local addresses
+ON-15657: fix potential issue causing interrupts to stop being generated
+ON-15696: CVE-2024-2201: extend syscall dispatch code for x86_64
+ON-15735: mibdump: report base interface for ipvlan
+ON-15775: fix segfault in onload_stackdump lots
+ON-15779: X3: Avoid theoretical situation where interrupt prime may be missed
+ON-15789: ensure evq_prime_deferred is consistent when doing prime in userspace
+ON-15801: fix resource leak in onload_stackump
+
+
+onload-8.1.2.26
+---------------
+
+Update sfc net driver to v5.3.16.1004
+
+Add support for:
+ - Red Hat Enterprise Linux 8.9
+ - Red Hat Enterprise Linux 9.3
+
+Bug fixes:
+
+    #171: transport/ip: re-check TCP state when spinning
+ON-14314: add stackdump universe
+ON-14712: use write syscall to report mprotect failure
+ON-15034: fix crash when using onload_move_fd under packet buffer pressure
+ON-15058: extend data-polling-ahead-of-event timeout to reduce (esp. X3) latency
+ON-15166: only build test for C++ startup where C++ available
+ON-15266: fix control plane limitation of 16 hardware ports (now 30).
+ON-15358: fix close trampoline compatibility issue with libhugetlbfs
+ON-15366: do a full poll when determining WODA ordering limit
+
+
+onload-8.1.1.17
+---------------
+
+Add support for:
+ - recent kernel.org kernel versions (up to 6.4)
+
+Bug fixes:
+
+ON-14479: return exclusivity status in ef_vi_filter_query
+ON-14817: avoid reporting error when huge page allocation interrupted
+ON-14844: avert rare negative congestion window in delegated sends
+ON-15084: fix missing compat to support kernel.org kernels 6.2 and 6.3
+ON-15086: allow installation of multiple multicast filters on X3
+ON-15102: fix X3 MAC+VLAN filters
+ON-15104: avoid falling back to shared net driver queue for exclusive filter
+ON-15105: ensure exact HW filter can be installed for exclusive queues
+ON-15108: fix propagation of flags with special filter types
+ON-15115: avoid trying to attach to an RxQ with kernel block filters on X3
+
+
+onload-8.1.0.15
+---------------
+
+Update sfc net driver to v5.3.14.1019
+
+Add support for:
+ - Red Hat Enterprise Linux 8.8
+ - Red Hat Enterprise Linux 9.2
+ - SuSE Linux Enterprise Server 15 SP5
+ - recent kernel.org kernel versions (up to 6.3)
+ - Debian 12 "Bookworm"
+
+Remove support for:
+ - Red Hat Enterprise Linux 7.8
+ - Red Hat Enterprise Linux 8.2 - 8.3
+ - SuSE Linux Enterprise Server 15 SP1 - SP3
+ - Debian 10 "Buster"
+
+Features:
+
+ ON-9348: support SOF_TIMESTAMPING_OPT_ID(_TCP)
+ON-14349: support MAC filters on X3 where available
+ON-14466: add HAVE_EFCT=0|1 to require or exclude support for X3 driver
+ON-14479: add ef_filter_set_dest() API to control exclusive use of X3 queues
+ON-14521: extend tx_timestamping example to process rx while awaiting tx tstamps
+ON-14602: determine X3 resource limits and capabilities at runtime
+ON-14617: deprecate EF_CHALLENGE_ACK_LIMIT in favour of EF_INVALID_ACK_RATELIMIT
+ON-14658: extract sub-ns extension from trailer timestamps
+ON-14799: provide transmit warming support in ef_vi for X3
+ON-14801: extend trader sim example to support X3
+ON-14923: trim core dump size to avoid dumping unused X3 buffers
+
+Bug fixes:
+
+    #122: udp_recv: return real length if MSG_TRUNC is set in flags
+ON-13557: improve reporting on values of EF_CP_SYNRECV_MAX and EF_MAX_ENDPOINTS
+ON-14072: comprehensively fix onload_tcpdump signal handling
+ON-14165: fix resolution of X3 dependencies especially on Debian
+ON-14171: fix segfaults accelerating IPv6 traffic on X3
+ON-14434: fix resolution of vm pages avoiding kernel fault
+ON-14528: fix jumbled stackdump output in some cases
+ON-14572: flush Rx queue more proactively, avoiding hanging reference at unload
+ON-14576: fix onload exit handlers to avoid hang affecting library destructors
+ON-14578: avoid unloading drivers when uninstalling dkms package
+ON-14590: ensure dup2/dup3 interrupts blocking operations
+ON-14613: fix incorrect return code propagation for close()
+ON-14623: fix error managing large numbers of packet buffers leading to panic
+ON-14629: avoid potential misordering with EF_WODA_SINGLE_INTERFACE=1
+ON-14655: fix discarding of X3 CTPIO transmissions for underflow poison
+ON-14679: report VI allocator allocation failure when given no VIs
+ON-14802: fix crash due to 32-bit overflow if one VI attached to >4 X3 Rx queues
+ON-14803: align Rx queue dimensions between X3 driver and Onload
+ON-14874: limit SO_RCVBUF and SO_SNDBUF to INT_MAX/2
+
+
+onload-8.0.2.51
+---------------
+
+Add support for:
+ - Red Hat Enterprise Linux 8.7
+ - Red Hat Enterprise Linux 9.1
+ - recent kernel.org kernel versions (up to 5.18)
+ - gcc-12 compiler
+
+Features:
+
+ON-14496: add receive_set_discards to control which traffic is discarded
+
+Bugs fixed:
+
+ON-11315: avoid benign errors about failure to send synthetic uevent
+ON-14118: X3522: avoid consuming Tx resources when not needed
+ON-14420: X3522: fix onload_stackump vi_stats failure
+ON-14441: fix onload_tcpdump shutdown on SIGKILL
+ON-14450: fix segfault during CTPIO
+ON-14454: avoid potential hang on app startup on RHEL7
+
+
+onload-8.0.1.39
+---------------
+
+Update sfc net driver to v5.3.13.1006
+
+Remove support for:
+ - Canonical Ubuntu Server 21.10
+
+Add support for:
+ - Alveo™ XtremeScale™ X3522 low latency network adapter
+ - SuSE Linux Enterprise Server 15 SP4
+ - recent kernel.org kernel versions (up to 5.17)
+
+Bugs fixed:
+
+ON-13611: fix races causing fd table corruption due to resolver operations
+ON-14228: discard jumbo fragments properly, fixing payload length reports < 0
+ON-14256: support differing site and platform python versions on RHEL
+ON-14270: install python modules to correct location on debian based distros
+ON-14292: restore onload_ext so to a major version number of 1
+ON-14308: restore binary compatibility for ef_vi apps built with onload < 8.0.0
+ON-14311: avoid pulling in unnecessary dependencies for onload_version.h
+ON-14374: fix RPM packaging to allow TCPDirct to be installed with DKMS Onload
+ON-13692: fix stackdump environment output with multiple stacks
+ON-13984: log pid on sock_create() error
+ON-14072: fix restart of onload_tcpdump after unclean exit
+
+
+onload-8.0.0.34
+---------------
+
+Update sfc net driver to v5.3.12.1023
+
+Remove support for:
+ - Red Hat Enterprise Linux 6
+ - Canonical Ubuntu Server LTS 18.04
+ - SuSE Linux Enterprise Server 12
+ - Debian 9 "Stretch"
+
+Add support for:
+ - Red Hat Enterprise Linux 8.6
+ - Red Hat Enterprise Linux 9.0
+ - Canonical Ubuntu Server LTS 22.04
+ - Canonical Ubuntu Server 21.10
+ - SuSE Linux Enterprise Server 15 SP3
+ - recent kernel.org kernel versions (up to 5.15)
+ - gcc 11.2
+
+Features:
+
+ON-6883: accept EF_CLUSTER_SIZE of 0 to ignore the cluster
+ON-10897: add TCP zero-copy receive capability
+ON-10993: add IPV6_UNICAST_HOPS, _TRANSPARENT and _MTU_DISCOVER socket options
+ON-10993: add IPV6_RECVHOPLIMIT and _RECVTCLASS socket options
+ON-11401: increase support up to 30 interfaces
+ON-11706: tune onload throughput
+ON-11870: add support for multicast loopback in efsend_pio
+ON-12051: add IGMP group join option to efsink
+ON-12240: remove sfc_affinity module; sfc_affinity_config uses resource driver
+ON-12407: license ef_vi, control plane and user-modifiable files as BSD-2-Clause
+ON-12499: dual license headers needed to use ef_vi
+ON-13632: update scripts to Python 3
+ON-13949: add SRPM option to install libonload with setuid root
+ON-13991: optimise X2 CTPIO write causing excessive early WC flushes on Ice Lake
+SCTT-956: ship onload_cplane as source code rather than binary
+SCTT-1019: separate TCPDirect from Onload
+
+Bugs fixed:
+
+ON-5029: avoid negative counter values in onload_stackdump
+ON-8261: include HW_TX_TIMESTAMPING flag in capabilities API
+ON-9170: rework SO_REUSEPORT to work with port 0
+ON-9952: track IPv6 path MTU properly
+ON-10045/ON-12106: handle fragmented IPv6 UDP datagrams
+ON-10813: avoid ENODEV binding to IPv6 link-local address
+ON-11152: avoid using failed ARP entry for a new connection
+ON-11327: support kernel configs with ip rule support
+ON-11360: fix close of listener with loopback socket on acceptq
+ON-11367: do not build BPF kernel components in non-BPF builds
+ON-11496: make epoll_wait timing more accurate in combination with spinning
+ON-11894: set SO_ERROR on UDP deferred ARP failure
+ON-11906: avoid premature exit from WODA
+ON-11919: do not send UDP packet via OS when unbound
+ON-12140: fix possible crash on UDP handover
+ON-12328: prefer socket's source ip as packet source address
+ON-12583: avoid potential crash on packet allocation failure
+ON-12694: fix IPv6 wildcard filtering
+ON-12742: really intercept terminating SIGINT
+ON-13355/ON-13358: fix call traces on rare resource allocation failures
+ON-13454: really set EF_TCP_URG_MODE=ignore by default
+ON-13611: fix race causing fd table corruption and application crash
+ON-13912: onload_stackdump -z stacks crashed
+ON-13997: fix forward table for >16384 entries
+ON-14097: avoid unnecessary large atomic kmalloc in buffer table programming
+ON-14141: fix case where the log fd could be closed by the app
+
+
+onload-7.1.3.202
+----------------
+
+Update sfc net driver to v4.15.14.1002
+
+Support Red Hat Enterprise Linux 8.5
+Support Debian 11
+Support gcc 11
+
+Bug fixes:
+
+ON-12771: fix rx hw timestamps for IPv6
+ON-12390: avoid undefined access resulting in segfault in ci_udp_recvmsg
+ON-12585/ON-13611: fix race causing fd table corruption and application crash
+ON-13056: apply IPTOS_RT_MASK to TOS in hash computation
+ON-13122: increase stack name length to 26 characters to accomodate 32-bit PIDs
+ON-13329: don't fail control plane startup if /var is not present.
+ON-13338: ignore TCP URG flag by default
+ON-13350: fixes for kernels without namespaces or without RETPOLINE
+ON-13380: Cap EF_CTPIO_MAX_FRAME_LEN to avoid assertion failure
+ON-13381: TCPDirect: fix corruption in OVERLAPPED receive
+ON-13385: TCPDirect: fix data corruption when mixing vlan and non-vlan traffic
+ON-13466: intercept deadly signals including cases that affected onload_tcpdump
+ON-13474: fix close behaviours to avoid hang when /dev/onload unavailable
+ON-13486: fix close behaviours preventing onloading of ssh on some systems
+ON-13498: fix assertion on rx of packet incorrectly marked as bad-checksum
+ON-13515: add sigaction() to basic syscall list, fixing hangs with ksh
+ON-13594: avoid disrecommended use of in_atomic() within driver
+ON-13627: install kernel modules into debian binary package
+ON-13657: make setting of text-valued options effective in extensions interface
+ON-13683: intercept all signal() functions (#53)
+ON-13723: fix interaction between retransmits and delegated sends
+ON-13786/ON13901: forbid interception of SIGONLOAD
+ON-13818: fix race freeing dshm such as when dumping stack during exit
+ON-13829: fix memory leak when out-of-order overlapped packet arrives
+ON-13899: update MSS on every ipcache update for a TCP connection
+ON-13902: cp_server parameters: use constants first
+
+
+onload-7.1.2.141
+----------------
+
+Support recent kernel.org kernel versions (up to 5.12)
+Support recent Linux distributions: RHEL 8.4
+
+Features:
+
+ON-12852: add EF_EVENT_TYPE_RESET notification for hardware restarts
+ON-13014: create cplane_track_xdp module option
+
+Bug fixes:
+
+ON-12676: fix high latency when spinning with XDP enabled
+ON-12840: TCPDirect: fix various duplicate ACK cases
+ON-12903: TCPDirect: remove potential for TCP seq number corruption on transmit
+ON-12920: ensure that negative window is not infinity
+ON-12966: TCPDirect: fix TCP receive window calculation
+ON-13003: recover from a lost non-timeout interrupt
+ON-13061: TCPDirect: rely on snd_lbb rather than snd_nxt to improve reliability
+ON-13147: fix server crash on creating fd when allocation fails
+ON-13186: TCPDirect: fix recv buf corruption when many unread segments coalesced
+ON-13290: fix EF_SIGNALS_NOPOSTPONE for RT signals (#29)
+ON-13305: TCPDirect: start RTO timer from zf_delegated_send_complete()
+ON-13385: TCPDirect: fix data corruption when mixining vlan and non-vlan traffic
+
+
+onload-7.1.1.75
+---------------
+
+Update sfc net driver to v4.15.12.1008
+
+Support recent kernel.org kernel versions (up to 5.9)
+Support recent GCC compilers (up to 10)
+Support recent Linux distributions:
+  RHEL 7.9, 8.3
+  SLES15 sp2
+Remove support for:
+  RHEL 6.8, 7.5, 8.0
+  SLES15 base
+  Ubuntu LTS 16.04
+  kernel.org kernel versions 3.10-4.3
+
+Features:
+
+ON-12532: add option to control how sends are combined in packets
+ON-12688: allow restricted features also on secondary group match (egid)
+
+Bug fixes:
+
+ON-11555: TCPDirect: support SSM with unspecified source port
+ON-12017/ON-12476/ON-12790: fix various timeout calculations in latency profile
+ON-12062: replace close() with ci_sys_close() in libonload init
+ON-12123: remove unnecessary Onload dependency in ef_vi
+ON-12267: fix several cases where XDP rx processing got bypassed
+ON-12346: default to not installing onload as setuid.
+ON-12421: fix occasional ENOMEM when re-adding new socket to epoll mode 2 set
+ON-12471: TCPDirect: ensure low-latency firmware mode always recognised
+ON-12511: TCPDirect: ensure delegated send has buffer to complete at preparation
+ON-12543: avoid string function usage that looks unsafe to tools
+ON-12566/ON-12598: fix rare issues affecting Nginx Onload profile
+ON-12597/ON-12644: TCPDirect: multiple fixes in timestamp handling
+ON-12736: fix allocation failure manifesting in ci_tcp_helper_more_bufs()
+ON-12737: avoid unnecessary control plane lookups, leading to jitter
+ON-12839: avoid unnecessary window updates, appearing as duplicate ACKs to peer
+ON-12903: TCPDirect: ensure out-of-order segments prompt duplicate ACKs
 
 
 onload-7.1.0.265
@@ -2388,3 +2757,6 @@ openonload-20090409.1
 
 - bug16011: Packet loss when IPG is very small.
 - Performance improvement for UDP recv() when spinning is enabled.
+
+
+(c) Copyright 2009-2024 Advanced Micro Devices, Inc.

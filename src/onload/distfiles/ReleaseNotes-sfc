@@ -1,6 +1,6 @@
 Solarflare 5.X Linux network driver
 ===================================
-Version:  v5.3.13.1006
+Version:  v5.3.18.1012
 
 
 Overview
@@ -28,9 +28,6 @@ The drivers contained in this package support the following adapters:
   - Solarflare SFN8522 Dual Port SFP+ Server Adapter
   - Solarflare SFN8542 Dual Port QSFP+ Server Adapter
   - Solarflare SFN8722 Dual Port SFP+ OCP Server Adapter
-
-- Solarflare AOE Adapters:
-  - Solarflare SFA7942Q QSFP+ AOE Adapter
 
 - The following OEM adapters are also supported, but note each OEM may recommend
   a different driver version to match the version used for testing/qualification
@@ -61,7 +58,7 @@ kernel
 Installation of the driver can be confirmed by typing:
    modinfo sfc | grep version
 and checking for the line:
-   version: v5.3.13.1006
+   version: v5.3.18.1012
 
 All network interfaces available on the system can be found with:
   ifconfig -a
@@ -70,20 +67,17 @@ All network interfaces available on the system can be found with:
 Linux distribution support for Solarflare Adapters
 --------------------------------------------------
 
-For Riverhead VCU1525 this driver package is supported on:
- - RedHat Enterprise Linux                        7.4, 7.5
-
 This driver package is supported on:
- - RedHat Enterprise Linux                        7.8 7.9
- - RedHat Enterprise Linux                        8.4, 8.5, 8.6
- - RedHat Enterprise Linux                        9.0
- - SuSE Linux Enterprise Server 15                sp2, sp3, sp4
- - Canonical Ubuntu Server LTS                    18.04, 20.04, 22.04
- - Debian 10 "Stretch"                            10.2
- - Kernel.org linux kernels                       4.15 to 5.11
+ - RedHat Enterprise Linux                        7.9
+ - RedHat Enterprise Linux                        8.8, 8.9, 8.10
+ - RedHat Enterprise Linux                        9.2, 9.3, 9.4
+ - SuSE Linux Enterprise Server 15                sp4, sp5
+ - Canonical Ubuntu Server LTS                    20.04, 22.04, 24.04
+ - Debian 11 "Bullseye"                           11.0
+ - Kernel.org linux kernels                       4.15 to 6.6
 
 
-Xilinx aims to support the current and previous major release of each
+AMD aims to support the current and previous major release of each
 supported distribution at the time this driver was released (plus, possibly,
 the latest long term support release if this is neither the current nor
 previous major release). Support includes all minor updates/releases/service
@@ -93,12 +87,121 @@ declared end of life/support.
 
 Support
 -------
-Please contact your local Xilinx support representative or email
-<support-nic@xilinx.com>.
+Please contact your local AMD support representative or email
+<support-nic@amd.com>.
 
 
 Changelog
 ---------
+
+### v5.3.18.1012
+[General changes]
+~ Improve kernel compatibility for efx_ptp_get_host_time
+
+SWNETLINUX-5201
+~ Add support for RHEL 8.10
+
+SWNETLINUX-5200
+~ Add support for RHEL 9.4
+
+SWNETLINUX-5126
+~ Fix skb leak when attempting to drop PTP packets and check
+  if PTP channel exists before transmitting PTP packets
+
+SWNETLINUX-5215
+~ Fix RSS indirection table reporting
+
+SWNETLINUX-5310
+~ Report PORT_FIBRE to ethtool for optical module connectors
+
+SWNETLINUX-5165
+~ Fix null pointer issue when using separate_tx_channels=1
+
+SWNETLINUX-5206
+~ Don't log unnecessary error messages when trying to enable hardware PPS when
+  it has already been enabled
+
+SWNETLINUX-5002
+~ Implement setting and querying hardware timestamp settings
+
+SWNETLINUX-5185
+~ Enable physical hardware clock support when PTP_1588_CLOCK is included in
+  kernel as a module
+
+SWNETLINUX-5204
+~ Ensure that PPS workqueues are always correctly cleaned up.
+
+SWNETLINUX-5136
+~ Add support to enable and disable hardware PPS input via userspace
+  EXTTS events
+
+SWNETLINUX-4550
+~ Improve kernel compatibility when using struct netlink_ext_ack and
+  add generic support for symmetric-xor RSS hash.
+
+SWNETLINUX-4193
+~ Correctly reflect interface names in /proc/mtd even when these
+  interface are renamed.
+~ Add PCI slot info to MTD partition names and extend the MTD
+  partition name buffer to avoid truncation
+
+### v5.3.16.1004
+[General changes]
+~ Fixes to support newer upstream kernels (v6.6)
+
+SWNETLINUX-5141
+~ When HW PPS is enabled ensure it is re-enabled if the NIC is reset
+
+SWNETLINUX-5081
+~ Resolve issue if NIC doesn't have IP address configured and a second
+  firmware update is applied by sfupdate without a driver reload.
+
+SWNETLINUX-5127
+~ Don't try to allocate XDP TX resources when XDP is disabled
+
+SWNETLINUX-5069
+~ Avoid kernel panic in 'dev_gro_receive' by adding a check for zero
+  length in EF10 RX prefix.
+
+SWNETLINUX-4975
+~ Remove support for SFA7942Q
+
+SWNETLINUX-5135
+~ Provide hardware PPS reading via PHC (/dev/ptpX) to support
+third-party applications
+
+### v5.3.14.1019
+[General changes]
+ ~ fixes to support newer upstream kernels (v6.1)
+ ~ removal of kcompat for old kernels until RHEL 6.10
+
+SWNETLINUX-4904
+ ~ Remove 128-bit register writes to fix concurrency bug (TX DMA error)
+SWNETLINUX-5058
+ ~ Support LC optical connector type
+SWNETLINUX-4106
+ ~ fix MTU update "Operation not permitted" problem on VFs
+SWNETLINUX-4969
+ ~ monitor periodic statistics DMA updates to avoid stats stop incrementing
+SWNETLINUX-4930
+ ~ Use phc.adjfine value scaled ppm value
+SWNETLINUX-2610
+ ~ Add PTP cross-timestamping (PTP_SYS_OFFSET_PRECISE ioctl) for higher quality
+   timestamps and compatibility with future kernels.
+SWNETLINUX-4952
+ ~ fix use after free error when disabling sriov
+SWNETLINUX-4674
+ ~ Add PTP gettimex64 callback for PTP_SYS_OFFSET_EXTENDED ioctl
+SWNETLINUX-4941
+ ~ fix build errors with CONFIG_NET_DEVLINK=n
+SWNETLINUX-4871
+ ~ replace ptp_clock_info .adjfreq method with .adjfine
+SWNETLINUX-4885
+ ~ Fix module eeprom reporting for QSFP modules to avoid
+   "netlink error: Invalid argument" when running ethtool -m
+SWNETLINUX-4909
+ ~ Avoid crash when running out of VI resources, to allow the driver to keep
+   trying to assign resources when using num_vis=1 and many VFs
 
 ### v5.3.13.1006
 [General changes]
@@ -296,6 +399,44 @@ Issue 80717:
 [General changes]
  ~ Initial support for Riverhead VCU1525. This is provided by the sfc_ef100.ko
    kernel module.
+
+### v4_15_17_1000
+
+Issue 5201
+~ Add support for RHEL 8.10
+
+Issue 4193
+~ Correctly reflect interface names in /proc/mtd even when these
+  interface are renamed.
+~ Add PCI slot info to MTD partition names and extend the MTD
+  partition name buffer to avoid truncation
+
+### v4_15_16_1000
+
+Issue 4975:
+~ Remove support for SFA7942Q
+
+Issue 4991 and 5131:
+~ Monitor periodic statistics DMA updates except when resetting and
+  when stats-block-usecs 0
+
+### v4_15_15_1003
+
+Issue 4934
+~ Add kcompat for netif_napi_add changes
+
+### v4_15_15_1002
+
+Issue 4890
+~ Add support for RHEL 8.7
+
+### v4_15_15_1001
+
+Issue 3157
+~ Add ethtool private flag to toggle link on resets
+
+Issue 4824
+~ Use vadaptor stats for non-link control PFs
 
 ### v4_15_15_1000
 
@@ -2530,18 +2671,21 @@ Issue 19951
 Deprecated features
 -------------------
 
-Support for legacy interrupts (as opposed to MSI or MSI-X interrupts) will be
-removed in a future release. All servers in use are expected to support MSI
-or MSI-X interrupts.
+Support for SuSE Linux Enterprise Server is deprecated.
 
-Support for SFN5000 and SFN6000 family adapters will be removed in a
-future release.
+Support for RHEL 7.9 is deprecated.
+
+Support for EF100 is deprecated.
 
 Removed features
 ----------------
 
 The following features were previously marked for deprecation and have now been
 removed. Please see the following descriptions for any impact and alternatives:
+
+MSI:
+ ~ MSI facilities are no longer supported.
+ ~ MSI-X facilities are supported.
 
 Hybrid SRIOV for older NICs:
  ~ Hybrid SRIOV support for 5000- and 6000-series NICs with Linux KVM.
@@ -2576,6 +2720,9 @@ Driverlink RX packet callback:
 
 Legacy interrupts:
  ~ All servers in use are expected to support MSI or MSI-X interrupts.
+
+Support for SFN5000, SFN6000 and SFN7000 family adapters has been
+removed.
 
 
 NIC partitioning, SR-IOV and PF-IOV modes on SFN7XXX/8XXX adapters
@@ -2761,6 +2908,36 @@ Issue 47490:
 
 Known Issues with Solarflare driver/firmware
 --------------------------------------------
+SWNETLINUX-5350 / SWNETLINUX-5126:
+ ~ When enabling the "separate_tx_channels" module parameter in combination with
+   sfptpd, user may experience reduced timestamping accuracy due to the system
+   falling back to software timestamps instead of using hardware timestamps.
+
+SWNETLINUX-5070:
+ ~ Due to a race between the adjustment of ring sizes and NIC reset it is
+   recommended to avoid using ethtool during boot. For more details see:
+   <https://support.xilinx.com/s/article/000036487>
+
+SWNETLINUX-4855:
+ ~ For some overlay network encapsulation offloads the NIC must maintain a list
+   of UDP ports used for overlays. Due to EF10 hardware limitations, some
+   changes to this list requires a full datapath reset, triggered by a firmware
+   initiated MC reboot.
+ ~ Applications like OvS can update UDP ports (that are used for overlay
+   networks) in quick succession. This in turn can lead to multiple MC reboots
+   being triggered from Firmware.
+ ~ MC reboots require full datapath resets and drivers would need to recreate
+   their queues and filters. EF10 detects these in flight resets and marks
+   tunnels as dirty. It could happen that tunnels are marked dirty and never
+   correctly configured.
+ ~ This situation is exacerbated by newer kernels which backfill slots in the
+   UDP port list array and when operating on the boundary of our offload
+   capabilities (max 16 UDP ports for overlays).
+
+Issue 4991:
+ ~ Message "Periodic DMA statistics are not updating. Restarting
+   periodic collection" might appear in systems logs. This can be
+   ignored
 SF-119015-KI / Issue 72914:
  ~ [SFN7xxx series firmware only].
    There is an issue when using MCFW where a transmit queue using TSO may lockup
@@ -2783,6 +2960,6 @@ Issue 50868:
 
 Copyright
 ---------
-Copyright 2009-2019 Solarflare Communications Inc.
-Copyright 2019-2022 Xilinx Inc.
+Copyright (C) 2019-2022, Xilinx, Inc.
+Copyright (C) 2022-2024, Advanced Micro Devices, Inc.
 All rights reserved. Use is subject to license terms.

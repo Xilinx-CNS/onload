@@ -1,6 +1,117 @@
-See README.md at top level.
 
-This file: (c) Copyright 2010-2020 Xilinx, Inc.
+Introduction
+============
+
+ OpenOnload(R) is a high performance user-level network stack, which
+ delivers absolutely the best performance to applications using the BSD
+ sockets API.  Please see www.openonload.org for more information.
+
+ EnterpriseOnload is a version of OpenOnload that includes an extended test
+ cycle, guaranteed support from Xilinx, bug fixes and a defined service
+ level agreement.
+
+ OpenOnload and EnterpriseOnload are licensed under the GNU General Public
+ License (Version 2, June 1991).  See the LICENSE and LICENSES-ALL files in
+ this distribution for details.
+
+
+Supported platforms
+===================
+
+ Linux kernels from 4.15.
+
+ The following processor architecture is supported:
+ - amd64/em64t (support for AMD processors prior to Zen is deprecated)
+
+ This release of Onload supports the following Xilinx adapter:
+   Alveo™ XtremeScale™ X3522 low latency network adapter
+
+ Onload supports Solarflare SFC9000 network controller chips,
+ including the following network adapters:
+   X2541, X2542
+   X2522, X2522-25G
+   SFN8042
+   SFN8522, SFN8522M, SFN8542, SFN8722
+
+ If you are interested in trying or buying Solarflare network adapters,
+ please contact <nic-sales@amd.com>.
+
+
+Documentation
+=============
+
+ The Onload User Guide is available from:
+
+   https://docs.xilinx.com/r/en-US/ug1586-onload-user
+
+ Other documentation for supported network cards including the Server Adapter
+ User Guide are available from:
+
+   https://www.xilinx.com/support/download/onload
+
+
+Quick start
+===========
+
+ If deploying Onload from a tarball, then the following command will
+ build and install the Onload drivers into system directories (as root).
+ For instructions on other Onload installation packages (e.g. source RPM),
+ please refer to the Onload user guide.
+
+   <top>/scripts/onload_install
+
+ To load the drivers, replacing any that may already be loaded:
+
+   onload_tool reload
+
+ You may need to configure your ethernet interface with an IP address using
+ the standard tools.  Please see the documentation that comes with your
+ Linux distribution for details.
+
+ To accelerate an application with the Onload user-level transport, simply
+ invoke the application on the command line as normal, prepended with
+ "onload".
+
+ ie. Instead of:
+
+   netperf -t TCP_RR -H myserver
+
+ do this:
+
+   onload netperf -t TCP_RR -H myserver
+
+ and tuned for best latency:
+
+   onload -p latency netperf -t TCP_RR -H myserver
+
+
+Configuration and tuning
+========================
+
+ Onload takes many configuration settings directly from the kernel stack.
+ In addition, there are a number of configuration and tuning options that
+ can be set via environment variables.  See the Onload User Guide for
+ details.
+
+ You can get detailed descriptions of the configuration options in the
+ version of Onload that you are using by running the following command:
+
+   onload_stackdump doc
+
+
+Any questions?
+==============
+
+ For support please e-mail:
+
+   support-nic@amd.com
+
+ or visit:
+
+   https://support.xilinx.com/s/case/Case/Default
+
+
+(c) Copyright 2010-2024 Advanced Micro Devices, Inc.
 
 ==========
  version: ONLOAD_VERSION

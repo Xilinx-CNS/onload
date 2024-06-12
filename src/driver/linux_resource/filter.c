@@ -1352,12 +1352,14 @@ efrm_read_protocol( const char** buf, size_t* remain, int* done,
 		EFRM_WARN("%s: Seen multiple protocols", __func__ );
 		*done = 1;
 	} else {
-		if ( !efrm_compare_and_skip( buf, remain, "tcp" ) ) {
+		if ( !efrm_compare_and_skip( buf, remain, "tcp" ) ||
+		     !efrm_compare_and_skip( buf, remain, "6" ) ) {
 			*protocol = ep_tcp;
 			*ruletype = EFRM_FR_PORTRANGE;
 			*seen = 1;
 		}
-		else if ( !efrm_compare_and_skip( buf, remain, "udp" ) ) {
+		else if ( !efrm_compare_and_skip( buf, remain, "udp" ) ||
+		          !efrm_compare_and_skip( buf, remain, "17" ) ) {
 			*protocol = ep_udp;
 			*ruletype = EFRM_FR_PORTRANGE;
 			*seen = 1;
