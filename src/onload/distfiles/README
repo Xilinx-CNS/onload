@@ -15,6 +15,17 @@ Introduction
  this distribution for details.
 
 
+Status of this file
+===================
+
+ This documentation and other files in this directory relate to released
+ versions of Onload, have no validity when not provided as part of an Onload
+ release and cannot be assumed to be up to date.
+
+ Please see README.md at the top level of the repository for documentation
+ relevant to the community-supported public work in progress.
+
+
 Supported platforms
 ===================
 
