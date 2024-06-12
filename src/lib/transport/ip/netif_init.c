@@ -358,12 +358,18 @@ ci_setup_ipstack_params(void)
     citp_tcp_rcvbuf_def = opt[1];
     citp_tcp_rcvbuf_max = opt[2];
   }
-  if( ci_sysctl_get_values("net/core/wmem_max", opt, 1) == 0 )
+  if( ci_sysctl_get_values("net/core/wmem_max", opt, 1) == 0 ) {
     citp_udp_sndbuf_max = opt[0];
+    if( opt[0] < citp_tcp_sndbuf_max )
+      citp_tcp_sndbuf_max = opt[0];
+  }
   if( ci_sysctl_get_values("net/core/wmem_default", opt, 1) == 0 )
     citp_udp_sndbuf_def = opt[0];
-  if( ci_sysctl_get_values("net/core/rmem_max", opt, 1) == 0 )
+  if( ci_sysctl_get_values("net/core/rmem_max", opt, 1) == 0 ) {
     citp_udp_rcvbuf_max = opt[0];
+    if( opt[0] < citp_tcp_rcvbuf_max )
+      citp_tcp_rcvbuf_max = opt[0];
+  }
   if( ci_sysctl_get_values("net/core/rmem_default", opt, 1) == 0 )
     citp_udp_rcvbuf_def = opt[0];
 
