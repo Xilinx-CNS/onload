@@ -1225,8 +1225,7 @@ efrm_vi_q_alloc_sanitize_size(struct efrm_vi *virs, enum efhw_q_type q_type,
 		n_q_entries = 1;
 	if (efrm_vi_q_get_size(virs, q_type, n_q_entries, &qsize) < 0) {
 		EFRM_ERR("%s: ERROR: bad %s size %d (supported=%x)",
-			 __FUNCTION__, q_names[q_type],
-			 virs->q[q_type].capacity,
+			 __FUNCTION__, q_names[q_type], n_q_entries,
 			 virs->rs.rs_client->nic->q_sizes[q_type]);
 		return -EINVAL;
 	}
@@ -1252,8 +1251,7 @@ efrm_vi_q_alloc(struct efrm_vi *virs, enum efhw_q_type q_type,
 		n_q_entries = 1;
 	if (efrm_vi_q_get_size(virs, q_type, n_q_entries, &qsize) < 0) {
 		EFRM_ERR("%s: ERROR: bad %s size %d (supported=%x)",
-			 __FUNCTION__, q_names[q_type],
-			 virs->q[q_type].capacity,
+			 __FUNCTION__, q_names[q_type], n_q_entries,
 			 virs->rs.rs_client->nic->q_sizes[q_type]);
 		return -EINVAL;
 	}
