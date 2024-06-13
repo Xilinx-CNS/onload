@@ -623,7 +623,7 @@ int efx_xdp_rx(struct efx_nic *efx, struct efx_rx_queue *rx_queue,
 #if defined(CONFIG_XDP_SOCKETS)
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_XSK_BUFFER_ALLOC)
 	if (rx_buf->flags & EFX_RX_BUF_ZC)
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_POOL)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_XSK_POOL) && defined(EFX_HAVE_XSK_BUFF_DMA_SYNC_FOR_CPU_2PARAM)
 		xsk_buff_dma_sync_for_cpu(rx_buf->xsk_buf, rx_queue->xsk_pool);
 #else
 		xsk_buff_dma_sync_for_cpu(rx_buf->xsk_buf);

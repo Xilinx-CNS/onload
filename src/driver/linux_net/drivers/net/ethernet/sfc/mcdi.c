@@ -1573,6 +1573,42 @@ static void efx_mcdi_ev_death(struct efx_nic *efx, bool bist)
 	spin_unlock(&mcdi->iface_lock);
 }
 
+static void efx_mcdi_ev_suc(struct efx_nic *efx,
+			    efx_qword_t *event)
+{
+	int code = MCDI_EVENT_FIELD(*event, SUC_ERR_TYPE);
+	u32 addr = MCDI_EVENT_FIELD(*event, SUC_ERR_ADDRESS);
+
+	switch (code) {
+	case MCDI_EVENT_SUC_BAD_APP:
+		netif_err(efx, hw, efx->net_dev,
+			  "SUC bad app (MCDI event " EFX_QWORD_FMT ")\n",
+			  EFX_QWORD_VAL(*event));
+		break;
+	case MCDI_EVENT_SUC_ASSERT:
+		netif_err(efx, hw, efx->net_dev,
+			  "SUC assert @ 0x%0x (MCDI event " EFX_QWORD_FMT ")\n",
+			  addr, EFX_QWORD_VAL(*event));
+		break;
+	case MCDI_EVENT_SUC_EXCEPTION:
+		netif_err(efx, hw, efx->net_dev,
+			  "SUC exception @ 0x%x (MCDI event "
+			  EFX_QWORD_FMT ")\n",
+			  addr, EFX_QWORD_VAL(*event));
+		break;
+	case MCDI_EVENT_SUC_WATCHDOG:
+		netif_err(efx, hw, efx->net_dev,
+			  "SUC watchdog (MCDI event " EFX_QWORD_FMT ")\n",
+			  EFX_QWORD_VAL(*event));
+		break;
+	default:
+		netif_err(efx, hw, efx->net_dev,
+			  "Unknown SUC event %d data 0x%x (MCDI event "
+			  EFX_QWORD_FMT ")\n",
+			  code, addr, EFX_QWORD_VAL(*event));
+	}
+}
+
 bool efx_mcdi_process_event(struct efx_channel *channel,
 			    efx_qword_t *event)
 {
@@ -1613,6 +1649,9 @@ bool efx_mcdi_process_event(struct efx_channel *channel,
 	case MCDI_EVENT_CODE_MC_BIST:
 		netif_info(efx, hw, efx->net_dev, "MC entered BIST mode\n");
 		efx_mcdi_ev_death(efx, true);
+		return true;
+	case MCDI_EVENT_CODE_SUC:
+		efx_mcdi_ev_suc(efx, event);
 		return true;
 	}
 

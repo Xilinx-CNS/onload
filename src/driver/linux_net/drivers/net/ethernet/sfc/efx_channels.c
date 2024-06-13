@@ -442,10 +442,8 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 {
 	unsigned int n_channels = efx_wanted_parallelism(efx);
 	unsigned int extra_channel_type;
-#ifdef EFX_HAVE_MSIX_CAP
-	int vec_count;
-#endif
 	unsigned int min_channels = 1;
+	int vec_count;
 
 	if (separate_tx_channels) {
 		n_channels *= 2;
@@ -467,7 +465,6 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 	efx_allocate_xdp_channels(efx, max_channels, n_channels);
 	n_channels += efx->n_xdp_channels;
 
-#ifdef EFX_HAVE_MSIX_CAP
 #ifdef EFX_NOT_UPSTREAM
 #if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	/* dl IRQs don't need VIs, so no need to clamp to max_channels */
@@ -517,7 +514,6 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 		 */
 		n_channels -= efx->n_dl_irqs;
 	}
-#endif
 #endif
 #endif
 
@@ -679,20 +675,6 @@ int efx_probe_interrupts(struct efx_nic *efx)
 				kfree(xentries);
 				return rc;
 			}
-#ifndef EFX_HAVE_MSIX_CAP
-		} else if (rc < n_irqs) {
-			int rc2;
-
-			netif_err(efx, drv, efx->net_dev,
-				  "WARNING: Insufficient MSI-X vectors available (%d < %u).\n",
-				  rc, n_irqs);
-			netif_err(efx, drv, efx->net_dev,
-				  "WARNING: Performance may be reduced.\n");
-			n_irqs = rc;
-			rc2 = efx_allocate_msix_channels(efx, n_irqs);
-			if (rc2)
-				rc = rc2;
-#endif
 		}
 
 		if (rc > 0) {
@@ -1419,15 +1401,10 @@ int efx_init_interrupts(struct efx_nic *efx)
 		efx->interrupt_mode = ffs(efx->type->supported_interrupt_modes) - 1;
 
 	if (efx->interrupt_mode == EFX_INT_MODE_MSIX) {
-#ifdef EFX_HAVE_MSIX_CAP
 		rc = pci_msix_vec_count(efx->pci_dev);
 		if (rc <= 0)
 			rc = efx_wanted_parallelism(efx);
 		efx->max_irqs = rc;
-#else
-		/* On old kernels fall back to the rss_cpus parameter */
-		efx->max_irqs = efx_wanted_parallelism(efx);
-#endif
 	}
 
 	if (efx->max_irqs > 0) {
