@@ -6930,6 +6930,7 @@ static int tcp_helper_wakeup(tcp_helper_resource_t* trs, int intf_i, int budget)
   if( ci_netif_intf_has_event(ni, intf_i) ) {
     if( efab_tcp_helper_netif_try_lock(trs, 1) ) {
       CITP_STATS_NETIF(++ni->state->stats.interrupt_polls);
+      trs->netif.state->interrupt_numa_nodes |= 1 << numa_node_id();
 
       if( ni->flags & CI_NETIF_FLAGS_AVOID_ATOMIC ) {
         /* Steal the locks and exit: don't attempt AF_XDP in atomic context */
@@ -6940,7 +6941,6 @@ static int tcp_helper_wakeup(tcp_helper_resource_t* trs, int intf_i, int budget)
       ni->state->poll_did_wake = 0;
       n = ci_netif_poll_n(ni, budget);
       CITP_STATS_NETIF_ADD(ni, interrupt_evs, n);
-      trs->netif.state->interrupt_numa_nodes |= 1 << numa_node_id();
 
       budget -= n;
       /* If we've exceeded budget, and have woken up user - we trust to user
@@ -7045,6 +7045,7 @@ static int tcp_helper_timeout(tcp_helper_resource_t* trs, int intf_i, int budget
   if( ci_netif_intf_has_event(ni, intf_i) ) {
     if( efab_tcp_helper_netif_try_lock(trs, 1) ) {
       CITP_STATS_NETIF(++ni->state->stats.timeout_interrupt_polls);
+      trs->netif.state->interrupt_numa_nodes |= 1 << numa_node_id();
 
       if( ni->flags & CI_NETIF_FLAGS_AVOID_ATOMIC || budget <= 0 ) {
         /* Steal the locks and exit: don't attempt AF_XDP in atomic context */
@@ -7053,7 +7054,6 @@ static int tcp_helper_timeout(tcp_helper_resource_t* trs, int intf_i, int budget
       }
 
       ni->state->poll_did_wake = 0;
-      trs->netif.state->interrupt_numa_nodes |= 1 << numa_node_id();
       if( (n = ci_netif_poll_n(ni, budget)) ) {
         CITP_STATS_NETIF(ni->state->stats.timeout_interrupt_evs += n;
                          ni->state->stats.timeout_interrupt_wakes +=
@@ -7138,6 +7138,7 @@ static int oo_handle_wakeup_int_driven(void* context, int is_timeout,
     if( ci_netif_intf_has_event(ni, tcph_nic->thn_intf_i) ) {
       if( efab_tcp_helper_netif_try_lock(trs, 1) ) {
         CITP_STATS_NETIF(++ni->state->stats.interrupt_polls);
+        trs->netif.state->interrupt_numa_nodes |= 1 << numa_node_id();
         ci_assert( ni->flags & CI_NETIF_FLAG_IN_DL_CONTEXT);
 
         if( ni->flags & CI_NETIF_FLAGS_AVOID_ATOMIC || budget <= 0 ) {
@@ -7152,7 +7153,6 @@ static int oo_handle_wakeup_int_driven(void* context, int is_timeout,
         CITP_STATS_NETIF_ADD(ni, interrupt_evs, n);
         if( ni->state->poll_did_wake )
           CITP_STATS_NETIF_INC(ni, interrupt_wakes);
-        trs->netif.state->interrupt_numa_nodes |= 1 << numa_node_id();
 
         if( n >= budget &&
             ci_netif_intf_has_event(ni, tcph_nic->thn_intf_i) ) {
