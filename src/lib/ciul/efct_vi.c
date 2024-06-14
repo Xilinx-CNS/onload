@@ -462,12 +462,14 @@ void efct_tx_handle_event(ef_vi* vi, ci_qword_t event, ef_event* ev_out)
     ev_out->tx_timestamp.ts_sec = vi->ep_state->evq.sync_timestamp_major;
     if ( ptstamp_seconds == ((timesync_seconds + 1) % 256) ) {
       ev_out->tx_timestamp.ts_sec++;
-    } 
+    }
     ev_out->tx_timestamp.ts_nsec = (ptstamp & 0xFFFFFFFF) >> vi->ts_subnano_bits;
+    /* We assert that there is enough space to store the number of subnano bits
+     * in efct_design_parameters, so we can have confidence that we are safely
+     * populating ts_nsec_frac. */
     ev_out->tx_timestamp.ts_nsec_frac =
                   ptstamp << (EF_VI_TX_TS_FRAC_NS_BITS - vi->ts_subnano_bits);
     ev_out->tx_timestamp.ts_flags = vi->ep_state->evq.sync_flags;
-    EF_VI_ASSERT(EF_VI_TX_TS_FRAC_NS_BITS >= vi->ts_subnano_bits);
     ev_out->tx_timestamp.type = EF_EVENT_TYPE_TX_WITH_TIMESTAMP;
     ev_out->tx_timestamp.rq_id = q->ids[(qs->previous - 1) & q->mask];
     ev_out->tx_timestamp.flags = EF_EVENT_FLAG_CTPIO;
@@ -1149,6 +1151,7 @@ efct_design_parameters(struct ef_vi* vi, struct efab_nic_design_parameters* dp)
   vi->vi_txq.ct_fifo_bytes = GET(tx_fifo_bytes) -
                              EFCT_TX_ALIGNMENT - EFCT_TX_HEADER_BYTES;
   vi->ts_subnano_bits = GET(timestamp_subnano_bits);
+  EF_VI_ASSERT(EF_VI_TX_TS_FRAC_NS_BITS >= vi->ts_subnano_bits);
   vi->unsol_credit_seq_mask = GET(unsol_credit_seq_mask);
   vi->efct_rxqs.rx_stride = GET(rx_stride);
   switch( GET(md_location) ) {
