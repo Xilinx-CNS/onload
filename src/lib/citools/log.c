@@ -36,12 +36,12 @@ const char* ci_log_prefix     = CI_LOG_PREFIX_DEFAULT;
 static int ci_log_prefix_len = sizeof(CI_LOG_PREFIX_DEFAULT) - 1;
 
 
-void ci_vlog(const char* fmt, va_list args)
+void ci_vlog_common(const char *prefix, size_t prefix_len, const char* fmt,
+                    va_list args)
 {
   int n = 0;
   char line[CI_LOG_MAX_LINE];
 
-  ci_assert(ci_log_prefix);
   ci_assert(fmt);
 
   if( ci_log_options ) {
@@ -80,11 +80,19 @@ void ci_vlog(const char* fmt, va_list args)
     }
   }
 
-  memcpy(line + n, ci_log_prefix, ci_log_prefix_len);
-  vsnprintf(line + n + ci_log_prefix_len,
-	    CI_LOG_MAX_LINE - ci_log_prefix_len - n, fmt, args);
+  memcpy(line + n, prefix, prefix_len);
+  vsnprintf(line + n + prefix_len,
+	    CI_LOG_MAX_LINE - prefix_len - n, fmt, args);
 
   ci_log_fn(line);
+}
+
+
+void ci_vlog(const char* fmt, va_list args)
+{
+  ci_assert(ci_log_prefix);
+
+  ci_vlog_common(ci_log_prefix, ci_log_prefix_len, fmt, args);
 }
 
 
@@ -107,11 +115,26 @@ void ci_log_dump_fn(void* unused, const char* fmt, ...)
   va_end(args);
 }
 
+/* Wrapper to make ci_log conform to the signature of an oo_dump_log_fn_t. */
+void ci_log_dump_on_exit_fn(void* stack_id, const char* fmt, ...)
+{
+  va_list args;
+  int id = *(int*)stack_id;
+  char prefix[CI_LOG_MAX_LINE];
+
+  snprintf(prefix, CI_LOG_MAX_LINE, "[onload] exit ni%d ", id);
+
+  va_start(args, fmt);
+  ci_vlog_common(prefix, strlen(prefix), fmt, args);
+  va_end(args);
+}
+
 
 void ci_set_log_prefix(const char* prefix)
 {
   if( !prefix ) {
     ci_log_prefix = CI_LOG_PREFIX_DEFAULT;
+    ci_log_prefix_len = strlen(ci_log_prefix);
     return;
   }
 

@@ -1736,3 +1736,9 @@ CI_CFG_OPT("EF_NO_HW", no_hw, ci_uint32,
 "will allocate resources, and will be fully accelerated.",
            1, , 0, 0, 1, yesno)
 
+CI_CFG_OPT("EF_DUMP_STACK_ON_EXIT", dump_stack_on_exit, ci_uint32,
+"This is an unsupported option for debugging and may be removed at any time. "
+"It causes details of the stack to be emitted to the kernel log when the "
+"stack exits.",
+           1, , 0, 0, 1, yesno)
+

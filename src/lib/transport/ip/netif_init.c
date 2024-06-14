@@ -1311,6 +1311,9 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
 
   if( (s = getenv("EF_NO_HW")) )
     opts->no_hw = atoi(s);
+
+  if( (s = getenv("EF_DUMP_STACK_ON_EXIT")) )
+    opts->dump_stack_on_exit = atoi(s);
 }
 
 

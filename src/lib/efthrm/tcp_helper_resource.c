@@ -5614,6 +5614,21 @@ tcp_helper_stop(tcp_helper_resource_t* trs)
                        __FUNCTION__, trs->id));
 }
 
+static void tcp_helper_dump_stack_on_exit(ci_netif *ni)
+{
+  int id = ni->state->stack_id;
+
+  dump_stack_to_logger(ni, ci_log_dump_on_exit_fn, &id);
+  full_netif_dump_extra_to_logger(ni, ci_log_dump_on_exit_fn, &id);
+  full_dump_stack_stat_to_logger(ni, ci_log_dump_on_exit_fn, &id);
+  full_dump_stack_more_stat_to_logger(ni, ci_log_dump_on_exit_fn, &id);
+#if CI_CFG_SUPPORT_STATS_COLLECTION
+  full_dump_ip_stats_to_logger(ni, ci_log_dump_on_exit_fn, &id);
+  full_dump_tcp_stats_to_logger(ni, ci_log_dump_on_exit_fn, &id);
+  full_dump_tcp_ext_stats_to_logger(ni, ci_log_dump_on_exit_fn, &id);
+  full_dump_udp_stats_to_logger(ni, ci_log_dump_on_exit_fn, &id);
+#endif
+}
 
 /*--------------------------------------------------------------------
  *!
@@ -5698,8 +5713,11 @@ void tcp_helper_dtor(tcp_helper_resource_t* trs)
 #endif
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
-  if( ~trs->netif.flags & CI_NETIF_FLAG_WEDGED )
+  if( ~trs->netif.flags & CI_NETIF_FLAG_WEDGED ) {
     tcp_helper_leak_check(trs);
+    if(NI_OPTS(&trs->netif).dump_stack_on_exit)
+      tcp_helper_dump_stack_on_exit(&trs->netif);
+  }
 #endif
 
 #if CI_CFG_TCP_SHARED_LOCAL_PORTS
