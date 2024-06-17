@@ -1,18 +1,7 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
 /* X-SPDX-Copyright-Text: (c) Copyright 2014-2024 Xilinx, Inc. */
-/**************************************************************************\
-*//*! \file
-** <L5_PRIVATE L5_SOURCE>
-** \author  ab
-**  \brief  Example for RX timestamping sockets API
-**   \date  2014/04/03
-**    \cop  (c) Level 5 Networks Limited.
-** </L5_PRIVATE>
-*//*
-\**************************************************************************/
-  
 
-/* Example application to demonstrate use of the timestamping API
+/* Example application to demonstrate use of the receive timestamping API
  *
  * This application will receive packets, and display their 
  * hardware timestamps.
@@ -30,6 +19,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <inttypes.h>
 #include <errno.h>
@@ -42,79 +32,10 @@
 #include <sys/ioctl.h>
 #include <net/if.h>
 
-#ifdef ONLOADEXT_AVAILABLE
-#include "onload/extensions_timestamping.h"
-#endif
+#include <linux/errqueue.h>
+#include <linux/net_tstamp.h>
+#include <linux/sockios.h>
 
-/* Use the kernel definitions if possible -
- * But if not, use our own local definitions, and Onload will allow it.
- * - Though you still need a reasonably recent kernel to get hardware
- *   timestamping.
- */
-#ifdef NO_KERNEL_TS_INCLUDE
-  #include <time.h>
-  struct hwtstamp_config {
-      int flags;           /* no flags defined right now, must be zero */
-      int tx_type;         /* HWTSTAMP_TX_* */
-      int rx_filter;       /* HWTSTAMP_FILTER_* */
-  };
-  enum {
-        SOF_TIMESTAMPING_TX_HARDWARE = (1<<0),
-        SOF_TIMESTAMPING_TX_SOFTWARE = (1<<1),
-        SOF_TIMESTAMPING_RX_HARDWARE = (1<<2),
-        SOF_TIMESTAMPING_RX_SOFTWARE = (1<<3),
-        SOF_TIMESTAMPING_SOFTWARE = (1<<4),
-        SOF_TIMESTAMPING_SYS_HARDWARE = (1<<5),
-        SOF_TIMESTAMPING_RAW_HARDWARE = (1<<6),
-        SOF_TIMESTAMPING_MASK =
-        (SOF_TIMESTAMPING_RAW_HARDWARE - 1) |
-        SOF_TIMESTAMPING_RAW_HARDWARE
-  };
-#else
-  #include <linux/net_tstamp.h>
-  #include <linux/sockios.h>
-#endif
-
-/* These are defined in socket.h, but older versions might not have all 3 */
-#ifndef SO_TIMESTAMP
-  #define SO_TIMESTAMP            29
-#endif
-#ifndef SO_TIMESTAMPNS
-  #define SO_TIMESTAMPNS          35
-#endif
-#ifndef SO_TIMESTAMPING
-  #define SO_TIMESTAMPING         37
-#endif
-
-/* Seconds.nanoseconds format */
-#define TIME_FMT "%" PRIu64 ".%.9" PRIu64 " "
-#define OTIME_FMT "%" PRIu64 ".%.9" PRIu32 " "
-
-/* Picosecond resolution format */
-#define SUBNS_TIME_FMT "%" PRIu64 ".%.9" PRIu32 "%03" PRIu64
-#define SUBNS_TIME_SCALE 1000
-
-/* Assert-like macros */
-#define TEST(x)                                                 \
-  do {                                                          \
-    if( ! (x) ) {                                               \
-      fprintf(stderr, "ERROR: '%s' failed\n", #x);              \
-      fprintf(stderr, "ERROR: at %s:%d\n", __FILE__, __LINE__); \
-      exit(1);                                                  \
-    }                                                           \
-  } while( 0 )
-
-#define TRY(x)                                                          \
-  do {                                                                  \
-    int __rc = (x);                                                     \
-      if( __rc < 0 ) {                                                  \
-        fprintf(stderr, "ERROR: TRY(%s) failed\n", #x);                 \
-        fprintf(stderr, "ERROR: at %s:%d\n", __FILE__, __LINE__);       \
-        fprintf(stderr, "ERROR: rc=%d errno=%d (%s)\n",                 \
-                __rc, errno, strerror(errno));                          \
-        exit(1);                                                        \
-      }                                                                 \
-  } while( 0 )
 
 struct configuration {
   char const*    cfg_ioctl;     /* e.g. eth6  - calls the ts enable ioctl */
@@ -123,6 +44,10 @@ struct configuration {
   unsigned int   cfg_max_packets; /* Stop after this many (0=forever) */
   int            cfg_ext;       /* Use extension API? Which version, 1 or 2? */
 };
+
+/* Include code in common with transmit timestamping example */
+
+#include "timestamping.h"
 
 /* Commandline options, configuration etc. */
 
@@ -145,26 +70,10 @@ void print_help(void)
   exit(-1);
 }
 
-
-static void get_protcol(struct configuration* cfg, const char* protocol)
-{
-  if( 0 == strcasecmp(protocol, "UDP") ) {
-    cfg->cfg_protocol = IPPROTO_UDP;
-  }
-  else if( 0 == strcasecmp(protocol, "TCP") ) {
-    cfg->cfg_protocol = IPPROTO_TCP;
-  }
-  else {
-    printf("ERROR: '%s' is not a recognised protocol (TCP or UCP).\n",
-           protocol);
-    exit(-EINVAL);
-  }
-}
-
-
 static void parse_options( int argc, char** argv, struct configuration* cfg )
 {
   int option_index = 0;
+  int valid = true;
   int opt;
   static struct option long_options[] = {
     { "ioctl", required_argument, 0, 'i' },
@@ -192,7 +101,7 @@ static void parse_options( int argc, char** argv, struct configuration* cfg )
         cfg->cfg_port = atoi(optarg);
         break;
       case 'P':
-        get_protcol(cfg, optarg);
+        cfg->cfg_protocol = get_protocol(optarg);
         break;
       case 'n':
         cfg->cfg_max_packets = atoi(optarg);
@@ -206,11 +115,17 @@ static void parse_options( int argc, char** argv, struct configuration* cfg )
         break;
 #endif
       default:
-        print_help();
+        valid = false;
         break;
     }
     opt = getopt_long(argc, argv, optstring, long_options, &option_index);
   }
+
+  if( cfg->cfg_protocol < 0 )
+    valid = false;
+
+  if( !valid )
+    print_help();
 }
 
 
@@ -222,54 +137,6 @@ static void make_address(unsigned short port, struct sockaddr_in* host_address)
   host_address->sin_family = AF_INET;
   host_address->sin_port = htons(port);
   host_address->sin_addr.s_addr = INADDR_ANY;
-}
-
-
-/* This requires a bit of explanation.
- * Typically, you have to enable hardware timestamping on an interface.
- * Any application can do it, and then it's available to everyone.
- * The easiest way to do this, is just to run sfptpd.
- *
- * But in case you need to do it manually; here is the code, but
- * that's only supported on reasonably recent versions
- *
- * Option: --ioctl ethX
- *
- * NOTE:
- * Usage of the ioctl call is discouraged. A better method, if using
- * hardware timestamping, would be to use sfptpd as it will effectively
- * make the ioctl call for you.
- *
- */
-static void do_ioctl(struct configuration* cfg, int sock)
-{
-#ifdef SIOCSHWTSTAMP
-  struct ifreq ifr;
-  struct hwtstamp_config hwc;
-#endif
-
-  if( cfg->cfg_ioctl == NULL )
-    return;
-
-#ifdef SIOCSHWTSTAMP
-  bzero(&ifr, sizeof(ifr));
-  snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%s", cfg->cfg_ioctl);
-
-  /* Standard kernel ioctl options */
-  hwc.flags = 0;
-  hwc.tx_type = 0;
-  hwc.rx_filter = HWTSTAMP_FILTER_ALL;
-
-  ifr.ifr_data = (char*)&hwc;
-
-  TRY( ioctl(sock, SIOCSHWTSTAMP, &ifr) );
-  return;
-#else
-  (void) sock;
-  printf("SIOCHWTSTAMP ioctl not supported on this kernel.\n");
-  exit(-ENOTSUP);
-  return;
-#endif
 }
 
 
@@ -355,50 +222,6 @@ static void print_time(struct timespec* ts)
     printf( "no timestamp\n" );
   }
 }
-
-
-#ifdef ONLOADEXT_AVAILABLE
-static const char *sof_ts_dir(int sof)
-{
-  if( sof & (SOF_TIMESTAMPING_RX_HARDWARE |
-             SOF_TIMESTAMPING_RX_SOFTWARE) )
-    return "rx";
-  else if( sof & (SOF_TIMESTAMPING_TX_HARDWARE |
-                  SOF_TIMESTAMPING_TX_SOFTWARE) )
-    return "tx";
-  else
-    return "?x";
-}
-
-static const char *sof_ts_type(int sof)
-{
-  if( sof & SOF_TIMESTAMPING_SOFTWARE )
-    return "sw";
-  else if( sof & SOF_TIMESTAMPING_SYS_HARDWARE )
-    return "xfrm";
-  else if( sof & SOF_TIMESTAMPING_RAW_HARDWARE )
-    return "hw";
-  else if( sof & SOF_TIMESTAMPING_OOEXT_TRAILER )
-    return "trailer";
-  else
-    return "?";
-}
-
-/* Render extension v2 timestamp */
-static void print_time_ext2(struct scm_timestamping_ooext* ts)
-{
-  printf(" %s.%s " SUBNS_TIME_FMT " %c%c%s",
-         sof_ts_dir(ts->type),
-         sof_ts_type(ts->type),
-         ts->timestamp.sec,
-         ts->timestamp.nsec,
-         (SUBNS_TIME_SCALE * ((uint64_t) ts->timestamp.nsec_frac)) >> 24,
-         ts->timestamp.flags & ONLOAD_TS_FLAG_CLOCK_SET     ? 's' : '-',
-         ts->timestamp.flags & ONLOAD_TS_FLAG_CLOCK_IN_SYNC ? 'S' : '-',
-         ts->timestamp.flags & ONLOAD_TS_FLAG_ACCEPTABLE    ?
-           u8"\u2714" : u8"\u2718");
-}
-#endif
 
 
 /* Given a packet, extract the timestamp(s) */
@@ -488,7 +311,7 @@ int main(int argc, char** argv)
 
   /* Initialise */
   parent = add_socket(&cfg);
-  do_ioctl(&cfg, parent);
+  do_ioctl(&cfg, parent, true, false);
   sock = parent;
   if( cfg.cfg_protocol == IPPROTO_TCP )
     sock = accept_child(parent);

@@ -1,18 +1,7 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
 /* X-SPDX-Copyright-Text: (c) Copyright 2014-2024 Xilinx, Inc. */
-/**************************************************************************\
-*//*! \file
-** <L5_PRIVATE L5_SOURCE>
-** \author  kjm
-**  \brief  Example for TX timestamping sockets API
-**   \date  2014/04/03
-**    \cop  (c) Level 5 Networks Limited.
-** </L5_PRIVATE>
-*//*
-\**************************************************************************/
-  
 
-/* Example application to demonstrate use of the timestamping API
+/* Example application to demonstrate use of the transmit timestamping API
  *
  * This application will echo packets, and display their TX timestamps.
  * With multiple different options for types of timestamp; including
@@ -21,8 +10,6 @@
  * Example:
  * (host1)$ EF_TX_TIMESTAMPING=1 onload tx_timestamping --proto tcp 
  * (host2)$ echo payload | nc host1 9000
- * 
- * (If not using onload, on most kernels, no TCP timestamp will be seen)
  */
 
 #include <unistd.h>
@@ -46,51 +33,10 @@
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
 
-#include "onload/extensions.h"
-#ifdef ONLOADEXT_AVAILABLE
-#include "onload/extensions_zc.h"
-#endif
+#include <linux/errqueue.h>
+#include <linux/net_tstamp.h>
+#include <linux/sockios.h>
 
-/* Use the kernel definitions if possible -
- * But if not, use our own local definitions, and Onload will allow it.
- * - Though you still need a reasonably recent kernel to get hardware
- *   timestamping.  Software timestamps can go back several more versions.
- */
-#ifndef NO_KERNEL_TS_INCLUDE
-  #include <linux/net_tstamp.h>
-  #include <linux/sockios.h>
-  #include <linux/errqueue.h>
-#else
-  #include <time.h>
-  struct hwtstamp_config {
-      int flags;           /* no flags defined right now, must be zero */
-      int tx_type;         /* HWTSTAMP_TX_* */
-      int rx_filter;       /* HWTSTAMP_FILTER_* */
-  };
-  enum {
-        SOF_TIMESTAMPING_TX_HARDWARE = (1<<0),
-        SOF_TIMESTAMPING_TX_SOFTWARE = (1<<1),
-        SOF_TIMESTAMPING_RX_HARDWARE = (1<<2),
-        SOF_TIMESTAMPING_RX_SOFTWARE = (1<<3),
-        SOF_TIMESTAMPING_SOFTWARE = (1<<4),
-        SOF_TIMESTAMPING_SYS_HARDWARE = (1<<5),
-        SOF_TIMESTAMPING_RAW_HARDWARE = (1<<6),
-        SOF_TIMESTAMPING_MASK =
-        (SOF_TIMESTAMPING_RAW_HARDWARE - 1) |
-        SOF_TIMESTAMPING_RAW_HARDWARE
-  };
-#endif
-
-/* These are defined in socket.h, but older versions might not have all 3 */
-#ifndef SO_TIMESTAMP
-  #define SO_TIMESTAMP            29
-#endif
-#ifndef SO_TIMESTAMPNS
-  #define SO_TIMESTAMPNS          35
-#endif
-#ifndef SO_TIMESTAMPING
-  #define SO_TIMESTAMPING         37
-#endif
 #ifndef SOF_TIMESTAMPING_OPT_ID
   #define SOF_TIMESTAMPING_OPT_ID (1<<7)
 #endif
@@ -98,27 +44,6 @@
   #define SOF_TIMESTAMPING_OPT_TSONLY (1<<11)
 #endif
 
-/* Assert-like macros */
-#define TEST(x)                                                 \
-  do {                                                          \
-    if( ! (x) ) {                                               \
-      fprintf(stderr, "ERROR: '%s' failed\n", #x);              \
-      fprintf(stderr, "ERROR: at %s:%d\n", __FILE__, __LINE__); \
-      exit(1);                                                  \
-    }                                                           \
-  } while( 0 )
-
-#define TRY(x)                                                          \
-  do {                                                                  \
-    int __rc = (x);                                                     \
-      if( __rc < 0 ) {                                                  \
-        fprintf(stderr, "ERROR: TRY(%s) failed\n", #x);                 \
-        fprintf(stderr, "ERROR: at %s:%d\n", __FILE__, __LINE__);       \
-        fprintf(stderr, "ERROR: rc=%d errno=%d (%s)\n",                 \
-                __rc, errno, strerror(errno));                          \
-        exit(1);                                                        \
-      }                                                                 \
-  } while( 0 )
 
 #define SEQ_LE(s1, s2)      ((uint32_t)((s1) - (s2)) <= 0)
 
@@ -137,6 +62,12 @@ struct configuration {
   bool           cfg_stream;    /* Set ONLOAD_SOF_TIMESTAMPING_STREAM */
 };
 
+
+/* Include code in common with receive timestamping example */
+
+#include "timestamping.h"
+
+
 /* Commandline options, configuration etc. */
 
 void print_help(void)
@@ -153,8 +84,8 @@ void print_help(void)
          "\t--mcast\t<group>\tSubscribe to multicast group.\n"
          "\t--data\tRequest a copy of outgoing packet with timestamp\n"
          "\t--cmsg\tUse SOF_TIMESTAMPING_OPT_CMSG (off by default)\n"
-         "\t--stream\tSet ONLOAD_SOF_TIMESTAMPING_STREAM (proprietary format)\n"
 #ifdef ONLOADEXT_AVAILABLE
+         "\t--stream\tSet ONLOAD_SOF_TIMESTAMPING_STREAM (proprietary format)\n"
          "\t--templated\tUse templated sends.\n"
          "\t--ext\t\tUse extensions API rather than SO_TIMESTAMPING.\n"
          "\t--ext2\t\tUse extensions API v2 rather than SO_TIMESTAMPING.\n"
@@ -162,19 +93,6 @@ void print_help(void)
         );
   exit(-1);
 }
-
-#define MATCHES(_x,_y) ( strncasecmp((_x),(_y),strlen((_x)))==0 )
-
-static int get_protocol(char const* proto)
-{
-  if (MATCHES( "udp", proto )) return IPPROTO_UDP;
-  if (MATCHES( "tcp", proto )) return IPPROTO_TCP;
-
-  printf("Could not understand requested protocol %s\n", proto);
-  print_help();
-  return -1;
-}
-#undef MATCHES
 
 static void parse_options( int argc, char** argv, struct configuration* cfg )
 {
@@ -289,72 +207,6 @@ static void do_mcast(struct configuration* cfg, int sock)
   TRY(setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, &req, sizeof(req)));
 }
 
-/* This requires a bit of explanation.
- * Typically, you have to enable hardware timestamping on an interface.
- * Any application can do it, and then it's available to everyone.
- * The easiest way to do this, is just to run sfptpd.
- *
- * But in case you need to do it manually; here is the code, but
- * that's only supported on reasonably recent versions
- *
- * Option: --ioctl ethX
- *
- * NOTE:
- * Usage of the ioctl call is discouraged. A better method, if using
- * hardware timestamping, would be to use sfptpd as it will effectively
- * make the ioctl call for you.
- *
- */
-static void do_ioctl(struct configuration* cfg, int sock)
-{
-#ifdef SIOCSHWTSTAMP
-  struct ifreq ifr;
-  struct hwtstamp_config hwc;
-  int ok;
-#endif
-
-  if(cfg->cfg_ioctl == NULL)
-    return;
-
-#ifdef SIOCSHWTSTAMP
-  bzero(&ifr, sizeof(ifr));
-  snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%s", cfg->cfg_ioctl);
-
-  hwc.flags = 0;
-  hwc.tx_type = HWTSTAMP_TX_ON;
-  hwc.rx_filter = 0;
-
-  ifr.ifr_data = (char*)&hwc;
-  
-  /* If using a TCP socket, we need to create a UDP one for the ioctl
-   * call.  This is fine as the setting is global for that
-   * interface 
-   */
-  if ( cfg->cfg_protocol == IPPROTO_TCP ) {
-    sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    TEST(sock != -1);
-  }
-
-  ok = ioctl(sock, SIOCSHWTSTAMP, &ifr);
-  if ( ok < 0 ) {
-    printf("Setting SIOCSHWTSTAMP ioctl failed %d (%d - %s)\n", 
-           ok, errno, strerror(errno));
-  } else {
-    printf("Accepted SIOCHWTSTAMP ioctl.\n");
-  }
-
-  if ( cfg->cfg_protocol == IPPROTO_TCP )
-    close(sock);
-
-  return;
-#else
-  (void) sock;
-  printf("SIOCHWTSTAMP ioctl not supported, ignoring --ioctl\n"
-         "HW timestamps will be unavailable unless sfptpd is running\n");
-  return; 
-#endif
-}
-
 /* This routine selects the correct socket option to enable timestamping.
  */
 static void do_ts_sockopt(struct configuration* cfg, int sock)
@@ -386,6 +238,7 @@ static void do_ts_sockopt(struct configuration* cfg, int sock)
       enable.flags |= SOF_TIMESTAMPING_OPT_TSONLY;
     if( cfg->cfg_cmsg )
       enable.flags |= SOF_TIMESTAMPING_OPT_CMSG;
+#ifdef ONLOADEXT_AVAILABLE
     if( cfg->cfg_stream &&
         cfg->cfg_protocol == IPPROTO_TCP ) {
       enable.flags |= ONLOAD_SOF_TIMESTAMPING_STREAM;
@@ -394,6 +247,7 @@ static void do_ts_sockopt(struct configuration* cfg, int sock)
         enable.flags |= SOF_TIMESTAMPING_OPT_ID_TCP;
 #endif
     }
+#endif
     ok = setsockopt(sock, SOL_SOCKET, optname, &enable, sizeof enable);
     if (ok < 0) {
       printf("Timestamp socket option failed.  %d (%d - %s)\n",
@@ -491,66 +345,19 @@ static void hexdump(const void* pv, int len)
 }
 
 
-#define TIME_FMT "%" PRIu64 ".%.9" PRIu64 " "
-#define OTIME_FMT "%" PRIu64 ".%.9" PRIu32 " "
 static void print_time(char *s, struct timespec* ts)
 {
    printf("%s timestamp " TIME_FMT "\n", s, 
           (uint64_t)ts->tv_sec, (uint64_t)ts->tv_nsec);
 }
 
-#ifdef ONLOADEXT_AVAILABLE
-
-/* Picosecond resolution format */
-#define SUBNS_TIME_FMT "%" PRIu64 ".%.9" PRIu32 "%03" PRIu64
-#define SUBNS_TIME_SCALE 1000
-
-static const char *sof_ts_dir(int sof)
-{
-  if( sof & (SOF_TIMESTAMPING_RX_HARDWARE |
-             SOF_TIMESTAMPING_RX_SOFTWARE) )
-    return "rx";
-  else if( sof & (SOF_TIMESTAMPING_TX_HARDWARE |
-                  SOF_TIMESTAMPING_TX_SOFTWARE) )
-    return "tx";
-  else
-    return "?x";
-}
-
-static const char *sof_ts_type(int sof)
-{
-  if( sof & SOF_TIMESTAMPING_SOFTWARE )
-    return "sw";
-  else if( sof & SOF_TIMESTAMPING_SYS_HARDWARE )
-    return "xfrm";
-  else if( sof & SOF_TIMESTAMPING_RAW_HARDWARE )
-    return "hw";
-  else if( sof & SOF_TIMESTAMPING_OOEXT_TRAILER )
-    return "trailer";
-  else
-    return "?";
-}
-
-/* Render extension v2 timestamp */
-static void print_time_ext2(struct scm_timestamping_ooext* ts)
-{
-  printf(" %s.%s " SUBNS_TIME_FMT " %c%c%s",
-         sof_ts_dir(ts->type),
-         sof_ts_type(ts->type),
-         ts->timestamp.sec,
-         ts->timestamp.nsec,
-         (SUBNS_TIME_SCALE * ((uint64_t) ts->timestamp.nsec_frac)) >> 24,
-         ts->timestamp.flags & ONLOAD_TS_FLAG_CLOCK_SET     ? 's' : '-',
-         ts->timestamp.flags & ONLOAD_TS_FLAG_CLOCK_IN_SYNC ? 'S' : '-',
-         ts->timestamp.flags & ONLOAD_TS_FLAG_ACCEPTABLE    ?
-           u8"\u2714" : u8"\u2718");
-}
-#endif
 
 /* Given a packet, extract the timestamp(s) */
 static void handle_time(struct msghdr* msg, struct configuration* cfg)
 {
+#ifdef ONLOADEXT_AVAILABLE
   struct onload_scm_timestamping_stream* tcp_tx_stamps;
+#endif
   struct timespec* udp_tx_stamp;
   struct cmsghdr* cmsg;
   struct sock_extended_err* err;
@@ -561,6 +368,7 @@ static void handle_time(struct msghdr* msg, struct configuration* cfg)
         cmsg->cmsg_level != SOL_IP )
       continue;
     switch(cmsg->cmsg_type) {
+#ifdef ONLOADEXT_AVAILABLE
     case ONLOAD_SCM_TIMESTAMPING_STREAM:
       tcp_tx_stamps = (struct onload_scm_timestamping_stream*)CMSG_DATA(cmsg);
       printf("Timestamp for tx - %d bytes:\n",
@@ -574,6 +382,7 @@ static void handle_time(struct msghdr* msg, struct configuration* cfg)
       /* Time retransmit sent */
       print_time("Last sent", &tcp_tx_stamps->last_sent);
       break;
+#endif
     case SO_TIMESTAMPING:
 #ifdef ONLOADEXT_AVAILABLE
       if( cfg->cfg_ext == 1 ) {
@@ -741,7 +550,7 @@ int main(int argc, char** argv)
   /* Initialise */
   sock = add_socket(&cfg);
   do_mcast(&cfg, sock);
-  do_ioctl(&cfg, sock);
+  do_ioctl(&cfg, sock, false, true);
   do_ts_sockopt(&cfg, sock);
 
   TRY( epoll = epoll_create(10) );
