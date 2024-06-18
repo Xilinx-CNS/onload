@@ -229,6 +229,7 @@ install_userland() {
               "$i_lib64/libonload.so"
     install_dlib "$u64"/lib/onload_ext/libonload_ext.so "$i_lib64"
     install_slib "$u64"/lib/onload_ext/libonload_ext.a "$i_lib64"
+    install_dlib "$u64"/lib/cplane/libefcp.so "$i_lib64"
     if [ -n "$ppc_at" ]; then
       install_plib "${u64}_at/lib/transport/unix/libcitransport0.so" \
                    "$i_prefix/$ppc_at/lib64/libonload.so"
