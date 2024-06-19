@@ -50,6 +50,7 @@
 struct configuration {
   int            cfg_protocol;  /* protocol: udp or tcp */
   char const*    cfg_host;      /* listen address */
+  char const*    cfg_intf;      /* interface address */
   char const*    cfg_mcast;     /* e.g. 239.10.10.10 - sets IP_ADD_MULTICAST */
   char const*    cfg_ioctl;     /* e.g. eth6  - calls the ts enable ioctl */
   unsigned short cfg_port;      /* listen port */
@@ -60,6 +61,7 @@ struct configuration {
                                  * Clears SOF_TIMESTAMPING_OPT_TSONLY */
   bool           cfg_cmsg;      /* Set SOF_TIMESTAMPING_OPT_CMSG */
   bool           cfg_stream;    /* Set ONLOAD_SOF_TIMESTAMPING_STREAM */
+  bool           cfg_rx;        /* Timestamp received packets */
 };
 
 
@@ -89,6 +91,8 @@ void print_help(void)
          "\t--templated\tUse templated sends.\n"
          "\t--ext\t\tUse extensions API rather than SO_TIMESTAMPING.\n"
          "\t--ext2\t\tUse extensions API v2 rather than SO_TIMESTAMPING.\n"
+         "\t--rx\t\tTimestamp received packets.\n"
+         "\t--intf\t\tAddress for interface to use for multicast receive.\n"
 #endif
         );
   exit(-1);
@@ -101,6 +105,7 @@ static void parse_options( int argc, char** argv, struct configuration* cfg )
   static struct option long_options[] = {
     { "proto", required_argument, 0, 't' },
     { "host", required_argument, 0, 'l' },
+    { "intf", required_argument, 0, 'I' },
     { "ioctl", required_argument, 0, 'i' },
     { "port", required_argument, 0, 'p' },
     { "mcast", required_argument, 0, 'c' },
@@ -112,9 +117,10 @@ static void parse_options( int argc, char** argv, struct configuration* cfg )
     { "ext", no_argument, 0, 'e' },
     { "ext2", no_argument, 0, 'E' },
     { "help", no_argument, 0, 'h' },
+    { "rx", no_argument, 0, 'r' },
     { 0, no_argument, 0, 0 }
   };
-  char const* optstring = "t:l:i:p:c:n:TheE";
+  char const* optstring = "t:l:i:p:c:n:TheErI:";
 
   /* Defaults */
   bzero(cfg, sizeof(struct configuration));
@@ -129,6 +135,9 @@ static void parse_options( int argc, char** argv, struct configuration* cfg )
         break;
       case 'l':
         cfg->cfg_host = optarg;
+        break;
+      case 'I':
+        cfg->cfg_intf = optarg;
         break;
       case 'i':
         cfg->cfg_ioctl = optarg;
@@ -162,6 +171,9 @@ static void parse_options( int argc, char** argv, struct configuration* cfg )
         cfg->cfg_ext = 2;
         break;
 #endif
+      case 'r':
+        cfg->cfg_rx = true;
+        break;
       case 'h':
       default:
         print_help();
@@ -195,15 +207,18 @@ static void make_address(char const* host, unsigned short port, struct sockaddr_
 /* Option: --mcast group_ip_address */
 static void do_mcast(struct configuration* cfg, int sock)
 {
+  struct sockaddr_in intf;
   struct ip_mreq req;
 
   if (cfg->cfg_mcast == NULL)
     return;
 
+  make_address(cfg->cfg_intf, 0, &intf);
+
   bzero(&req, sizeof(req));
   TRY(inet_aton(cfg->cfg_mcast, &req.imr_multiaddr));
 
-  req.imr_interface.s_addr = INADDR_ANY;
+  req.imr_interface.s_addr = intf.sin_addr.s_addr;
   TRY(setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, &req, sizeof(req)));
 }
 
@@ -220,7 +235,9 @@ static void do_ts_sockopt(struct configuration* cfg, int sock)
     optname = SO_TIMESTAMPING_OOEXT;
 
   if( cfg->cfg_ext == 1 )
-    TRY(onload_timestamping_request(sock, ONLOAD_TIMESTAMPING_FLAG_TX_NIC));
+    TRY(onload_timestamping_request(sock,
+        ONLOAD_TIMESTAMPING_FLAG_TX_NIC |
+        (cfg->cfg_rx ? ONLOAD_TIMESTAMPING_FLAG_RX_NIC : 0)));
   else
 #endif
   {
@@ -230,6 +247,9 @@ static void do_ts_sockopt(struct configuration* cfg, int sock)
                SOF_TIMESTAMPING_SYS_HARDWARE |
                SOF_TIMESTAMPING_SOFTWARE
     };
+
+    if( cfg->cfg_rx )
+      enable.flags |= SOF_TIMESTAMPING_RX_HARDWARE;
 
     int ok = 0;
 
@@ -483,6 +503,7 @@ int do_echo(int sock, unsigned int pkt_num, struct configuration* cfg)
   TEST(got >= 0);
 
   printf("Packet %d - %d bytes\n", pkt_num, got);
+  handle_time(&msg, cfg);
 
   /* echo back */
   msg.msg_controllen = 0;
@@ -550,7 +571,7 @@ int main(int argc, char** argv)
   /* Initialise */
   sock = add_socket(&cfg);
   do_mcast(&cfg, sock);
-  do_ioctl(&cfg, sock, false, true);
+  do_ioctl(&cfg, sock, cfg.cfg_rx, true);
   do_ts_sockopt(&cfg, sock);
 
   TRY( epoll = epoll_create(10) );
