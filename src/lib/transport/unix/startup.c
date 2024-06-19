@@ -435,6 +435,7 @@ static void citp_opts_getenv(citp_opts_t* opts)
   GET_ENV_OPT_INT("EF_EPOLL_MT_SAFE",   ul_epoll_mt_safe);
   GET_ENV_OPT_INT("EF_WODA_SINGLE_INTERFACE", woda_single_if);
   GET_ENV_OPT_INT("EF_FDTABLE_SIZE",	fdtable_size);
+  GET_ENV_OPT_INT("EF_FDS_MAX",	fds_max);
   GET_ENV_OPT_INT("EF_SPIN_USEC",	ul_spin_usec);
   GET_ENV_OPT_INT("EF_SLEEP_SPIN_USEC",	sleep_spin_usec);
   GET_ENV_OPT_INT("EF_STACK_PER_THREAD",stack_per_thread);
