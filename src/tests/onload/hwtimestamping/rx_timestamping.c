@@ -149,6 +149,8 @@ static void do_ts_sockopt(struct configuration* cfg, int sock)
              SOF_TIMESTAMPING_SYS_HARDWARE |
              SOF_TIMESTAMPING_SOFTWARE
   };
+  struct so_timestamping readback;
+  socklen_t readback_len = sizeof readback;
   int optname = SO_TIMESTAMPING;
 
   printf("Selecting hardware timestamping mode.\n");
@@ -164,7 +166,15 @@ static void do_ts_sockopt(struct configuration* cfg, int sock)
                                           ONLOAD_TIMESTAMPING_FLAG_RX_CPACKET));
   else
 #endif
+  {
     TRY(setsockopt(sock, SOL_SOCKET, optname, &enable, sizeof enable));
+    TRY(getsockopt(sock, SOL_SOCKET, optname, &readback, &readback_len));
+    if (enable.flags != readback.flags)
+      printf("SO_TIMESTAMPING flags mismatch on read back:\n"
+             "  got      0x%08x\n"
+             "  expected 0x%08x\n",
+             readback.flags, enable.flags);
+  }
 }
 
 static int add_socket(struct configuration* cfg)
