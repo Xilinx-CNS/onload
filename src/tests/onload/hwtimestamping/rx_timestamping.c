@@ -42,6 +42,7 @@ struct configuration {
   unsigned short cfg_port;      /* listen port */
   int            cfg_protocol;  /* udp or tcp? */
   unsigned int   cfg_max_packets; /* Stop after this many (0=forever) */
+  bool           cfg_pktinfo;   /* Whether to obtain incoming phys intf */
   int            cfg_ext;       /* Use extension API? Which version, 1 or 2? */
 };
 
@@ -62,6 +63,7 @@ void print_help(void)
            "Default: UDP\n"
          "\t--max\t<num>\tStop after n packets.  "
            "Default: Run forever\n"
+         "\t--pktinfo\t\tObtain physical timestamping interface.\n"
 #ifdef ONLOADEXT_AVAILABLE
          "\t--ext\t\tUse extensions API v1 rather than SO_TIMESTAMPING.\n"
          "\t--ext2\t\tUse extensions API v2 rather than SO_TIMESTAMPING.\n"
@@ -80,11 +82,12 @@ static void parse_options( int argc, char** argv, struct configuration* cfg )
     { "port", required_argument, 0, 'p' },
     { "proto", required_argument, 0, 'P' },
     { "max", required_argument, 0, 'n' },
+    { "pktinfo", no_argument, 0, 'k' },
     { "ext", no_argument, 0, 'e' },
     { "ext2", no_argument, 0, 'E' },
     { 0, no_argument, 0, 0 }
   };
-  const char* optstring = "i:p:P:n:eE";
+  const char* optstring = "i:p:P:n:eEk";
 
   /* Defaults */
   bzero(cfg, sizeof(struct configuration));
@@ -105,6 +108,9 @@ static void parse_options( int argc, char** argv, struct configuration* cfg )
         break;
       case 'n':
         cfg->cfg_max_packets = atoi(optarg);
+        break;
+      case 'k':
+        cfg->cfg_pktinfo = true;
         break;
 #ifdef ONLOADEXT_AVAILABLE
       case 'e':
@@ -154,6 +160,10 @@ static void do_ts_sockopt(struct configuration* cfg, int sock)
   int optname = SO_TIMESTAMPING;
 
   printf("Selecting hardware timestamping mode.\n");
+
+  if( cfg->cfg_pktinfo ) {
+    enable.flags |= SOF_TIMESTAMPING_OPT_PKTINFO;
+  }
 
 #ifdef ONLOADEXT_AVAILABLE
   if( cfg->cfg_ext == 2 ) {
@@ -223,13 +233,13 @@ static void print_time(struct timespec* ts)
      * in that order - though depending on socket option, you may have 0 in
      * some of them.
      */
-    printf("timestamps " TIME_FMT TIME_FMT TIME_FMT "\n",
+    printf("\ttimestamps " TIME_FMT TIME_FMT TIME_FMT,
       (uint64_t)ts[0].tv_sec, (uint64_t)ts[0].tv_nsec,
       (uint64_t)ts[1].tv_sec, (uint64_t)ts[1].tv_nsec,
       (uint64_t)ts[2].tv_sec, (uint64_t)ts[2].tv_nsec );
   } else
   {
-    printf( "no timestamp\n" );
+    printf( "\tno timestamp" );
   }
 }
 
@@ -245,38 +255,44 @@ static void handle_time(struct msghdr* msg, struct configuration* cfg)
       continue;
 
     switch( cmsg->cmsg_type ) {
-    case SO_TIMESTAMPNS:
+    case SCM_TIMESTAMPNS:
       ts = (struct timespec*) CMSG_DATA(cmsg);
+      print_time(ts);
       break;
-    case SO_TIMESTAMPING:
+    case SCM_TIMESTAMPING:
 #ifdef ONLOADEXT_AVAILABLE
       if( cfg->cfg_ext == 1 ) {
         struct onload_timestamp* ts = (struct onload_timestamp*) CMSG_DATA(cmsg);
-        printf("ext v1 timestamps " OTIME_FMT OTIME_FMT "\n",
+        printf("\text v1 timestamps " OTIME_FMT OTIME_FMT,
           ts[0].sec, ts[0].nsec, ts[1].sec, ts[1].nsec);
-        return;
+        break;
       }
 #endif
       ts = (struct timespec*) CMSG_DATA(cmsg);
+      print_time(ts);
       break;
 #ifdef ONLOADEXT_AVAILABLE
-    case SO_TIMESTAMPING_OOEXT:
+    case SCM_TIMESTAMPING_OOEXT:
       struct scm_timestamping_ooext *t, *tend;
       t = (struct scm_timestamping_ooext *) CMSG_DATA(cmsg);
       tend = t + cmsg->cmsg_len / sizeof *t;
-      printf("ext v2 timestamps");
+      printf("\text v2 timestamps");
       for (; t != tend; t++)
         print_time_ext2(t);
-      printf("\n");
-      return;
+      break;
 #endif
+    case SCM_TIMESTAMPING_PKTINFO:
+      struct scm_ts_pktinfo *pktinfo;
+      pktinfo = (struct scm_ts_pktinfo *) CMSG_DATA(cmsg);
+      printf("\tintf %d",
+             pktinfo->if_index);
+      break;
     default:
       /* Ignore other cmsg options */
       break;
     }
   }
-
-  print_time(ts);
+  printf("\n");
 }
 
 /* Receive a packet, and print out the timestamps from it */
@@ -305,7 +321,7 @@ static int do_recv(int sock, unsigned int pkt_num, struct configuration* cfg)
   if( !got && errno == EAGAIN )
     return 0;
 
-  printf("Packet %d - %d bytes\t", pkt_num, got);
+  printf("Packet %d - %d bytes", pkt_num, got);
   handle_time(&msg, cfg);
   return got;
 };
