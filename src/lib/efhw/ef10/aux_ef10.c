@@ -290,7 +290,6 @@ static int ef10_probe(struct auxiliary_device *auxdev,
   struct linux_efhw_nic *lnic;
   struct efhw_nic *nic;
   struct net_device *net_dev;
-  struct pci_dev *pci_dev;
   int rc;
 
   EFRM_NOTICE("%s name %s", __func__, id->name);
@@ -326,7 +325,7 @@ static int ef10_probe(struct auxiliary_device *auxdev,
   rc = efhw_sfc_device_type_init(&dev_type, res_dim.pci_dev);
   if( rc < 0 ) {
     EFRM_ERR("%s: efhw_device_type_init failed %04x:%04x rc %d",
-    __func__, (unsigned) pci_dev->vendor,
+    __func__, (unsigned) res_dim.pci_dev->vendor,
     (unsigned) res_dim.pci_dev->device, rc);
     goto fail3;
   }

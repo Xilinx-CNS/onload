@@ -2191,7 +2191,7 @@ ef10_rss_mode_to_nic_flags(struct efhw_nic *efhw_nic, u32 rss_mode,
                            u32 *flags_out)
 {
   int rc;
-  u32 rss_flags;
+  u32 rss_flags = 0;
   u32 nic_tcp_mode;
   u32 nic_src_mode = (1 << RSS_MODE_HASH_SRC_ADDR_LBN) |
                      (1 << RSS_MODE_HASH_SRC_PORT_LBN);
