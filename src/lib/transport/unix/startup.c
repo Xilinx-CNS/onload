@@ -583,6 +583,8 @@ citp_transport_init(void)
   if( CITP_OPTS.load_env )
     citp_opts_getenv(&CITP_OPTS);
 
+  citp_set_log_level(CITP_OPTS.log_level);
+
   /* NB. We only look at EF_CONFIG_DUMP if EF_LOAD_ENV. */
   if( CITP_OPTS.load_env && getenv("EF_CONFIG_DUMP") ) {
     citp_dump_opts(&CITP_OPTS);
