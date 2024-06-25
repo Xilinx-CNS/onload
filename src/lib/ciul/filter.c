@@ -547,7 +547,7 @@ int ef_vi_filter_add(ef_vi *vi, ef_driver_handle dh, const ef_filter_spec *fs,
     ef_filter_cookie cookie;
     unsigned flags = 0;
     int rxq_no = 0;
-
+    bool shared_mode = false;
 
     if( vi->efct_rxqs.active_qs ) {
 
@@ -573,10 +573,15 @@ int ef_vi_filter_add(ef_vi *vi, ef_driver_handle dh, const ef_filter_spec *fs,
     if( rc < 0 )
       return rc;
 
+    if ( fs->flags & EF_FILTER_FLAG_SHRUB_SHARED ) {
+      shared_mode = true;
+      rxq = fs->data[0] >> 16;
+    }
+
     if( filter_cookie_out )
       *filter_cookie_out = cookie;
     if( vi->internal_ops.post_filter_add ) {
-      rc = vi->internal_ops.post_filter_add(vi, fs, &cookie, rxq);
+      rc = vi->internal_ops.post_filter_add(vi, fs, &cookie, rxq, shared_mode);
       if( rc < 0 )
         ef_filter_del(dh, vi->vi_resource_id, &cookie);
     }

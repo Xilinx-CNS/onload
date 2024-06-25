@@ -479,6 +479,8 @@ enum ef_filter_flags {
   **
   */
   EF_FILTER_FLAG_EXCLUSIVE_RXQ     = 0x4,
+  /* TODO FILL THIS OUT (if this is the right thing to do) */
+  EF_FILTER_FLAG_SHRUB_SHARED      = 0x8,
 };
 
 /*! \brief Specification of a filter */

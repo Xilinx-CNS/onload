@@ -851,7 +851,11 @@ typedef struct {
   /** Post a buffer to the hardware FIFO (called internally) */
   void (*post)(struct ef_vi*, int qid, int sbid, bool sentinel);
   /** Attach a queue */
-  int  (*attach)(struct ef_vi*, int qid, unsigned n_superbufs);
+  int  (*attach)(struct ef_vi*,
+                 int qid,
+                 int buf_fd,
+                 unsigned n_superbufs,
+                 bool shared_mode);
   /** Refresh the internal config; called if config_generation changes */
   int  (*refresh)(struct ef_vi*, int qid);
   /** Prime the virtual interface's queues (both rx and tx) */
@@ -1219,7 +1223,8 @@ typedef struct ef_vi {
     int (*design_parameters)(struct ef_vi*, struct efab_nic_design_parameters*);
     /** A filter has just been added to the given VI */
     int (*post_filter_add)(struct ef_vi*, const struct ef_filter_spec* fs,
-                           const struct ef_filter_cookie* cookie, int rxq);
+                           const struct ef_filter_cookie* cookie, int rxq,
+                           bool shared_mode);
   } internal_ops;
 } ef_vi;
 
