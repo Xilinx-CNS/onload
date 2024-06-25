@@ -33,20 +33,27 @@ struct shrub_controller_vi {
   ef_driver_handle dh;
 };
 
-int init(struct ef_shrub_server** server_out,
-         const char* server_addr) {
-    return ef_shrub_server_open(
+int init(struct shrub_controller_vi* res,
+         struct ef_shrub_server** server_out,
+         const char* server_addr,
+         int qid) {
+    int rc = ef_shrub_server_open(
+      &res->vi,
       server_out,
       server_addr,
       cfg_buffer_size,
-      cfg_buffer_count
+      cfg_buffer_count,
+      qid
     );
+    if ( rc < 0 )
+      fprintf(stderr, "initializing shrub server failed");
+    return rc;
 }
 
-int reactor_loop(struct shrub_controller_vi* res, struct ef_shrub_server* server) {
+int reactor_loop(struct shrub_controller_vi* res, struct ef_shrub_server* server, int qid) {
   assert(server != NULL);
   while ( true ) {
-    ef_shrub_server_poll(&res->vi, server);
+    ef_shrub_server_poll(&res->vi, server, qid);
   }
 }
 
@@ -58,7 +65,6 @@ static __attribute__ ((__noreturn__)) void usage(void)
   fprintf(stderr, "options:\n");
   fprintf(stderr, "  -b       Total amount of superbuf buffers the controller manages.\n");
   fprintf(stderr, "  -q       RXQ and socket that the shrub controller should manage.\n");
-  fprintf(stderr, "  -s       Size of each superbuf buffer.\n");
   // TODO fill out the rest of this
   exit(1);
 }
@@ -68,12 +74,14 @@ int main(int argc, char* argv[]) {
   const char* interface;
   struct shrub_controller_vi* res;
   struct ef_shrub_server* server;
-  char sock_fd_path[SOCK_NAME_LEN];
+  char sock_fd_path[SOCK_NAME_LEN] = {0};
   struct stat st = {0};
   int c;
   char* queue = NULL;
+  unsigned pd_flags, vi_flags;
 
-  while( (c = getopt (argc, argv, "b:q:s:")) != -1 )
+
+  while( (c = getopt (argc, argv, "b:q:")) != -1 )
     switch( c ) {
       case 'b':
          cfg_buffer_count = atoi(optarg);
@@ -81,9 +89,6 @@ int main(int argc, char* argv[]) {
       case 'q':
          queue = optarg;
          cfg_queue = atoi(queue);
-         break;
-      case 's':
-         cfg_buffer_size = atoi(optarg);
          break;
       case '?':
         usage();
@@ -103,20 +108,23 @@ int main(int argc, char* argv[]) {
     exit(1);
   }
 
+  vi_flags = EF_VI_FLAGS_DEFAULT;
+  pd_flags = EF_PD_DEFAULT;
+
   rc = ef_driver_open(&res->dh);
   if ( rc != 0 ) {
     fprintf(stderr, "failed to open driver handle\n");
     exit(1);
   }
 
-  rc = ef_pd_alloc_by_name(&res->pd, res->dh, interface, 0);
+  rc = ef_pd_alloc_by_name(&res->pd, res->dh, interface, pd_flags);
   if ( rc != 0 ) {
     fprintf(stderr, "failed to alloc pd for %s\n", interface);
     exit(1);
   }
 
   rc = ef_vi_alloc_from_pd(&res->vi, res->dh, &res->pd, res->dh,
-                           -1, 0, 0, NULL, -1, 0);
+                           -1, -1, 0, NULL, -1, vi_flags);
   if ( rc != 0 ) {
     fprintf(stderr, "failed to allocate vi\n");
     exit(1);
@@ -131,7 +139,6 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  memset(sock_fd_path, 0, sizeof(sock_fd_path));
   strncpy(sock_fd_path, SOCK_DIR_PATH, SOCK_NAME_LEN - 1);
   strncat(sock_fd_path, "sock", SOCK_NAME_LEN - strlen(sock_fd_path) - 1); // For now a fixed one TODO later adjust
 
@@ -143,7 +150,7 @@ int main(int argc, char* argv[]) {
   // want to error instead as the socket is in control by another user.
   remove(sock_fd_path);
 
-  rc = init(&server, sock_fd_path);
+  rc = init(res, &server, sock_fd_path, cfg_queue);
   if ( rc != 0 ) {
     //TODO: Put a handler to destruct the socket on all interrupts.
     remove(sock_fd_path);
@@ -151,6 +158,6 @@ int main(int argc, char* argv[]) {
     exit(1);
   }
 
-  reactor_loop(res, server);
+  reactor_loop(res, server, cfg_queue);
 }
 
