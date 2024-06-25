@@ -19,20 +19,24 @@ struct ef_shrub_server;
 
 /* Create a server and make it available to accept incoming client connections.
  *
+ * vi:           initialized pointer to a EtherFabric Virtual Interface
  * server:       provides a pointer to the structure for managing the server
  * server_addr:  the address for the server, typically a filesystem path;
  *               clients will use this to connect
  * buffer_bytes: the size of each buffer that the server will provide
  * buffer_count: the total number of buffers to allocate
- *
+ * qid:          Queue to attach onto.
+ * 
  * Returns zero on success, or a negative error code including
  *  -ENOMEM memory allocation failed
  *  -EPERM  user does not have permission to bind to the address
  */
-int ef_shrub_server_open(struct ef_shrub_server** server,
+int ef_shrub_server_open(struct ef_vi* vi,
+                         struct ef_shrub_server** server,
                          const char* server_addr,
                          size_t buffer_bytes,
-                         size_t buffer_count);
+                         size_t buffer_count,
+                         int qid);
 
 /* Shut down the server and destroy the opaque structure. This will close
  * all client connections, although shared buffers and other resources may
@@ -49,7 +53,7 @@ void ef_shrub_server_close(struct ef_shrub_server* server);
  *
  * This should be called frequently.
  */
-void ef_shrub_server_poll(struct ef_vi* vi, struct ef_shrub_server* server);
+void ef_shrub_server_poll(struct ef_vi* vi, struct ef_shrub_server* server, int qid);
 
 #endif
 

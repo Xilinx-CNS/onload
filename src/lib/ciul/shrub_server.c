@@ -15,6 +15,9 @@
 
 #include "shrub_pool.h"
 #include "shrub_shared.h"
+#include "logging.h"
+#include "bitfield.h"
+
 
 #include <stdlib.h>
 #include <stdbool.h>
@@ -27,13 +30,15 @@
 #include <sys/user.h>
 #include <sys/epoll.h>
 
-
-/* TODO we'll need some way to post the buffers to whatever is populating the
- * data. Perhaps we could be provided with pointers to functions like these?
- * Or maybe it could be another client?
- */
-static bool hw_want_buffer(void) {return false;}
-static void hw_post_buffer(struct ef_vi* vi, ef_shrub_buffer_id buffer) {}
+static ef_shrub_buffer_id set_buffer_id(ef_shrub_buffer_id id, bool sentinel) {
+  ci_dword_t buffer_id;
+  CI_POPULATE_DWORD_2(
+    buffer_id,
+    EF_SHRUB_BUFFER_ID, id,
+    EF_SHRUB_SENTINEL, sentinel
+  );
+  return buffer_id.u32[0];
+}
 
 struct ef_shrub_connection {
   struct ef_shrub_connection* next;
@@ -56,13 +61,16 @@ struct ef_shrub_server {
   int connection_count;
 
   ef_shrub_buffer_id* fifo;
-  struct ef_shrub_buffer_pool* buffer_pool;
   unsigned* buffer_refs;
 
   struct ef_shrub_connection* connections;
   struct ef_shrub_connection* closed_connections;
 };
 
+
+static bool fifo_has_space(struct ef_shrub_server* server) {
+  return server->fifo_size > 0 && server->fifo[server->fifo_index] == EF_SHRUB_INVALID_BUFFER;
+}
 
 static void set_fifo_size(struct ef_shrub_server* server)
 {
@@ -98,20 +106,6 @@ static int server_alloc_refs(struct ef_shrub_server* server)
   return 0;
 }
 
-static int server_alloc_pool(struct ef_shrub_server* server)
-{
-  int rc;
-  ef_shrub_buffer_id id;
-
-  rc = ef_shrub_init_pool(server->buffer_count, &server->buffer_pool);
-  if( rc < 0 )
-    return rc;
-
-  for( id = 0; id < server->buffer_count; ++id )
-    ef_shrub_free_buffer(server->buffer_pool, id);
-
-  return 0;
-}
 
 static int server_alloc_shared(struct ef_shrub_server* server)
 {
@@ -219,35 +213,28 @@ static int server_listen(struct ef_shrub_server* server,
   return listen(server->listen, 32);
 }
 
-static void poll_fifo(struct ef_shrub_server* server,
-                      struct ef_shrub_connection* connection)
+static void poll_fifo(struct ef_vi* vi, struct ef_shrub_server* server,
+                      struct ef_shrub_connection* connection, int qid)
 {
   int i = connection->fifo_index;
+
   ef_shrub_buffer_id buffer = connection->fifo[i];
+
   if( buffer == EF_SHRUB_INVALID_BUFFER )
     return;
 
   connection->fifo[i] = EF_SHRUB_INVALID_BUFFER;
   connection->fifo_index = i == server->fifo_size - 1 ? 0 : i + 1;
   if( --server->buffer_refs[buffer] == 0 )
-    ef_shrub_free_buffer(server->buffer_pool, buffer);
+    vi->efct_rxqs.ops->free(vi, qid, buffer);
 }
 
-static void poll_fifos(struct ef_shrub_server* server)
+static void poll_fifos(struct ef_vi* vi, struct ef_shrub_server* server,
+                       int qid)
 {
   struct ef_shrub_connection* c;
   for( c = server->connections; c != NULL; c = c->next )
-    poll_fifo(server, c);
-}
-
-static void post_buffer(struct ef_vi* vi, struct ef_shrub_server* server,
-                        ef_shrub_buffer_id buffer)
-{
-  int i = server->fifo_index;
-
-  hw_post_buffer(vi, buffer);
-  server->fifo[i] = buffer;
-  server->fifo_index = i == server->fifo_size - 1 ? 0 : i + 1;
+    poll_fifo(vi, server, c, qid);
 }
 
 static struct ef_shrub_connection*
@@ -407,10 +394,12 @@ static void poll_sockets(struct ef_shrub_server* server)
   }
 }
 
-int ef_shrub_server_open(struct ef_shrub_server** server_out,
+int ef_shrub_server_open(struct ef_vi* vi,
+                         struct ef_shrub_server** server_out,
                          const char* server_addr,
                          size_t buffer_bytes,
-                         size_t buffer_count)
+                         size_t buffer_count,
+                         int qid)
 {
   struct ef_shrub_server* server;
   int rc, i;
@@ -426,10 +415,6 @@ int ef_shrub_server_open(struct ef_shrub_server** server_out,
   rc = server_alloc_refs(server);
   if( rc < 0 )
     goto fail_refs;
-
-  rc = server_alloc_pool(server);
-  if( rc < 0 )
-    goto fail_pool;
 
   rc = server_alloc_shared(server);
   if( rc < 0 )
@@ -455,9 +440,18 @@ int ef_shrub_server_open(struct ef_shrub_server** server_out,
   if( rc < 0 )
     goto fail_epoll_add;
 
+  rc = vi->efct_rxqs.ops->attach(vi,
+                                 qid,
+                                 server->shared_fds[EF_SHRUB_FD_BUFFERS],
+                                 server->buffer_count,
+                                 false);
+  if (rc < 0)
+    goto fail_server_attach;
+
   *server_out = server;
   return 0;
 
+fail_server_attach:
 fail_epoll_add:
 fail_listen:
   close(server->listen);
@@ -469,8 +463,6 @@ fail_fifo:
 fail_shared:
   for( i = 0; i < EF_SHRUB_FD_COUNT; ++i )
     close(server->shared_fds[i]);
-  ef_shrub_fini_pool(server->buffer_pool);
-fail_pool:
   free(server->buffer_refs);
 fail_refs:
   free(server);
@@ -487,20 +479,28 @@ void ef_shrub_server_close(struct ef_shrub_server* server)
   munmap(server->fifo, fifo_bytes(server));
   for( i = 0; i < EF_SHRUB_FD_COUNT; ++i )
     close(server->shared_fds[i]);
-  ef_shrub_fini_pool(server->buffer_pool);
   free(server->buffer_refs);
   free(server);
 }
 
-void ef_shrub_server_poll(struct ef_vi* vi, struct ef_shrub_server* server)
+void ef_shrub_server_poll(struct ef_vi* vi, struct ef_shrub_server* server, int qid)
 {
-  poll_fifos(server);
-  while( hw_want_buffer() ) {
-    ef_shrub_buffer_id buffer = ef_shrub_alloc_buffer(server->buffer_pool);
-    if( buffer == EF_SHRUB_INVALID_BUFFER )
-      break;
+  bool sentinel;
+  unsigned sbseq;
+  ef_vi_efct_rxq_ops* ops;
+  ops = vi->efct_rxqs.ops;
 
-    post_buffer(vi, server, buffer);
+  poll_fifos(vi, server, qid);
+  while( fifo_has_space(server) ) {
+    int next_buffer = ops->next(vi, qid, &sentinel, &sbseq);
+    if ( next_buffer < 0 ) {
+      break;
+    }
+    int i = server->fifo_index;
+    server->fifo[i] = set_buffer_id(next_buffer, sentinel);
+    assert(server->buffer_refs[next_buffer] == 0);
+    server->buffer_refs[next_buffer] = server->connection_count;
+    server->fifo_index = i == server->fifo_size - 1 ? 0 : i + 1;
   }
 
   /* TBD: should this be a separate operation?
