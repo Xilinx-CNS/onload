@@ -134,7 +134,11 @@ static bool efct_kbufs_available(const ef_vi* vi, int qid)
   return OO_ACCESS_ONCE(shm->rxq.added) != shm->rxq.removed;
 }
 
-static int efct_kbufs_attach(ef_vi* vi, int qid, unsigned n_superbufs)
+static int efct_kbufs_attach(ef_vi* vi,
+                             int qid,
+                             int buf_fd,
+                             unsigned n_superbufs,
+                             bool shared_mode)
 {
 #ifdef __KERNEL__
   /* Onload does its own thing before calling attach_internal */

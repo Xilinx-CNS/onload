@@ -7,15 +7,24 @@
 #error TODO support efct_ubufs for kernel ef_vi
 #endif
 
+#include <stdio.h>
+
 #include <sys/mman.h>
 #include <etherfabric/memreg.h>
 #include "ef_vi_internal.h"
 #include "shrub_pool.h"
 #include "driver_access.h"
+#include "shrub_client.h"
+#include "shrub_pool.h"
+#include "logging.h"
 
 /* TODO move CI_EFCT_MAX_SUPERBUFS somewhere more sensible, or remove
  * dependencies on it */
 #include <etherfabric/internal/efct_uk_api.h>
+
+#define SOCK_DIR_PATH "/run/onload/"
+#define SOCK_DIR_LEN  12
+#define SOCK_NAME_LEN 20
 
 struct efct_ubufs_desc
 {
@@ -28,6 +37,7 @@ struct efct_ubufs_rxq
 {
   uint32_t superbuf_pkts;
   struct ef_shrub_buffer_pool* buffer_pool;
+  struct ef_shrub_client* shrub_client;
 
   /* FIFO to record buffers posted to the NIC. */
   unsigned added, filled, removed;
@@ -125,7 +135,20 @@ static void post_buffers(ef_vi* vi, struct efct_ubufs_rxq* rxq, int qid)
   }
 }
 
-static int efct_ubufs_next(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq)
+static int efct_ubufs_next_shared(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq)
+{
+  struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[qid];
+
+  ef_shrub_buffer_id id;
+  int rc = ef_shrub_client_acquire_buffer(rxq->shrub_client, &id, sentinel);
+  if ( rc < 0 ) {
+    return rc;
+  }
+  *sbseq = rxq->removed++;
+  return id;
+}
+
+static int efct_ubufs_next_local(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq)
 {
   struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[qid];
   struct efct_ubufs_desc desc;
@@ -145,7 +168,17 @@ static int efct_ubufs_next(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq)
   return desc.id;
 }
 
-static void efct_ubufs_free(ef_vi* vi, int qid, int sbid)
+static int efct_ubufs_next(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq)
+{
+  const struct efct_ubufs_rxq* rxq = &const_ubufs(vi)->q[qid];
+  if (rxq->shrub_client) {
+    return efct_ubufs_next_shared(vi, qid, sentinel, sbseq);
+  } else {
+    return efct_ubufs_next_local(vi, qid, sentinel, sbseq);
+  }
+}
+
+static void efct_ubufs_free_local(ef_vi* vi, int qid, int sbid)
 {
   struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[qid];
 
@@ -154,11 +187,44 @@ static void efct_ubufs_free(ef_vi* vi, int qid, int sbid)
   post_buffers(vi, rxq, qid);
 }
 
-static bool efct_ubufs_available(const ef_vi* vi, int qid)
+static void efct_ubufs_free_shared(ef_vi* vi, int qid, int sbid)
+{
+  const struct efct_ubufs_rxq* rxq = &const_ubufs(vi)->q[qid];
+  ef_shrub_client_release_buffer(rxq->shrub_client, sbid);
+}
+
+static void efct_ubufs_free(ef_vi* vi, int qid, int sbid)
+{
+  const struct efct_ubufs_rxq* rxq = &const_ubufs(vi)->q[qid];
+  if (rxq->shrub_client) {
+    efct_ubufs_free_shared(vi, qid, sbid);
+  } else {
+    efct_ubufs_free_local(vi, qid, sbid);
+  }
+}
+
+static bool efct_ubufs_local_available(const ef_vi* vi, int qid)
 {
   const struct efct_ubufs_rxq* rxq = &const_ubufs(vi)->q[qid];
   return rxq->added != rxq->removed;
 }
+
+static bool efct_ubufs_shared_available(const ef_vi* vi, int qid)
+{
+  const struct efct_ubufs_rxq* rxq = &const_ubufs(vi)->q[qid];
+  return ef_shrub_client_buffer_available(rxq->shrub_client);
+}
+
+static bool efct_ubufs_available(const ef_vi* vi, int qid)
+{
+  const struct efct_ubufs_rxq* rxq = &const_ubufs(vi)->q[qid];
+  if (rxq->shrub_client) {
+    return efct_ubufs_shared_available(vi, qid);
+  } else {
+    return efct_ubufs_local_available(vi, qid);
+  }
+}
+
 
 static void efct_ubufs_post_direct(ef_vi* vi, int qid, int sbid, bool sentinel)
 {
@@ -195,7 +261,8 @@ static void efct_ubufs_post_kernel(ef_vi* vi, int qid, int sbid, bool sentinel)
   ci_resource_op(vi->dh, &op);
 }
 
-static int efct_ubufs_attach(ef_vi* vi, int qid, unsigned n_superbufs)
+
+static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd, unsigned n_superbufs)
 {
 #ifdef __KERNEL__
   // TODO
@@ -209,6 +276,8 @@ static int efct_ubufs_attach(ef_vi* vi, int qid, unsigned n_superbufs)
   struct efct_ubufs* ubufs = get_ubufs(vi);
   struct efct_ubufs_rxq* rxq;
 
+  int flags = (fd < 0 ? MAP_PRIVATE | MAP_ANONYMOUS : MAP_SHARED);
+
   if( n_superbufs > CI_EFCT_MAX_SUPERBUFS )
     return -EINVAL;
 
@@ -220,9 +289,9 @@ static int efct_ubufs_attach(ef_vi* vi, int qid, unsigned n_superbufs)
                           CI_HUGEPAGE_SIZE);
   map = mmap((void*)vi->efct_rxqs.q[ix].superbuf, map_bytes,
              PROT_READ | PROT_WRITE,
-             MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_HUGETLB |
-               MAP_FIXED | MAP_POPULATE,
-             -1, 0);
+             flags  | MAP_NORESERVE | MAP_HUGETLB |
+             MAP_FIXED | MAP_POPULATE,
+             fd, 0);
   if( map == MAP_FAILED )
     return -errno;
   if( map != vi->efct_rxqs.q[ix].superbuf ) {
@@ -256,6 +325,62 @@ static int efct_ubufs_attach(ef_vi* vi, int qid, unsigned n_superbufs)
   return 0;
 #endif
 }
+
+static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd, unsigned n_superbufs)
+{
+  int ix;
+  char sock_fd_path[SOCK_NAME_LEN] = {0};
+  char cqid[3] = {0};
+  struct efct_ubufs* ubufs = get_ubufs(vi);
+  struct efct_ubufs_rxq* rxq;
+
+  struct stat st = {0};
+  EF_VI_ASSERT(qid < vi->efct_rxqs.max_qs);
+
+  ix = efct_vi_find_free_rxq(vi, qid);
+  if( ix < 0 )
+    return ix;
+
+  strncpy(sock_fd_path, SOCK_DIR_PATH, SOCK_DIR_LEN);
+
+  strncat(sock_fd_path, "sock", SOCK_NAME_LEN  - strlen(sock_fd_path) - 1);
+  snprintf(cqid, 3, "%d", qid);
+  strncat(sock_fd_path, cqid, SOCK_NAME_LEN  - strlen(sock_fd_path) - 1);
+
+  if ( stat(sock_fd_path, &st) == -1 ) {
+    LOG(ef_log("%s: ERROR no sock path found!", __FUNCTION__));
+    return -errno;
+  }
+
+  rxq = &ubufs->q[qid];
+  int rc = ef_shrub_client_open(&rxq->shrub_client,
+                                (void*)vi->efct_rxqs.q[qid].superbuf,
+                                sock_fd_path);
+  rxq->superbuf_pkts = ef_shrub_client_buffer_bytes(rxq->shrub_client) / EFCT_PKT_STRIDE;
+  if ( rc != 0 ) {
+    LOG(ef_log("%s: ERROR initializing shrub client!", __FUNCTION__));
+    return -rc;
+  }
+
+  ubufs->active_qs |= 1 << ix;
+  efct_vi_start_rxq(vi, ix, qid);
+  
+  return 0;
+}
+
+static int efct_ubufs_attach(ef_vi* vi,
+                             int qid,
+                             int fd,
+                             unsigned n_superbufs,
+                             bool shared_mode)
+{
+  if ( shared_mode ) {
+    return efct_ubufs_shared_attach(vi, qid, fd, n_superbufs);
+  } else {
+    return efct_ubufs_local_attach(vi, qid, fd, n_superbufs);
+  }
+}
+
 
 static int efct_ubufs_prime(ef_vi* vi, ef_driver_handle dh)
 {
@@ -322,9 +447,9 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
   ubufs->pd = pd;
   ubufs->pd_dh = pd_dh;
 
-  ubufs->ops.available = efct_ubufs_available;
-  ubufs->ops.next = efct_ubufs_next;
   ubufs->ops.free = efct_ubufs_free;
+  ubufs->ops.next = efct_ubufs_next;
+  ubufs->ops.available = efct_ubufs_available;
   ubufs->ops.attach = efct_ubufs_attach;
   ubufs->ops.refresh = efct_ubufs_refresh;
   ubufs->ops.prime = efct_ubufs_prime;
