@@ -18,7 +18,6 @@
 
 #include "utils.h"
 
-
 #define EV_POLL_BATCH_SIZE   16
 #define REFILL_BATCH_SIZE    16
 
@@ -93,6 +92,8 @@ static int cfg_exit_pkts = -1;
 static int cfg_register_mcast;
 static int cfg_discard = -1;
 static bool cfg_exclusive = false;
+static bool cfg_x4_shared_mode = false;
+
 
 /* Mutex to protect printing from different threads */
 static pthread_mutex_t printf_mutex;
@@ -541,7 +542,7 @@ int main(int argc, char* argv[])
   struct in_addr sa_mcast;
   int c, sock;
 
-  while( (c = getopt (argc, argv, "dtVL:vmbefF:n:jD:x")) != -1 )
+  while( (c = getopt (argc, argv, "dtVL:vmbefF:n:jD:x4")) != -1 )
     switch( c ) {
     case 'd':
       cfg_hexdump = 1;
@@ -584,6 +585,9 @@ int main(int argc, char* argv[])
       break;
     case 'x':
       cfg_exclusive = true;
+      break;
+    case '4':
+      cfg_x4_shared_mode = true; //todo allow flexible unix socket path locations
       break;
     case '?':
       usage();
@@ -696,8 +700,16 @@ int main(int argc, char* argv[])
   /* Add filters so that adapter will send packets to this VI. */
   while( argc > 0 ) {
     ef_filter_spec filter_spec;
-    if( filter_parse(&filter_spec, argv[0], &sa_mcast,
-                     cfg_exclusive ? EF_FILTER_FLAG_EXCLUSIVE_RXQ : EF_FILTER_FLAG_NONE) != 0 ) {
+
+    int filter_flags = EF_FILTER_FLAG_NONE;
+    if ( cfg_exclusive )
+      filter_flags = EF_FILTER_FLAG_EXCLUSIVE_RXQ;
+    if ( cfg_x4_shared_mode ) {
+      filter_flags = EF_FILTER_FLAG_SHRUB_SHARED;
+      TRY(ef_filter_spec_set_dest(&filter_spec, 0, 0)); //todo adjust this for a specific qids
+    }
+
+    if( filter_parse(&filter_spec, argv[0], &sa_mcast, filter_flags) != 0 ) {
       LOGE("ERROR: Bad filter spec '%s'\n", argv[0]);
       exit(1);
     }

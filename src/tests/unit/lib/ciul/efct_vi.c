@@ -144,7 +144,7 @@ static void efct_mock_free(ef_vi* vi, int qid, int sbid)
   ops->free_sbid = sbid;
 }
 
-static int efct_mock_attach(ef_vi* vi, int qid, unsigned n_superbufs)
+static int efct_mock_attach(ef_vi* vi, int qid, int buf_fd, unsigned n_superbufs, bool shared_mode)
 {
   struct efct_mock_ops* ops = mock_ops(vi);
 

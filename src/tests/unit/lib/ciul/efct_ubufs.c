@@ -154,7 +154,7 @@ static void test_efct_ubufs(void)
   STATE_STASH(vi);
   ops = vi->efct_rxqs.ops;
   ops->post = mock_post;
-  CHECK(ops->attach(vi, 0, SUPERBUF_COUNT), ==, 0);
+  CHECK(ops->attach(vi, 0, -1, SUPERBUF_COUNT, false), ==, 0);
 
   for( rep = 0; rep < 3; ++rep ) {
     for( i = 0; i < SUPERBUF_COUNT; ++i ) {
@@ -199,7 +199,7 @@ static void test_sentinel(void)
   STATE_STASH(vi);
   ops = vi->efct_rxqs.ops;
   ops->post = mock_post;
-  CHECK(ops->attach(vi, 0, 1), ==, 0);
+  CHECK(ops->attach(vi, 0, -1, 1, false), ==, 0);
 
   buf = ops->next(vi, 0, &sentinel, &sbseq);
   CHECK(buf, >=, 0);
@@ -243,7 +243,7 @@ static void test_poison(void)
   STATE_STASH(vi);
   ops = vi->efct_rxqs.ops;
   ops->post = mock_post;
-  CHECK(ops->attach(vi, 0, 1), ==, 0);
+  CHECK(ops->attach(vi, 0, -1, 1, false), ==, 0);
 
   buf = ops->next(vi, 0, &sentinel, &sbseq);
   CHECK(buf, >=, 0);
