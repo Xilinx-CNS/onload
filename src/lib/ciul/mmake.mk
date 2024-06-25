@@ -46,6 +46,7 @@ LIB_SRCS	+=		\
 		ctpio.c         \
 		shrub_pool.c    \
 		shrub_server.c  \
+		shrub_client.c  \
 		efct_ubufs.c    \
 
 # librt is needed on old glibc, e.g. on RHEL 6
