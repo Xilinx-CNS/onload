@@ -320,7 +320,7 @@ efct_test_rollover(struct efct_test* t, int qid, int sbid, int sentinel)
 
 static void efct_test_attach_only(struct efct_test* t, int qid)
 {
-  CHECK(t->vi->internal_ops.post_filter_add(t->vi, NULL, NULL, qid), ==, 0);
+  CHECK(t->vi->internal_ops.post_filter_add(t->vi, NULL, NULL, qid, false), ==, 0);
   STATE_CHECK(t->mock_ops, anything_called, 1);
   STATE_CHECK(t->mock_ops, attach_called, 1);
   STATE_CHECK(t->mock_ops, attach_qid, qid);
@@ -367,11 +367,11 @@ static void test_efct_attach(void)
   struct efct_test* t = efct_test_init_rx(3);
 
   test_filter_is_block_only = true;
-  CHECK(t->vi->internal_ops.post_filter_add(t->vi, NULL, NULL, 1), ==, 0);
+  CHECK(t->vi->internal_ops.post_filter_add(t->vi, NULL, NULL, 1, false), ==, 0);
   STATE_CHECK(t->mock_ops, anything_called, 0);
   test_filter_is_block_only = false;
 
-  CHECK(t->vi->internal_ops.post_filter_add(t->vi, NULL, NULL, 3), ==, -EINVAL);
+  CHECK(t->vi->internal_ops.post_filter_add(t->vi, NULL, NULL, 3, false), ==, -EINVAL);
   STATE_CHECK(t->mock_ops, anything_called, 1);
   STATE_CHECK(t->mock_ops, attach_called, 1);
   STATE_CHECK(t->mock_ops, attach_qid, 3);
