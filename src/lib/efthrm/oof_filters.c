@@ -2722,7 +2722,7 @@ __oof_socket_add(struct oof_manager* fm, struct oof_socket* skf, int do_arm_only
       }
       if( do_arm )
         rc = oof_socket_add_wild(fm, skf, skf->af_space, lpa, skf->sf_laddr, 1);
-      if( rc < 0 )
+      if( rc < 0 && rc != -EFILTERSSOME )
         return rc;
       ci_dllist_push(&lpa->lpa_semi_wild_socks, &skf->sf_lp_link);
       if( do_arm )
@@ -4063,7 +4063,7 @@ oof_mcast_install(struct oof_manager* fm, struct oof_mcast_member* mm,
                             lp->lp_protocol, addr_any, 0, maddr, lp->lp_lport,
                             mf->mf_vlan_id, install_hwport_mask,
                             OOF_SRC_FLAGS_DEFAULT_MCAST);
-  if( rc != 0 ) {
+  if( rc != 0 && rc != -EFILTERSSOME ) {
     ci_addr_t laddr;
 
     /* We didn't get all of the filters we wanted, but traffic should
@@ -4467,7 +4467,7 @@ oof_socket_mcast_add(struct oof_manager* fm, struct oof_socket* skf,
                                          skf->sf_raddr.ip4, skf->sf_rport);
       if( rc == 0 && OOF_NEED_MCAST_FILTER(fm, skf, mm) ) {
         rc = oof_mcast_install(fm, mm, &mcast_filters);
-        if( rc != 0 ) {
+        if( rc != 0 && rc != -EFILTERSSOME ) {
           ci_dllist_pop(&skf->sf_mcast_memberships);
           new_mm = mm;
         }

@@ -167,6 +167,14 @@ static int ci_mcast_join_leave(ci_netif* ni, ci_udp_state* us,
     if( CITP_OPTS.no_fail )
       return 0;
     else {
+      /* If the user tries to join a multicast group on a bond we might end up
+       * in the situation where the filter is installed on at least one nic, but
+       * not all. In this case remove the existing filter and return a
+       * predictable error code. */
+      if( rc == -EFILTERSSOME ) {
+        ci_tcp_ep_mcast_add_del(ni, S_SP(us), ifindex, maddr, /*false*/0);
+        rc = -ENOBUFS;
+      }
       /* The caller is responsible for rolling back the OS socket state */
       RET_WITH_ERRNO(-rc);
     }

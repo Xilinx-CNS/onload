@@ -372,13 +372,17 @@ int oo_hw_filter_add_hwports(struct oo_hw_filter* oofilter,
                    (rc == -EBUSY && !oof_all_ports_required) ) )
         rc = rc1;
     }
-  if( ok_seen && 
-      ( ( rc == -EACCES ) || 
-        ( !oof_all_ports_required && ( rc == -EBUSY ) ) ) ) {
-    /* If some interfaces, but not ALL interfaces, have blocked the filter
-     *  then consider the filter added.
-     */
-    rc = 0;
+  if( ok_seen ) {
+    if ( ( rc == -EACCES ) ||
+         ( !oof_all_ports_required && ( rc == -EBUSY ) ) ) {
+      /* If some interfaces, but not ALL interfaces, have blocked the filter
+       *  then consider the filter added.
+       */
+      rc = 0;
+    }
+    else if( rc ) {
+      rc = -EFILTERSSOME;
+    }
   }
   return rc;
 }
