@@ -32,3 +32,103 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/ssa
           make ONLOAD_TREE=$GITHUB_WORKSPACE/onload_internal -j $(nproc)
+
+
+  extract_branch_info:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    outputs:
+      onloadBranch: ${{ steps.onloadBranch.outputs.branch }}
+      tcpdirectBranch: ${{ steps.tcpdirectBranch.outputs.branch }}
+    steps:
+      - name: Checkout onload
+        uses: actions/checkout@v4
+        with:
+          path: onload
+
+      - name: Install yq
+        run: |
+           sudo apt-get update
+           sudo apt-get install -y python3 python3-pip jq
+           pip3 install yq
+
+      - name: Extract onload branch
+        id: onloadBranch
+        run: echo "branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> "$GITHUB_OUTPUT"
+
+      - name: Extract TCPDirect branch
+        id: tcpdirectBranch
+        run: echo "branch=$(yq -r '.products.TCPDirect.version' < $GITHUB_WORKSPACE/onload/versions.yaml)" >> "$GITHUB_OUTPUT"
+
+
+  tcpdirect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: extract_branch_info
+    env:
+      TCPDIRECT_TREE: ${{ github.workspace }}/tcpdirect
+      ONLOAD_TREE: ${{ github.workspace }}/onload
+    steps:
+      # We try checking out TCPDirect with the current onload branch to support
+      # development workflows, but will fall back to the branch defined in our
+      # versions.yaml file.
+      - name: Checkout TCPDirect development branch
+        id: primary_tcpdirect_checkout
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/tcpdirect
+          path: ${{ env.TCPDIRECT_TREE }}
+          ref: ${{ needs.extract_branch_info.outputs.onloadBranch }}
+
+      - name: Cleanup failed TCPDirect development branch checkout
+        if: ${{ ! cancelled() && steps.primary_tcpdirect_checkout.outcome == 'failure' }}
+        run: rm -rf "$TCPDIRECT_TREE"
+
+      - name: Checkout TCPDirect
+        uses: actions/checkout@v4
+        if: ${{ ! cancelled() && steps.primary_tcpdirect_checkout.outcome == 'failure' }}
+        with:
+          repository: ${{ github.repository_owner }}/tcpdirect
+          path: tcpdirect
+          ref: ${{ needs.extract_branch_info.outputs.tcpdirectBranch }}
+
+      - name: Checkout Onload
+        uses: actions/checkout@v4
+        with:
+          path: ${{ env.ONLOAD_TREE }}
+
+      - name: Checkout packetdrill
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          repository: ${{ github.repository_owner }}/packetdrill-tcpdirect
+          path: packetdrill-tcpdirect
+          ref: tcpdirect-8.1
+
+      - name: Install the TCPDirect build and test dependencies
+        uses: ./tcpdirect/.github/actions/install-dependencies
+
+      - name: Build the base TCPDirect library
+        uses: ./tcpdirect/.github/actions/build
+        with:
+          tcpdirect_tree: ${{ env.TCPDIRECT_TREE }}
+          onload_tree: ${{ env.ONLOAD_TREE }}
+          build_target: all
+          debug: true
+
+      - name: Build the TCPDirect socket shim
+        uses: ./tcpdirect/.github/actions/build
+        with:
+          tcpdirect_tree: ${{ env.TCPDIRECT_TREE }}
+          onload_tree: ${{ env.ONLOAD_TREE }}
+          build_target: shim
+          debug: true
+
+      - name: Run the TCPDirect unit tests
+        uses: ./tcpdirect/.github/actions/test
+        with:
+          tcpdirect_tree: ${{ env.TCPDIRECT_TREE }}
+          onload_tree: ${{ env.ONLOAD_TREE }}
+          test_timeout_multiplier: 2
+          run_slow_tests: false

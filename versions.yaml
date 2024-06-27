@@ -7,4 +7,6 @@ products:
     version: 8.1.5
   simple_sockets_apps:
     version: last_known_good/onload-8.1
+  TCPDirect:
+    version: v8_1
 ...
