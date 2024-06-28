@@ -363,7 +363,7 @@ int efrm_nic_get_accel_allowed(struct efhw_nic* nic)
  *
  * NOTE: the flow of control through this routine is quite subtle
  * because of the number of operations that can fail. We therefore
- * take the apporaching of keeping the return code (rc) variable
+ * take the approaching of keeping the return code (rc) variable
  * accurate, and only do operations while it is non-negative. Tear down
  * is done at the end if rc is negative, depending on what has been set up
  * by that point.

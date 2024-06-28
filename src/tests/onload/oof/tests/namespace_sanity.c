@@ -128,7 +128,7 @@ int test_namespace_sanity()
   current = proc2;
   thr2 = ooft_alloc_stack(4);
 
-  /* We don't currently propogate cplane address information, so can't
+  /* We don't currently propagate cplane address information, so can't
    * set up the second namespace until after we know that the filter manager
    * has been created.
    */

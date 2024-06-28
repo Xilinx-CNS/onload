@@ -573,7 +573,7 @@ def do_test_alien_bond(cpserver,cp,netns,mode,v6,include_non_sf_intf=False):
     k = cp_fwd_key(any_ip(v6), fake_ip(v6, 0))
 
     for active in hwports + list(reversed(hwports)):
-        if mode not in [0, 2, 3]: # some modes do not allow setting active inteface
+        if mode not in [0, 2, 3]: # some modes do not allow setting active interface
             bond_set_active(cpserver, bond_name, slavenames[active])
         # FIMXE: for some reason the system call to check bond is needed
         #        without it cpresolve might produce out of date result
@@ -857,7 +857,7 @@ def link_options(kind):
 @cpdecorate(tag='main_ns')
 @cpdecorate(tag='myns', parent_tag='main_ns')
 def do_test_multi_ns(main_ns, myns, encap):
-    ''' The test verifies hwport and license resolution of higher order intefaces
+    ''' The test verifies hwport and license resolution of higher order interfaces
         based on lower order interfaces in different namespace.
 
         Creates two namespaces of which one is the main the other subordinate.
@@ -1063,7 +1063,7 @@ def do_combination(cpserver,cp,netns,combination):
     ifname = 'O1'
     build_intf(netns, ifname, '192.168.1.2/16', cp=cp, hwport=1)
 
-    # create base inteface
+    # create base interface
     ifname = 'O0'
     build_intf(netns, ifname, None, cp=cp, hwport=0)
 

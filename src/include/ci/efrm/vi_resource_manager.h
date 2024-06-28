@@ -104,7 +104,7 @@ struct efrm_vi_q {
  * one that is currently unused, but allowing multiple EVQs to map to the same
  * interrupt when necessary or advantageous.
  *     Note that on architectures that use wakeups (notably EF10), interrupts
- * are managed by the net driver, and the structre below does not apply. */
+ * are managed by the net driver, and the structure below does not apply. */
 struct efrm_interrupt_vector {
 	/* Link into efrm_nic::irq_list.  Protected by efrm_nic::lock. */
 	struct list_head link;

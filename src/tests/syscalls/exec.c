@@ -761,7 +761,7 @@ fd_s *scm_rights_unix_client(fork_b dofork, fd_s *fds) {
   }
 
   ret = add_fd_s(rfd);
-  //Need to transfer state accross
+  //Need to transfer state across
   set_state(ret,fds->state);
   ret->type  = fds->type;
   ret->is_l5 = fds->is_l5; 

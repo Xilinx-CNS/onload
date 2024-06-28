@@ -157,7 +157,7 @@ struct ci_netif_s {
 #define OO_SHARED_BUFFER_CHUNK_SIZE  (1ULL << PMD_SHIFT)
   /* With CI_CFG_NETIF_MAX_ENDPOINTS_MAX = 2^21,
    * there can't be more than 2^11 chunks of socket buffers
-   * (+ a few chunks for the stack state itsefl). */
+   * (+ a few chunks for the stack state itself). */
 #endif
 
   struct oo_cplane_handle *cplane;
@@ -290,7 +290,7 @@ struct ci_netif_s {
 #define CI_NETIF_FLAG_AF_XDP               0x10000
 /* one of the NICs is EFCT */
 #define CI_NETIF_FLAG_EFCT                 0x20000
-/* these architecture cannot handle polling in atomic */
+/* these architectures cannot handle polling in atomic */
 #define CI_NETIF_FLAGS_AVOID_ATOMIC \
         (CI_NETIF_FLAG_AF_XDP|\
          CI_NETIF_FLAG_EFCT)

@@ -5,8 +5,8 @@
 **   Copyright: (c) Level 5 Networks Limited.
 **      Author: slp
 **     Started: 2005/04/22
-** Description: Interface for the tcp driver pluggin. This is all the
-** stuff, control plane and asynchronous threads which is requried to
+** Description: Interface for the tcp driver plugin. This is all the
+** stuff, control plane and asynchronous threads which is required to
 ** support a ULTCP stack
 ** </L5_PRIVATE>
 \**************************************************************************/

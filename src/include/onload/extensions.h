@@ -245,7 +245,7 @@ extern int onload_fd_check_feature(int fd, enum onload_fd_feature feature);
  *    on this socket);
  * b) simple receive queue: do not read() before move, no urgent data.
  *
- * Returns 0 f moved successfully, -1 otherwise.
+ * Returns 0 if moved successfully, -1 otherwise.
  * In any case, fd is a good accelerated socket after this call.
  */
 extern int onload_move_fd(int fd);

@@ -240,7 +240,7 @@ ci_inline char* oo_state_off_to_ptr(ci_netif* ni, unsigned off)
                   EP_BUF_PER_CHUNK);
 #endif
 
-/* Threshhold for proactive socket allocation is half of the shmbuf chunk
+/* Threshold for proactive socket allocation is half of the shmbuf chunk
  * capability: 2^21 / 2^10 / 2 = 1024.  It can't guarantee that one driverlink
  * poll does not exhaust all the spare socket buffers, but probably gives
  * a good chance that a listener can accept all incoming connections and

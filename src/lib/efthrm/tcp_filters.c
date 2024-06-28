@@ -421,7 +421,7 @@ int oo_hw_filter_update(struct oo_hw_filter* oofilter,
   int kernel_redirect = src_flags & OO_HW_SRC_FLAG_KERNEL_REDIRECT;
 
   /* TODO: clustering: This needed for handling NIC resets.
-   * For clusters we can only add/remove filters from intefaces.
+   * For clusters we can only add/remove filters from interfaces.
    */
   if( new_stack != NULL && oofilter->thc != NULL ) {
     ci_log("%s: ERROR: Stack moving not supported on clustered filters",

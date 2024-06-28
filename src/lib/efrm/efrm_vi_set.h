@@ -37,8 +37,8 @@
 #include <ci/efrm/vi_allocation.h>
 #include <ci/efrm/efrm_filter.h>
 
-/* EFRM_RSS_MODE_ID_MAX needs to be large engough
- * to accomodate all modes.
+/* EFRM_RSS_MODE_ID_MAX needs to be large enough
+ * to accommodate all modes.
  * See EFRM_RSS_MODE_ID in vi_set.h
  */
 #define EFRM_RSS_MODE_ID_MAX 1

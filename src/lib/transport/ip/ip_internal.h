@@ -332,7 +332,7 @@ ci_tcp_ep_clear_filters(ci_netif*         ni,
  * \param ni              ci_netif structure
  * \param sock_id         socket id
  * \param sock_fd         OS socket file descriptor
- * \param phys_port       L5 physcial port index to use when joining the
+ * \param phys_port       L5 physical port index to use when joining the
  *                        group
  * \param mcast_addr      Multicast address to add to the socket list
  * \param add             add or delete multicast entry?
