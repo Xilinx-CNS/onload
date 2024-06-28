@@ -207,4 +207,6 @@ test: $(TARGETS)
 	  env $(UNIT_TEST_ENV_VARS) \
 	  python3 -B $(shell which py.test) -p no:cacheprovider \
 	    $(PYTEST_SELECT_OPT) $(UNIT_TEST_REDIRECT); \
-	sudo pkill -s 0 shim_cp_server || true
+	rc=$$?; \
+	sudo pkill -s 0 shim_cp_server || true; \
+	exit $$rc
