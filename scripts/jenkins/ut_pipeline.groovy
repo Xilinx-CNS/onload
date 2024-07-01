@@ -183,6 +183,12 @@ String[] list_build_profiles() {
         continue
       }
 
+      /* We want to handle cloud builds separately as the unit tests depend on
+       * this build. */
+      if( profile_name.equals("cloud") ) {
+        continue
+      }
+
       /* "extra" is the default profile that has already been built before
        * we ran the unit tests.  "af_xdp" requires a newer kernel that we have
        * available. */
@@ -236,6 +242,8 @@ void doUnitTestsPipeline() {
     }
 
     doDeveloperBuild()
+    doDeveloperBuild("cloud")
+
     doUnitTests(gcovr_options)
     doSystemTests()
     tm.publish_coverage_report(coverage_files)
