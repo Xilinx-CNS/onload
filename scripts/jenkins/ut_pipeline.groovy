@@ -35,36 +35,6 @@ def tm = new TestManager(this)
 @Field
 def scmmanager = new SCMManager(this)
 
-@Field
-def coverage_files = [:]
-
-void doCplanePipeline(List gcovr_options)
-{
-  String[] gcov_paths = [
-    'build/**/*.gc*',
-    'build/gnu_x86_64/tests/onload/cplane_unit',
-  ]
-  coverage_files['cplane'] = tm.runUnitTest('cplane', 'check:unit:cplane', gcov_paths, true, [], gcovr_options)
-}
-
-void doOOFPipeline(List gcovr_options)
-{
-  String[] gcov_paths = [
-    'build/**/*.gc*',
-    'build/gnu_x86_64/tests/onload/oof/oof_test',
-  ]
-  coverage_files['oof'] = tm.runUnitTest('oof', 'check:unit:oof', gcov_paths, true, [], gcovr_options)
-}
-
-void doORMPipeline(List gcovr_options)
-{
-  String[] gcov_paths = [
-    'build/**/*.gc*',
-    'build/gnu_x86_64/tests/onload/onload_remote_monitor/internal_tests/test_ftl',
-  ]
-  coverage_files['orm'] = tm.runUnitTest('orm', 'check:unit:orm', gcov_paths, true, [], gcovr_options)
-}
-
 void doDeveloperBuild(String build_profile=null) {
   def components = ['kernel_driver', 'userspace', 'efct_driver', 'kernel_driver_no_sfc']
   def debugnesses = ['DEBUG', 'NDEBUG']
@@ -122,44 +92,38 @@ void doDeveloperBuild(String build_profile=null) {
   }
 }
 
-void doUnitTests(List gcovr_options) {
-  stage('Unit tests') {
-    utils.parallel(
-      'cplane': {
-        doCplanePipeline(gcovr_options)
-      },
-      'ftl': {
-        doORMPipeline(gcovr_options)
-      },
-      'oof': {
-        doOOFPipeline(gcovr_options)
-      },
-    )
-  }
-}
-
-void doSystemTests() {
-  stage('System tests') {
-    String[] gcov_paths = [
-      'build/**/*.gc*',
-      'src/tests/onload/cplane_sysunit/*',
-      'build/gnu_x86_64/tests/onload/cplane_sysunit',
-    ]
-    utils.parallel(
-      'netlink-inc-bond': {
-        withEnv([
-          'CPLANE_SYS_ASSERT_NETLINK_BOND=Included'
-        ]) {
-          coverage_files['cplane-sys-netlink-inc-bond'] = tm.runUnitTest(
-            'cplane-sys-netlink-inc-bond',
-            'check:cplane_sys',
-            gcov_paths,
-            true,
-            ['netlink-inc-bond'],
-          )
-        }
-      },
-    )
+void doTests() {
+  node("unit-test-parallel") {
+    def workspace = "workspace/${new URLDecoder().decode(env.JOB_NAME)}/exec-${env.EXECUTOR_NUMBER}-unit_tests"
+    ws(workspace) {
+      def path = "PATH=\"\$PATH:\$PWD/scripts\""
+      stage("Prepare test build") {
+        scmmanager.cloneGit(scm)
+        sh(script: "scripts/onload_build --strict --debug --user --build-profile=cloud")
+      }
+      stage("Run Tests") {
+        utils.parallel([
+          "cplane unit":  {
+            sh(script: "$path make -C build/gnu_x86_64/tests/onload/cplane_unit all")
+            sh(script: "$path make -C build/gnu_x86_64/tests/onload/cplane_unit test")
+          },
+          "OOF unit": {
+            // OOF is the only one that actually requires a separate "make all"
+            // step, but this has been copied in other places for consistency.
+            sh(script: "$path make -C build/gnu_x86_64/tests/onload/oof all")
+            sh(script: "$path make -C build/gnu_x86_64/tests/onload/oof tests")
+          },
+          "ORM unit": {
+            sh(script: "$path make -C build/gnu_x86_64/tests/onload/onload_remote_monitor/internal_tests all")
+            sh(script: "$path make -C build/gnu_x86_64/tests/onload/onload_remote_monitor/internal_tests test")
+          },
+          "cplane system": {
+            sh(script: "$path make -C build/gnu_x86_64/tests/onload/cplane_sysunit all")
+            sh(script: "$path make -C build/gnu_x86_64/tests/onload/cplane_sysunit test")
+          }
+        ])
+      }
+    }
   }
 }
 
@@ -244,9 +208,7 @@ void doUnitTestsPipeline() {
     doDeveloperBuild()
     doDeveloperBuild("cloud")
 
-    doUnitTests(gcovr_options)
-    doSystemTests()
-    tm.publish_coverage_report(coverage_files)
+    doTests()
 
     /* Build for each build profile */
     for( int i = 0; i < build_profiles.size(); ++i ) {
