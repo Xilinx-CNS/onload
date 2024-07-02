@@ -711,11 +711,19 @@ __Figure: Creating Filters__
 
 \subsection filters_permission Filter permission requirements
 
+By default, super-user rights (specifically `CAP_NET_ADMIN`) are needed to use
+the following filters:
+
+- MAC filters (including the VLAN variant)
+- IP proto (and the VLAN variant)
+- Ethertype (and the VLAN variant)
+
+Onload-9 adds the sfc_char module option `mac_filters_gid` which can be used to permit other applications to use these three filter types.
+
+
 Super-user rights (specifically `CAP_NET_ADMIN`) are needed to use the following
 filters:
 
-- IP proto (and the VLAN variant)
-- Ethertype (and the VLAN variant)
 - Unicast-mismatch (and the VLAN variant)
 - Multicast-mismatch (and the VLAN variant)
 - Unicast-all
