@@ -134,8 +134,8 @@ efrm_rss_context_alloc_and_init(struct efrm_pd *pd,
 	 * NOTE1: netdriver might be configured to use random key.
 	 * NOTE2: shared keys currently are set with random keys by fw.
 	 *
-	 * The same key accross devices will ensure the identical spreading,
-	 * which is important for maintaining proper opration after bond
+	 * The same key across devices will ensure the identical spreading,
+	 * which is important for maintaining proper operation after bond
 	 * reconfiguration or fallover.
 	 * Also Transparent proxy requires identical rss key on its devices.
 	 */

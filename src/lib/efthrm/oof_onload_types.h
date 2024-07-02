@@ -58,7 +58,7 @@ struct oo_filter_ns_manager {
   /* In some circumstances, tproxies need to install protocol filters that are
    * not MAC-qualified and are required for the lifetime of any tproxy and are
    * system-global.  Because hwports may be present in more than one netns
-   * we need to arbitrate between the different users of these global filters.o   *
+   * we need to arbitrate between the different users of these global filters.o
    * We protect this list with its own mutex.  We can't use ofnm_lock, as its
    * possible for the oof_managers to want to update their tproxy filters in
    * the context of an update made while we're already holding that.
@@ -66,7 +66,7 @@ struct oo_filter_ns_manager {
   struct oo_tproxy_filter ofnm_tproxy_filters[OOF_TPROXY_GLOBAL_FILTER_COUNT];
   struct mutex ofnm_tproxy_lock;
 
-  /* We maintain global state of hwports so that we can propogate the info
+  /* We maintain global state of hwports so that we can propagate the info
    * when new namespaces appear.
    */
   unsigned ofnm_hwports_up;

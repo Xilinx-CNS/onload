@@ -1967,7 +1967,7 @@ static void sw_update_cb(void* arg, void* data)
 }
 
 /* Do actions asked by kernel.
- * Some actions should be performed immediatedly (sw filter update
+ * Some actions should be performed immediately (sw filter update
  * must happen before the stack poll), others may go to stack lock
  * and deferred to unlock function.
  */

@@ -745,7 +745,7 @@ static void oo_epoll_prime_all_stacks(struct oo_epoll_private* priv)
 
 #if CI_CFG_EPOLL3
 /* It is a f_op->poll() like function, but we poll from oo_epoll1_block_on()
- * only, so there is no need to propogate it as such. */
+ * only, so there is no need to propagate it as such. */
 /* Fixme: get rid of f_op->poll() prototype, and call
  * add_wait_queue(this_wq, ept.wq[0]) directly. */
 static unsigned oo_epoll1_poll(struct file* filp, poll_table* wait)

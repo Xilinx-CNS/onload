@@ -198,7 +198,7 @@ tcp_helper_endpoint_reuseaddr_cleanup(ci_netif* ni, ci_sock_cmn* s)
 
 
 /* Function flushes pending endpoint CLEAR FILTER operation, which is
- * normally scheduled to be done asnychronously by tcp_helper_do_non_atomic()
+ * normally scheduled to be done asynchronously by tcp_helper_do_non_atomic()
  * in workqueue context.
  * Flushing is required before setting new filter. */
 static int

@@ -55,7 +55,7 @@ int ci_tcp_helper_clear_epcache(ci_netif* ni)
  *
  * \param fd              File descriptor of tcp_helper
  * \param ep              TCP control block id
- * \param phys_port       L5 physcial port index to support SO_BINDTODEVICE
+ * \param phys_port       L5 physical port index to support SO_BINDTODEVICE
  *                        (ignored unless raddr/rport = 0/0)
  * \param from_tcp_id     block id of listening socket to "borrow" filter from
  *                        (-1 if not required)
@@ -191,7 +191,7 @@ int ci_tcp_helper_ep_filter_dump(void* opaque, void* buf, int buf_len)
  * 
  * \param fd              File descriptor of tcp_helper
  * \param ep              TCP control block id
- * \param phys_port       L5 physcial port index to support SO_BINDTODEVICE
+ * \param phys_port       L5 physical port index to support SO_BINDTODEVICE
  *                        (ignored unless raddr/rport = 0/0)
  * \param mcast_addr      Multicast address to add to the socket list
  * \param add             Add or delete?

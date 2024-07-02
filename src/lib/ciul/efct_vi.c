@@ -892,7 +892,7 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
     pkt_id = rxq_ptr->data_pkt;
     desc = efct_rx_desc(vi, pkt_id);
 
-    /* Do a course grained check first, then get rid of the false positives.*/
+    /* Do a coarse grained check first, then get rid of the false positives. */
     if(unlikely( header->u64[0] & CHECK_FIELDS ) &&
        (header->u64[0] & M(ROLLOVER) ||
         (discard_flags = header_status_flags(header) & vi->rx_discard_mask)) ) {

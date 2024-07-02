@@ -927,7 +927,7 @@ def link_options(kind):
 @cpdecorate(tag='main_ns')
 @cpdecorate(tag='myns', parent_tag='main_ns')
 def do_test_multi_ns(main_ns, myns, encap):
-    ''' The test verifies hwport and license resolution of higher order intefaces
+    ''' The test verifies hwport and license resolution of higher order interfaces
         based on lower order interfaces in different namespace.
 
         Creates two namespaces of which one is the main the other subordinate.
@@ -1135,7 +1135,7 @@ def do_combination(cpserver,cp,netns,combination):
     ifname = 'O1'
     build_intf(netns, ifname, '192.168.1.2/16', cp=cp, hwport=1)
 
-    # create base inteface
+    # create base interface
     ifname = 'O0'
     build_intf(netns, ifname, None, cp=cp, hwport=0)
 

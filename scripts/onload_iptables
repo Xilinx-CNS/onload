@@ -343,7 +343,7 @@ def MakeSysFsRulesFromLine( line, options ):
 		except:
 			return( comment, "" )
 	else:
-		# Otherwise, we do need to propogate exceptions
+		# Otherwise, we do need to propagate exceptions
 		bits = GenerateBits(good)
 	rulemap = ComprehensibleIpRule( bits, options.strict, options.treat_as_outgoing )
 	interfaces = GetInterfaces( options )

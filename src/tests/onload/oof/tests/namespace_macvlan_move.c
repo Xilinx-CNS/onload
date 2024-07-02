@@ -102,7 +102,7 @@ int test_namespace_macvlan_move(void)
    * base interface (ie it's effectively a macvlan interface).  We don't
    * configure an address here - we're about to move it to another namespace.
    *
-   * We know that the default cplane init will number intefaces from 1, so
+   * We know that the default cplane init will number interfaces from 1, so
    * use that knowledge to just grab the interface we want.
    */
   struct ooft_ifindex* idx1 = ooft_idx_from_id(1);

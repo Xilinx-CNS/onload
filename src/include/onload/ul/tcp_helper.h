@@ -83,7 +83,7 @@ extern int ciul_can_handle_addr(struct ci_netif_s *netif, ci_uint32 ip_be32,
  *
  * \param fd              File descriptor of tcp_helper
  * \param ep              TCP control block id
- * \param phys_port       L5 physcial port index to support SO_BINDTODEVICE
+ * \param phys_port       L5 physical port index to support SO_BINDTODEVICE
  *                        (ignored unless raddr/rport = 0/0)
  * \param from_tcp_id     block id of listening socket to "borrow" filter from
  *                        (-1 if not required)
@@ -161,7 +161,7 @@ ci_tcp_helper_cluster_dump(void* opaque, void* buf, int buf_len) CI_HF;
  * 
  * \param fd              File descriptor of tcp_helper
  * \param ep              TCP control block id
- * \param phys_port       L5 physcial port index to support SO_BINDTODEVICE
+ * \param phys_port       L5 physical port index to support SO_BINDTODEVICE
  *                        (ignored unless raddr/rport = 0/0)
  * \param mcast_addr      Multicast address to add to the socket list
  * \param add             Add or delete?

@@ -212,7 +212,7 @@ typedef struct tcp_helper_resource_s {
   /*! Link for global list of stacks. */
   ci_dllink              all_stacks_link;
 
-  /* VI descruction completion helper. */
+  /* VI destruction completion helper. */
   struct completion complete;
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER

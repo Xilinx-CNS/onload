@@ -222,7 +222,7 @@ ci_inline void citp_signal_set_pending(int signum, siginfo_t *info,
   log("%s: no empty slot to set pending signal %d", __FUNCTION__, signum);
 }
 
-/*! Run signal handler immediatedly, just now.
+/*! Run signal handler immediately, just now.
 ** \param  signum   Signal number
 ** \param  info     Saved info for sa_sigaction handler
 ** \param  context  Saved context for sa_sigaction handler
