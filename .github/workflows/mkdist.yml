@@ -76,7 +76,7 @@ jobs:
         ./scripts/onload_mkcontainer --output-vars ./*.tgz | tr -d '"' >> "$GITHUB_OUTPUT"
 
     - name: Cache tarball
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ steps.mkcontainer.outputs.tarball_subdir }}
         path: ${{ steps.mkcontainer.outputs.tarball_name }}
