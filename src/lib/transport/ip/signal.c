@@ -72,7 +72,7 @@ static int oo_signal_write_lock(int sig, ci_uint32* seq_p)
   ci_uint32 seq;
   int i = 0;
 
-  do {
+  while( true ) {
     seq = OO_ACCESS_ONCE(store->seq);
     if( seq & OO_SIGSTORE_BUSY ) {
       if( i++ > 1000000 ) {
@@ -81,8 +81,12 @@ static int oo_signal_write_lock(int sig, ci_uint32* seq_p)
       }
       ci_spinloop_pause();
     }
-  } while( ci_cas32u_fail(&store->seq, seq, seq | OO_SIGSTORE_BUSY) );
+    else if( ci_cas32u_succeed(&store->seq, seq, seq | OO_SIGSTORE_BUSY) ) {
+      break;
+    }
+  }
 
+  ci_assert_nflags(seq, OO_SIGSTORE_BUSY);
   *seq_p = seq;
   return 0;
 }
