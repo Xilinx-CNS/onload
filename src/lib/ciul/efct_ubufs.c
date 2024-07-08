@@ -330,7 +330,6 @@ static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd, unsigned n_s
 {
   int ix;
   char sock_fd_path[SOCK_NAME_LEN] = {0};
-  char cqid[3] = {0};
   struct efct_ubufs* ubufs = get_ubufs(vi);
   struct efct_ubufs_rxq* rxq;
 
@@ -341,12 +340,7 @@ static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd, unsigned n_s
   if( ix < 0 )
     return ix;
 
-  strncpy(sock_fd_path, SOCK_DIR_PATH, SOCK_DIR_LEN);
-
-  strncat(sock_fd_path, "sock", SOCK_NAME_LEN  - strlen(sock_fd_path) - 1);
-  snprintf(cqid, 3, "%d", qid);
-  strncat(sock_fd_path, cqid, SOCK_NAME_LEN  - strlen(sock_fd_path) - 1);
-
+  snprintf(sock_fd_path, SOCK_NAME_LEN, SOCK_DIR_PATH "sock%d", qid);
   if ( stat(sock_fd_path, &st) == -1 ) {
     LOG(ef_log("%s: ERROR no sock path found!", __FUNCTION__));
     return -errno;
@@ -356,11 +350,11 @@ static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd, unsigned n_s
   int rc = ef_shrub_client_open(&rxq->shrub_client,
                                 (void*)vi->efct_rxqs.q[qid].superbuf,
                                 sock_fd_path);
-  rxq->superbuf_pkts = ef_shrub_client_buffer_bytes(rxq->shrub_client) / EFCT_PKT_STRIDE;
   if ( rc != 0 ) {
-    LOG(ef_log("%s: ERROR initializing shrub client!", __FUNCTION__));
+    LOG(ef_log("%s: ERROR initializing shrub client! rc=%d", __FUNCTION__, rc));
     return -rc;
   }
+  rxq->superbuf_pkts = ef_shrub_client_buffer_bytes(rxq->shrub_client) / EFCT_PKT_STRIDE;
 
   ubufs->active_qs |= 1 << ix;
   efct_vi_start_rxq(vi, ix, qid);

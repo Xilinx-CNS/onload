@@ -342,6 +342,7 @@ static void connection_opened(struct ef_shrub_server* server)
   /* TODO synchronise */
   connection->next = server->connections;
   server->connections = connection;
+  server->connection_count++;
   return;
 
 fail_epoll:
@@ -374,6 +375,7 @@ static void connection_closed(struct ef_shrub_server* server,
 
   connection->next = server->closed_connections;
   server->closed_connections = connection;
+  server->connection_count--;
 }
 
 static void poll_sockets(struct ef_shrub_server* server)

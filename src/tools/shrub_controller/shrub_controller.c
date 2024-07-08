@@ -46,7 +46,7 @@ int init(struct shrub_controller_vi* res,
       qid
     );
     if ( rc < 0 )
-      fprintf(stderr, "initializing shrub server failed");
+      fprintf(stderr, "initializing shrub server failed\n");
     return rc;
 }
 
@@ -139,11 +139,7 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  strncpy(sock_fd_path, SOCK_DIR_PATH, SOCK_NAME_LEN - 1);
-  strncat(sock_fd_path, "sock", SOCK_NAME_LEN - strlen(sock_fd_path) - 1); // For now a fixed one TODO later adjust
-
-  if (queue != NULL)
-    strncat(sock_fd_path, queue, SOCK_NAME_LEN - strlen(sock_fd_path) - 1);
+  snprintf(sock_fd_path, SOCK_NAME_LEN, SOCK_DIR_PATH "sock%d", cfg_queue);
 
   //For initial development cleanup the existing socket.
   //This could be a wrong move in production where we
