@@ -80,7 +80,7 @@ jobs:
           scripts/onload-user.Dockerfile
 
     - name: Get mkdist tarball
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: ${{ needs.mkdist-caller.outputs.dir }}
 
@@ -97,7 +97,7 @@ jobs:
 
     - name: Build and push image
       id: build
-      uses: docker/build-push-action@v5
+      uses: docker/build-push-action@v6
       with:
         context: .
         file: scripts/onload-user.Dockerfile
@@ -170,7 +170,7 @@ jobs:
 
     - name: Build and push image
       id: build
-      uses: docker/build-push-action@v5
+      uses: docker/build-push-action@v6
       with:
         context: .
         file: scripts/onload-user.Dockerfile
