@@ -94,16 +94,13 @@ int unix_server_poll(struct unix_server* server)
   int rc;
   struct epoll_event event;
   rc = epoll_wait(server->epoll, &event, 1, 0);
-  if( rc < 0) {
-    return rc;
+  if( rc > 0 ) {
+    if( event.data.ptr == NULL )
+      rc = server->ops.connection_opened(server);
+
+    if( event.events & EPOLLHUP )
+      rc = server->ops.connection_closed(server, event.data.ptr);
   }
-
-  if( event.data.ptr == NULL )
-    rc = server->ops.connection_opened(server);
-
-  if( event.events & EPOLLHUP )
-    rc = server->ops.connection_closed(server, event.data.ptr);
-
   return rc;
 }
 

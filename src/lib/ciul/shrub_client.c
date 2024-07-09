@@ -1,11 +1,12 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
 /* X-SPDX-Copyright-Text: (c) Copyright 2023 Advanced Micro Devices, Inc. */
 #include "shrub_client.h"
-#include "shrub_shared.h"
 
 
 #include "ci/driver/efab/hardware/byteswap.h"
 #include "ci/driver/efab/hardware/bitfield.h"
+
+#include <etherfabric/shrub_shared.h>
 
 #include <stdio.h>
 #include <stdbool.h>
@@ -30,18 +31,13 @@ struct ef_shrub_client {
   ef_shrub_buffer_id* client_fifo;
 };
 
-static int client_socket(struct ef_shrub_client* client)
+static int client_socket(void)
 {
   int rc = socket(AF_UNIX, SOCK_STREAM, 0);
-  if( rc < 0 )
-    return -errno;
-
-  client->socket = rc;
-  return 0;
+  return rc >= 0 ? rc : -errno;
 }
 
-static int client_connect(struct ef_shrub_client* client,
-                          const char* server_addr)
+static int client_connect(int client, const char* server_addr)
 {
   struct sockaddr_un addr;
   int path_len = strlen(server_addr);
@@ -52,9 +48,8 @@ static int client_connect(struct ef_shrub_client* client,
   addr.sun_family = AF_UNIX;
   strcpy(addr.sun_path, server_addr);
   /* TBD: do we want a non-blocking option (for this and recv)? */
-  return connect(client->socket, (struct sockaddr*)&addr,
+  return connect(client, (struct sockaddr*)&addr,
                  offsetof(struct sockaddr_un, sun_path) + path_len + 1);
-  /* TBD: should the client send a message with its protocol version? */
 }
 
 static size_t buffer_mmap_bytes(struct ef_shrub_client* client)
@@ -64,7 +59,7 @@ static size_t buffer_mmap_bytes(struct ef_shrub_client* client)
 
 static size_t server_mmap_bytes(struct ef_shrub_client* client)
 {
-  return client->metrics.server_fifo_size * sizeof(ef_shrub_buffer_id);
+  return client->metrics.queue_fifo_size * sizeof(ef_shrub_buffer_id);
 }
 
 static size_t client_mmap_bytes(struct ef_shrub_client* client)
@@ -99,6 +94,25 @@ static int client_mmap(struct ef_shrub_client* client,
   client->client_fifo = map;
 
   return 0;
+}
+
+static int client_request_q(struct ef_shrub_client *client,
+                            const char* server_addr, int qid)
+{
+  int rc = 0;
+  struct ef_shrub_queue_request req;
+
+  rc = client_connect(client->socket, server_addr);
+  if( rc < 0 )
+    return rc;
+
+  req.server_version = EF_SHRUB_VERSION;
+  req.qid = qid;
+  rc = send(client->socket, &req, sizeof(req), 0);
+  if( rc < 0 )
+    rc = -errno;
+
+  return rc;
 }
 
 static int client_recv_metrics(struct ef_shrub_client* client, void* buffer_addresses)
@@ -144,8 +158,8 @@ static int client_recv_metrics(struct ef_shrub_client* client, void* buffer_addr
 }
 
 int ef_shrub_client_open(struct ef_shrub_client** client_out,
-                         void* buffer_addresses,
-                         const char* server_addr)
+                         void* buffer_addresses, const char* server_addr,
+                         int qid)
 {
   struct ef_shrub_client* client;
   int rc;
@@ -154,13 +168,14 @@ int ef_shrub_client_open(struct ef_shrub_client** client_out,
   if( client == NULL )
     return -ENOMEM;
 
-  rc = client_socket(client);
+  rc = client_socket();
   if( rc < 0 )
     goto fail_socket;
+  client->socket = rc;
 
-  rc = client_connect(client, server_addr);
+  rc = client_request_q(client, server_addr, qid);
   if( rc < 0 )
-    goto fail_connect;
+    goto fail_request_q;
 
   rc = client_recv_metrics(client, buffer_addresses);
   if( rc < 0 )
@@ -176,7 +191,7 @@ fail_recv:
     munmap(client->server_fifo, server_mmap_bytes(client));
   if( client->client_fifo )
     munmap(client->client_fifo, client_mmap_bytes(client));
-fail_connect:
+fail_request_q:
   close(client->socket);
 fail_socket:
   free(client);
@@ -204,7 +219,7 @@ int ef_shrub_client_acquire_buffer(struct ef_shrub_client* client,
     return -EAGAIN;
 
   client->server_fifo_index =
-    i == client->metrics.server_fifo_size - 1 ? 0 : i + 1;
+    i == client->metrics.queue_fifo_size - 1 ? 0 : i + 1;
 
   id2.u32[0] = id;
   *buffer_id = CI_DWORD_FIELD(id2, EF_SHRUB_BUFFER_ID);

@@ -20,7 +20,7 @@ struct ef_shrub_server;
 /* Create a server and make it available to accept incoming client connections.
  *
  * vi:           initialized pointer to a EtherFabric Virtual Interface
- * server:       provides a pointer to the structure for managing the server
+ * server_out:   provides a pointer to the structure for managing the server
  * server_addr:  the address for the server, typically a filesystem path;
  *               clients will use this to connect
  * buffer_bytes: the size of each buffer that the server will provide
@@ -32,11 +32,10 @@ struct ef_shrub_server;
  *  -EPERM  user does not have permission to bind to the address
  */
 int ef_shrub_server_open(struct ef_vi* vi,
-                         struct ef_shrub_server** server,
+                         struct ef_shrub_server** server_out,
                          const char* server_addr,
                          size_t buffer_bytes,
-                         size_t buffer_count,
-                         int qid);
+                         size_t buffer_count);
 
 /* Shut down the server and destroy the opaque structure. This will close
  * all client connections, although shared buffers and other resources may
@@ -53,7 +52,7 @@ void ef_shrub_server_close(struct ef_shrub_server* server);
  *
  * This should be called frequently.
  */
-void ef_shrub_server_poll(struct ef_vi* vi, struct ef_shrub_server* server, int qid);
+void ef_shrub_server_poll(struct ef_shrub_server* server);
 
 #endif
 

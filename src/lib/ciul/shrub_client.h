@@ -29,8 +29,8 @@ struct ef_shrub_client;
  * This function will block while communicating with the server.
  */
 int ef_shrub_client_open(struct ef_shrub_client** client,
-                         void* buffer_addrs,
-                         const char* server_addr);
+                         void* buffer_addrs, const char* server_addr,
+                         int qid);
 
 /* Close the client connection and destroy the opaque structure.
  * This will implicitly release all buffers acquired from the connection.

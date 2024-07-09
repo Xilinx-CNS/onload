@@ -22,10 +22,6 @@
  * dependencies on it */
 #include <etherfabric/internal/efct_uk_api.h>
 
-#define SOCK_DIR_PATH "/run/onload/"
-#define SOCK_DIR_LEN  12
-#define SOCK_NAME_LEN 20
-
 struct efct_ubufs_desc
 {
   unsigned id : 31;
@@ -329,27 +325,19 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd, unsigned n_superb
 static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd, unsigned n_superbufs)
 {
   int ix;
-  char sock_fd_path[SOCK_NAME_LEN] = {0};
   struct efct_ubufs* ubufs = get_ubufs(vi);
   struct efct_ubufs_rxq* rxq;
 
-  struct stat st = {0};
   EF_VI_ASSERT(qid < vi->efct_rxqs.max_qs);
 
   ix = efct_vi_find_free_rxq(vi, qid);
   if( ix < 0 )
     return ix;
 
-  snprintf(sock_fd_path, SOCK_NAME_LEN, SOCK_DIR_PATH "sock%d", qid);
-  if ( stat(sock_fd_path, &st) == -1 ) {
-    LOG(ef_log("%s: ERROR no sock path found!", __FUNCTION__));
-    return -errno;
-  }
-
-  rxq = &ubufs->q[qid];
+  rxq = &ubufs->q[ix];
   int rc = ef_shrub_client_open(&rxq->shrub_client,
-                                (void*)vi->efct_rxqs.q[qid].superbuf,
-                                sock_fd_path);
+                                (void*)vi->efct_rxqs.q[ix].superbuf,
+                                EF_SHRUB_CONTROLLER_PATH, qid);
   if ( rc != 0 ) {
     LOG(ef_log("%s: ERROR initializing shrub client! rc=%d", __FUNCTION__, rc));
     return -rc;

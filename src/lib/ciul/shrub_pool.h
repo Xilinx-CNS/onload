@@ -4,7 +4,7 @@
 #ifndef __CI_CIUL_SHRUB_POOL_H__
 #define __CI_CIUL_SHRUB_POOL_H__
 
-#include "shrub_shared.h"
+#include <etherfabric/shrub_shared.h>
 
 struct ef_shrub_buffer_pool;
 
