@@ -6,6 +6,7 @@
 
 #include "ef_vi_internal.h"
 
+#include <etherfabric/unix_server.h>
 #include <etherfabric/shrub_server.h>
 #include <etherfabric/vi.h>
 #include <etherfabric/pd.h>
@@ -51,8 +52,7 @@ struct ef_shrub_connection {
 };
 
 struct ef_shrub_server {
-  int listen;
-  int epoll;
+  struct unix_server connection_server;
   int shared_fds[EF_SHRUB_FD_COUNT];
 
   size_t buffer_bytes, buffer_count;
@@ -154,63 +154,6 @@ static int server_map_fifo(struct ef_shrub_server* server)
 
   init_fifo(server, server->fifo);
   return 0;
-}
-
-static int server_epoll_create(struct ef_shrub_server* server)
-{
-  int rc = epoll_create(1);
-  if( rc < 0 )
-    return -errno;
-
-  server->epoll = rc;
-  return 0;
-}
-
-static int server_socket(struct ef_shrub_server* server)
-{
-  int rc = socket(AF_UNIX, SOCK_STREAM, 0);
-  if( rc < 0 )
-    return -errno;
-
-  server->listen = rc;
-  return 0;
-}
-
-static int server_epoll_add(struct ef_shrub_server* server,
-                            struct ef_shrub_connection* connection)
-{
-  int rc, fd = connection ? connection->socket : server->listen;
-  struct epoll_event event;
-
-  event.events = EPOLLIN;
-  event.data.ptr = connection;
-
-  rc = epoll_ctl(server->epoll, EPOLL_CTL_ADD, fd, &event);
-  if( rc < 0 )
-    return -errno;
-
-  return 0;
-}
-
-static int server_listen(struct ef_shrub_server* server,
-                         const char* server_addr)
-{
-  int rc;
-  struct sockaddr_un addr;
-  int path_len = strlen(server_addr);
-
-  if( path_len >= sizeof(addr.sun_path) )
-    return -EINVAL;
-
-  addr.sun_family = AF_UNIX;
-  strcpy(addr.sun_path, server_addr);
-
-  rc = bind(server->listen, (struct sockaddr*)&addr,
-            offsetof(struct sockaddr_un, sun_path) + path_len + 1);
-  if( rc < 0 )
-    return rc;
-
-  return listen(server->listen, 32);
 }
 
 static void poll_fifo(struct ef_vi* vi, struct ef_shrub_server* server,
@@ -317,25 +260,29 @@ static int connection_send_metrics(struct ef_shrub_server* server,
   return 0;
 }
 
-static void connection_opened(struct ef_shrub_server* server)
+static int server_connection_opened(struct unix_server* unix_server)
 {
   int rc, socket;
   struct ef_shrub_connection* connection;
-
-  socket = accept(server->listen, NULL, NULL);
+  struct ef_shrub_server* server = CI_CONTAINER(struct ef_shrub_server,
+                                                connection_server, unix_server);
+  socket = accept(server->connection_server.listen, NULL, NULL);
   if( socket < 0 )
-    return;
+    return socket;
 
   connection = connection_alloc(server);
-  if( connection == NULL )
+  if( connection == NULL ) {
+    rc = -1; /* TODO propagate connection_alloc's rc */
     goto fail_alloc;
+  }
 
   connection->socket = socket;
   rc = connection_send_metrics(server, connection);
   if( rc < 0 )
     goto fail_send;
 
-  rc = server_epoll_add(server, connection);
+  rc = unix_server_epoll_add(&server->connection_server, connection->socket,
+                             connection);
   if( rc < 0 )
     goto fail_epoll;
 
@@ -343,7 +290,7 @@ static void connection_opened(struct ef_shrub_server* server)
   connection->next = server->connections;
   server->connections = connection;
   server->connection_count++;
-  return;
+  return 0;
 
 fail_epoll:
 fail_send:
@@ -351,11 +298,15 @@ fail_send:
   server->closed_connections = connection;
 fail_alloc:
   close(socket);
+  return rc;
 }
 
-static void connection_closed(struct ef_shrub_server* server,
-                              struct ef_shrub_connection* connection)
+static int server_connection_closed(struct unix_server* unix_server,
+                             void *data)
 {
+  struct ef_shrub_server* server = CI_CONTAINER(struct ef_shrub_server,
+                                                connection_server, unix_server);
+  struct ef_shrub_connection* connection = data;
   /* TODO release buffers owned by this connection */
   close(connection->socket);
 
@@ -376,24 +327,13 @@ static void connection_closed(struct ef_shrub_server* server,
   connection->next = server->closed_connections;
   server->closed_connections = connection;
   server->connection_count--;
+  return 0;
 }
 
 static void poll_sockets(struct ef_shrub_server* server)
 {
-  int rc;
-  struct epoll_event event;
-
-  while( true ) {
-    rc = epoll_wait(server->epoll, &event, 1, 0);
-    if( rc <= 0 )
-      break;
-
-    if( event.data.ptr == NULL )
-      connection_opened(server);
-
-    if( event.events & EPOLLHUP )
-      connection_closed(server, event.data.ptr);
-  }
+  while( true )
+    unix_server_poll(&server->connection_server);
 }
 
 int ef_shrub_server_open(struct ef_vi* vi,
@@ -426,21 +366,11 @@ int ef_shrub_server_open(struct ef_vi* vi,
   if( rc < 0 )
     goto fail_fifo;
 
-  rc = server_epoll_create(server);
+  rc = unix_server_init(&server->connection_server, server_addr);
   if( rc < 0 )
-    goto fail_epoll_create;
-
-  rc = server_socket(server);
-  if( rc < 0 )
-    goto fail_socket;
-
-  rc = server_listen(server, server_addr);
-  if( rc < 0 )
-    goto fail_listen;
-
-  rc = server_epoll_add(server, NULL);
-  if( rc < 0 )
-    goto fail_epoll_add;
+    goto fail_unix_server_init;
+  server->connection_server.ops.connection_opened = server_connection_opened;
+  server->connection_server.ops.connection_closed = server_connection_closed;
 
   rc = vi->efct_rxqs.ops->attach(vi,
                                  qid,
@@ -454,12 +384,8 @@ int ef_shrub_server_open(struct ef_vi* vi,
   return 0;
 
 fail_server_attach:
-fail_epoll_add:
-fail_listen:
-  close(server->listen);
-fail_socket:
-  close(server->epoll);
-fail_epoll_create:
+  unix_server_fini(&server->connection_server);
+fail_unix_server_init:
   munmap(server->fifo, fifo_bytes(server));
 fail_fifo:
 fail_shared:
@@ -476,8 +402,7 @@ void ef_shrub_server_close(struct ef_shrub_server* server)
   int i;
 
   /* TODO close connections */
-  close(server->listen);
-  close(server->epoll);
+  unix_server_fini(&server->connection_server);
   munmap(server->fifo, fifo_bytes(server));
   for( i = 0; i < EF_SHRUB_FD_COUNT; ++i )
     close(server->shared_fds[i]);
