@@ -361,7 +361,7 @@ static int ci_udp_setsockopt_lk(citp_socket* ep, ci_fd_t fd, ci_fd_t os_sock,
         }
         else {
           int lim = CI_MAX((int)NI_OPTS(netif).udp_sndbuf_max,
-                           netif->packets->sets_max * CI_CFG_PKT_BUF_SIZE / 2);
+                           ci_netif_pkt_sets_max_size(netif) / 2);
           if( v > lim ) {
             NI_LOG_ONCE(netif, RESOURCE_WARNINGS,
                         "SO_SNDBUFFORCE: limiting user-provided value %d "
@@ -403,7 +403,7 @@ static int ci_udp_setsockopt_lk(citp_socket* ep, ci_fd_t fd, ci_fd_t os_sock,
         }
         else {
           int lim = CI_MAX((int)NI_OPTS(netif).udp_rcvbuf_max,
-                           netif->packets->sets_max * CI_CFG_PKT_BUF_SIZE / 2);
+                           ci_netif_pkt_sets_max_size(netif) / 2);
           if( v > lim ) {
             NI_LOG_ONCE(netif, RESOURCE_WARNINGS,
                         "SO_RCVBUFFORCE: limiting user-provided value %d "

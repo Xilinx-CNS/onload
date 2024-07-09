@@ -3312,6 +3312,11 @@ ci_inline int ci_netif_pkt_release_check_keep(ci_netif* ni, ci_ip_pkt_fmt* pkt)
   }
 }
 
+ci_inline ci_uint32 ci_netif_pkt_sets_max_size(ci_netif* ni)
+{
+  return pkt_sets_max(ni) * PKTS_PER_SET * CI_CFG_PKT_BUF_SIZE;
+}
+
 /*********************************************************************
 *************************** pktbuf reserve accounting ****************
 *********************************************************************/
