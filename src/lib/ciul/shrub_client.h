@@ -8,17 +8,31 @@
  * release them for reuse once all data has been extracted.
  */
 
-#include <stdint.h>
-#include <stdbool.h>
-#include <stdlib.h>
+#include <etherfabric/shrub_shared.h>
 
-/* Opaque structure used to manage a client connection to a server. */
-struct ef_shrub_client;
+/* Structure containing connection state sharable between instances */
+struct ef_shrub_client_state
+{
+  int server_fifo_index;
+  int client_fifo_index;
+  struct ef_shrub_shared_metrics metrics;
+};
 
-/* Create a client and open a connection to a server.
+/* Structure for managing a client instance */
+struct ef_shrub_client
+{
+  int socket;
+  void* buffers;
+  ef_shrub_buffer_id* server_fifo;
+  ef_shrub_buffer_id* client_fifo;
+  struct ef_shrub_client_state* state;
+};
+
+/* Open a connection to a server.
  *
- * client:      provides a pointer to the structure for managing the connection
- * buffer_addrs: TODO fill out.
+ * client:      pointer to the structure for managing the connection
+ * state:       location to store connection state
+ * buffers:     location to map the buffer memory, NULL for arbitrary location
  * server_addr: the address for the server, typically a filesystem path
  *
  * Returns zero on success, or negative error codes including
@@ -28,14 +42,14 @@ struct ef_shrub_client;
  *
  * This function will block while communicating with the server.
  */
-int ef_shrub_client_open(struct ef_shrub_client** client,
-                         void* buffer_addrs, const char* server_addr,
+int ef_shrub_client_open(struct ef_shrub_client* client,
+                         struct ef_shrub_client_state* state,
+                         void* buffers,
+                         const char* server_addr,
                          int qid);
 
-/* Close the client connection and destroy the opaque structure.
+/* Close the client connection.
  * This will implicitly release all buffers acquired from the connection.
- *
- * client: connection to close; the pointer will be invalidated
  */
 void ef_shrub_client_close(struct ef_shrub_client* client);
 
@@ -63,16 +77,6 @@ int ef_shrub_client_acquire_buffer(struct ef_shrub_client* client,
 void ef_shrub_client_release_buffer(struct ef_shrub_client* client,
                                     uint32_t buffer_id);
 
-/* Returns the size in bytes of each buffer provided by the connection. */
-size_t ef_shrub_client_buffer_bytes(const struct ef_shrub_client* client);
-
-/* Returns the total number of buffers available for the connection.
- *
- * Identifiers provided by ef_shrub_client_acquire_buffer are in the range
- * [0, buffer_count) and so can be used as indexes into an array of this
- * size, if such a thing is desirable.
- */
-size_t ef_shrub_client_buffer_count(const struct ef_shrub_client* client);
-
 /* Returns whether it is possible to acquire a new buffer. */
 bool ef_shrub_client_buffer_available(const struct ef_shrub_client* client);
+

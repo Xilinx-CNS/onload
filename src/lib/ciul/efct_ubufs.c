@@ -28,12 +28,12 @@ struct efct_ubufs_desc
   unsigned sentinel : 1;
 };
 
-/* TODO for Onload, share mutable state between kernel and user instances */
 struct efct_ubufs_rxq
 {
   uint32_t superbuf_pkts;
   struct ef_shrub_buffer_pool* buffer_pool;
-  struct ef_shrub_client* shrub_client;
+  struct ef_shrub_client shrub_client;
+  struct ef_shrub_client_state shrub_state; /* TODO move to shared state */
 
   /* FIFO to record buffers posted to the NIC. */
   unsigned added, filled, removed;
@@ -136,7 +136,7 @@ static int efct_ubufs_next_shared(ef_vi* vi, int qid, bool* sentinel, unsigned* 
   struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[qid];
 
   ef_shrub_buffer_id id;
-  int rc = ef_shrub_client_acquire_buffer(rxq->shrub_client, &id, sentinel);
+  int rc = ef_shrub_client_acquire_buffer(&rxq->shrub_client, &id, sentinel);
   if ( rc < 0 ) {
     return rc;
   }
@@ -167,11 +167,10 @@ static int efct_ubufs_next_local(ef_vi* vi, int qid, bool* sentinel, unsigned* s
 static int efct_ubufs_next(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq)
 {
   const struct efct_ubufs_rxq* rxq = &const_ubufs(vi)->q[qid];
-  if (rxq->shrub_client) {
-    return efct_ubufs_next_shared(vi, qid, sentinel, sbseq);
-  } else {
+  if( rxq->buffer_pool )
     return efct_ubufs_next_local(vi, qid, sentinel, sbseq);
-  }
+  else
+    return efct_ubufs_next_shared(vi, qid, sentinel, sbseq);
 }
 
 static void efct_ubufs_free_local(ef_vi* vi, int qid, int sbid)
@@ -185,18 +184,17 @@ static void efct_ubufs_free_local(ef_vi* vi, int qid, int sbid)
 
 static void efct_ubufs_free_shared(ef_vi* vi, int qid, int sbid)
 {
-  const struct efct_ubufs_rxq* rxq = &const_ubufs(vi)->q[qid];
-  ef_shrub_client_release_buffer(rxq->shrub_client, sbid);
+  struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[qid];
+  ef_shrub_client_release_buffer(&rxq->shrub_client, sbid);
 }
 
 static void efct_ubufs_free(ef_vi* vi, int qid, int sbid)
 {
   const struct efct_ubufs_rxq* rxq = &const_ubufs(vi)->q[qid];
-  if (rxq->shrub_client) {
-    efct_ubufs_free_shared(vi, qid, sbid);
-  } else {
+  if( rxq->buffer_pool )
     efct_ubufs_free_local(vi, qid, sbid);
-  }
+  else
+    efct_ubufs_free_shared(vi, qid, sbid);
 }
 
 static bool efct_ubufs_local_available(const ef_vi* vi, int qid)
@@ -208,17 +206,16 @@ static bool efct_ubufs_local_available(const ef_vi* vi, int qid)
 static bool efct_ubufs_shared_available(const ef_vi* vi, int qid)
 {
   const struct efct_ubufs_rxq* rxq = &const_ubufs(vi)->q[qid];
-  return ef_shrub_client_buffer_available(rxq->shrub_client);
+  return ef_shrub_client_buffer_available(&rxq->shrub_client);
 }
 
 static bool efct_ubufs_available(const ef_vi* vi, int qid)
 {
   const struct efct_ubufs_rxq* rxq = &const_ubufs(vi)->q[qid];
-  if (rxq->shrub_client) {
-    return efct_ubufs_shared_available(vi, qid);
-  } else {
+  if( rxq->buffer_pool )
     return efct_ubufs_local_available(vi, qid);
-  }
+  else
+    return efct_ubufs_shared_available(vi, qid);
 }
 
 
@@ -336,13 +333,14 @@ static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd, unsigned n_s
 
   rxq = &ubufs->q[ix];
   int rc = ef_shrub_client_open(&rxq->shrub_client,
+                                &rxq->shrub_state,
                                 (void*)vi->efct_rxqs.q[ix].superbuf,
                                 EF_SHRUB_CONTROLLER_PATH, qid);
   if ( rc != 0 ) {
     LOG(ef_log("%s: ERROR initializing shrub client! rc=%d", __FUNCTION__, rc));
     return -rc;
   }
-  rxq->superbuf_pkts = ef_shrub_client_buffer_bytes(rxq->shrub_client) / EFCT_PKT_STRIDE;
+  rxq->superbuf_pkts = rxq->shrub_client.state->metrics.buffer_bytes / EFCT_PKT_STRIDE;
 
   ubufs->active_qs |= 1 << ix;
   efct_vi_start_rxq(vi, ix, qid);

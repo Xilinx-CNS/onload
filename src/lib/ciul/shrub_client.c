@@ -1,35 +1,14 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
 /* X-SPDX-Copyright-Text: (c) Copyright 2023 Advanced Micro Devices, Inc. */
+
+#include "ef_vi_internal.h"
 #include "shrub_client.h"
 
-
-#include "ci/driver/efab/hardware/byteswap.h"
-#include "ci/driver/efab/hardware/bitfield.h"
-
-#include <etherfabric/shrub_shared.h>
-
-#include <stdio.h>
-#include <stdbool.h>
-
 #include <stddef.h>
-#include <errno.h>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/mman.h>
-
-
-struct ef_shrub_client {
-  int socket;
-
-  int server_fifo_index;
-  int client_fifo_index;
-
-  struct ef_shrub_shared_metrics metrics;
-  char* buffers;
-  ef_shrub_buffer_id* server_fifo;
-  ef_shrub_buffer_id* client_fifo;
-};
 
 static int client_socket(void)
 {
@@ -54,27 +33,28 @@ static int client_connect(int client, const char* server_addr)
 
 static size_t buffer_mmap_bytes(struct ef_shrub_client* client)
 {
-  return client->metrics.buffer_bytes * client->metrics.buffer_count;
+  return client->state->metrics.buffer_bytes * client->state->metrics.buffer_count;
 }
 
 static size_t server_mmap_bytes(struct ef_shrub_client* client)
 {
-  return client->metrics.server_fifo_size * sizeof(ef_shrub_buffer_id);
+  return client->state->metrics.server_fifo_size * sizeof(ef_shrub_buffer_id);
 }
 
 static size_t client_mmap_bytes(struct ef_shrub_client* client)
 {
-  return client->metrics.client_fifo_size * sizeof(ef_shrub_buffer_id);
+  return client->state->metrics.client_fifo_size * sizeof(ef_shrub_buffer_id);
 }
 
 static int client_mmap(struct ef_shrub_client* client,
-                       void* buffer_addresses,
+                       void* buffers,
                        int shared_fds[EF_SHRUB_FD_COUNT])
 {
   void* map;
   int flags = MAP_SHARED | MAP_POPULATE;
 
-  map = mmap(buffer_addresses, client->metrics.buffer_count * client->metrics.buffer_bytes, PROT_READ, flags | MAP_HUGETLB | MAP_FIXED,
+  map = mmap(buffers, buffer_mmap_bytes(client), PROT_READ,
+             flags | MAP_HUGETLB | MAP_FIXED,
              shared_fds[EF_SHRUB_FD_BUFFERS], 0);
   if( map == MAP_FAILED )
     return -errno;
@@ -88,7 +68,7 @@ static int client_mmap(struct ef_shrub_client* client,
 
   map = mmap(NULL, client_mmap_bytes(client), PROT_WRITE, flags,
              shared_fds[EF_SHRUB_FD_CLIENT_FIFO],
-             client->metrics.client_fifo_offset);
+             client->state->metrics.client_fifo_offset);
   if( map == MAP_FAILED )
     return -errno;
   client->client_fifo = map;
@@ -115,12 +95,12 @@ static int client_request_q(struct ef_shrub_client *client,
   return rc;
 }
 
-static int client_recv_metrics(struct ef_shrub_client* client, void* buffer_addresses)
+static int client_recv_metrics(struct ef_shrub_client* client, void* buffers)
 {
   int rc, i;
   struct iovec iov = {
-    .iov_base = &client->metrics,
-    .iov_len = sizeof(client->metrics)
+    .iov_base = &client->state->metrics,
+    .iov_len = sizeof(client->state->metrics)
   };
   int shared_fds[EF_SHRUB_FD_COUNT];
   char cmsg_buf[CMSG_SPACE(sizeof(shared_fds))];
@@ -135,8 +115,8 @@ static int client_recv_metrics(struct ef_shrub_client* client, void* buffer_addr
   rc = recvmsg(client->socket, &msg, 0);
   if( rc < 0 )
     return -errno;
-  if( rc != sizeof(client->metrics) ||
-      client->metrics.server_version != EF_SHRUB_VERSION)
+  if( rc != sizeof(client->state->metrics) ||
+      client->state->metrics.server_version != EF_SHRUB_VERSION)
     return -EPROTO;
 
   cmsg = CMSG_FIRSTHDR(&msg);
@@ -147,7 +127,7 @@ static int client_recv_metrics(struct ef_shrub_client* client, void* buffer_addr
     return -EPROTO;
 
   memcpy(shared_fds, CMSG_DATA(cmsg), sizeof(shared_fds));
-  rc = client_mmap(client, buffer_addresses, shared_fds);
+  rc = client_mmap(client, buffers, shared_fds);
   for( i = 0; i < EF_SHRUB_FD_COUNT; ++i )
     close(shared_fds[i]);
   if( rc < 0 )
@@ -157,16 +137,15 @@ static int client_recv_metrics(struct ef_shrub_client* client, void* buffer_addr
   return 0;
 }
 
-int ef_shrub_client_open(struct ef_shrub_client** client_out,
-                         void* buffer_addresses, const char* server_addr,
+int ef_shrub_client_open(struct ef_shrub_client* client,
+                         struct ef_shrub_client_state* state,
+                         void* buffers,
+                         const char* server_addr,
                          int qid)
 {
-  struct ef_shrub_client* client;
   int rc;
-
-  client = calloc(1, sizeof(*client));
-  if( client == NULL )
-    return -ENOMEM;
+  memset(client, 0, sizeof(*client));
+  client->state = state;
 
   rc = client_socket();
   if( rc < 0 )
@@ -177,11 +156,10 @@ int ef_shrub_client_open(struct ef_shrub_client** client_out,
   if( rc < 0 )
     goto fail_request_q;
 
-  rc = client_recv_metrics(client, buffer_addresses);
+  rc = client_recv_metrics(client, buffers);
   if( rc < 0 )
     goto fail_recv;
 
-  *client_out = client;
   return 0;
 
 fail_recv:
@@ -194,7 +172,6 @@ fail_recv:
 fail_request_q:
   close(client->socket);
 fail_socket:
-  free(client);
   return rc;
 }
 
@@ -204,22 +181,21 @@ void ef_shrub_client_close(struct ef_shrub_client* client)
   munmap(client->server_fifo, server_mmap_bytes(client));
   munmap(client->client_fifo, client_mmap_bytes(client));
   close(client->socket);
-  free(client);
 }
 
 int ef_shrub_client_acquire_buffer(struct ef_shrub_client* client,
-                                   uint32_t* buffer_id ,
+                                   uint32_t* buffer_id,
                                    bool* sentinel)
 {
 
   ci_dword_t id2;
-  int i = client->server_fifo_index;
+  int i = client->state->server_fifo_index;
   ef_shrub_buffer_id id = client->server_fifo[i];
   if( id == EF_SHRUB_INVALID_BUFFER )
     return -EAGAIN;
 
-  client->server_fifo_index =
-    i == client->metrics.server_fifo_size - 1 ? 0 : i + 1;
+  client->state->server_fifo_index =
+    i == client->state->metrics.server_fifo_size - 1 ? 0 : i + 1;
 
   id2.u32[0] = id;
   *buffer_id = CI_DWORD_FIELD(id2, EF_SHRUB_BUFFER_ID);
@@ -230,25 +206,16 @@ int ef_shrub_client_acquire_buffer(struct ef_shrub_client* client,
 void ef_shrub_client_release_buffer(struct ef_shrub_client* client,
                                     uint32_t buffer_id)
 {
-  int i = client->client_fifo_index;
+  int i = client->state->client_fifo_index;
 
   client->client_fifo[i] = buffer_id;
-  client->client_fifo_index = i == client->metrics.client_fifo_size - 1 ? 0 : i + 1;
-}
-
-size_t ef_shrub_client_buffer_bytes(const struct ef_shrub_client* client)
-{
-  return client->metrics.buffer_bytes;
-}
-
-size_t ef_shrub_client_buffer_count(const struct ef_shrub_client* client)
-{
-  return client->metrics.buffer_count;
+  client->state->client_fifo_index =
+    i == client->state->metrics.client_fifo_size - 1 ? 0 : i + 1;
 }
 
 bool ef_shrub_client_buffer_available(const struct ef_shrub_client* client)
 {
-  int i = client->server_fifo_index;
+  int i = client->state->server_fifo_index;
   ef_shrub_buffer_id id = client->server_fifo[i];
   return id != EF_SHRUB_INVALID_BUFFER;
 }
