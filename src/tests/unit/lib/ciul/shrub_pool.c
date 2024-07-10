@@ -4,6 +4,7 @@
 /* Dependencies */
 #include <stddef.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 /* Functions under test */
 #include "shrub_pool.h"

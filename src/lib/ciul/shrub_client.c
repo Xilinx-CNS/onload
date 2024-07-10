@@ -4,6 +4,7 @@
 #include "ef_vi_internal.h"
 #include "shrub_client.h"
 
+#ifndef __KERNEL__
 #include <stddef.h>
 #include <unistd.h>
 #include <sys/socket.h>
@@ -189,6 +190,7 @@ void ef_shrub_client_close(struct ef_shrub_client* client)
   client_munmap(client);
   close(client->socket);
 }
+#endif
 
 int ef_shrub_client_acquire_buffer(struct ef_shrub_client* client,
                                    uint32_t* buffer_id,

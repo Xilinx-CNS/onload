@@ -19,13 +19,15 @@ EFVI_SRCS	:=		\
 		efxdp_vi.c      \
 		efct_vi.c       \
 		efcompat_vi.c   \
-		efct_kbufs.c
 
 LIB_SRCS	:=		\
 		$(EFVI_SRCS)	\
 		ef10_evtimer.c	\
-		logging.c \
-		checksum.c
+		logging.c       \
+		checksum.c      \
+		shrub_client.c  \
+		efct_kbufs.c    \
+		efct_ubufs.c    \
 
 ifneq ($(DRIVER),1)
 LIB_SRCS	+=		\
@@ -47,8 +49,6 @@ LIB_SRCS	+=		\
 		ctpio.c         \
 		shrub_pool.c    \
 		shrub_server.c  \
-		shrub_client.c  \
-		efct_ubufs.c    \
 
 # librt is needed on old glibc, e.g. on RHEL 6
 MMAKE_DIR_LINKFLAGS	:= $(MMAKE_DIR_LINKFLAGS) -lrt

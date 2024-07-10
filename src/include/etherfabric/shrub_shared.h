@@ -18,8 +18,6 @@
 #ifndef __CI_CIUL_SHRUB_SHARED_H__
 #define __CI_CIUL_SHRUB_SHARED_H__
 
-#include <stdint.h>
-
 /* Identifier for a buffer, an index into the shared buffer memory.
  * The MSB for the id corresponds to the sentinel for the buffer. */
 typedef uint32_t ef_shrub_buffer_id;

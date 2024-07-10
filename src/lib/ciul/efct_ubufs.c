@@ -3,20 +3,16 @@
 
 /* EFCT buffer management using user-allocated buffers */
 
-#ifdef __KERNEL__
-#error TODO support efct_ubufs for kernel ef_vi
-#endif
-
-#include <stdio.h>
-
-#include <sys/mman.h>
-#include <linux/mman.h>
 #include <etherfabric/memreg.h>
 #include "ef_vi_internal.h"
-#include "driver_access.h"
 #include "shrub_client.h"
-#include "shrub_pool.h"
 #include "logging.h"
+
+#ifndef __KERNEL__
+#include <sys/mman.h>
+#include <linux/mman.h>
+#include "driver_access.h"
+#endif
 
 /* TODO move CI_EFCT_MAX_SUPERBUFS somewhere more sensible, or remove
  * dependencies on it */
@@ -230,7 +226,7 @@ static bool efct_ubufs_available(const ef_vi* vi, int qid)
     return efct_ubufs_shared_available(vi, qid);
 }
 
-
+#ifndef __KERNEL__
 static void efct_ubufs_post_direct(ef_vi* vi, int qid, int sbid, bool sentinel)
 {
   ef_addr addr = ef_memreg_dma_addr(&get_ubufs(vi)->q[qid].memreg,
@@ -287,6 +283,7 @@ static int efct_ubufs_init_rxq_resource(ef_vi *vi, int qid,
   }
   return ra.out_id.index;
 }
+#endif
 
 static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
                                    unsigned n_superbufs)
@@ -380,6 +377,11 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
 static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd,
                                     unsigned n_superbufs)
 {
+#ifdef __KERNEL__
+  // TODO
+  BUG();
+  return -EOPNOTSUPP;
+#else
   int ix;
   struct efct_ubufs* ubufs = get_ubufs(vi);
   struct efct_ubufs_rxq* rxq;
@@ -419,6 +421,7 @@ static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd,
     return rc;
   }
   return ix;
+#endif
 }
 
 static int efct_ubufs_attach(ef_vi* vi,
@@ -453,7 +456,7 @@ static void efct_ubufs_cleanup(ef_vi* vi)
   efct_superbufs_cleanup(vi);
 
 #ifdef __KERNEL__
-  kzfree(ubufs);
+  kfree(ubufs);
 #else
   int i;
   for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
@@ -512,10 +515,14 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
   ubufs->ops.prime = efct_ubufs_prime;
   ubufs->ops.cleanup = efct_ubufs_cleanup;
 
+#ifdef __KERNEL__
+  // TODO
+#else
   if( vi->vi_flags & EF_VI_RX_PHYS_ADDR )
     ubufs->ops.post = efct_ubufs_post_direct;
   else
     ubufs->ops.post = efct_ubufs_post_kernel;
+#endif
 
   vi->efct_rxqs.active_qs = &ubufs->active_qs;
   vi->efct_rxqs.ops = &ubufs->ops;
