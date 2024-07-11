@@ -33,7 +33,6 @@ struct efct_ubufs_rxq
   uint32_t superbuf_pkts;
   struct ef_shrub_buffer_pool* buffer_pool;
   struct ef_shrub_client shrub_client;
-  struct ef_shrub_client_state shrub_state; /* TODO move to shared state */
 
   /* FIFO to record buffers posted to the NIC. */
   unsigned added, filled, removed;
@@ -333,7 +332,6 @@ static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd, unsigned n_s
 
   rxq = &ubufs->q[ix];
   int rc = ef_shrub_client_open(&rxq->shrub_client,
-                                &rxq->shrub_state,
                                 (void*)vi->efct_rxqs.q[ix].superbuf,
                                 EF_SHRUB_CONTROLLER_PATH, qid);
   if ( rc != 0 ) {

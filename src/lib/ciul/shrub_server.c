@@ -226,6 +226,12 @@ static int fifo_bytes(struct ef_shrub_queue* queue)
   return queue->fifo_size * sizeof(ef_shrub_buffer_id);
 }
 
+static int client_total_bytes(struct ef_shrub_queue* queue)
+{
+  return fifo_bytes(queue) +
+    EF_VI_ROUND_UP(sizeof(struct ef_shrub_client_state), PAGE_SIZE);
+}
+
 static size_t buffer_total_bytes(struct ef_shrub_queue* queue)
 {
   return EF_VI_ROUND_UP(queue->buffer_count * queue->buffer_bytes,
@@ -341,12 +347,13 @@ connection_alloc(struct ef_shrub_queue* queue)
 
   fd = queue->shared_fds[EF_SHRUB_FD_CLIENT_FIFO];
 
-  offset = queue->connection_count * fifo_bytes(queue);
-  rc = ftruncate(fd, offset + fifo_bytes(queue));
+  offset = queue->connection_count * client_total_bytes(queue);
+  rc = ftruncate(fd, offset + client_total_bytes(queue));
   if( rc < 0 )
     goto fail_fifo;
 
-  map = mmap(NULL, fifo_bytes(queue), PROT_READ | PROT_WRITE,
+  map = mmap(NULL, client_total_bytes(queue),
+             PROT_READ | PROT_WRITE,
              MAP_SHARED | MAP_POPULATE, fd, offset);
   if( map == MAP_FAILED )
     goto fail_fifo;
@@ -366,17 +373,12 @@ static int connection_send_metrics(struct ef_shrub_queue* queue,
                                    struct ef_shrub_connection* connection)
 {
   int rc;
-  struct ef_shrub_shared_metrics metrics = {
-    .server_version = EF_SHRUB_VERSION,
-    .buffer_bytes = queue->buffer_bytes,
-    .buffer_count = queue->buffer_count,
-    .server_fifo_size = fifo_bytes(queue),
-    .client_fifo_offset = connection->fifo_mmap_offset,
-    .client_fifo_size = fifo_bytes(queue)
-  };
+  struct ef_shrub_client_state* state =
+    (void*)((char*)connection->fifo + fifo_bytes(queue));
+  struct ef_shrub_shared_metrics* metrics = &state->metrics;
   struct iovec iov = {
-    .iov_base = &metrics,
-    .iov_len = sizeof(metrics)
+    .iov_base = metrics,
+    .iov_len = sizeof(*metrics)
   };
   char cmsg_buf[CMSG_SPACE(sizeof(queue->shared_fds))];
   struct msghdr msg = {
@@ -388,6 +390,13 @@ static int connection_send_metrics(struct ef_shrub_queue* queue,
   struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
   if( cmsg == NULL )
     return -EPROTO;
+
+  metrics->server_version = EF_SHRUB_VERSION;
+  metrics->buffer_bytes = queue->buffer_bytes;
+  metrics->buffer_count = queue->buffer_count;
+  metrics->server_fifo_size = queue->fifo_size;
+  metrics->client_fifo_offset = connection->fifo_mmap_offset;
+  metrics->client_fifo_size = queue->fifo_size;
 
   cmsg->cmsg_level = SOL_SOCKET;
   cmsg->cmsg_type = SCM_RIGHTS;

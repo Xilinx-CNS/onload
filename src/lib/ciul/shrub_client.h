@@ -10,14 +10,6 @@
 
 #include <etherfabric/shrub_shared.h>
 
-/* Structure containing connection state sharable between instances */
-struct ef_shrub_client_state
-{
-  int server_fifo_index;
-  int client_fifo_index;
-  struct ef_shrub_shared_metrics metrics;
-};
-
 /* Structure for managing a client instance */
 struct ef_shrub_client
 {
@@ -31,7 +23,6 @@ struct ef_shrub_client
 /* Open a connection to a server.
  *
  * client:      pointer to the structure for managing the connection
- * state:       location to store connection state
  * buffers:     location to map the buffer memory, NULL for arbitrary location
  * server_addr: the address for the server, typically a filesystem path
  *
@@ -43,7 +34,6 @@ struct ef_shrub_client
  * This function will block while communicating with the server.
  */
 int ef_shrub_client_open(struct ef_shrub_client* client,
-                         struct ef_shrub_client_state* state,
                          void* buffers,
                          const char* server_addr,
                          int qid);

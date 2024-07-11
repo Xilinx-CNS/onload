@@ -25,7 +25,7 @@
 typedef uint32_t ef_shrub_buffer_id;
 
 /* Protocol version, to check compatibility between client and server */
-#define EF_SHRUB_VERSION 1
+#define EF_SHRUB_VERSION 2
 
 /* An identifier that does not represent a buffer, used to indicate empty
  * slots in the FIFOs.
@@ -79,11 +79,21 @@ struct ef_shrub_shared_metrics {
    * Offset is zero, length is sizeof(ef_shrub_buffer_id) * size */
   uint64_t server_fifo_size;
 
-  /* Mapping information for the FIFO for clients to release buffers to server.
-   * Write only for clients.
-   * Offset is provided, length is sizeof(ef_shrub_buffer_id) * size */
+  /* Mapping information for the FIFO for clients to release buffers to server,
+   * followed by the client's FIFO access state.
+   * Readable and writable for clients.
+   * Offset is provided, length is
+   *   sizeof(ef_shrub_buffer_id) * size + sizeof(struct ef_shrub_client_state) */
   uint64_t client_fifo_offset;
   uint64_t client_fifo_size;
+};
+
+/* Structure containing connection state sharable between instances */
+struct ef_shrub_client_state
+{
+  uint64_t server_fifo_index;
+  uint64_t client_fifo_index;
+  struct ef_shrub_shared_metrics metrics;
 };
 
 #endif
