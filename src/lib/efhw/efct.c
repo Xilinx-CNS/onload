@@ -282,7 +282,7 @@ efct_nic_release_hardware(struct efhw_nic* nic)
   struct efhw_nic_efct* efct = nic->arch_extra;
 
 #define ACTION_ASSERT_HASH_TABLE_EMPTY(F) \
-    EFHW_ASSERT(efct->filters.F##_n == 0);
+    EFHW_ASSERT(efct->filter_state.filters.F##_n == 0);
   FOR_EACH_FILTER_CLASS(ACTION_ASSERT_HASH_TABLE_EMPTY)
 #endif
 }
@@ -582,6 +582,131 @@ static const int efct_nic_buffer_table_orders[] = {};
  *
  *--------------------------------------------------------------------*/
 
+struct filter_insert_params {
+  struct efhw_nic *nic;
+  struct xlnx_efct_filter_params efct_params;
+};
+
+int filter_insert_op(const struct efct_filter_insert_in *in,
+                     struct efct_filter_insert_out *out)
+{
+  struct filter_insert_params *params;
+  struct xlnx_efct_filter_params *efct_params;
+  struct device *dev;
+  struct xlnx_efct_device *edev;
+  struct xlnx_efct_client *cli;
+  int rc;
+
+  params = (struct filter_insert_params*)in->drv_opaque;
+  efct_params = &params->efct_params;
+  efct_params->spec = in->filter;
+
+  EFCT_PRE(dev, edev, cli, params->nic, rc);
+  rc = edev->ops->filter_insert(cli, efct_params);
+  EFCT_POST(dev, edev, cli, params->nic, rc);
+
+  if( rc == 0 ) {
+    out->rxq = efct_params->rxq_out;
+    out->drv_id = efct_params->filter_id_out;
+    out->filter_handle = efct_params->filter_handle;
+  }
+
+  return rc;
+}
+
+static int
+efct_nic_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
+                       int *rxq, unsigned pd_excl_token,
+                       const struct cpumask *mask, unsigned flags)
+{
+  struct device *dev;
+  struct xlnx_efct_device* edev;
+  struct xlnx_efct_client* cli;
+  struct efhw_nic_efct *efct = nic->arch_extra;
+  struct filter_insert_params params;
+  struct ethtool_rx_flow_spec hw_filter;
+  int rc;
+
+  if( flags & EFHW_FILTER_F_REPLACE )
+    return -EOPNOTSUPP;
+
+  /* Get the straight translation to ethtool spec of the requested filter.
+   * This allows us to make any necessary checks on the actually requested
+   * filter before we furtle it later on. */
+  rc = efx_spec_to_ethtool_flow(spec, &hw_filter);
+  if( rc < 0 )
+    return rc;
+
+  params.nic = nic;
+  params.efct_params = (struct xlnx_efct_filter_params) {
+    .spec = &hw_filter,
+    .mask = mask ? mask : cpu_all_mask,
+  };
+  if( flags & EFHW_FILTER_F_ANY_RXQ )
+    params.efct_params.flags |= XLNX_EFCT_FILTER_F_ANYQUEUE_LOOSE;
+  if( flags & EFHW_FILTER_F_PREF_RXQ )
+    params.efct_params.flags |= XLNX_EFCT_FILTER_F_PREF_QUEUE;
+  if( flags & EFHW_FILTER_F_EXCL_RXQ ) {
+    params.efct_params.flags |= XLNX_EFCT_FILTER_F_EXCLUSIVE_QUEUE;
+
+    EFCT_PRE(dev, edev, cli, nic, rc);
+    rc = edev->ops->is_filter_supported(cli, &hw_filter);
+    EFCT_POST(dev, edev, cli, nic, rc);
+
+    if( !rc )
+      return -EPERM;
+  }
+
+  /* For some filter types we use wider HW filters to represent a more specific
+   * SW filter. This function handles any modifications that are needed to do
+   * this. */
+  rc = sanitise_ethtool_flow(&hw_filter);
+  if( rc < 0 )
+    return rc;
+
+  return efct_filter_insert(&efct->filter_state, spec, &hw_filter, rxq,
+                            pd_excl_token, flags, filter_insert_op, &params);
+}
+
+static void
+efct_nic_filter_remove(struct efhw_nic *nic, int filter_id)
+{
+  struct device *dev;
+  struct xlnx_efct_device* edev;
+  struct xlnx_efct_client* cli;
+  struct efhw_nic_efct *efct = nic->arch_extra;
+  int drv_id = efct_filter_remove(&efct->filter_state, filter_id);
+  int rc;
+
+  if( drv_id >= 0 ) {
+    EFCT_PRE(dev, edev, cli, nic, rc);
+    rc = edev->ops->filter_remove(cli, drv_id);
+    EFCT_POST(dev, edev, cli, nic, rc);
+  }
+}
+
+static int
+efct_nic_filter_query(struct efhw_nic *nic, int filter_id,
+                  struct efhw_filter_info *info)
+{
+  struct efhw_nic_efct *efct = nic->arch_extra;
+  return efct_filter_query(&efct->filter_state, filter_id, info);
+}
+
+static int
+efct_nic_multicast_block(struct efhw_nic *nic, bool block)
+{
+  struct efhw_nic_efct *efct = nic->arch_extra;
+  return efct_multicast_block(&efct->filter_state, block);
+}
+
+static int
+efct_nic_unicast_block(struct efhw_nic *nic, bool block)
+{
+  struct efhw_nic_efct *efct = nic->arch_extra;
+  return efct_unicast_block(&efct->filter_state, block);
+}
+
 
 /*--------------------------------------------------------------------
  *
@@ -658,11 +783,11 @@ struct efhw_func_ops efct_char_functional_units = {
   .translate_dma_addrs = efct_translate_dma_addrs,
   .buffer_table_orders = efct_nic_buffer_table_orders,
   .buffer_table_orders_num = CI_ARRAY_SIZE(efct_nic_buffer_table_orders),
-  .filter_insert = efct_filter_insert,
-  .filter_remove = efct_filter_remove,
-  .filter_query = efct_filter_query,
-  .multicast_block = efct_multicast_block,
-  .unicast_block = efct_unicast_block,
+  .filter_insert = efct_nic_filter_insert,
+  .filter_remove = efct_nic_filter_remove,
+  .filter_query = efct_nic_filter_query,
+  .multicast_block = efct_nic_multicast_block,
+  .unicast_block = efct_nic_unicast_block,
   .vi_io_region = efct_vi_io_region,
   .ctpio_addr = efct_ctpio_addr,
   .design_parameters = efct_design_parameters,

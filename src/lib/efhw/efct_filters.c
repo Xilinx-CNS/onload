@@ -23,6 +23,7 @@
 #include <etherfabric/internal/internal.h>
 #include "efct.h"
 #include "efct_superbuf.h"
+#include "efct_filters.h"
 
 #if CI_HAVE_EFCT_AUX
 
@@ -42,16 +43,40 @@ static u32 filter_hash_table_seed;
 static bool filter_hash_table_seed_inited = false;
 
 
-void efct_nic_filter_init(struct efhw_nic_efct *efct)
+int efct_filter_state_init(struct efct_filter_state *state,
+                           struct xlnx_efct_design_params *dp)
 {
+  mutex_init(&state->driver_filters_mtx);
+
+  state->hw_filters_n = dp->num_filter;
+  state->hw_filters = vzalloc(sizeof(*state->hw_filters) * state->hw_filters_n);
+  if( ! state->hw_filters )
+    return -ENOMEM;
+
+  state->exclusive_rxq_mapping = vzalloc(sizeof(*state->exclusive_rxq_mapping) *
+                                         dp->rx_queues);
+  if( ! state->exclusive_rxq_mapping )
+    return -ENOMEM;
+
   if( ! filter_hash_table_seed_inited ) {
     filter_hash_table_seed_inited = true;
     filter_hash_table_seed = get_random_u32();
   }
 
 #define ACTION_INIT_HASH_TABLE(F) \
-        hash_init(efct->filters.F);
+        hash_init(state->filters.F);
   FOR_EACH_FILTER_CLASS(ACTION_INIT_HASH_TABLE)
+
+  return 0;
+}
+
+
+void efct_filter_state_free(struct efct_filter_state *state)
+{
+  if( state->hw_filters )
+    vfree(state->hw_filters);
+  if( state->exclusive_rxq_mapping )
+    vfree(state->exclusive_rxq_mapping);
 }
 
 
@@ -60,7 +85,7 @@ static uint32_t zero_remote_port(uint32_t l4_4_bytes)
   return htonl(ntohl(l4_4_bytes) & 0xffff);
 }
 
-static int sanitise_ethtool_flow(struct ethtool_rx_flow_spec *dst)
+int sanitise_ethtool_flow(struct ethtool_rx_flow_spec *dst)
 {
   /* Blat out the remote fields: we can soft-filter them even though the
    * hardware can't */
@@ -232,8 +257,8 @@ get_filter_class(int filter_id)
 static int
 do_filter_insert(int clas, struct hlist_head* table, size_t *table_n,
                  size_t hash_bits, size_t max_n, struct efct_filter_node* node,
-                 struct efhw_nic_efct *efct, size_t node_len, bool allow_dups,
-                 struct efct_filter_node** used_node)
+                 struct efct_filter_state *state, size_t node_len,
+                 bool allow_dups, struct efct_filter_node** used_node)
 {
   size_t key_len = node_len - offsetof(struct efct_filter_node, key_start);
   struct efct_filter_node* node_ptr;
@@ -285,12 +310,13 @@ do_filter_insert(int clas, struct hlist_head* table, size_t *table_n,
   }
 
   if ( node->hw_filter >= 0 )
-    ++efct->hw_filters[node->hw_filter].refcount;
+    ++state->hw_filters[node->hw_filter].refcount;
   return 0;
 }
 
 static struct efct_filter_node*
-lookup_filter_by_id(struct efhw_nic_efct *efct, int filter_id, size_t **class_n)
+lookup_filter_by_id(struct efct_filter_state *state, int filter_id,
+                    size_t **class_n)
 {
   int clasi = 0;
   int clas = get_filter_class(filter_id);
@@ -298,13 +324,13 @@ lookup_filter_by_id(struct efhw_nic_efct *efct, int filter_id, size_t **class_n)
 #define ACTION_LOOKUP_BY_FILTER_ID(F) \
     if( clasi++ == clas ) { \
       int bkt = (filter_id >> FILTER_CLASS_BITS) & \
-                (HASH_SIZE(efct->filters.F) - 1); \
+                (HASH_SIZE(state->filters.F) - 1); \
       struct efct_filter_node* node; \
-      hlist_for_each_entry_rcu(node, &efct->filters.F[bkt], node) { \
+      hlist_for_each_entry_rcu(node, &state->filters.F[bkt], node) { \
         if( node->filter_id == filter_id ) { \
-          EFHW_ASSERT(efct->filters.F##_n > 0); \
+          EFHW_ASSERT(state->filters.F##_n > 0); \
           if( class_n ) \
-            *class_n = &efct->filters.F##_n; \
+            *class_n = &state->filters.F##_n; \
           return node; \
         } \
       } \
@@ -313,17 +339,17 @@ lookup_filter_by_id(struct efhw_nic_efct *efct, int filter_id, size_t **class_n)
   return NULL;
 }
 
-static void do_filter_del(struct efhw_nic_efct *efct, int filter_id,
+static void do_filter_del(struct efct_filter_state *state, int filter_id,
                          int* hw_filter)
 {
   size_t *class_n;
-  struct efct_filter_node *node = lookup_filter_by_id(efct, filter_id, &class_n);
+  struct efct_filter_node *node = lookup_filter_by_id(state, filter_id, &class_n);
 
   *hw_filter = -1;
   if( node ) {
     *hw_filter = node->hw_filter;
     if( node->hw_filter >= 0 ) {
-      --efct->hw_filters[node->hw_filter].refcount;
+      --state->hw_filters[node->hw_filter].refcount;
     }
     if( --node->refcount == 0 ) {
       hash_del_rcu(&node->node);
@@ -334,17 +360,14 @@ static void do_filter_del(struct efhw_nic_efct *efct, int filter_id,
 }
 
 int
-efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
-                   int *rxq, unsigned pd_excl_token, const struct cpumask *mask,
-                   unsigned flags)
+efct_filter_insert(struct efct_filter_state *state, struct efx_filter_spec *spec,
+                    struct ethtool_rx_flow_spec *hw_filter,
+                   int *rxq, unsigned pd_excl_token, unsigned flags,
+                   drv_filter_insert insert_op, void *insert_data)
 {
   int rc;
-  struct ethtool_rx_flow_spec hw_filter;
-  struct xlnx_efct_filter_params params;
-  struct efhw_nic_efct *efct = nic->arch_extra;
-  struct device *dev;
-  struct xlnx_efct_device* edev;
-  struct xlnx_efct_client* cli;
+  struct efct_filter_insert_in op_in;
+  struct efct_filter_insert_out op_out;
   struct efct_filter_node node;
   struct efct_filter_node* sw_filter_node;
   size_t node_len;
@@ -353,44 +376,8 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
   unsigned no_vlan_flags = spec->match_flags & ~EFX_FILTER_MATCH_OUTER_VID;
   unsigned q_excl_token = 0;
 
-  if( flags & EFHW_FILTER_F_REPLACE )
-    return -EOPNOTSUPP;
-
-  /* Get the straight translation to ethtool spec of the requested filter.
-   * This allows us to make any necessary checks on the actually requested
-   * filter before we furtle it later on. */
-  rc = efx_spec_to_ethtool_flow(spec, &hw_filter);
-  if( rc < 0 )
-    return rc;
-
-  params = (struct xlnx_efct_filter_params){
-    .spec = &hw_filter,
-    .mask = mask ? mask : cpu_all_mask,
-  };
-  if( flags & EFHW_FILTER_F_ANY_RXQ )
-    params.flags |= XLNX_EFCT_FILTER_F_ANYQUEUE_LOOSE;
-  if( flags & EFHW_FILTER_F_PREF_RXQ )
-    params.flags |= XLNX_EFCT_FILTER_F_PREF_QUEUE;
-  if( flags & EFHW_FILTER_F_EXCL_RXQ ) {
-    params.flags |= XLNX_EFCT_FILTER_F_EXCLUSIVE_QUEUE;
-
-    EFCT_PRE(dev, edev, cli, nic, rc);
-    rc = edev->ops->is_filter_supported(cli, &hw_filter);
-    EFCT_POST(dev, edev, cli, nic, rc);
-
-    if( !rc )
-      return -EPERM;
-  }
-
-  /* For some filter types we use wider HW filters to represent a more specific
-   * SW filter. This function handles any modifications that are needed to do
-   * this. */
-  rc = sanitise_ethtool_flow(&hw_filter);
-  if( rc < 0 )
-    return rc;
-
   if( *rxq >= 0 )
-    hw_filter.ring_cookie = *rxq;
+    hw_filter->ring_cookie = *rxq;
 
   /* Step 1 of 2: Convert ethtool_rx_flow_spec to efct_filter_node */
   memset(&node, 0, sizeof(node));
@@ -473,17 +460,17 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
     node.vlan = spec->outer_vid;
 
   /* Step 2 of 2: Insert efct_filter_node in to the correct hash table */
-  mutex_lock(&efct->driver_filters_mtx);
+  mutex_lock(&state->driver_filters_mtx);
 
   if ( *rxq > 0 ) {
-    q_excl_token = efct->exclusive_rxq_mapping[*rxq];
+    q_excl_token = state->exclusive_rxq_mapping[*rxq];
 
     /* If the q excl tokens are 0, we are in a fresh state and can claim it.
     *  If both the pd and q are EFHW_PD_NON_EXC_TOKEN, we are in a non-exclusive queue.
     *  If the q one is set, but the pd one does not match, than the pd is overstepping on another rxq.
     *  The q state is owned and managed by the driver and persists external to the application. */
     if ( ( q_excl_token > 0 ) && ( q_excl_token != pd_excl_token ) ) {
-      mutex_unlock(&efct->driver_filters_mtx);
+      mutex_unlock(&state->driver_filters_mtx);
       return -EPERM;
     }
   }
@@ -493,22 +480,23 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
       (spec->match_flags & EFX_FILTER_MATCH_LOC_MAC) ) {
     int i;
     int avail = -1;
-    for( i = 0; i < efct->hw_filters_n; ++i ) {
-      if( ! efct->hw_filters[i].refcount )
+    for( i = 0; i < state->hw_filters_n; ++i ) {
+      if( ! state->hw_filters[i].refcount )
         avail = i;
       else {
-        if( hw_filters_are_equal(&node, &efct->hw_filters[i], clas) ) {
+        if( hw_filters_are_equal(&node, &state->hw_filters[i], clas) ) {
 
           if( ! (flags & (EFHW_FILTER_F_ANY_RXQ | EFHW_FILTER_F_PREF_RXQ) ) &&
-              *rxq >= 0 && *rxq != efct->hw_filters[i].rxq ) {
-            mutex_unlock(&efct->driver_filters_mtx);
+              *rxq >= 0 && *rxq != state->hw_filters[i].rxq ) {
+            mutex_unlock(&state->driver_filters_mtx);
             return -EEXIST;
           }
 
-          if ( efct->hw_filters[i].rxq > 0 && 
-               pd_excl_token != efct->exclusive_rxq_mapping[efct->hw_filters[i].rxq] ) {
+          if ( state->hw_filters[i].rxq > 0 &&
+               pd_excl_token !=
+               state->exclusive_rxq_mapping[state->hw_filters[i].rxq] ) {
             /* Trying to attach onto an rxq owned by someone else. */
-            mutex_unlock(&efct->driver_filters_mtx);
+            mutex_unlock(&state->driver_filters_mtx);
             return -EPERM;
           }
 
@@ -521,12 +509,12 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
       /* If we have no free hw filters, that's fine: we'll just use rxq0 */
       if( avail >= 0 ) {
         node.hw_filter = avail;
-        efct->hw_filters[avail].proto = node.proto;
-        efct->hw_filters[avail].ip = node.u.ip4.lip;
-        efct->hw_filters[avail].port = node.lport;
-        memcpy(&efct->hw_filters[avail].loc_mac, &node.loc_mac,
+        state->hw_filters[avail].proto = node.proto;
+        state->hw_filters[avail].ip = node.u.ip4.lip;
+        state->hw_filters[avail].port = node.lport;
+        memcpy(&state->hw_filters[avail].loc_mac, &node.loc_mac,
                 sizeof(node.loc_mac));
-        efct->hw_filters[avail].outer_vlan = node.vlan;
+        state->hw_filters[avail].outer_vlan = node.vlan;
         insert_hw_filter = true;
       }
     }
@@ -535,34 +523,37 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
   /* If we aren't going to have a hw filter, then we definitely don't have an
    * exclusive queue available. */
   if( node.hw_filter < 0 && (flags & EFHW_FILTER_F_EXCL_RXQ) ) {
-    mutex_unlock(&efct->driver_filters_mtx);
+    mutex_unlock(&state->driver_filters_mtx);
     return -EPERM;
   }
 
 #define ACTION_DO_FILTER_INSERT(F) \
     if( clas == FILTER_CLASS_##F ) { \
-      rc = do_filter_insert(clas, efct->filters.F, &efct->filters.F##_n, \
-                            HASH_BITS(efct->filters.F), MAX_ALLOWED_##F, \
-                            &node, efct, node_len, \
+      rc = do_filter_insert(clas, state->filters.F, &state->filters.F##_n, \
+                            HASH_BITS(state->filters.F), MAX_ALLOWED_##F, \
+                            &node, state, node_len, \
                             clas != FILTER_CLASS_full_match, &sw_filter_node); \
     }
   FOR_EACH_FILTER_CLASS(ACTION_DO_FILTER_INSERT)
 
   if( rc < 0 ) {
-    mutex_unlock(&efct->driver_filters_mtx);
+    mutex_unlock(&state->driver_filters_mtx);
     return rc;
   }
 
   if( insert_hw_filter ) {
-    EFCT_PRE(dev, edev, cli, nic, rc);
-    rc = edev->ops->filter_insert(cli, &params);
-    EFCT_POST(dev, edev, cli, nic, rc);
+    op_in = (struct efct_filter_insert_in) {
+      .drv_opaque = insert_data,
+      .filter = hw_filter,
+    };
+
+    rc = insert_op(&op_in, &op_out);
 
     if( rc == -ENOSPC && sw_filter_node->refcount == 1 ) {
       /* We discovered we had fewer hardware filters than we thought - undo a bit
        * and use rxq0 / sw filtering only */
       rc = flags & EFHW_FILTER_F_EXCL_RXQ ? -EPERM : 0;
-      --efct->hw_filters[node.hw_filter].refcount;
+      --state->hw_filters[node.hw_filter].refcount;
       sw_filter_node->hw_filter = -1;
       node.hw_filter = -1;
     }
@@ -570,24 +561,24 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
 
   if( rc < 0 ) {
     int unused;
-    do_filter_del(efct, node.filter_id, &unused);
+    do_filter_del(state, node.filter_id, &unused);
   }
   else {
     if( node.hw_filter >= 0 ) {
       if( insert_hw_filter ) {
-        efct->hw_filters[node.hw_filter].rxq = params.rxq_out;
-        efct->hw_filters[node.hw_filter].drv_id = params.filter_id_out;
-        efct->hw_filters[node.hw_filter].hw_id = params.filter_handle;
+        state->hw_filters[node.hw_filter].rxq = op_out.rxq;
+        state->hw_filters[node.hw_filter].drv_id = op_out.drv_id;
+        state->hw_filters[node.hw_filter].hw_id = op_out.filter_handle;
       }
-      *rxq = efct->hw_filters[node.hw_filter].rxq;
+      *rxq = state->hw_filters[node.hw_filter].rxq;
       if ( *rxq > 0 )
-        efct->exclusive_rxq_mapping[*rxq] = pd_excl_token;
+        state->exclusive_rxq_mapping[*rxq] = pd_excl_token;
     }
     else {
       *rxq = 0;
     }
   }
-  mutex_unlock(&efct->driver_filters_mtx);
+  mutex_unlock(&state->driver_filters_mtx);
 
   /* If we are returning successfully having requested an exclusive queue, that
    * queue should not be shared with the net driver. */
@@ -597,23 +588,23 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
 }
 
 static void
-remove_exclusive_rxq_ownership(struct efhw_nic_efct* efct, int hw_filter)
+remove_exclusive_rxq_ownership(struct efct_filter_state *state, int hw_filter)
 {
   int i;
   bool delete_owner = true;
-  int rxq = efct->hw_filters[hw_filter].rxq;
+  int rxq = state->hw_filters[hw_filter].rxq;
 
-  if( efct->exclusive_rxq_mapping[rxq] ) {
+  if( state->exclusive_rxq_mapping[rxq] ) {
     /* We should never have claimed rxq 0 as exclusive as this is always shared
      * with the net driver. */
     EFHW_ASSERT(rxq > 0);
 
     /* Only bother worrying about exclusive mapping iff the filter has an exclusive entry */
-    for( i = 0; i < efct->hw_filters_n; ++i ) {
-      if ( efct->hw_filters[i].refcount ) {
+    for( i = 0; i < state->hw_filters_n; ++i ) {
+      if ( state->hw_filters[i].refcount ) {
         /* Iff any of the currently active filters (ie refcount > 0) share the same rxq
           * as the one we are attempting to delete, we cannot clear the rxq ownership.*/
-        if( efct->hw_filters[i].rxq == rxq ) {
+        if( state->hw_filters[i].rxq == rxq ) {
           delete_owner = false;
           break;
         }
@@ -622,41 +613,31 @@ remove_exclusive_rxq_ownership(struct efhw_nic_efct* efct, int hw_filter)
   }
   
   if ( delete_owner )
-    efct->exclusive_rxq_mapping[rxq] = 0;
+    state->exclusive_rxq_mapping[rxq] = 0;
 }
 
 
-void
-efct_filter_remove(struct efhw_nic *nic, int filter_id)
+int
+efct_filter_remove(struct efct_filter_state *state, int filter_id)
 {
-  struct efhw_nic_efct *efct = nic->arch_extra;
-  struct device *dev;
-  struct xlnx_efct_device* edev;
-  struct xlnx_efct_client* cli;
-  int rc;
   int hw_filter;
   int drv_id = -1;
 
-  mutex_lock(&efct->driver_filters_mtx);
+  mutex_lock(&state->driver_filters_mtx);
 
-  do_filter_del(efct, filter_id, &hw_filter);
+  do_filter_del(state, filter_id, &hw_filter);
 
   if( hw_filter >= 0 ) {
-    if( efct->hw_filters[hw_filter].refcount == 0 ) {
+    if( state->hw_filters[hw_filter].refcount == 0 ) {
         /* The above check implies the current filter is unused. */
-        drv_id = efct->hw_filters[hw_filter].drv_id;
-        remove_exclusive_rxq_ownership(efct, hw_filter);
+        drv_id = state->hw_filters[hw_filter].drv_id;
+        remove_exclusive_rxq_ownership(state, hw_filter);
     }
   }
 
 
-  mutex_unlock(&efct->driver_filters_mtx);
-
-  if( drv_id >= 0 ) {
-    EFCT_PRE(dev, edev, cli, nic, rc);
-    rc = edev->ops->filter_remove(cli, drv_id);
-    EFCT_POST(dev, edev, cli, nic, rc);
-  }
+  mutex_unlock(&state->driver_filters_mtx);
+  return drv_id;
 }
 
 static bool
@@ -677,18 +658,15 @@ static bool is_ipv6_extension_hdr(uint8_t type)
   return type == 0 || type == 43 || type == 60;
 }
 
-bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
-                         const void* meta, const void* payload)
+bool efct_packet_matches_filter(struct efct_filter_state *state,
+                                struct net_device *net_dev, int rxq,
+                                const unsigned char* pkt, size_t pkt_len)
 {
-  struct efhw_nic_efct *efct = (struct efhw_nic_efct *) driver_data;
   struct efct_filter_node node;
-  const unsigned char* pkt = payload;
   size_t l3_off;
   size_t l4_off = SIZE_MAX;
   size_t full_match_node_len = 0;
   size_t semi_wild_node_len = 0;
-  const ci_oword_t* header = meta;
-  size_t pkt_len = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_PACKET_LENGTH);
   struct netdev_hw_addr *hw_addr;
   bool is_mcast = false;
   bool is_outer_vlan;
@@ -696,14 +674,9 @@ bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
   size_t mac_node_len = offsetof(struct efct_filter_node, loc_mac) +
                         sizeof(node.loc_mac);
 
-  if( pkt_len < ETH_HLEN )
-    return false;
+  /* Should be checked by caller */
+  EFHW_ASSERT(pkt_len >= ETH_HLEN);
 
-  /* This is asserting the next_frame_loc for the wrong packet: we should be
-   * looking at the preceeding metadata. Still, having it will probably
-   * detect hardware that doesn't use a fixed value fairly rapidly. */
-  EFHW_ASSERT(CI_OWORD_FIELD(*header, EFCT_RX_HEADER_NEXT_FRAME_LOC) == 1);
-  pkt += EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
   memset(&node, 0, sizeof(node));
 
   /* -------- layer 2 -------- */
@@ -729,16 +702,16 @@ bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
   memcpy(&node.loc_mac, pkt + 0, ETH_ALEN);
   /* Check for MAC+VLAN filter match */
   if( is_outer_vlan ) {
-    if( filter_matches(efct->filters.mac_vlan,
-                      HASH_BITS(efct->filters.mac_vlan),
+    if( filter_matches(state->filters.mac_vlan,
+                      HASH_BITS(state->filters.mac_vlan),
                       &node, mac_node_len, true) )
       return true;
   }
   /* Check for MAC filter match */
   vlan = node.vlan;
   node.vlan = -1;
-  if( filter_matches(efct->filters.mac,
-                      HASH_BITS(efct->filters.mac),
+  if( filter_matches(state->filters.mac,
+                      HASH_BITS(state->filters.mac),
                       &node, mac_node_len, true) )
     return true;
   node.vlan = vlan;
@@ -797,27 +770,27 @@ bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
     memcpy(&node.rport, pkt + l4_off, 2);
     memcpy(&node.lport, pkt + l4_off + 2, 2);
 
-    if( filter_matches(efct->filters.full_match,
-                       HASH_BITS(efct->filters.full_match),
+    if( filter_matches(state->filters.full_match,
+                       HASH_BITS(state->filters.full_match),
                        &node, full_match_node_len, false) )
       return true;
     node.rport = 0;
 
-    if( filter_matches(efct->filters.semi_wild,
-                          HASH_BITS(efct->filters.semi_wild),
+    if( filter_matches(state->filters.semi_wild,
+                          HASH_BITS(state->filters.semi_wild),
                           &node, semi_wild_node_len, false) )
       return true;
   }
 
-  if( filter_matches(efct->filters.ethertype,
-                        HASH_BITS(efct->filters.ethertype),
+  if( filter_matches(state->filters.ethertype,
+                        HASH_BITS(state->filters.ethertype),
                         &node, offsetof(struct efct_filter_node, proto),
                         false) )
     return true;
 
   if( !is_mcast ) {
-    if( efct->block_kernel & EFCT_NIC_BLOCK_KERNEL_UNICAST ) {
-      netdev_for_each_uc_addr(hw_addr, efct->nic->net_dev) {
+    if( state->block_kernel & EFCT_NIC_BLOCK_KERNEL_UNICAST ) {
+      netdev_for_each_uc_addr(hw_addr, net_dev) {
         if( ether_addr_equal(pkt, hw_addr->addr) )
           return false;
       }
@@ -825,19 +798,19 @@ bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
 
     node.ethertype = EFCT_ETHERTYPE_IG_FILTER;
     node.proto = EFCT_PROTO_UCAST_IG_FILTER;
-    if( filter_matches(efct->filters.ethertype,
-                          HASH_BITS(efct->filters.ethertype),
+    if( filter_matches(state->filters.ethertype,
+                          HASH_BITS(state->filters.ethertype),
                           &node, offsetof(struct efct_filter_node, rport),
                           false) )
       return true;
   }
   else {
-    if( efct->block_kernel & EFCT_NIC_BLOCK_KERNEL_MULTICAST ) {
+    if( state->block_kernel & EFCT_NIC_BLOCK_KERNEL_MULTICAST ) {
       /* Iterate through our subscribed multicast MAC addresses, and check if they   *
       * are equal to the dest MAC of the incoming packet. If any of them match,     *
       * this this is _not_ a multicast mismatch, and we can return false here -  we *
       * don't need to deal with multicast mismatch filtering.                       */
-      netdev_for_each_mc_addr(hw_addr, efct->nic->net_dev) {
+      netdev_for_each_mc_addr(hw_addr, net_dev) {
         if( ether_addr_equal(pkt, hw_addr->addr) )
           return false;
       }
@@ -845,8 +818,8 @@ bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
 
     node.ethertype = EFCT_ETHERTYPE_IG_FILTER;
     node.proto = EFCT_PROTO_MCAST_IG_FILTER;
-    if( filter_matches(efct->filters.ethertype,
-                          HASH_BITS(efct->filters.ethertype),
+    if( filter_matches(state->filters.ethertype,
+                          HASH_BITS(state->filters.ethertype),
                           &node, offsetof(struct efct_filter_node, rport),
                           false) )
       return true;
@@ -856,23 +829,22 @@ bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
 }
 
 int
-efct_filter_query(struct efhw_nic *nic, int filter_id,
+efct_filter_query(struct efct_filter_state *state, int filter_id,
                   struct efhw_filter_info *info)
 {
-  struct efhw_nic_efct *efct = nic->arch_extra;
   int rc;
   struct efct_filter_node *node;
   int exclusivity_id = 0;
 
-  mutex_lock(&efct->driver_filters_mtx);
-  node = lookup_filter_by_id(efct, filter_id, NULL);
+  mutex_lock(&state->driver_filters_mtx);
+  node = lookup_filter_by_id(state, filter_id, NULL);
   if( ! node ) {
     rc = -ENOENT;
   }
   else if( node->hw_filter >= 0 ) {
-    info->hw_id = efct->hw_filters[node->hw_filter].hw_id;
-    info->rxq = efct->hw_filters[node->hw_filter].rxq;
-    exclusivity_id = efct->exclusive_rxq_mapping[info->rxq];
+    info->hw_id = state->hw_filters[node->hw_filter].hw_id;
+    info->rxq = state->hw_filters[node->hw_filter].rxq;
+    exclusivity_id = state->exclusive_rxq_mapping[info->rxq];
     if ( exclusivity_id != 0 && exclusivity_id != EFHW_PD_NON_EXC_TOKEN )
       info->flags |= EFHW_FILTER_F_IS_EXCL;
     rc = 0;
@@ -886,29 +858,27 @@ efct_filter_query(struct efhw_nic *nic, int filter_id,
     info->flags = 0;
     rc = 0;
   }
-  mutex_unlock(&efct->driver_filters_mtx);
+  mutex_unlock(&state->driver_filters_mtx);
   return rc;
 }
 
 int
-efct_multicast_block(struct efhw_nic *nic, bool block)
+efct_multicast_block(struct efct_filter_state *state, bool block)
 {
   /* Keep track of whether this has been set to allow us to tell if our *
    * MAC I/G filter is multicast-mis or multicast-all.                  */
-  struct efhw_nic_efct *efct = (struct efhw_nic_efct *) nic->arch_extra;
-  efct->block_kernel = (block ?
-                        efct->block_kernel | EFCT_NIC_BLOCK_KERNEL_MULTICAST :
-                        efct->block_kernel & ~EFCT_NIC_BLOCK_KERNEL_MULTICAST);
+  state->block_kernel = (block ?
+                        state->block_kernel | EFCT_NIC_BLOCK_KERNEL_MULTICAST :
+                        state->block_kernel & ~EFCT_NIC_BLOCK_KERNEL_MULTICAST);
   return 0;
 }
 
 int
-efct_unicast_block(struct efhw_nic *nic, bool block)
+efct_unicast_block(struct efct_filter_state *state, bool block)
 {
-  struct efhw_nic_efct *efct = (struct efhw_nic_efct *) nic->arch_extra;
-  efct->block_kernel = (block ?
-                        efct->block_kernel | EFCT_NIC_BLOCK_KERNEL_UNICAST :
-                        efct->block_kernel & ~EFCT_NIC_BLOCK_KERNEL_UNICAST);
+  state->block_kernel = (block ?
+                        state->block_kernel | EFCT_NIC_BLOCK_KERNEL_UNICAST :
+                        state->block_kernel & ~EFCT_NIC_BLOCK_KERNEL_UNICAST);
   return 0;
 }
 

@@ -18,14 +18,13 @@
 
 
 static int efct_debugfs_read_hw_filters(struct seq_file *file,
-                                        const void *data)
+                                        const struct efct_filter_state *fs)
 {
-  const struct efhw_nic_efct *efct = data;
   struct efct_hw_filter *filter;
   int i;
 
-  for( i = 0; i < efct->hw_filters_n; i++ ) {
-    filter = &efct->hw_filters[i];
+  for( i = 0; i < fs->hw_filters_n; i++ ) {
+    filter = &fs->hw_filters[i];
     if( filter->refcount > 0 )
       seq_printf(file, "%03x: ref: %d\tid: %d/%d\trxq: %d\t%s:%pI4:%d "
                        "%pM %d\n", i,
@@ -39,13 +38,14 @@ static int efct_debugfs_read_hw_filters(struct seq_file *file,
   return 0;
 }
 
-static int efct_debugfs_read_exclusive_rxq_mapping(struct seq_file *file,
-                                                   const void *data)
+static int
+efct_debugfs_read_exclusive_rxq_mapping(struct seq_file *file, int rxq_n,
+                                        const struct efct_filter_state *fs)
 {
-  const struct efhw_nic_efct *efct = data;
   int qid;
-  for( qid = 0; qid < efct->rxq_n; ++qid ) {
-    uint32_t excl = efct->exclusive_rxq_mapping[qid];
+  seq_printf(file, "exclusive rxq map: ");
+  for( qid = 0; qid < rxq_n; ++qid ) {
+    uint32_t excl = fs->exclusive_rxq_mapping[qid];
     seq_printf(file, "%s%d",
                qid == 0 ? "" : " ",
                excl && excl != EFHW_PD_NON_EXC_TOKEN);
@@ -54,12 +54,21 @@ static int efct_debugfs_read_exclusive_rxq_mapping(struct seq_file *file,
   return 0;
 }
 
+static int efct_debugfs_read_filter_state(struct seq_file *file, const void *data)
+{
+  const struct efhw_nic_efct *efct = data;
+  const struct efct_filter_state *fs = &efct->filter_state;
+
+  seq_printf(file, "%d\n", fs->hw_filters_n);
+  efct_debugfs_read_hw_filters(file, fs);
+  efct_debugfs_read_exclusive_rxq_mapping(file, efct->rxq_n, fs);
+  return 0;
+}
+
 static const struct efrm_debugfs_parameter efhw_debugfs_efct_parameters[] = {
   EFRM_U32_PARAMETER(struct efhw_nic_efct, rxq_n),
   EFRM_U32_PARAMETER(struct efhw_nic_efct, evq_n),
-  EFRM_U32_PARAMETER(struct efhw_nic_efct, hw_filters_n),
-  _EFRM_RAW_PARAMETER(hw_filters, efct_debugfs_read_hw_filters),
-  _EFRM_RAW_PARAMETER(exclusive_rxq_mapping, efct_debugfs_read_exclusive_rxq_mapping),
+  _EFRM_RAW_PARAMETER(hw_filters, efct_debugfs_read_filter_state),
   {NULL},
 };
 
