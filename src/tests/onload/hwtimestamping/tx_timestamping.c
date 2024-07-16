@@ -241,30 +241,28 @@ static void do_ts_sockopt(struct configuration* cfg, int sock)
   else
 #endif
   {
-    struct so_timestamping enable = {
-      .flags = SOF_TIMESTAMPING_TX_HARDWARE |
-               SOF_TIMESTAMPING_RAW_HARDWARE |
-               SOF_TIMESTAMPING_SYS_HARDWARE |
-               SOF_TIMESTAMPING_SOFTWARE
-    };
+    int enable = SOF_TIMESTAMPING_TX_HARDWARE |
+                 SOF_TIMESTAMPING_RAW_HARDWARE |
+                 SOF_TIMESTAMPING_SYS_HARDWARE |
+                 SOF_TIMESTAMPING_SOFTWARE;
 
     if( cfg->cfg_rx )
-      enable.flags |= SOF_TIMESTAMPING_RX_HARDWARE;
+      enable |= SOF_TIMESTAMPING_RX_HARDWARE;
 
     int ok = 0;
 
-    enable.flags |= SOF_TIMESTAMPING_OPT_ID;
+    enable |= SOF_TIMESTAMPING_OPT_ID;
     if( ! (cfg->cfg_data || cfg->cfg_cmsg))
-      enable.flags |= SOF_TIMESTAMPING_OPT_TSONLY;
+      enable |= SOF_TIMESTAMPING_OPT_TSONLY;
     if( cfg->cfg_cmsg )
-      enable.flags |= SOF_TIMESTAMPING_OPT_CMSG;
+      enable |= SOF_TIMESTAMPING_OPT_CMSG;
 #ifdef ONLOADEXT_AVAILABLE
     if( cfg->cfg_stream &&
         cfg->cfg_protocol == IPPROTO_TCP ) {
-      enable.flags |= ONLOAD_SOF_TIMESTAMPING_STREAM;
+      enable |= ONLOAD_SOF_TIMESTAMPING_STREAM;
 #if defined(SOF_TIMESTAMPING_OPT_ID_TCP)
-      if( enable.flags & SOF_TIMESTAMPING_OPT_ID )
-        enable.flags |= SOF_TIMESTAMPING_OPT_ID_TCP;
+      if( enable & SOF_TIMESTAMPING_OPT_ID )
+        enable |= SOF_TIMESTAMPING_OPT_ID_TCP;
 #endif
     }
 #endif

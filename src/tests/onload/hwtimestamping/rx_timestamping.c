@@ -149,25 +149,23 @@ static void make_address(unsigned short port, struct sockaddr_in* host_address)
 /* This routine selects the correct socket option to enable timestamping. */
 static void do_ts_sockopt(struct configuration* cfg, int sock)
 {
-  struct so_timestamping enable = {
-    .flags = SOF_TIMESTAMPING_RX_HARDWARE |
-             SOF_TIMESTAMPING_RAW_HARDWARE |
-             SOF_TIMESTAMPING_SYS_HARDWARE |
-             SOF_TIMESTAMPING_SOFTWARE
-  };
-  struct so_timestamping readback;
+  int enable = SOF_TIMESTAMPING_RX_HARDWARE |
+               SOF_TIMESTAMPING_RAW_HARDWARE |
+               SOF_TIMESTAMPING_SYS_HARDWARE |
+               SOF_TIMESTAMPING_SOFTWARE;
+  int readback;
   socklen_t readback_len = sizeof readback;
   int optname = SO_TIMESTAMPING;
 
   printf("Selecting hardware timestamping mode.\n");
 
   if( cfg->cfg_pktinfo ) {
-    enable.flags |= SOF_TIMESTAMPING_OPT_PKTINFO;
+    enable |= SOF_TIMESTAMPING_OPT_PKTINFO;
   }
 
 #ifdef ONLOADEXT_AVAILABLE
   if( cfg->cfg_ext == 2 ) {
-    enable.flags |= SOF_TIMESTAMPING_OOEXT_TRAILER;
+    enable |= SOF_TIMESTAMPING_OOEXT_TRAILER;
     optname = SO_TIMESTAMPING_OOEXT;
   }
 
@@ -179,11 +177,11 @@ static void do_ts_sockopt(struct configuration* cfg, int sock)
   {
     TRY(setsockopt(sock, SOL_SOCKET, optname, &enable, sizeof enable));
     TRY(getsockopt(sock, SOL_SOCKET, optname, &readback, &readback_len));
-    if (enable.flags != readback.flags)
+    if (enable != readback)
       printf("SO_TIMESTAMPING flags mismatch on read back:\n"
              "  got      0x%08x\n"
              "  expected 0x%08x\n",
-             readback.flags, enable.flags);
+             readback, enable);
   }
 }
 
@@ -273,19 +271,23 @@ static void handle_time(struct msghdr* msg, struct configuration* cfg)
       break;
 #ifdef ONLOADEXT_AVAILABLE
     case SCM_TIMESTAMPING_OOEXT:
-      struct scm_timestamping_ooext *t, *tend;
-      t = (struct scm_timestamping_ooext *) CMSG_DATA(cmsg);
-      tend = t + cmsg->cmsg_len / sizeof *t;
-      printf("\text v2 timestamps");
-      for (; t != tend; t++)
-        print_time_ext2(t);
+      {
+        struct scm_timestamping_ooext *t, *tend;
+        t = (struct scm_timestamping_ooext *) CMSG_DATA(cmsg);
+        tend = t + cmsg->cmsg_len / sizeof *t;
+        printf("\text v2 timestamps");
+        for (; t != tend; t++)
+          print_time_ext2(t);
+      }
       break;
 #endif
     case SCM_TIMESTAMPING_PKTINFO:
-      struct scm_ts_pktinfo *pktinfo;
-      pktinfo = (struct scm_ts_pktinfo *) CMSG_DATA(cmsg);
-      printf("\tintf %d",
-             pktinfo->if_index);
+      {
+        struct scm_ts_pktinfo *pktinfo;
+        pktinfo = (struct scm_ts_pktinfo *) CMSG_DATA(cmsg);
+        printf("\tintf %d",
+               pktinfo->if_index);
+      }
       break;
     default:
       /* Ignore other cmsg options */
