@@ -361,6 +361,30 @@ def sfc_resource_loaded():
     return module_loaded('sfc_resource')
 
 
+def sfc_resource_cpu2rxq_path(ethx):
+    """
+    Return the absolute path to cpu2rxq for the given interface,
+    or None if the sfc_resource module is not probed.
+
+    Use RE to find the AUX device name with the following format:
+        dev_set_name(dev, "%s.%s.%d", modname, auxdev->name, auxdev->id);
+
+    (See the __auxiliary_device_add() function in the Linux kernel.)
+
+    Here, modname is "sfc", auxdev->name is "onload", but auxdev->id
+    is unknown in advance and not exposed in sysfs.
+
+    Prefer RE to glob because glob does not support the "one or more" operator.
+    """
+    cpu2rxq_path = None
+    path = '/sys/class/net/%s/device/' % ethx
+    for filename in os.listdir(path):
+        if re.match("sfc.onload.\d+", filename):
+            assert cpu2rxq_path is None  # Allow no more than one match.
+            cpu2rxq_path = os.path.join(path, filename, "sfc_resource", "cpu2rxq")
+    return cpu2rxq_path
+
+
 def sfc_check():
     if not module_loaded('sfc'):
         err("sfc driver is not loaded")
@@ -395,7 +419,7 @@ def sfc_affinity_new_interface(ethx, cpu_to_q):
             err("Failed to load sfc_resource driver")
             return
     s = ' '.join([str(i) for i in cpu_to_q])
-    cmd = "echo %s >/sys/class/net/%s/device/sfc_resource/cpu2rxq" % (s, ethx)
+    cmd = "echo %s > %s" % (s, sfc_resource_cpu2rxq_path(ethx))
     if do_system(cmd) != 0:
         err("Failed to register interface %s" % ethx)
         err("Command was:")
@@ -404,12 +428,12 @@ def sfc_affinity_new_interface(ethx, cpu_to_q):
 
 
 def sfc_affinity_get_cpu2rxq(ethx):
-    return file_get_int_list('/sys/class/net/%s/device/sfc_resource/cpu2rxq' % ethx)
+    return file_get_int_list(sfc_resource_cpu2rxq_path(ethx))
 
 
 def sfc_affinity_intf_is_registered(ethx):
     try:
-        os.stat('/sys/class/net/%s/device/sfc_resource/cpu2rxq' % ethx)
+        os.stat(sfc_resource_cpu2rxq_path(ethx))
         return True
     except:
         return False
