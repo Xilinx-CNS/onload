@@ -13,8 +13,9 @@
 
 /*! \cidoxg_lib_transport_unix */
 
-#include <ci/internal/transport_config_opt.h>
+#include <linux/time_types.h>
 
+#include <ci/internal/transport_config_opt.h>
 
 #define LPF      "citp_epollb:"
 
@@ -554,7 +555,6 @@ int citp_epollb_ctl(citp_fdinfo* fdi, int eop, int fd,
   }
 }
 
-
 int citp_epollb_wait(citp_fdinfo* fdi, struct epoll_event *events,
                      int maxevents, ci_int64 timeout_hr,
                      const sigset_t *sigmask, const struct timespec *ts,
@@ -564,6 +564,9 @@ int citp_epollb_wait(citp_fdinfo* fdi, struct epoll_event *events,
   struct oo_epoll2_action_arg op;
   int rc;
   int have_postponed = 0;
+#if CI_LIBC_HAS_epoll_pwait2
+  struct __kernel_timespec kts;
+#endif /* CI_LIBC_HAS_epoll_pwait2 */
 
   if( maxevents <= 0 ) {
     errno = EINVAL;
@@ -578,7 +581,7 @@ int citp_epollb_wait(citp_fdinfo* fdi, struct epoll_event *events,
 
 #if CI_LIBC_HAS_epoll_pwait2
     if( ts != NULL ) {
-      return ci_sys_epoll_pwait2(fdi->fd, events, maxevents, ts, sigmask);
+      return ci_sys_epoll_pwait2(epi->kepfd, events, maxevents, ts, sigmask);
     }
     else
 #endif /* CI_LIBC_HAS_epoll_pwait2 */
@@ -600,6 +603,7 @@ int citp_epollb_wait(citp_fdinfo* fdi, struct epoll_event *events,
   op.maxevents = maxevents;
   op.timeout_hr = timeout_hr;
   CI_USER_PTR_SET(op.sigmask, sigmask);
+  CI_USER_PTR_SET(op.ts, NULL);
 
   /* Set up spin_cycles. */
   if( oo_per_thread_get()->spinstate & (1 << ONLOAD_SPIN_EPOLL_WAIT) )
@@ -624,6 +628,14 @@ int citp_epollb_wait(citp_fdinfo* fdi, struct epoll_event *events,
     /* If timeout!=0 && op.rc==0, fall through to blocking syscall */
     op.timeout_hr = timeout_hr;
   }
+
+#if CI_LIBC_HAS_epoll_pwait2
+  if(ts != NULL) {
+    kts.tv_sec = ts->tv_sec;
+    kts.tv_nsec = ts->tv_nsec;
+    CI_USER_PTR_SET(op.ts, &kts);
+  }
+#endif /* CI_LIBC_HAS_epoll_pwait2 */
 
   citp_exit_lib(lib_context, FALSE);
   rc = ci_sys_ioctl(fdi->fd, OO_EPOLL2_IOC_ACTION, &op);

@@ -444,17 +444,27 @@ static void oo_epoll2_wait(struct oo_epoll_private *priv,
 
   /* Block */
 #ifdef EFRM_HAVE_EPOLL_PWAIT2
-  {
+  if(CI_USER_PTR_GET(op->ts)) {
     struct __kernel_timespec ts;
     oo_epoll_frc_to_ts(timeout_hr, &ts);
-    op->rc = efab_linux_sys_epoll_pwait2(op->kepfd, CI_USER_PTR_GET(op->events),
-                                         op->maxevents, &ts, NULL);
+
+    /* efab_linux_sys_epoll_pwait2 requires user pointers and so we must 
+     * copy our newly computed timespec to the __kerenel_timespec in op->ts */
+    if( copy_to_user(CI_USER_PTR_GET(op->ts), &ts, sizeof(ts)) )
+      op->rc = -EFAULT;
+    else
+      op->rc = efab_linux_sys_epoll_pwait2(op->kepfd,
+                                           CI_USER_PTR_GET(op->events),
+                                           op->maxevents,
+                                           CI_USER_PTR_GET(op->ts), NULL);
   }
-#else
-  op->rc = efab_linux_sys_epoll_wait(op->kepfd, CI_USER_PTR_GET(op->events),
-                                     op->maxevents,
-                                     timeout_hr / oo_timesync_cpu_khz);
+  else
 #endif /* EFRM_HAVE_EPOLL_PWAIT2 */
+  {
+    op->rc = efab_linux_sys_epoll_wait(op->kepfd, CI_USER_PTR_GET(op->events),
+                                       op->maxevents,
+                                       timeout_hr / oo_timesync_cpu_khz);
+  }
   return;
 
 do_exit:
@@ -507,17 +517,20 @@ static int oo_epoll2_action(struct oo_epoll_private *priv,
       oo_epoll2_wait(priv, op);
     else {
 #ifdef EFRM_HAVE_EPOLL_PWAIT2
-      struct __kernel_timespec ts;
-      oo_epoll_frc_to_ts(op->timeout_hr, &ts);
-      op->rc = efab_linux_sys_epoll_pwait2(op->kepfd,
-                                           CI_USER_PTR_GET(op->events),
-                                           op->maxevents, &ts, NULL);
-#else
-      op->rc = efab_linux_sys_epoll_wait(op->kepfd,
-                                         CI_USER_PTR_GET(op->events),
-                                         op->maxevents,
-                                         op->timeout_hr / oo_timesync_cpu_khz);
+      if(CI_USER_PTR_GET(op->ts))
+        op->rc = efab_linux_sys_epoll_pwait2(op->kepfd,
+                                             CI_USER_PTR_GET(op->events),
+                                             op->maxevents,
+                                             CI_USER_PTR_GET(op->ts), NULL);
+      else
 #endif /* EFRM_HAVE_EPOLL_PWAIT2 */
+      {
+        int timeout = op->timeout_hr / oo_timesync_cpu_khz;
+        op->rc = efab_linux_sys_epoll_wait(op->kepfd,
+                                           CI_USER_PTR_GET(op->events),
+                                           op->maxevents,
+                                           timeout);
+      }
     }
 
     if( CI_USER_PTR_GET(op->sigmask) ) {

@@ -92,9 +92,10 @@ int efab_linux_sys_epoll_pwait2(int epfd, struct epoll_event *events,
                                 const struct __kernel_timespec *timeout,
                                 const sigset_t *sigmask)
 {
-  return (int)SYSCALL_DISPATCHn(5, epoll_pwait2,
+  return (int)SYSCALL_DISPATCHn(6, epoll_pwait2,
                                 (int, struct epoll_event*, int,
-                                 struct timespec *, const sigset_t*),
-                                epfd, events, maxevents, timeout, sigmask);
+                                 struct timespec *, const sigset_t*, size_t),
+                                epfd, events, maxevents, timeout, sigmask,
+                                sizeof(*sigmask));
 }
 #endif /* EFRM_HAVE_EPOLL_PWAIT2 */
