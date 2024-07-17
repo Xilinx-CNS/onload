@@ -236,6 +236,27 @@ static void efct_hugepage_list_changed(void *driver_data, int rxq)
   }
 }
 
+bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
+                         const void* meta, const void* payload)
+{
+  struct efhw_nic_efct *efct = (struct efhw_nic_efct *) driver_data;
+  const unsigned char* pkt = payload;
+  const ci_oword_t* header = meta;
+  size_t pkt_len = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_PACKET_LENGTH);
+
+  if( pkt_len < ETH_HLEN )
+    return false;
+
+  /* This is asserting the next_frame_loc for the wrong packet: we should be
+   * looking at the preceeding metadata. Still, having it will probably
+   * detect hardware that doesn't use a fixed value fairly rapidly. */
+  EFHW_ASSERT(CI_OWORD_FIELD(*header, EFCT_RX_HEADER_NEXT_FRAME_LOC) == 1);
+  pkt += EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
+
+  return efct_packet_matches_filter(&efct->filter_state, efct->nic->net_dev, rxq,
+                                    pkt, pkt_len);
+}
+
 struct xlnx_efct_drvops efct_ops = {
   .name = "sfc_resource",
   .poll = efct_poll,
@@ -286,18 +307,13 @@ static int efct_resource_init(struct xlnx_efct_device *edev,
   if( rc < 0 )
     return rc;
 
-  efct->hw_filters_n = val.design_params.num_filter;
-  efct->hw_filters = vzalloc(sizeof(*efct->hw_filters) * efct->hw_filters_n);
-  if( ! efct->hw_filters )
-    return -ENOMEM;
+  rc = efct_filter_state_init(&efct->filter_state, &val.design_params);
+  if( rc < 0 )
+    return rc;
 
   efct->rxq_n = val.design_params.rx_queues;
   efct->rxq = vzalloc(sizeof(*efct->rxq) * efct->rxq_n);
   if( ! efct->rxq )
-    return -ENOMEM;
-
-  efct->exclusive_rxq_mapping = vzalloc(sizeof(*efct->exclusive_rxq_mapping) * efct->rxq_n);
-  if( ! efct->exclusive_rxq_mapping )
     return -ENOMEM;
 
   for( i = 0; i < efct->rxq_n; ++i)
@@ -398,7 +414,6 @@ int efct_probe(struct auxiliary_device *auxdev,
   if( ! efct )
     return -ENOMEM;
 
-  mutex_init(&efct->driver_filters_mtx);
   efct->edev = edev;
 
   /* As soon as we've opened the handle we can start getting callbacks through
@@ -449,7 +464,6 @@ int efct_probe(struct auxiliary_device *auxdev,
   nic = &lnic->efrm_nic.efhw_nic;
   nic->mtu = net_dev->mtu + ETH_HLEN;
   nic->arch_extra = efct;
-  efct_nic_filter_init(efct);
 
   /* Setting the nic here marks the device as ready for use. */
   efct->nic = nic;
@@ -467,19 +481,15 @@ int efct_probe(struct auxiliary_device *auxdev,
  fail2:
   edev->ops->close(client);
  fail1:
-  if( efct->hw_filters )
-    vfree(efct->hw_filters);
+  efct_filter_state_free(&efct->filter_state);
   if( efct->rxq )
     vfree(efct->rxq);
   if( efct->evq )
     vfree(efct->evq);
-  if( efct->exclusive_rxq_mapping )
-    vfree(efct->exclusive_rxq_mapping);
   vfree(efct);
   EFRM_ERR("%s rc %d", __func__, rc);
   return rc;
 }
-
 
 void efct_remove(struct auxiliary_device *auxdev)
 {
@@ -541,10 +551,9 @@ void efct_remove(struct auxiliary_device *auxdev)
    * TODO: rethink where to call close and how to synchronise with
    * the rest. */
   edev->ops->close(client);
-  vfree(efct->hw_filters);
+  efct_filter_state_free(&efct->filter_state);
   vfree(efct->rxq);
   vfree(efct->evq);
-  vfree(efct->exclusive_rxq_mapping);
   vfree(efct);
 }
 

@@ -185,6 +185,26 @@ struct efct_hw_filter {
 #define EFCT_NIC_BLOCK_KERNEL_UNICAST 0x1
 #define EFCT_NIC_BLOCK_KERNEL_MULTICAST 0x2
 
+#ifdef __KERNEL__
+struct efct_filter_state {
+  /* This array is used for marking whether a given hw_qid is exclusively owned.
+   * The index represents the hardware_queue, and the value should correspond to
+   * a token representing exclusive ownership of the rxq. In this case, a token_id
+   * of 0 indicates the rxq is not being used. Otherwise the queue is owned and
+   * in-use.  */
+  uint32_t* exclusive_rxq_mapping;
+
+  /* We could have one filter set per rxq, effectively adding a few more bits
+   * to the hash key. Let's not for now: the memory trade-off doesn't seem
+   * worth it */
+  struct efct_filter_set filters;
+  uint32_t hw_filters_n;
+  struct efct_hw_filter *hw_filters;
+  struct mutex driver_filters_mtx;
+  uint8_t block_kernel;
+};
+#endif
+
 struct efhw_nic_efct {
   uint32_t rxq_n;
   uint32_t evq_n;
@@ -197,22 +217,9 @@ struct efhw_nic_efct {
     struct efhw_stack_vi_allocator tx;
     struct efhw_stack_vi_allocator rx;
   } vi_allocator;
-  /* This array is used for marking whether a given hw_qid is exclusively owned.
-   * The index represents the hardware_queue, and the value should correspond to a 
-   * token representing exclusive ownership of the rxq. In this case, a token_id
-   * of 0 indicates the rxq is not being used. Otherwise the queue is owned and in-use.
-   */
-  uint32_t* exclusive_rxq_mapping;
-#ifdef __KERNEL__
   /* ZF emu includes this file from UL */
-  /* We could have one filter set per rxq, effectively adding a few more bits
-   * to the hash key. Let's not for now: the memory trade-off doesn't seem
-   * worth it */
-  struct efct_filter_set filters;
-  uint32_t hw_filters_n;
-  struct efct_hw_filter *hw_filters;
-  struct mutex driver_filters_mtx;
-  uint8_t block_kernel;
+#ifdef __KERNEL__
+  struct efct_filter_state filter_state;
   struct dentry* debug_dir;
 #endif
 };
@@ -229,9 +236,12 @@ int efct_get_hugepages(struct efhw_nic *nic, int hwqid,
                        struct xlnx_efct_hugepage *pages, size_t n_pages);
 int efct_request_wakeup(struct efhw_nic_efct *efct, struct efhw_efct_rxq *app,
                         unsigned sbseq, unsigned pktix, bool allow_recursion);
-void efct_nic_filter_init(struct efhw_nic_efct *efct);
-bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
-                         const void* meta, const void* payload);
+int efct_filter_state_init(struct efct_filter_state *state,
+                           struct xlnx_efct_design_params *dp);
+void efct_filter_state_free(struct efct_filter_state *state);
+bool efct_packet_matches_filter(struct efct_filter_state *state,
+                                struct net_device *net_dev, int rxq,
+                                const unsigned char* pkt, size_t pkt_len);
 #endif
 
 static inline void efct_app_list_push(struct efhw_efct_rxq **head,
