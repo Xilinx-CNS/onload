@@ -112,6 +112,7 @@
 %define debug_package %{nil}
 %endif
 
+%global __python %{__python3}
 
 ###############################################################################
 
@@ -133,7 +134,7 @@ BuildRequires	: gawk gcc sed make bash libpcap libpcap-devel automake libtool au
 %if %{redhat}
 BuildRequires	: glibc-common python3-devel libcap
 %else
-BuildRequires	: glibc-devel glibc python-devel libcap2
+BuildRequires	: glibc-devel glibc python3-devel libcap2
 %ifarch x86_64
 %if %{build32}
 BuildRequires   : glibc-devel-32bit
@@ -346,7 +347,10 @@ rm -fR $RPM_BUILD_ROOT
 /usr/share/onload/onload_modules-load.d.conf
 /usr/share/onload/sysconfig_onload_modules
 
-/usr/lib*/python*/site-packages/*
+%{python3_sitelib}/sfc*.py
+%{python3_sitelib}/__pycache__/sfc*.pyc
+%{python3_sitelib}/*Onload*.egg-info
+%{python_sitearch}/solar_clusterd/
 
 %files kmod-%{kverrel}
 %defattr(744,root,root)
