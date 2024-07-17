@@ -104,6 +104,12 @@ int efhw_sfc_device_type_init(struct efhw_device_type *dt, struct pci_dev* dev)
 	case 0x0b03:
 		ef10_device_type_init(dt, 'C', dev->device, class_revision);
 		break;
+	case 0x0c03:
+	case 0x1c03:
+	case 0x2c03:
+	case 0x3c03:
+		ef10_device_type_init(dt, 'F', dev->device, class_revision);
+		break;
 	default:
 		return -ENODEV;
 	}
