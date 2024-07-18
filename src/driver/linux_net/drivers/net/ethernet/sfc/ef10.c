@@ -258,10 +258,16 @@ static int efx_ef10_init_datapath_caps(struct efx_nic *efx)
 		nic_data->piobuf_size = MCDI_WORD(outbuf,
 				GET_CAPABILITIES_V2_OUT_SIZE_PIO_BUFF);
 #ifdef EFX_NOT_UPSTREAM
-		/* Does the largest sw-possible PIO packet fit inside a hw
-		 * PIO buffer?
-		 */
-		EFX_WARN_ON_PARANOID(nic_data->piobuf_size < ER_DZ_TX_PIOBUF_SIZE);
+		if (efx_nic_rev(efx) >= EFX_REV_X4) {
+			/* No PIO/CTPIO support on X4 FF datapath. */
+			EFX_WARN_ON_PARANOID(nic_data->piobuf_size != 0);
+		} else {
+			/* Does the largest sw-possible PIO packet fit
+			 * inside a hw PIO buffer?
+			 */
+			EFX_WARN_ON_PARANOID(nic_data->piobuf_size <
+					     ER_DZ_TX_PIOBUF_SIZE);
+		}
 #endif
 	} else {
 		nic_data->datapath_caps2 = 0;

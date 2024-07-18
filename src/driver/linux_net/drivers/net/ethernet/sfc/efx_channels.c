@@ -442,10 +442,8 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 {
 	unsigned int n_channels = efx_wanted_parallelism(efx);
 	unsigned int extra_channel_type;
-#ifdef EFX_HAVE_MSIX_CAP
-	int vec_count;
-#endif
 	unsigned int min_channels = 1;
+	int vec_count;
 
 	if (separate_tx_channels) {
 		n_channels *= 2;
@@ -467,14 +465,6 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 	efx_allocate_xdp_channels(efx, max_channels, n_channels);
 	n_channels += efx->n_xdp_channels;
 
-#ifdef EFX_HAVE_MSIX_CAP
-#ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
-	/* dl IRQs don't need VIs, so no need to clamp to max_channels */
-	n_channels += efx->n_dl_irqs;
-#endif
-#endif
-
 	vec_count = pci_msix_vec_count(efx->pci_dev);
 	if (vec_count < 0)
 		return vec_count;
@@ -490,36 +480,12 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 		pci_err(efx->pci_dev,
 			"WARNING: Performance may be reduced.\n");
 
-#ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
-		/* reduce driverlink allocated IRQs first, to a minimum of 1 */
-		n_channels -= efx->n_dl_irqs;
-		efx->n_dl_irqs = vec_count == min_channels ? 0 :
-				 min(max(vec_count - (int)n_channels, 1),
-				     efx->n_dl_irqs);
-		/* Make driverlink-consumed IRQ vectors unavailable for net
-		 * driver use.
-		 */
-		vec_count -= efx->n_dl_irqs;
-#endif
-#endif
 		/* reduce XDP channels */
 		n_channels -= efx->n_xdp_channels;
 		efx->n_xdp_channels = max(vec_count - (int)n_channels, 0);
 
 		n_channels = vec_count;
 	}
-#ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
-	else {
-		/* driverlink IRQs don't have a channel in the net driver, so
-		 * remove them from further calculations.
-		 */
-		n_channels -= efx->n_dl_irqs;
-	}
-#endif
-#endif
-#endif
 
 	/* Ignore XDP tx channels when creating rx channels. */
 	n_channels -= efx->n_xdp_channels;
@@ -565,63 +531,40 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 }
 
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
-static u16 efx_dl_make_irq_resources_(struct efx_dl_irq_resources *res,
-				      size_t entries,
-				      struct msix_entry *xentries)
+static bool efx_fallback_interrupt_mode(struct efx_nic *efx)
 {
-	u16 n_ranges = 0;
-	size_t i = 0, j;
-
-	while (i < entries) {
-		j = i + 1;
-
-		while (j < entries &&
-		       xentries[j - 1].vector + 1 == xentries[j].vector)
-			++j;
-
-		if (res) {
-			res->irq_ranges[n_ranges].vector = xentries[i].vector;
-			res->irq_ranges[n_ranges].range = j - i;
-		}
-		n_ranges++;
-		i = j;
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_PCI_ALLOC_DYN)
+	/* Fall back to single channel MSI */
+	if (efx->type->supported_interrupt_modes & BIT(EFX_INT_MODE_MSI)) {
+		efx->interrupt_mode = EFX_INT_MODE_MSI;
+		return true;
 	}
-
-	return n_ranges;
-}
-
-static void efx_dl_make_irq_resources(struct efx_nic *efx, size_t entries,
-				      struct msix_entry *xentries)
-{
-	u16 n_ranges = efx_dl_make_irq_resources_(NULL, entries, xentries);
-
-	if (n_ranges) {
-		efx->irq_resources = kzalloc(struct_size(efx->irq_resources,
-							 irq_ranges, n_ranges),
-					     GFP_KERNEL);
-		if (!efx->irq_resources)
-			netif_warn(efx, drv, efx->net_dev,
-				   "Out of memory exporting interrupts to driverlink\n");
-	}
-	if (efx->irq_resources) {
-		efx->irq_resources->hdr.type = EFX_DL_IRQ_RESOURCES;
-		efx->irq_resources->channel_base = xentries[0].entry;
-		efx->irq_resources->n_ranges = n_ranges;
-		efx_dl_make_irq_resources_(efx->irq_resources,
-					   entries, xentries);
-
-		netif_dbg(efx, drv, efx->net_dev,
-			  "Exporting %d IRQ range(s) to driverlink for channels %d-%zu. IRQ[0]=%d.\n",
-			  efx->irq_resources->n_ranges,
-			  efx->irq_resources->channel_base,
-			  efx->irq_resources->channel_base + entries - 1,
-			  efx->irq_resources->irq_ranges[0].vector);
-	}
-}
-#endif
 #endif
 
+#ifdef CONFIG_SFC_BUSYPOLL
+	/* Fall back to polled mode */
+	if (efx->type->supported_interrupt_modes & BIT(EFX_INT_MODE_POLLED)) {
+		efx->interrupt_mode = EFX_INT_MODE_POLLED;
+		return true;
+	}
+#endif
+	return false;
+}
+#endif	/* EFX_NOT_UPSTREAM */
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_ALLOC_DYN)
+static void efx_assign_msix_vectors(struct efx_nic *efx, unsigned int n_irqs)
+{
+	struct efx_channel *channel;
+
+	efx_for_each_channel(channel, efx)
+		if (channel->channel < n_irqs)
+			channel->irq = pci_irq_vector(efx->pci_dev,
+						      channel->channel);
+		else
+			channel->irq = 0;
+}
+#else
 static void efx_assign_msix_vectors(struct efx_nic *efx,
 				    struct msix_entry *xentries,
 				    unsigned int n_irqs)
@@ -634,6 +577,7 @@ static void efx_assign_msix_vectors(struct efx_nic *efx,
 		else
 			channel->irq = 0;
 }
+#endif
 
 /* Probe the number and type of interrupts we are able to obtain, and
  * the resulting numbers of channels and RX queues.
@@ -644,18 +588,22 @@ int efx_probe_interrupts(struct efx_nic *efx)
 	int rc;
 
 	if (efx->interrupt_mode == EFX_INT_MODE_MSIX) {
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_PCI_ALLOC_DYN)
 		struct msix_entry *xentries;
+#endif
 		unsigned int n_irqs = efx->max_irqs;
 
 		n_irqs = min(n_irqs, efx_channels(efx));
-#ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
-		n_irqs += efx->n_dl_irqs;
-#endif
-#endif
 		netif_dbg(efx, drv, efx->net_dev,
 			  "Allocating %u interrupts\n", n_irqs);
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_ALLOC_DYN)
+		i = PCI_IRQ_MSIX;
+		if (efx->type->supported_interrupt_modes &
+		    BIT(EFX_INT_MODE_MSI))
+			i |= PCI_IRQ_MSI;
+		rc = pci_alloc_irq_vectors(efx->pci_dev, 1, n_irqs, i);
+#else
 		xentries = kmalloc_array(n_irqs, sizeof(*xentries), GFP_KERNEL);
 		if (!xentries) {
 			rc = -ENOMEM;
@@ -665,48 +613,32 @@ int efx_probe_interrupts(struct efx_nic *efx)
 			rc = pci_enable_msix_range(efx->pci_dev, xentries,
 						   1, n_irqs);
 		}
+#endif
 		if (rc < 0) {
-			/* Fall back to single channel MSI */
+#if defined(EFX_NOT_UPSTREAM)
 			netif_err(efx, drv, efx->net_dev,
 				  "could not enable MSI-X (%d)\n", rc);
-			if (efx->type->supported_interrupt_modes & BIT(EFX_INT_MODE_MSI))
-				efx->interrupt_mode = EFX_INT_MODE_MSI;
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_BUSYPOLL)
-			else if (efx->type->supported_interrupt_modes & BIT(EFX_INT_MODE_POLLED))
-				efx->interrupt_mode = EFX_INT_MODE_POLLED;
-#endif
-			else {
+			if (!efx_fallback_interrupt_mode(efx)) {
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_PCI_ALLOC_DYN)
 				kfree(xentries);
+#endif
 				return rc;
 			}
-#ifndef EFX_HAVE_MSIX_CAP
-		} else if (rc < n_irqs) {
-			int rc2;
-
+#else	/* EFX_NOT_UPSTREAM */
 			netif_err(efx, drv, efx->net_dev,
-				  "WARNING: Insufficient MSI-X vectors available (%d < %u).\n",
-				  rc, n_irqs);
-			netif_err(efx, drv, efx->net_dev,
-				  "WARNING: Performance may be reduced.\n");
-			n_irqs = rc;
-			rc2 = efx_allocate_msix_channels(efx, n_irqs);
-			if (rc2)
-				rc = rc2;
-#endif
+				  "could not enable interrupts (%d)\n", rc);
+			return rc;
+#endif	/* EFX_NOT_UPSTREAM */
 		}
 
-		if (rc > 0) {
-#ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
-			n_irqs = rc - efx->n_dl_irqs;
-			efx_dl_make_irq_resources(efx, efx->n_dl_irqs,
-						  xentries + n_irqs);
-#endif
-#endif
+		if (rc > 0)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_ALLOC_DYN)
+			efx_assign_msix_vectors(efx, n_irqs);
+#else
 			efx_assign_msix_vectors(efx, xentries, n_irqs);
-		}
 
 		kfree(xentries);
+#endif
 	}
 
 	/* Try single interrupt MSI */
@@ -1419,15 +1351,10 @@ int efx_init_interrupts(struct efx_nic *efx)
 		efx->interrupt_mode = ffs(efx->type->supported_interrupt_modes) - 1;
 
 	if (efx->interrupt_mode == EFX_INT_MODE_MSIX) {
-#ifdef EFX_HAVE_MSIX_CAP
 		rc = pci_msix_vec_count(efx->pci_dev);
 		if (rc <= 0)
 			rc = efx_wanted_parallelism(efx);
 		efx->max_irqs = rc;
-#else
-		/* On old kernels fall back to the rss_cpus parameter */
-		efx->max_irqs = efx_wanted_parallelism(efx);
-#endif
 	}
 
 	if (efx->max_irqs > 0) {

@@ -99,7 +99,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.0.0.1002"
+#define EFX_DRIVER_VERSION	"6.0.0.1004"
 #endif
 
 #ifdef DEBUG
@@ -1827,11 +1827,13 @@ struct efx_nic {
 	/** @dl_nic: Efx driverlink nic */
 	struct efx_dl_nic dl_nic;
 #endif
-	/* @block_kernel_mutex: Mutex protecting @block_kernel_count
+	/**
+	 * @block_kernel_mutex: Mutex protecting @block_kernel_count
 	 *	and corresponding per-client state
 	 */
 	struct mutex block_kernel_mutex;
-	/* @block_kernel_count: Number of times clients are blocking the
+	/**
+	 * @block_kernel_count: Number of times clients are blocking the
 	 *	kernel stack from receiving packets
 	 */
 	unsigned int block_kernel_count[EFX_FILTER_BLOCK_KERNEL_MAX];

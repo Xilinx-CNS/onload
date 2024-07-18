@@ -364,12 +364,13 @@ struct efx_auxdev_ops {
 	/** @set_rxfh_flags: Set RSS flags for an RSS context. */
 	int (*set_rxfh_flags)(struct efx_auxdev_client *handle, u32 rss_context,
 			      u32 flags);
-	/* @vport_new: Allocate a vport. */
+	/** @vport_new: Allocate a vport. */
 	int (*vport_new)(struct efx_auxdev_client *handle, u16 vlan,
 			 bool vlan_restrict);
-	/* @vport_free: Free a vport. */
+	/** @vport_free: Free a vport. */
 	int (*vport_free)(struct efx_auxdev_client *handle, u16 port_id);
-	/* @vport_id_get Return underlying vport id handle in lower 32
+	/**
+	 * @vport_id_get: Return underlying vport id handle in lower 32
 	 * bits. On failure, return a negative rc.
 	 */
 	s64 (*vport_id_get)(struct efx_auxdev_client *handle, u16 port_id);

@@ -455,7 +455,10 @@ static int efx_auxbus_get_param(struct efx_auxdev_client *handle,
 #endif
 		break;
 	case EFX_RXFH_DEFAULT_FLAGS:
-		arg->value = efx->type->rx_get_default_rss_flags(efx);
+		if (efx->type->rx_get_default_rss_flags)
+			arg->value = efx->type->rx_get_default_rss_flags(efx);
+		else	/* NIC does not support RSS flags */
+			arg->value = 0;
 		break;
 	case EFX_DESIGN_PARAM:
 		arg->design_params = &handle->design_params;

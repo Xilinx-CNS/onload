@@ -9769,6 +9769,9 @@
 #define        MC_CMD_INIT_RXQ_EXT_IN_FLAG_NO_CONT_EV_OFST 16
 #define        MC_CMD_INIT_RXQ_EXT_IN_FLAG_NO_CONT_EV_LBN 20
 #define        MC_CMD_INIT_RXQ_EXT_IN_FLAG_NO_CONT_EV_WIDTH 1
+#define        MC_CMD_INIT_RXQ_EXT_IN_FLAG_SUPPRESS_RX_EVENTS_OFST 16
+#define        MC_CMD_INIT_RXQ_EXT_IN_FLAG_SUPPRESS_RX_EVENTS_LBN 21
+#define        MC_CMD_INIT_RXQ_EXT_IN_FLAG_SUPPRESS_RX_EVENTS_WIDTH 1
 /* Owner ID to use if in buffer mode (zero if physical) */
 #define       MC_CMD_INIT_RXQ_EXT_IN_OWNER_ID_OFST 20
 #define       MC_CMD_INIT_RXQ_EXT_IN_OWNER_ID_LEN 4
@@ -9875,6 +9878,9 @@
 #define        MC_CMD_INIT_RXQ_V3_IN_FLAG_NO_CONT_EV_OFST 16
 #define        MC_CMD_INIT_RXQ_V3_IN_FLAG_NO_CONT_EV_LBN 20
 #define        MC_CMD_INIT_RXQ_V3_IN_FLAG_NO_CONT_EV_WIDTH 1
+#define        MC_CMD_INIT_RXQ_V3_IN_FLAG_SUPPRESS_RX_EVENTS_OFST 16
+#define        MC_CMD_INIT_RXQ_V3_IN_FLAG_SUPPRESS_RX_EVENTS_LBN 21
+#define        MC_CMD_INIT_RXQ_V3_IN_FLAG_SUPPRESS_RX_EVENTS_WIDTH 1
 /* Owner ID to use if in buffer mode (zero if physical) */
 #define       MC_CMD_INIT_RXQ_V3_IN_OWNER_ID_OFST 20
 #define       MC_CMD_INIT_RXQ_V3_IN_OWNER_ID_LEN 4
@@ -10010,6 +10016,9 @@
 #define        MC_CMD_INIT_RXQ_V4_IN_FLAG_NO_CONT_EV_OFST 16
 #define        MC_CMD_INIT_RXQ_V4_IN_FLAG_NO_CONT_EV_LBN 20
 #define        MC_CMD_INIT_RXQ_V4_IN_FLAG_NO_CONT_EV_WIDTH 1
+#define        MC_CMD_INIT_RXQ_V4_IN_FLAG_SUPPRESS_RX_EVENTS_OFST 16
+#define        MC_CMD_INIT_RXQ_V4_IN_FLAG_SUPPRESS_RX_EVENTS_LBN 21
+#define        MC_CMD_INIT_RXQ_V4_IN_FLAG_SUPPRESS_RX_EVENTS_WIDTH 1
 /* Owner ID to use if in buffer mode (zero if physical) */
 #define       MC_CMD_INIT_RXQ_V4_IN_OWNER_ID_OFST 20
 #define       MC_CMD_INIT_RXQ_V4_IN_OWNER_ID_LEN 4
@@ -10158,6 +10167,9 @@
 #define        MC_CMD_INIT_RXQ_V5_IN_FLAG_NO_CONT_EV_OFST 16
 #define        MC_CMD_INIT_RXQ_V5_IN_FLAG_NO_CONT_EV_LBN 20
 #define        MC_CMD_INIT_RXQ_V5_IN_FLAG_NO_CONT_EV_WIDTH 1
+#define        MC_CMD_INIT_RXQ_V5_IN_FLAG_SUPPRESS_RX_EVENTS_OFST 16
+#define        MC_CMD_INIT_RXQ_V5_IN_FLAG_SUPPRESS_RX_EVENTS_LBN 21
+#define        MC_CMD_INIT_RXQ_V5_IN_FLAG_SUPPRESS_RX_EVENTS_WIDTH 1
 /* Owner ID to use if in buffer mode (zero if physical) */
 #define       MC_CMD_INIT_RXQ_V5_IN_OWNER_ID_OFST 20
 #define       MC_CMD_INIT_RXQ_V5_IN_OWNER_ID_LEN 4
@@ -14717,6 +14729,9 @@
 #define        MC_CMD_GET_CAPABILITIES_V7_OUT_CLIENT_CMD_VF_PROXY_OFST 148
 #define        MC_CMD_GET_CAPABILITIES_V7_OUT_CLIENT_CMD_VF_PROXY_LBN 15
 #define        MC_CMD_GET_CAPABILITIES_V7_OUT_CLIENT_CMD_VF_PROXY_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V7_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V7_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_LBN 16
+#define        MC_CMD_GET_CAPABILITIES_V7_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_WIDTH 1
 
 /* MC_CMD_GET_CAPABILITIES_V8_OUT msgresponse */
 #define    MC_CMD_GET_CAPABILITIES_V8_OUT_LEN 160
@@ -15227,6 +15242,9 @@
 #define        MC_CMD_GET_CAPABILITIES_V8_OUT_CLIENT_CMD_VF_PROXY_OFST 148
 #define        MC_CMD_GET_CAPABILITIES_V8_OUT_CLIENT_CMD_VF_PROXY_LBN 15
 #define        MC_CMD_GET_CAPABILITIES_V8_OUT_CLIENT_CMD_VF_PROXY_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V8_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V8_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_LBN 16
+#define        MC_CMD_GET_CAPABILITIES_V8_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_WIDTH 1
 /* These bits are reserved for communicating test-specific capabilities to
  * host-side test software. All production drivers should treat this field as
  * opaque.
@@ -15751,6 +15769,9 @@
 #define        MC_CMD_GET_CAPABILITIES_V9_OUT_CLIENT_CMD_VF_PROXY_OFST 148
 #define        MC_CMD_GET_CAPABILITIES_V9_OUT_CLIENT_CMD_VF_PROXY_LBN 15
 #define        MC_CMD_GET_CAPABILITIES_V9_OUT_CLIENT_CMD_VF_PROXY_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V9_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V9_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_LBN 16
+#define        MC_CMD_GET_CAPABILITIES_V9_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_WIDTH 1
 /* These bits are reserved for communicating test-specific capabilities to
  * host-side test software. All production drivers should treat this field as
  * opaque.
@@ -16310,6 +16331,9 @@
 #define        MC_CMD_GET_CAPABILITIES_V10_OUT_CLIENT_CMD_VF_PROXY_OFST 148
 #define        MC_CMD_GET_CAPABILITIES_V10_OUT_CLIENT_CMD_VF_PROXY_LBN 15
 #define        MC_CMD_GET_CAPABILITIES_V10_OUT_CLIENT_CMD_VF_PROXY_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V10_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V10_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_LBN 16
+#define        MC_CMD_GET_CAPABILITIES_V10_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_WIDTH 1
 /* These bits are reserved for communicating test-specific capabilities to
  * host-side test software. All production drivers should treat this field as
  * opaque.
@@ -16883,6 +16907,9 @@
 #define        MC_CMD_GET_CAPABILITIES_V11_OUT_CLIENT_CMD_VF_PROXY_OFST 148
 #define        MC_CMD_GET_CAPABILITIES_V11_OUT_CLIENT_CMD_VF_PROXY_LBN 15
 #define        MC_CMD_GET_CAPABILITIES_V11_OUT_CLIENT_CMD_VF_PROXY_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V11_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V11_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_LBN 16
+#define        MC_CMD_GET_CAPABILITIES_V11_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_WIDTH 1
 /* These bits are reserved for communicating test-specific capabilities to
  * host-side test software. All production drivers should treat this field as
  * opaque.
@@ -22740,6 +22767,125 @@
 
 /* MC_CMD_TABLE_DELETE_OUT msgresponse */
 #define    MC_CMD_TABLE_DELETE_OUT_LEN 0
+
+/* MC_CMD_QUEUE_HANDLE structuredef: On X4, to distinguish between full-
+ * featured (X2-style) VIs and low-latency (X3-style) queues, we use the top
+ * four bits of the queue number for low-latency queues in all MCDI calls which
+ * refer to VIs/queues. These bits should be masked off when indexing into a
+ * queue in the BAR.
+ */
+#define    MC_CMD_QUEUE_HANDLE_LEN 4
+/* Combined queue number and type. This is the ID returned by and passed into
+ * MCDI calls that use queues.
+ */
+#define       MC_CMD_QUEUE_HANDLE_QUEUE_HANDLE_OFST 0
+#define       MC_CMD_QUEUE_HANDLE_QUEUE_HANDLE_LEN 4
+#define        MC_CMD_QUEUE_HANDLE_QUEUE_NUM_OFST 0
+#define        MC_CMD_QUEUE_HANDLE_QUEUE_NUM_LBN 0
+#define        MC_CMD_QUEUE_HANDLE_QUEUE_NUM_WIDTH 24
+#define        MC_CMD_QUEUE_HANDLE_QUEUE_TYPE_OFST 0
+#define        MC_CMD_QUEUE_HANDLE_QUEUE_TYPE_LBN 24
+#define        MC_CMD_QUEUE_HANDLE_QUEUE_TYPE_WIDTH 8
+/* enum: Indicates that the queue instance is a full-featured VI */
+#define          MC_CMD_QUEUE_HANDLE_QUEUE_TYPE_FF_VI 0x0
+/* enum: Indicates that the queue instance is a LL TXQ */
+#define          MC_CMD_QUEUE_HANDLE_QUEUE_TYPE_LL_TXQ 0x1
+/* enum: Indicates that the queue instance is a LL RXQ */
+#define          MC_CMD_QUEUE_HANDLE_QUEUE_TYPE_LL_RXQ 0x2
+/* enum: Indicates that the queue instance is a LL EVQ */
+#define          MC_CMD_QUEUE_HANDLE_QUEUE_TYPE_LL_EVQ 0x3
+#define       MC_CMD_QUEUE_HANDLE_QUEUE_HANDLE_LBN 0
+#define       MC_CMD_QUEUE_HANDLE_QUEUE_HANDLE_WIDTH 32
+
+
+/***********************************/
+/* MC_CMD_ALLOC_LL_QUEUES
+ * Allocate low latency (X3-style) queues for current PCI function. Can be
+ * called more than once if desired to allocate more queues.
+ */
+#define MC_CMD_ALLOC_LL_QUEUES 0x1dd
+#undef MC_CMD_0x1dd_PRIVILEGE_CTG
+
+#define MC_CMD_0x1dd_PRIVILEGE_CTG SRIOV_CTG_GENERAL
+
+/* MC_CMD_ALLOC_LL_QUEUES_IN msgrequest */
+#define    MC_CMD_ALLOC_LL_QUEUES_IN_LEN 24
+/* The minimum number of TXQs that is acceptable */
+#define       MC_CMD_ALLOC_LL_QUEUES_IN_MIN_TXQ_COUNT_OFST 0
+#define       MC_CMD_ALLOC_LL_QUEUES_IN_MIN_TXQ_COUNT_LEN 4
+/* The maximum number of TXQs that would be useful */
+#define       MC_CMD_ALLOC_LL_QUEUES_IN_MAX_TXQ_COUNT_OFST 4
+#define       MC_CMD_ALLOC_LL_QUEUES_IN_MAX_TXQ_COUNT_LEN 4
+/* The minimum number of RXQs that is acceptable */
+#define       MC_CMD_ALLOC_LL_QUEUES_IN_MIN_RXQ_COUNT_OFST 8
+#define       MC_CMD_ALLOC_LL_QUEUES_IN_MIN_RXQ_COUNT_LEN 4
+/* The maximum number of RXQs that would be useful */
+#define       MC_CMD_ALLOC_LL_QUEUES_IN_MAX_RXQ_COUNT_OFST 12
+#define       MC_CMD_ALLOC_LL_QUEUES_IN_MAX_RXQ_COUNT_LEN 4
+/* The minimum number of EVQs that is acceptable */
+#define       MC_CMD_ALLOC_LL_QUEUES_IN_MIN_EVQ_COUNT_OFST 16
+#define       MC_CMD_ALLOC_LL_QUEUES_IN_MIN_EVQ_COUNT_LEN 4
+/* The maximum number of EVQs that would be useful */
+#define       MC_CMD_ALLOC_LL_QUEUES_IN_MAX_EVQ_COUNT_OFST 20
+#define       MC_CMD_ALLOC_LL_QUEUES_IN_MAX_EVQ_COUNT_LEN 4
+
+/* MC_CMD_ALLOC_LL_QUEUES_OUT msgresponse */
+#define    MC_CMD_ALLOC_LL_QUEUES_OUT_LENMIN 16
+#define    MC_CMD_ALLOC_LL_QUEUES_OUT_LENMAX 252
+#define    MC_CMD_ALLOC_LL_QUEUES_OUT_LENMAX_MCDI2 1020
+#define    MC_CMD_ALLOC_LL_QUEUES_OUT_LEN(num) (12+4*(num))
+#define    MC_CMD_ALLOC_LL_QUEUES_OUT_QUEUES_NUM(len) (((len)-12)/4)
+/* The number of TXQs allocated in this request */
+#define       MC_CMD_ALLOC_LL_QUEUES_OUT_TXQ_COUNT_OFST 0
+#define       MC_CMD_ALLOC_LL_QUEUES_OUT_TXQ_COUNT_LEN 4
+/* The number of RXQs allocated in this request */
+#define       MC_CMD_ALLOC_LL_QUEUES_OUT_RXQ_COUNT_OFST 4
+#define       MC_CMD_ALLOC_LL_QUEUES_OUT_RXQ_COUNT_LEN 4
+/* The number of EVQs allocated in this request */
+#define       MC_CMD_ALLOC_LL_QUEUES_OUT_EVQ_COUNT_OFST 8
+#define       MC_CMD_ALLOC_LL_QUEUES_OUT_EVQ_COUNT_LEN 4
+/* A list of allocated queues, returned as MC_CMD_QUEUE_HANDLEs, not
+ * necessarily contiguous. TXQs are first in the list, followed by RXQs then
+ * EVQs. The type of each queue is indicated by the top bits (see the
+ * QUEUE_TYPE enum)
+ */
+#define       MC_CMD_ALLOC_LL_QUEUES_OUT_QUEUES_OFST 12
+#define       MC_CMD_ALLOC_LL_QUEUES_OUT_QUEUES_LEN 4
+#define       MC_CMD_ALLOC_LL_QUEUES_OUT_QUEUES_MINNUM 1
+#define       MC_CMD_ALLOC_LL_QUEUES_OUT_QUEUES_MAXNUM 60
+#define       MC_CMD_ALLOC_LL_QUEUES_OUT_QUEUES_MAXNUM_MCDI2 252
+
+
+/***********************************/
+/* MC_CMD_FREE_LL_QUEUES
+ * Free low latency (X3-style) queues for current PCI function.
+ */
+#define MC_CMD_FREE_LL_QUEUES 0x1de
+#undef MC_CMD_0x1de_PRIVILEGE_CTG
+
+#define MC_CMD_0x1de_PRIVILEGE_CTG SRIOV_CTG_GENERAL
+
+/* MC_CMD_FREE_LL_QUEUES_IN msgrequest */
+#define    MC_CMD_FREE_LL_QUEUES_IN_LENMIN 8
+#define    MC_CMD_FREE_LL_QUEUES_IN_LENMAX 252
+#define    MC_CMD_FREE_LL_QUEUES_IN_LENMAX_MCDI2 1020
+#define    MC_CMD_FREE_LL_QUEUES_IN_LEN(num) (4+4*(num))
+#define    MC_CMD_FREE_LL_QUEUES_IN_QUEUES_NUM(len) (((len)-4)/4)
+/* The number of queues to free. */
+#define       MC_CMD_FREE_LL_QUEUES_IN_QUEUE_COUNT_OFST 0
+#define       MC_CMD_FREE_LL_QUEUES_IN_QUEUE_COUNT_LEN 4
+/* A list of queues to free, as a list of MC_CMD_QUEUE_HANDLEs. They must have
+ * all been previously allocated by MC_CMD_ALLOC_LL_QUEUES. The type of each
+ * queue should be indicated by the top bits.
+ */
+#define       MC_CMD_FREE_LL_QUEUES_IN_QUEUES_OFST 4
+#define       MC_CMD_FREE_LL_QUEUES_IN_QUEUES_LEN 4
+#define       MC_CMD_FREE_LL_QUEUES_IN_QUEUES_MINNUM 1
+#define       MC_CMD_FREE_LL_QUEUES_IN_QUEUES_MAXNUM 62
+#define       MC_CMD_FREE_LL_QUEUES_IN_QUEUES_MAXNUM_MCDI2 254
+
+/* MC_CMD_FREE_LL_QUEUES_OUT msgresponse */
+#define    MC_CMD_FREE_LL_QUEUES_OUT_LEN 0
 
 
 #endif /* MCDI_PCOL_H */

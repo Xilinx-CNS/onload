@@ -43,7 +43,8 @@ struct efx_client_type_data {
 	struct efx_probe_data *pd;
 	void *type_data;
 #ifdef EFX_NOT_UPSTREAM
-	/* @vis_allocated: Flag denoting whether VIs have been allocated using
+	/**
+	 * @vis_allocated: Flag denoting whether VIs have been allocated using
 	 *  @efx_net_alloc, which can only be allowed to happen once.
 	 */
 	bool vis_allocated;

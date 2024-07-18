@@ -52,6 +52,7 @@ static int ef100_ethtool_set_ringparam(struct net_device *net_dev,
 #endif
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
+	bool is_up = !efx_check_disabled(efx) && netif_running(efx->net_dev);
 	int rc = 0;
 
 	if (ring->rx_mini_pending || ring->rx_jumbo_pending)
@@ -86,12 +87,22 @@ static int ef100_ethtool_set_ringparam(struct net_device *net_dev,
 		return -ERANGE;
 	}
 
+#ifdef EFX_NOT_UPSTREAM
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
+	if (efx->open_count > is_up) {
+		netif_err(efx, drv, efx->net_dev,
+			  "unable to set ring sizes. device in use by driverlink stack\n");
+		return -EBUSY;
+	}
+#endif
+#endif
+
 	/* Apply the new settings */
 	efx->rxq_entries = ring->rx_pending;
 	efx->txq_entries = ring->tx_pending;
 
 	/* Update the datapath with the new settings if the interface is up */
-	if (!efx_check_disabled(efx) && netif_running(efx->net_dev)) {
+	if (is_up) {
 		dev_close(net_dev);
 		rc = dev_open(net_dev, NULL);
 	}

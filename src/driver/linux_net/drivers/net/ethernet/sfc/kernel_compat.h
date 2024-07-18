@@ -1654,7 +1654,7 @@ static inline long scaled_ppm_to_ppb(long ppm)
 int pci_vfs_assigned(struct pci_dev *dev);
 #endif
 
-#ifdef EFX_NEED_PCI_ENABLE_MSIX_RANGE
+#if defined(EFX_NEED_PCI_ENABLE_MSIX_RANGE) && !defined(EFX_HAVE_PCI_ALLOC_DYN)
 /**
  * pci_enable_msix_range - configure device's MSI-X capability structure
  * @dev: pointer to the pci_dev data structure of MSI-X device function

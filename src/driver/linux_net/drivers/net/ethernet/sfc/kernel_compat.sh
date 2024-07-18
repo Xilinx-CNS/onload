@@ -199,7 +199,6 @@ EFX_HAVE_INDIRECT_CALL_WRAPPERS		file				include/linux/indirect_call_wrapper.h
 EFX_HAVE_NEW_KFIFO			symbol kfifo_out		include/linux/kfifo.h
 EFX_HAVE_NETFILTER_INDIRECT_SKB		memtype	struct_nf_hook_ops	hook	include/linux/netfilter.h	unsigned int(*)(unsigned int, struct sk_buff **, const struct net_device *, const struct net_device *, int (*)(struct sk_buff *))
 EFX_HAVE_NFPROTO_CONSTANTS		symbol	NFPROTO_NUMPROTO	include/linux/netfilter.h
-EFX_HAVE_MSIX_CAP			symbol	msix_cap		include/linux/pci.h
 EFX_NEED_PCI_ENABLE_MSIX_RANGE          nsymbol pci_enable_msix_range include/linux/pci.h
 EFX_NEED_PCI_MSIX_VEC_COUNT		nsymbol	pci_msix_vec_count	include/linux/pci.h
 EFX_HAVE_SKB_OOO_OKAY			member	struct_sk_buff ooo_okay	include/linux/skbuff.h
@@ -345,12 +344,14 @@ EFX_HAVE_ETHTOOL_GET_RINGPARAM_EXTACK	memtype	struct_ethtool_ops	get_ringparam	i
 EFX_HAVE_ETHTOOL_SET_RINGPARAM_EXTACK	memtype	struct_ethtool_ops	set_ringparam	include/linux/ethtool.h	int (*)(struct net_device *, struct ethtool_ringparam *, struct kernel_ethtool_ringparam *, struct netlink_ext_ack *)
 
 EFX_HAVE_PCI_FIND_NEXT_EXT_CAPABILITY	symbol	pci_find_next_ext_capability	include/linux/pci.h
+EFX_HAVE_PCI_ALLOC_DYN			symbol	pci_msix_can_alloc_dyn	include/linux/pci.h
 EFX_HAVE_XDP_SOCK			export	xdp_get_umem_from_qid	include/net/xdp_sock.h
 EFX_HAVE_XDP_SOCK_DRV			export	xdp_get_umem_from_qid	include/net/xdp_sock_drv.h
 EFX_HAVE_XSK_POOL			export	xsk_get_pool_from_qid	include/net/xdp_sock_drv.h
 EFX_HAVE_XSK_OFFSET_ADJUST             symbol  xsk_umem_adjust_offset  include/net/xdp_sock.h
 EFX_HAVE_XDP_UMEM_RELEASE_ADDR         symbol  xsk_umem_release_addr  include/net/xdp_sock.h
 EFX_HAVE_XSK_UMEM_CONS_TX_2PARAM	symtype xsk_umem_consume_tx	include/net/xdp_sock.h bool(struct xdp_umem *umem, struct xdp_desc *)
+EFX_HAVE_XSK_BUFF_DMA_SYNC_FOR_CPU_2PARAM	symtype xsk_buff_dma_sync_for_cpu	include/net/xdp_sock_drv.h void(struct xdp_buff *, struct xsk_buff_pool *)
 EFX_HAVE_XSK_NEED_WAKEUP		symbol	xsk_umem_uses_need_wakeup	include/net/xdp_sock.h include/net/xdp_sock_drv.h
 EFX_HAVE_COALESCE_PARAMS		member struct_ethtool_ops supported_coalesce_params include/linux/ethtool.h
 EFX_HAVE_ETHTOOL_COALESCE_CQE		memtype	struct_ethtool_ops	get_coalesce	include/linux/ethtool.h	int (*)(struct net_device *, struct ethtool_coalesce *, struct kernel_ethtool_coalesce *, struct netlink_ext_ack *)
