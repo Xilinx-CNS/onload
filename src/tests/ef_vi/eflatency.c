@@ -37,6 +37,7 @@ static inline void rx_wait_with_ts(struct eflatency_vi*);
 #define DEFAULT_PAYLOAD_SIZE  0
 
 
+static int              cfg_verbose = 0;
 static int              cfg_iter = 100000;
 static int              cfg_warmups = 10000;
 static int              cfg_payload_len = DEFAULT_PAYLOAD_SIZE;
@@ -461,54 +462,54 @@ static void
 generic_desc_check(struct eflatency_vi* vi, int wait)
 {
   /* We might exit with events read but unprocessed. */
-  int i = vi->i;
-  int n_ev = vi->n_ev;
-  ef_event* evs = vi->evs;
-  int n_rx;
   ef_request_id   tx_ids[EF_VI_TRANSMIT_BATCH];
   ef_request_id   rx_ids[EF_VI_RECEIVE_BATCH];
+  int n_rx;
 
   while( 1 ) {
-    for( ; i < n_ev; vi->i = ++i )
-      switch( EF_EVENT_TYPE(evs[i]) ) {
+    while( vi->i < vi->n_ev ) {
+      const ef_event * const ev = &vi->evs[vi->i++];
+      if( cfg_verbose >= 2 )
+        fprintf(stderr, "event "EF_EVENT_FMT"\n", EF_EVENT_PRI_ARG(*ev));
+
+      switch( EF_EVENT_TYPE(*ev) ) {
       case EF_EVENT_TYPE_RX:
-        vi->i = ++i;
         return;
       case EF_EVENT_TYPE_RX_REF:
-        handle_rx_ref(&vi->vi, evs[i].rx_ref.pkt_id, evs[i].rx_ref.len);
-        vi->i = ++i;
+        handle_rx_ref(&vi->vi, ev->rx_ref.pkt_id, ev->rx_ref.len);
         return;
       case EF_EVENT_TYPE_TX:
-        ef_vi_transmit_unbundle(&vi->vi, &(evs[i]), tx_ids);
+        ef_vi_transmit_unbundle(&vi->vi, ev, tx_ids);
         break;
       case EF_EVENT_TYPE_TX_ALT:
         ++(tx_alt.complete_id);
         break;
       case EF_EVENT_TYPE_RX_MULTI:
       case EF_EVENT_TYPE_RX_MULTI_DISCARD:
-        n_rx = ef_vi_receive_unbundle(&vi->vi, &(evs[i]), rx_ids);
+        n_rx = ef_vi_receive_unbundle(&vi->vi, ev, rx_ids);
         TEST(n_rx == 1);
-        vi->i = ++i;
         return;
       case EF_EVENT_TYPE_RX_MULTI_PKTS:
-        n_rx = evs[i].rx_multi_pkts.n_pkts;
+        n_rx = ev->rx_multi_pkts.n_pkts;
         TEST(n_rx == 1);
         ef_vi_rxq_next_desc_id(&vi->vi);
-        vi->i = ++i;
         return;
       case EF_EVENT_TYPE_RX_REF_DISCARD:
-        handle_rx_ref(&vi->vi, evs[i].rx_ref_discard.pkt_id,
-                      evs[i].rx_ref_discard.len);
-        if( evs[i].rx_ref_discard.flags & EF_VI_DISCARD_RX_ETH_FCS_ERR &&
+        handle_rx_ref(&vi->vi, ev->rx_ref_discard.pkt_id,
+                      ev->rx_ref_discard.len);
+        if( ev->rx_ref_discard.flags & EF_VI_DISCARD_RX_ETH_FCS_ERR &&
             cfg_ctpio_thresh < tx_frame_len ) {
           break;
         }
         fprintf(stderr, "ERROR: unexpected ref discard flags=%x\n",
-                evs[i].rx_ref_discard.flags);
+                ev->rx_ref_discard.flags);
         TEST(0);
         break;
       case EF_EVENT_TYPE_RX_DISCARD:
-        if( EF_EVENT_RX_DISCARD_TYPE(evs[i]) == EF_EVENT_RX_DISCARD_CRC_BAD &&
+        if( cfg_verbose )
+            fprintf(stderr, "RX discard%s\n",
+              EF_EVENT_RX_DISCARD_TYPE(*ev) == EF_EVENT_RX_DISCARD_CRC_BAD ? " bad CRC" : "");
+        if( EF_EVENT_RX_DISCARD_TYPE(*ev) == EF_EVENT_RX_DISCARD_CRC_BAD &&
             (ef_vi_flags(&vi->vi) & EF_VI_TX_CTPIO) && ! cfg_ctpio_no_poison ) {
           /* Likely a poisoned frame caused by underrun.  A good copy will
            * follow.
@@ -519,14 +520,15 @@ generic_desc_check(struct eflatency_vi* vi, int wait)
         ci_fallthrough;
       default:
         fprintf(stderr, "ERROR: unexpected event "EF_EVENT_FMT"\n",
-                EF_EVENT_PRI_ARG(evs[i]));
+                EF_EVENT_PRI_ARG(*ev));
         TEST(0);
         break;
       }
-    vi->n_ev = n_ev = ef_eventq_poll(&vi->vi, evs,
-                                     sizeof(vi->evs) / sizeof(vi->evs[0]));
-    vi->i = i = 0;
-    if( ! n_ev && ! wait )
+    }
+    vi->i = 0;
+    vi->n_ev = ef_eventq_poll(&vi->vi, vi->evs,
+                              sizeof(vi->evs) / sizeof(vi->evs[0]));
+    if( ! vi->n_ev && ! wait )
       break;
   }
 }
@@ -699,6 +701,7 @@ static CI_NORETURN usage(const char* fmt, ...)
   fprintf(stderr, "                        [p]io, [a]lternatives, [d]ma\n");
   fprintf(stderr, "  -t <modes>          - set TX_PUSH: [a]lways, [d]isable\n");
   fprintf(stderr, "  -o <filename>       - save raw timings to file\n");
+  fprintf(stderr, "  -v                  - increase verbosity level\n");
   fprintf(stderr, "\n");
   exit(1);
 }
@@ -736,7 +739,7 @@ int main(int argc, char* argv[])
     p = (unsigned int)__v;                                   \
   } while( 0 );
 
-  while( (c = getopt (argc, argv, "n:s:w:c:pm:t:o:")) != -1 )
+  while( (c = getopt (argc, argv, "n:s:w:c:pm:t:o:v")) != -1 )
     switch( c ) {
     case 'n':
       OPT_INT(optarg, cfg_iter);
@@ -789,6 +792,9 @@ int main(int argc, char* argv[])
           usage("Unknown mode '%c'", optarg[i]);
         }
       }
+      break;
+    case 'v':
+      cfg_verbose++;
       break;
     case '?':
       usage(NULL);
@@ -889,6 +895,9 @@ int main(int argc, char* argv[])
   printf("# warmups: %d\n", cfg_warmups);
   printf("# frame len: %d\n", tx_frame_len);
   printf("# mode: %s\n", t->name);
+  if( cfg_verbose )
+    printf("# verbose: %d\n", cfg_verbose);
+
   if( ping )
     printf("paylen\tmean\tmin\t50%%\t95%%\t99%%\tmax\n");
 
