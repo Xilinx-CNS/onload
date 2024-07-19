@@ -434,13 +434,15 @@ static void handle_time(struct msghdr* msg, struct configuration* cfg)
       break;
 #ifdef ONLOADEXT_AVAILABLE
     case SO_TIMESTAMPING_OOEXT:
-      struct scm_timestamping_ooext *t, *tend;
-      t = (struct scm_timestamping_ooext *) CMSG_DATA(cmsg);
-      tend = t + cmsg->cmsg_len / sizeof *t;
-      printf("ext v2 timestamps");
-      for (; t != tend; t++)
-        print_time_ext2(t);
-      printf("\n");
+      {
+        struct scm_timestamping_ooext *t, *tend;
+        t = (struct scm_timestamping_ooext *) CMSG_DATA(cmsg);
+        tend = t + cmsg->cmsg_len / sizeof *t;
+        printf("ext v2 timestamps");
+        for (; t != tend; t++)
+          print_time_ext2(t);
+        printf("\n");
+      }
       return;
 #endif
     default:
