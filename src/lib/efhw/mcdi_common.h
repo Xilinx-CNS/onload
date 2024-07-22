@@ -1,41 +1,16 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /* X-SPDX-Copyright-Text: (c) Copyright 2012-2019 Xilinx, Inc. */
-/****************************************************************************
- * Driver for Solarflare network controllers -
- *          resource management for Xen backend, OpenOnload, etc
- *           (including support for SFE4001 10GBT NIC)
- *
- * This file contains EF10 hardware support.
- *
- * Copyright 2005-2008: Solarflare Communications Inc,
- *                      9501 Jeronimo Road, Suite 250,
- *                      Irvine, CA 92618, USA
- *
- * Developed and maintained by Solarflare Communications:
- *                      <linux-xen-drivers@solarflare.com>
- *                      <onload-dev@solarflare.com>
- *
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License version 2 as published
- * by the Free Software Foundation, incorporated herein by reference.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
- ****************************************************************************
- */
+
+#ifndef LIB_EFHW_MCDI_COMMMON_H
+#define LIB_EFHW_MCDI_COMMMON_H
 
 #include <ci/compat.h>
 #include <ci/tools/byteorder.h>
 #include <ci/tools/bitfield.h>
 #include <ci/tools/sysdep.h>
 
+
+extern uint64_t mcdi_parser_info_to_nic_flags(ci_dword_t *out, int num_matches);
 
 #ifndef BUILD_BUG_ON_ZERO
         #define BUILD_BUG_ON_ZERO(e) (sizeof(char[1 - 2 * !!(e)]) - 1)
@@ -288,3 +263,4 @@ ci_inline ci_uint16 efhw_mcdi_read(char *addr)
 			     MC_CMD_ ## _name10, _value10,		\
 			     MC_CMD_ ## _name11, _value11)
 
+#endif /* LIB_EFHW_MCDI_COMMMON_H */
