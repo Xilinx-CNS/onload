@@ -220,11 +220,6 @@ static void ef10_reset_resume(struct efx_auxdev_client * client,
   }
   nic->ctr_ap_bar = val.value;
 
-  /* Driverlink calls might have been disabled forcibly if, e.g., the NIC
-   * had been in BIST mode.  We know that they're safe now, so enable
-   * them. */
-  efrm_driverlink_resume(nic);
-
   /* Remove record on queue initialization from before a reset
    * No hardware operation will be performed */
   efrm_nic_flush_all_queues(nic, EFRM_FLUSH_QUEUES_F_NOHW |

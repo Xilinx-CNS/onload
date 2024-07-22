@@ -2287,18 +2287,12 @@ ef10_filter_remove(struct efhw_nic *nic, int filter_id)
   struct efx_auxdev *auxdev = to_efx_auxdev(to_auxiliary_dev(dev));
   struct efx_auxdev_client *cli = efhw_nic_acquire_auxdev(nic);
 
+  /* Note: We do not use AUX_PRE/AUX_POST here as we do with other filter
+   * operations. The filter_remove operation in the net driver has some
+   * additional logic to handle removing a filter during a reset which we rely
+   * on. */
   if( auxdev != NULL ) {
-    /* If the filter op fails with ENETDOWN, that indicates that
-     * the hardware is inacessible but that the device has not
-     * (yet) been shut down.  It will be recovered by a subsequent
-     * reset.  In the meantime, the net driver's and Onload's
-     * opinions as to the installed filters will diverge.  We
-     * minimise the damage by preventing further driverlink
-     * activity until the reset happens. */
-    unsigned generation = efrm_driverlink_generation(nic);
     rc = auxdev->ops->filter_remove(cli, filter_id);
-    if( rc == -ENETDOWN )
-      efrm_driverlink_desist(nic, generation);
 
     efhw_nic_release_auxdev(nic, cli);
   }

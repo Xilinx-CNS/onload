@@ -612,11 +612,8 @@ EXPORT_SYMBOL(efhw_nic_find_by_foo);
  */
 void* efhw_nic_acquire_drv_device(struct efhw_nic* efhw_nic)
 {
-	struct efrm_nic* rnic = efrm_nic(efhw_nic);
 	struct linux_efhw_nic* lnic = linux_efhw_nic(efhw_nic);
 	void* drv_device;
-	if (rnic->rnic_flags & EFRM_NIC_FLAG_DRIVERLINK_PROHIBITED)
-		return NULL;
 
 	/* Acquire the lock if the driverlink device is live, taking care to
 	 * avoid races against it changing under our feet. */
