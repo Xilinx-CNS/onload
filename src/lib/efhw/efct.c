@@ -10,6 +10,7 @@
 #include <ci/efhw/efct.h>
 #include <ci/efhw/eventq.h>
 #include <ci/efhw/checks.h>
+#include <ci/efhw/mc_driver_pcol.h>
 #include <ci/driver/ci_efct.h>
 #include <ci/tools/bitfield.h>
 #include <ci/net/ipv6.h>
@@ -24,6 +25,7 @@
 #include "efct.h"
 #include "efct_superbuf.h"
 #include "efct_filters.h"
+#include "mcdi_common.h"
 
 #if CI_HAVE_EFCT_AUX
 
@@ -250,6 +252,48 @@ efct_nic_sw_ctor(struct efhw_nic *nic,
 }
 
 
+static uint64_t
+efct_nic_supported_filter_flags(struct efhw_nic *nic)
+{
+  struct device *dev;
+  struct xlnx_efct_device* edev;
+  struct xlnx_efct_client* cli;
+  int rc;
+  int num_matches;
+  size_t outlen_actual;
+  EFHW_MCDI_DECLARE_BUF(in, MC_CMD_GET_PARSER_DISP_INFO_IN_LEN);
+  EFHW_MCDI_DECLARE_BUF(out, MC_CMD_GET_PARSER_DISP_INFO_OUT_LENMAX);
+  struct xlnx_efct_rpc rpc = {
+    .cmd = MC_CMD_GET_PARSER_DISP_INFO,
+    .inbuf = (u32*)&in,
+    .inlen = MC_CMD_GET_PARSER_DISP_INFO_IN_LEN,
+    .outbuf = (u32*)&out,
+    .outlen = MC_CMD_GET_PARSER_DISP_INFO_OUT_LENMAX,
+    .outlen_actual = &outlen_actual,
+  };
+
+  EFHW_MCDI_INITIALISE_BUF(in);
+  EFHW_MCDI_INITIALISE_BUF(out);
+
+  EFHW_MCDI_SET_DWORD(in, GET_PARSER_DISP_INFO_IN_OP,
+                   MC_CMD_GET_PARSER_DISP_INFO_IN_OP_GET_SUPPORTED_RX_MATCHES);
+
+  EFCT_PRE(dev, edev, cli, nic, rc);
+  rc = edev->ops->fw_rpc(cli, &rpc);
+  EFCT_POST(dev, edev, cli, nic, rc);
+
+  if( rc != 0 )
+    EFHW_ERR("%s: failed rc=%d", __FUNCTION__, rc);
+  else if ( outlen_actual < MC_CMD_GET_PARSER_DISP_INFO_OUT_LENMIN )
+    EFHW_ERR("%s: failed, expected response min len %d, got %zd", __FUNCTION__,
+             MC_CMD_GET_PARSER_DISP_INFO_OUT_LENMIN, outlen_actual);
+
+  num_matches = EFHW_MCDI_VAR_ARRAY_LEN(outlen_actual,
+                                   GET_PARSER_DISP_INFO_OUT_SUPPORTED_MATCHES);
+
+  return mcdi_parser_info_to_filter_flags(out, num_matches);
+}
+
 static int
 efct_nic_init_hardware(struct efhw_nic *nic,
                        struct efhw_ev_handler *ev_handlers,
@@ -263,20 +307,9 @@ efct_nic_init_hardware(struct efhw_nic *nic,
              | NIC_FLAG_HW_MULTICAST_REPLICATION
              | NIC_FLAG_SHARED_PD
              ;
-  nic->filter_flags |= NIC_FILTER_FLAG_RX_TYPE_IP_LOCAL
-                    | NIC_FILTER_FLAG_RX_TYPE_IP_FULL
-                    | NIC_FILTER_FLAG_IPX_VLAN_SW
-                    | NIC_FILTER_FLAG_RX_ETHERTYPE
-                    /* TODO: This will need to be updated to check for nic capabilities. */
-                    | NIC_FILTER_FLAG_RX_TYPE_ETH_LOCAL
-                    | NIC_FILTER_FLAG_RX_TYPE_ETH_LOCAL_VLAN
-                    ;
-  /* This isn't true, but previously we had a single flag for HW and SW, so
-   * to maintain equivalent behaviour we need to claim the HW flag too until
-   * we follow up with the rest of the work which unravels the various
-   * inconsistencies in this area. */
-  nic->filter_flags |= NIC_FILTER_FLAG_IPX_VLAN_HW;
 
+  nic->filter_flags |= efct_nic_supported_filter_flags(nic);
+  nic->filter_flags |= NIC_FILTER_FLAG_IPX_VLAN_SW;
   efct_nic_tweak_hardware(nic);
   return 0;
 }
