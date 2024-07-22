@@ -47,7 +47,7 @@
 
 #include <ci/efhw/ef10.h>
 #include <ci/efhw/mc_driver_pcol.h>
-#include "ef10_mcdi.h"
+#include "mcdi_common.h"
 #include "ef10_ef100.h"
 
 extern int force_ev_timer;

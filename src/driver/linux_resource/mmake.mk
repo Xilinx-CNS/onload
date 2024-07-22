@@ -19,7 +19,7 @@ EFHW_SRCS	:= nic.c eventq.c af_xdp.c ethtool_rxclass.c \
 		ethtool_flow.c efct.c debugfs_nic.c debugfs_efct.c \
 		sw_buffer_table.c efct_filters.c
 
-EFHW_HDRS	:= ef10_mcdi.h ethtool_rxclass.h ethtool_flow.h ef10_ef100.h \
+EFHW_HDRS	:= mcdi_common.h ethtool_rxclass.h ethtool_flow.h ef10_ef100.h \
 		efct.h ef10ct.h sw_buffer_table.h efct_filters.h
 
 EFRM_SRCS	:=			\
