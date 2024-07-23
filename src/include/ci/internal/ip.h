@@ -4704,6 +4704,7 @@ static inline const char* ci_tcp_aux_type2str(int type)
     case CI_TCP_AUX_TYPE_SYNRECV: return "syn-recv state";
     case CI_TCP_AUX_TYPE_BUCKET:  return "syn-recv bucket";
     case CI_TCP_AUX_TYPE_EPOLL: return "epoll3 state";
+    case CI_TCP_AUX_TYPE_PMTUS: return "path mtu data";
     default: return "unknown";
   }
 }
