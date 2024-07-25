@@ -19,10 +19,14 @@
 #include <ci/efhw/ef10ct.h>
 #include <ci/efhw/mc_driver_pcol.h>
 
+#include <linux/ethtool.h>
+
 #include "etherfabric/internal/internal.h"
 
 #include "ef10ct.h"
 #include "sw_buffer_table.h"
+#include "mcdi_common.h"
+#include "ethtool_flow.h"
 
 
 #if CI_HAVE_EF10CT
@@ -558,35 +562,173 @@ static const int ef10ct_nic_buffer_table_orders[] = {9};
  *--------------------------------------------------------------------*/
 
 
+struct filter_insert_params {
+  struct efhw_nic *nic;
+  const struct cpumask *mask;
+  unsigned flags;
+};
+
+
+static void filter_to_mcdi(ci_dword_t *buf, int rxq,
+                           const struct ethtool_rx_flow_spec *filter)
+{
+  /* FIXME EF10CT to implement */
+  EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_OP, MC_CMD_FILTER_OP_IN_OP_INSERT);
+}
+
+
+static int get_rxq_from_mask(struct efhw_nic_ef10ct *ef10ct,
+                             const struct cpumask *mask, bool exclusive)
+{
+  return 0;
+}
+
+
+static int select_rxq(struct filter_insert_params *params, uint64_t rxq_in)
+{
+  struct efhw_nic_ef10ct *ef10ct = params->nic->arch_extra;
+  bool anyqueue, loose, exclusive;
+  int rxq = -1; /* ignored on failure, but initialised for logging */
+  int rc = 0;
+
+  anyqueue = params->flags & EFHW_FILTER_F_ANY_RXQ;
+  loose = ((params->flags & EFHW_FILTER_F_PREF_RXQ) ||
+           (params->flags & EFHW_FILTER_F_ANY_RXQ));
+  exclusive = params->flags & EFHW_FILTER_F_EXCL_RXQ;
+
+  if( !anyqueue ) {
+    if( rxq_in >= ef10ct->rxq_n ) {
+      EFHW_WARN("%s: Invalid queue id %lld\n", __func__, rxq_in);
+      rc = -EINVAL;
+      goto out;
+    }
+    rxq = rxq_in;
+  }
+  else {
+    if( params->mask )
+      rxq = get_rxq_from_mask(ef10ct, params->mask, exclusive);
+  }
+
+  /* Failed to get an rxq matching our cpumask, so allow fallback to any cpu
+   * if allowed */
+  if( rxq < 0 && loose )
+    rxq = get_rxq_from_mask(ef10ct, cpu_online_mask, exclusive);
+
+  if( rxq < 0 ) {
+    EFHW_WARN("%s: Unable to find the queue ID for given mask, flags= %d\n",
+              __func__, params->flags);
+    rc = rxq;
+    goto out;
+  }
+
+ out:
+  EFHW_TRACE("%s: any: %d loose: %d exclusive: %d rxq_in: %llu rc: %d rxq: %d",
+             __func__, anyqueue, loose, exclusive, rxq_in, rc, rxq);
+
+  return rc < 0 ? rc : rxq;
+}
+
+
+static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in_data,
+                                  struct efct_filter_insert_out *out_data)
+{
+  int rc;
+  struct filter_insert_params *params = (struct filter_insert_params*)
+                                        in_data->drv_opaque;
+  EFHW_MCDI_DECLARE_BUF(in, MC_CMD_FILTER_OP_IN_LEN);
+  EFHW_MCDI_DECLARE_BUF(out, MC_CMD_FILTER_OP_OUT_LEN);
+  size_t outlen_actual;
+  struct efx_auxiliary_rpc rpc = {
+    .cmd = MC_CMD_FILTER_OP,
+    .inbuf = (u32*)&in,
+    .inlen = MC_CMD_FILTER_OP_IN_LEN,
+    .outbuf = (u32*)&out,
+    .outlen = MC_CMD_FILTER_OP_OUT_LEN,
+    .outlen_actual = &outlen_actual,
+  };
+  int rxq;
+  rxq = select_rxq(params, in_data->filter->ring_cookie);
+  if( rxq < 0 )
+    return rxq;
+
+  EFHW_MCDI_INITIALISE_BUF(in);
+  EFHW_MCDI_INITIALISE_BUF(out);
+  filter_to_mcdi(in, rxq, in_data->filter);
+
+  rc = ef10ct_fw_rpc(params->nic, &rpc);
+
+  if( rc == 0 ) {
+    uint32_t id_low = EFHW_MCDI_DWORD(out, FILTER_OP_OUT_HANDLE_LO);
+    uint32_t id_hi = EFHW_MCDI_DWORD(out, FILTER_OP_OUT_HANDLE_HI);
+    out_data->rxq = rxq;
+    out_data->drv_id = id_low || (uint64_t)id_hi << 32;
+    /* Metadata filter_id is the bottom 16 bits of MCDI filter handle */
+    out_data->filter_handle = id_low & 0xffff;
+  }
+
+  return rc;
+}
+
+
 static int
 ef10ct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
                      int *rxq, unsigned pd_excl_token,
                      const struct cpumask *mask, unsigned flags)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
-  int i;
-  bool found;
+  struct ethtool_rx_flow_spec hw_filter;
+  struct filter_insert_params params = {
+    .nic = nic,
+    .mask = mask,
+    .flags = flags,
+  };
+  int rc;
 
-  /* We want to find the hw rxq given the dummy vi number in the spec */
-  /* For now, just loop over the rxqs to check if the vi is attached
-   * TODO: Will this have to handle multiple vis connected to the same rxq? */
-  for( i = 0; i < ef10ct->rxq_n; i++ ) {
-    if( ef10ct->rxq[i].q_id == spec->dmaq_id ) {
-      *rxq = i;
-      found = true;
-      break;
-    }
-  }
 
-  if( !found )
-    return -EINVAL;
-  return 0;
+  rc = efx_spec_to_ethtool_flow(spec, &hw_filter);
+  if( rc < 0 )
+    return rc;
+
+  /* There's no special RXQ 0 here, so don't allow fallback to SW filter */
+  flags |= EFHW_FILTER_F_USE_HW;
+  return efct_filter_insert(&ef10ct->filter_state, spec, &hw_filter, rxq,
+                            pd_excl_token, flags, ef10ct_filter_insert_op,
+                            &params);
 }
 
 
 static void
 ef10ct_filter_remove(struct efhw_nic *nic, int filter_id)
 {
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  EFHW_MCDI_DECLARE_BUF(in, MC_CMD_FILTER_OP_IN_LEN);
+  EFHW_MCDI_DECLARE_BUF(out, MC_CMD_FILTER_OP_OUT_LEN);
+  size_t outlen_actual;
+  struct efx_auxiliary_rpc rpc = {
+    .cmd = MC_CMD_FILTER_OP,
+    .inbuf = (u32*)&in,
+    .inlen = MC_CMD_FILTER_OP_IN_LEN,
+    .outbuf = (u32*)&out,
+    .outlen = MC_CMD_FILTER_OP_OUT_LEN,
+    .outlen_actual = &outlen_actual,
+  };
+  bool remove_drv;
+  uint64_t drv_id;
+  int rc;
+
+  remove_drv = efct_filter_remove(&ef10ct->filter_state, filter_id, &drv_id);
+
+  /* FIXME EF10CT need to support remove/unsubscribe */
+  if( remove_drv ) {
+    EFHW_MCDI_SET_DWORD(in, FILTER_OP_IN_OP, MC_CMD_FILTER_OP_IN_OP_REMOVE);
+    EFHW_MCDI_SET_DWORD(in, FILTER_OP_IN_HANDLE_LO, drv_id);
+    EFHW_MCDI_SET_DWORD(in, FILTER_OP_IN_HANDLE_HI, drv_id >> 32);
+
+    rc = ef10ct_fw_rpc(nic, &rpc);
+    if( rc < 0 )
+      EFHW_NOTICE("%s: Failed to remove filter id %d, rc %d",
+                  __func__, filter_id, rc);
+  }
 }
 
 

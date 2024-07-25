@@ -43,15 +43,26 @@ static int ef10ct_resource_init(struct efx_auxiliary_device *edev,
   int rc;
   int i;
 
-  res_dim->efhw_ops = &ef10ct_char_functional_units;
-  rc = edev->ops->get_param(client, EFX_AUXILIARY_NIC_RESOURCES, &val);
+  rc = edev->ops->get_param(client, EFX_AUXILIARY_DESIGN_PARAM, &val);
+  if( rc < 0 )
+    return rc;
+  rc = efct_filter_state_init(&ef10ct->filter_state, val.design_params.num_filter,
+                              val.design_params.rx_queues);
   if( rc < 0 )
     return rc;
 
+  res_dim->efhw_ops = &ef10ct_char_functional_units;
+
+  rc = edev->ops->get_param(client, EFX_AUXILIARY_NIC_RESOURCES, &val);
+  if( rc < 0 )
+    goto fail;
+
   ef10ct->evq_n = val.nic_res.evq_lim;
   ef10ct->evq = vzalloc(sizeof(*ef10ct->evq) * ef10ct->evq_n);
-  if( ! ef10ct->evq )
+  if( ! ef10ct->evq ) {
+    rc = -ENOMEM;
     goto fail;
+  }
 
   res_dim->vi_min = val.nic_res.evq_min;
   res_dim->vi_lim = EF10CT_EVQ_DUMMY_MAX;
@@ -66,8 +77,10 @@ static int ef10ct_resource_init(struct efx_auxiliary_device *edev,
 
   ef10ct->rxq_n = val.nic_res.rxq_lim;
   ef10ct->rxq = vzalloc(sizeof(*ef10ct->rxq) * ef10ct->rxq_n);
-  if( ! ef10ct->rxq )
+  if( ! ef10ct->rxq ) {
+    rc = -ENOMEM;
     goto fail1;
+  }
   for( i = 0; i < ef10ct->rxq_n; i++ ) {
     ef10ct->rxq[i].evq = -1;
     ef10ct->rxq[i].q_id = -1;
@@ -93,8 +106,10 @@ static int ef10ct_resource_init(struct efx_auxiliary_device *edev,
   /* TODO: determine how many more to add for interrupt affinity */
   ef10ct->shared_n = 1;
   ef10ct->shared = vzalloc(sizeof(*ef10ct->shared) * ef10ct->shared_n);
-  if( ! ef10ct->shared )
+  if( ! ef10ct->shared ) {
+    rc = -ENOMEM;
     goto fail2;
+  }
 
   return 0;
 
@@ -103,7 +118,8 @@ fail2:
 fail1:
   vfree(ef10ct->evq);
 fail:
-  return -ENOMEM;
+  efct_filter_state_free(&ef10ct->filter_state);
+  return rc;
 }
 
 
@@ -365,6 +381,8 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
    * TODO: rethink where to call close and how to synchronise with
    * the rest. */
   edev->ops->close(client);
+
+  efct_filter_state_free(&ef10ct->filter_state);
   vfree(ef10ct->evq);
   vfree(ef10ct->rxq);
   vfree(ef10ct->shared);

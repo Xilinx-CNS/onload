@@ -768,10 +768,12 @@ efct_nic_filter_remove(struct efhw_nic *nic, int filter_id)
   struct xlnx_efct_device* edev;
   struct xlnx_efct_client* cli;
   struct efhw_nic_efct *efct = nic->arch_extra;
-  int drv_id = efct_filter_remove(&efct->filter_state, filter_id);
+  uint64_t drv_id;
   int rc;
+  bool remove_drv = efct_filter_remove(&efct->filter_state, filter_id,
+                                       &drv_id);
 
-  if( drv_id >= 0 ) {
+  if( remove_drv ) {
     EFCT_PRE(dev, edev, cli, nic, rc);
     rc = edev->ops->filter_remove(cli, drv_id);
     EFCT_POST(dev, edev, cli, nic, rc);

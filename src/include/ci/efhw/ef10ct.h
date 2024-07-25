@@ -4,6 +4,7 @@
 #ifndef CI_EFHW_EF10CT_H
 #define CI_EFHW_EF10CT_H
 
+#include <ci/efhw/efct.h>
 #include <ci/driver/ci_ef10ct.h>
 #include <ci/tools/sysdep.h>
 #include <ci/efhw/stack_vi_allocator.h>
@@ -51,6 +52,7 @@ struct efhw_nic_ef10ct {
     struct efhw_stack_vi_allocator tx;
     struct efhw_stack_vi_allocator rx;
   } vi_allocator;
+  struct efct_filter_state filter_state;
 };
 
 #endif /* CI_EFHW_EF10CT_H */

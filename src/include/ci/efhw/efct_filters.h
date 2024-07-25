@@ -10,7 +10,7 @@ struct efct_filter_insert_in {
 };
 struct efct_filter_insert_out {
   int rxq;
-  int drv_id;
+  uint64_t drv_id;
   u32 filter_handle;
 };
 struct efct_filter_state;
@@ -23,8 +23,9 @@ efct_filter_insert(struct efct_filter_state *state, struct efx_filter_spec *spec
                    struct ethtool_rx_flow_spec *hw_filter,
                    int *rxq, unsigned pd_excl_token, unsigned flags,
                    drv_filter_insert insert_op, void *insert_data);
-extern int
-efct_filter_remove(struct efct_filter_state *state, int filter_id);
+extern bool
+efct_filter_remove(struct efct_filter_state *state, int filter_id,
+                   uint64_t *drv_id_out);
 extern int
 efct_filter_query(struct efct_filter_state *state, int filter_id,
                   struct efhw_filter_info *info);

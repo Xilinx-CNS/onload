@@ -573,10 +573,8 @@ int ef_vi_filter_add(ef_vi *vi, ef_driver_handle dh, const ef_filter_spec *fs,
     if( rc < 0 )
       return rc;
 
-    if ( fs->flags & EF_FILTER_FLAG_SHRUB_SHARED ) {
+    if ( fs->flags & EF_FILTER_FLAG_SHRUB_SHARED )
       shared_mode = true;
-      rxq = fs->data[0] >> 16;
-    }
 
     if( filter_cookie_out )
       *filter_cookie_out = cookie;

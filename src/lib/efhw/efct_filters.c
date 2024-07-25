@@ -160,6 +160,7 @@ hw_filters_are_equal(const struct efct_filter_node *node,
                      int clas)
 {
   switch (clas) {
+  /* FIXME EF10CT this is different for X4LL */
   case FILTER_CLASS_semi_wild:
   case FILTER_CLASS_full_match:
     if (hw_filter->proto == node->proto &&
@@ -641,11 +642,12 @@ remove_exclusive_rxq_ownership(struct efct_filter_state *state, int hw_filter)
 }
 
 
-int
-efct_filter_remove(struct efct_filter_state *state, int filter_id)
+bool
+efct_filter_remove(struct efct_filter_state *state, int filter_id,
+                   uint64_t *drv_id_out)
 {
   int hw_filter;
-  int drv_id = -1;
+  bool remove_drv = false;
 
   mutex_lock(&state->driver_filters_mtx);
 
@@ -654,14 +656,15 @@ efct_filter_remove(struct efct_filter_state *state, int filter_id)
   if( hw_filter >= 0 ) {
     if( state->hw_filters[hw_filter].refcount == 0 ) {
         /* The above check implies the current filter is unused. */
-        drv_id = state->hw_filters[hw_filter].drv_id;
+        *drv_id_out = state->hw_filters[hw_filter].drv_id;
         remove_exclusive_rxq_ownership(state, hw_filter);
+        remove_drv = true;
     }
   }
 
 
   mutex_unlock(&state->driver_filters_mtx);
-  return drv_id;
+  return remove_drv;
 }
 
 static bool
