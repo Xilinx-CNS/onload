@@ -82,10 +82,6 @@
 	#error "This kernel version is now unsupported"
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)
-	/* Fixing MSI-X masking introduced another bug, fixed in 2.6.36 */
-	#define EFX_NEED_SAVE_MSIX_MESSAGES yes
-#endif
 
 /**************************************************************************
  *
@@ -179,16 +175,6 @@
 #endif
 #ifndef NETIF_F_RXALL
 	#define NETIF_F_RXALL 0
-#endif
-
-/* RHEL 6.2 introduced XPS support but didn't add it under CONFIG_XPS.
- * Instead the code was simply included directly, so it's enabled in all
- * configurations. We check for the presence of CONFIG_XPS in other code.
- */
-#if (LINUX_VERSION_CODE == KERNEL_VERSION(2,6,32)) && \
-    defined(RHEL_MAJOR) && (RHEL_MAJOR == 6) &&  \
-    defined(RHEL_MINOR) && (RHEL_MINOR >= 2)
-# define CONFIG_XPS
 #endif
 
 #ifndef PCI_EXP_LNKCAP_SLS_5_0GB
@@ -485,6 +471,9 @@
 	};
 	#define ETHTOOL_GET_TS_INFO	0x00000041 /* Get time stamping and PHC info */
 #endif
+#ifdef EFX_NEED_KERNEL_ETHTOOL_TS_INFO
+	#define kernel_ethtool_ts_info ethtool_ts_info
+#endif
 
 #ifndef EFX_HAVE_ETHTOOL_RXFH_PARAM
 /* We want to use this struct even if older kernels do not have it, so old
@@ -509,16 +498,6 @@ struct ethtool_rxfh_param {
 #ifndef SUPPORTED_40000baseKR4_Full
 	#define SUPPORTED_40000baseKR4_Full	(1 << 23)
 	#define SUPPORTED_40000baseCR4_Full	(1 << 24)
-#endif
-
-#ifdef EFX_NEED_VZALLOC
-	static inline void *vzalloc(unsigned long size)
-	{
-		void *buf = vmalloc(size);
-		if (buf)
-			memset(buf, 0, size);
-		return buf;
-	}
 #endif
 
 #ifndef NETIF_F_GSO
@@ -547,24 +526,6 @@ struct ethtool_rxfh_param {
 
 #ifndef netdev_mc_count
 	#define netdev_mc_count(dev) (dev)->mc_count
-#endif
-
-#ifdef EFX_NEED_NETIF_SET_REAL_NUM_TX_QUEUES
-	static inline void
-	netif_set_real_num_tx_queues(struct net_device *dev, unsigned int txq)
-	{
-		dev->real_num_tx_queues = txq;
-	}
-#endif
-
-#ifdef EFX_NEED_NETIF_SET_REAL_NUM_RX_QUEUES
-	static inline void
-	netif_set_real_num_rx_queues(struct net_device *dev, unsigned int rxq)
-	{
-#ifdef CONFIG_RPS
-		dev->num_rx_queues = rxq;
-#endif
-	}
 #endif
 
 #ifdef EFX_NEED_DMA_SET_COHERENT_MASK
@@ -989,26 +950,6 @@ static inline struct sk_buff *
 	#define __clear_bit_le efx__clear_bit_le
 #endif
 
-#ifdef CONFIG_SFC_MTD
-#ifdef EFX_NEED_MTD_DEVICE_REGISTER
-	struct mtd_partition;
-
-	static inline int
-	mtd_device_register(struct mtd_info *master,
-			    const struct mtd_partition *parts,
-			    int nr_parts)
-	{
-		BUG_ON(parts);
-		return add_mtd_device(master);
-	}
-
-	static inline int mtd_device_unregister(struct mtd_info *master)
-	{
-		return del_mtd_device(master);
-	}
-#endif
-#endif
-
 #ifndef for_each_set_bit
 	#define for_each_set_bit(bit, addr, size)			\
 		for ((bit) = find_first_bit((addr), (size));		\
@@ -1182,17 +1123,6 @@ static inline struct tcphdr *inner_tcp_hdr(const struct sk_buff *skb)
 #define rtnl_link_stats64	net_device_stats
 #endif
 
-#ifdef EFX_NEED_MOD_DELAYED_WORK
-static inline bool mod_delayed_work(struct workqueue_struct *wq,
-				    struct delayed_work *dwork,
-				    unsigned long delay)
-{
-	cancel_delayed_work(dwork);
-	queue_delayed_work(wq, dwork, delay);
-	return true;
-}
-#endif
-
 #ifdef EFX_NEED_PCI_AER_CLEAR_NONFATAL_STATUS
 static inline int pci_aer_clear_nonfatal_status(struct pci_dev *dev)
 {
@@ -1327,18 +1257,6 @@ static inline void debugfs_lookup_and_remove(const char *name,
  *
  */
 
-#if defined(EFX_NEED_SAVE_MSIX_MESSAGES)
-
-	#include <linux/msi.h>
-
-	int efx_pci_save_state(struct pci_dev *dev);
-	#define pci_save_state efx_pci_save_state
-
-	void efx_pci_restore_state(struct pci_dev *dev);
-	#define pci_restore_state efx_pci_restore_state
-
-#endif
-
 #if !defined(topology_sibling_cpumask) && defined(topology_thread_cpumask)
 	#define topology_sibling_cpumask topology_thread_cpumask
 #endif
@@ -1362,41 +1280,15 @@ unsigned int cpumask_local_spread(unsigned int i, int node);
  *
  */
 
-#ifdef EFX_NEED_WQ_SYSFS
-	#define WQ_SYSFS	0
-#endif
 #ifndef WQ_MEM_RECLAIM
 	#define WQ_MEM_RECLAIM	0
-#endif
-
-#ifdef EFX_HAVE_ALLOC_WORKQUEUE
-#ifndef EFX_HAVE_NEW_ALLOC_WORKQUEUE
-	#define efx_alloc_workqueue(_fmt, _flags, _max, _name)	\
-		alloc_workqueue(_name, _flags, _max)
-#else
-	#define efx_alloc_workqueue(_fmt, _flags, _max, _name)	\
-		alloc_workqueue(_fmt, _flags, _max, _name)
-#endif
-#else
-	#define efx_alloc_workqueue(_fmt, _flags, _max, _name)	\
-		create_singlethread_workqueue(_name)
 #endif
 
 #if defined(EFX_USE_GRO) && defined(EFX_HAVE_NAPI_GRO_RECEIVE_GR)
 	/* Redhat backports of functions returning gro_result_t */
 	#define napi_gro_frags napi_gro_frags_gr
 	#define napi_gro_receive napi_gro_receive_gr
-#elif defined(EFX_USE_GRO) && defined(EFX_NEED_GRO_RESULT_T)
-	typedef int gro_result_t;
 
-	#define napi_gro_frags(_napi)				\
-		({ napi_gro_frags(_napi);			\
-		   GRO_MERGED; })
-	#define napi_gro_receive(_napi, _skb)			\
-		({ napi_gro_receive(_napi, _skb);		\
-		   GRO_MERGED; })
-#endif
-#if defined(EFX_USE_GRO) && (defined(EFX_HAVE_NAPI_GRO_RECEIVE_GR) || defined(EFX_NEED_GRO_RESULT_T))
 	/* vlan_gro_{frags,receive} won't return gro_result_t in
 	 * either of the above cases.
 	 */
@@ -1784,39 +1676,6 @@ static inline bool __must_check IS_ERR_OR_NULL(__force const void *ptr)
 #define cpu_to_mem(cpu) cpu_to_node(cpu)
 #endif
 
-/* As in include/linux/kconfig.h */
-#ifndef __take_second_arg
-#define __take_second_arg(__ignored, val, ...) val
-#endif
-#ifndef __and
-#define __ARG_PLACEHOLDER_1 0,
-
-#define __and(x, y)			___and(x, y)
-#define ___and(x, y)			____and(__ARG_PLACEHOLDER_##x, y)
-#define ____and(arg1_or_junk, y)	__take_second_arg(arg1_or_junk y, 0)
-
-#define __or(x, y)			___or(x, y)
-#define ___or(x, y)			____or(__ARG_PLACEHOLDER_##x, y)
-#define ____or(arg1_or_junk, y)		__take_second_arg(arg1_or_junk 1, y)
-#endif
-
-#if !defined(IS_ENABLED) || LINUX_VERSION_CODE < KERNEL_VERSION(3,4,0)
-#undef IS_ENABLED
-#undef IS_BUILTIN
-#undef IS_MODULE
-#undef IS_REACHABLE
-
-#define __is_defined(x)			___is_defined(x)
-#define ___is_defined(val)		____is_defined(__ARG_PLACEHOLDER_##val)
-#define ____is_defined(arg1_or_junk)	__take_second_arg(arg1_or_junk 1, 0)
-
-#define IS_BUILTIN(option) __is_defined(option)
-#define IS_MODULE(option) __is_defined(option##_MODULE)
-#define IS_REACHABLE(option) __or(IS_BUILTIN(option), \
-				__and(IS_MODULE(option), __is_defined(MODULE)))
-#define IS_ENABLED(option) __or(IS_BUILTIN(option), IS_MODULE(option))
-#endif
-
 #ifndef EFX_HAVE_NETIF_XMIT_STOPPED
 #define netif_xmit_stopped netif_tx_queue_stopped
 #endif
@@ -2098,13 +1957,6 @@ static inline int efx_dev_open(struct net_device *netdev,
 
 #ifdef EFX_NEED_CONSUME_SKB_ANY
 #define dev_consume_skb_any(skb) dev_kfree_skb_any(skb)
-#endif
-
-#ifdef EFX_NEED_SKB_CHECKSUM_START_OFFSET
-static inline int skb_checksum_start_offset(const struct sk_buff *skb)
-{
-	return skb->csum_start - skb_headroom(skb);
-}
 #endif
 
 #ifdef EFX_NEED_CSUM16_SUB

@@ -916,18 +916,6 @@ static void efx_unregister_netdev(struct efx_nic *efx)
 	if (WARN_ON(efx_netdev_priv(efx->net_dev) != efx))
 		return;
 
-#if defined(EFX_NOT_UPSTREAM)
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,18)
-	/* bug11519: This has only been seen on fc4, but the bug has never
-	 * been fully understood - so this workaround is applied to a range
-	 * of kernels. The issue is that if dev_close() is run too close
-	 * to a driver unload, then netlink can allow userspace to leak a
-	 * reference count. Sleeping here for a bit lowers the probability
-	 * of seeing this failure. */
-	schedule_timeout_uninterruptible(HZ * 2);
-
-#endif
-#endif
 	if (efx_dev_registered(efx)) {
 		strscpy(efx->name, pci_name(efx->pci_dev), sizeof(efx->name));
 		efx_fini_devlink(efx);
@@ -1367,14 +1355,6 @@ static int efx_pci_probe(struct pci_dev *pci_dev,
 	rc = efx_mtd_probe(efx);
 	rtnl_unlock();
 #endif
-#endif
-
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_MTD_TABLE)
-	if (rc == -EBUSY)
-		netif_warn(efx, probe, efx->net_dev,
-			   "kernel MTD table is full; flash will not be "
-			   "accessible\n");
-	else
 #endif
 	if (rc && rc != -EPERM)
 		netif_warn(efx, probe, efx->net_dev,

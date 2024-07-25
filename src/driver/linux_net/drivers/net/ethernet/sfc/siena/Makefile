@@ -75,7 +75,7 @@ ifndef EFX_NO_KCOMPAT
 ifneq ($(MAKECMDGOALS),export)
 sfc-siena-y += kernel_compat.o
 ifndef EFX_FOR_UPSTREAM
-sfc-siena-y += ioctl.o ioctl_common.o linux_mdio.o sfctool.o
+sfc-siena-y += ioctl.o ioctl_common.o sfctool.o
 CFLAGS_efx.o = -DEFX_USE_PRIVATE_IOCTL
 endif
 endif
@@ -98,7 +98,7 @@ include $(TOPDIR)/scripts/Makefile.common
 
 # Generate config.h
 define filechk_config.h
-	printf "$(foreach name,SFC_DEBUGFS SFC_DUMP SFC_MCDI_MON SFC_MTD SFC_SIENA SFC_SRIOV SFC_PTP SFC_PRIVATE_MDIO SFC_PPS SFC_TRACING SFC_MCDI_LOGGING SFC_BUSYPOLL,#undef CONFIG_$(name)\n$(if $(filter y m,$(CONFIG_$(name))),#define CONFIG_$(name) $(CONFIG_$(name))\n))"
+	printf "$(foreach name,SFC_DEBUGFS SFC_DUMP SFC_MCDI_MON SFC_MTD SFC_SIENA SFC_SRIOV SFC_PTP SFC_PPS SFC_TRACING SFC_MCDI_LOGGING SFC_BUSYPOLL,#undef CONFIG_$(name)\n$(if $(filter y m,$(CONFIG_$(name))),#define CONFIG_$(name) $(CONFIG_$(name))\n))"
 endef
 
 $(obj)/config.h: $(src)/Makefile FORCE

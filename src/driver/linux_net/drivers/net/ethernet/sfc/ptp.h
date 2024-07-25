@@ -12,7 +12,7 @@
 #include <linux/net_tstamp.h>
 #include "net_driver.h"
 
-struct ethtool_ts_info;
+struct kernel_ethtool_ts_info;
 #ifdef CONFIG_SFC_PTP
 #if defined(EFX_NOT_UPSTREAM)
 struct efx_ts_settime;
@@ -42,7 +42,8 @@ int efx_ptp_get_ts_config(struct efx_nic *efx,
 int efx_ptp_set_ts_config(struct efx_nic *efx, struct ifreq *ifr);
 int efx_ptp_get_ts_config(struct efx_nic *efx, struct ifreq *ifr);
 #endif
-void efx_ptp_get_ts_info(struct efx_nic *efx, struct ethtool_ts_info *ts_info);
+void efx_ptp_get_ts_info(struct efx_nic *efx,
+			 struct kernel_ethtool_ts_info *ts_info);
 int efx_ptp_get_attributes(struct efx_nic *efx);
 bool efx_ptp_uses_separate_channel(struct efx_nic *efx);
 bool efx_ptp_is_ptp_tx(struct efx_nic *efx, struct sk_buff *skb);
@@ -82,11 +83,22 @@ static inline struct efx_channel *efx_ptp_channel(struct efx_nic *efx)
 	return NULL;
 }
 static inline void efx_ptp_remove(struct efx_nic *efx) {}
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_HWTSTAMP_GET)
+static inline int efx_ptp_set_ts_config(struct efx_nic *efx,
+					struct kernel_hwtstamp_config *config,
+					struct netlink_ext_ack *extack)
+#else
 static inline int efx_ptp_set_ts_config(struct efx_nic *efx, struct ifreq *ifr)
+#endif
 {
 	return -EOPNOTSUPP;
 }
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_HWTSTAMP_GET)
+static inline int efx_ptp_get_ts_config(struct efx_nic *efx,
+					struct kernel_hwtstamp_config *config)
+#else
 static inline int efx_ptp_get_ts_config(struct efx_nic *efx, struct ifreq *ifr)
+#endif
 {
 	return -EOPNOTSUPP;
 }

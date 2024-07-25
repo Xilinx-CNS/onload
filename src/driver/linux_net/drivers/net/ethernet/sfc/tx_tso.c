@@ -17,14 +17,7 @@
 #include <net/ipv6.h>
 #include <net/tcp.h>
 #include <linux/if_ether.h>
-#if !defined(EFX_USE_KCOMPAT)
 #include <linux/highmem.h>
-#else
-#include <linux/version.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
-#include <linux/highmem.h>
-#endif
-#endif
 #include <linux/moduleparam.h>
 #include <linux/cache.h>
 #include "net_driver.h"

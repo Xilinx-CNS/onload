@@ -148,13 +148,6 @@ static int efx_ethtool_set_flags(struct net_device *net_dev, u32 data)
 
 #endif /* EFX_HAVE_NDO_SET_FEATURES && EFX_HAVE_EXT_NDO_SET_FEATURES */
 
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_ETHTOOL_OP_GET_LINK)
-static u32 efx_ethtool_get_link(struct net_device *net_dev)
-{
-	return netif_running(net_dev) && netif_carrier_ok(net_dev);
-}
-#endif
-
 /*
  * Each channel has a single IRQ and moderation timer, started by any
  * completion (or other event).  Unless the module parameter
@@ -421,15 +414,13 @@ int efx_ethtool_set_dump(struct net_device *net_dev, struct ethtool_dump *val)
 static
 #endif
 int efx_ethtool_get_ts_info(struct net_device *net_dev,
-			    struct ethtool_ts_info *ts_info)
+			    struct kernel_ethtool_ts_info *ts_info)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	/* Software capabilities */
 	ts_info->so_timestamping = (SOF_TIMESTAMPING_RX_SOFTWARE |
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB_TX_TIMESTAMP)
 				    SOF_TIMESTAMPING_TX_SOFTWARE |
-#endif
 				    SOF_TIMESTAMPING_SOFTWARE);
 	ts_info->phc_index = -1;
 
@@ -489,11 +480,7 @@ const struct ethtool_ops efx_ethtool_ops = {
 	.get_msglevel		= efx_ethtool_get_msglevel,
 	.set_msglevel		= efx_ethtool_set_msglevel,
 	.nway_reset		= efx_ethtool_nway_reset,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_ETHTOOL_OP_GET_LINK)
 	.get_link		= ethtool_op_get_link,
-#else
-	.get_link		= efx_ethtool_get_link,
-#endif
 	.get_coalesce		= efx_ethtool_get_coalesce,
 	.set_coalesce		= efx_ethtool_set_coalesce,
 	.get_ringparam		= efx_ethtool_get_ringparam,

@@ -51,6 +51,7 @@
 #include "mcdi_pcol.h"
 #include "io.h"
 #include "nic.h"
+#include "rx_common.h"
 #include "debugfs.h"
 #ifdef EFX_USE_KCOMPAT
 #include "efx_ioctl.h"
@@ -2860,15 +2861,9 @@ static int efx_create_pps_worker(struct efx_ptp_data *ptp)
 		 ptp->efx->pci_dev->devfn);
 
 	INIT_WORK(&ptp->pps_work, efx_ptp_pps_worker);
-#if defined(EFX_NOT_UPSTREAM)
-	ptp->pps_workwq = efx_alloc_workqueue("sfc_pps_%s", WQ_UNBOUND |
-					      WQ_MEM_RECLAIM | WQ_SYSFS, 1,
-					      busdevice);
-#else
 	ptp->pps_workwq = alloc_workqueue("sfc_pps_%s", WQ_UNBOUND |
 					  WQ_MEM_RECLAIM | WQ_SYSFS, 1,
 					  busdevice);
-#endif
 	if (!ptp->pps_workwq)
 		return -ENOMEM;
 	return 0;
@@ -3126,15 +3121,17 @@ int efx_ptp_probe(struct efx_nic *efx, struct efx_channel *channel)
 
 /* Initialise PTP channel.
  *
- * Setting core_index to zero causes the queue to be initialised and doesn't
- * overlap with 'rxq0' because ptp.c doesn't use skb_record_rx_queue.
+ * This is a specific version of efx_set_channel_rx().
  */
 static int efx_ptp_probe_channel(struct efx_channel *channel)
 {
+	struct efx_rx_queue *rx_queue = &channel->rx_queue;
 	struct efx_nic *efx = channel->efx;
 
 	channel->irq_moderation_us = 0;
-	channel->rx_queue.core_index = 0;
+	rx_queue->core_index = channel->channel;
+	rx_queue->queue = efx_rx_queue_id_internal(efx, channel->channel);
+	rx_queue->label = channel->channel;
 
 	return efx_ptp_probe(efx, channel);
 }
@@ -3403,7 +3400,8 @@ static int efx_ptp_ts_init(struct efx_nic *efx,
 	return 0;
 }
 
-void efx_ptp_get_ts_info(struct efx_nic *efx, struct ethtool_ts_info *ts_info)
+void efx_ptp_get_ts_info(struct efx_nic *efx,
+			 struct kernel_ethtool_ts_info *ts_info)
 {
 	struct efx_ptp_data *phc_ptp = efx->phc_ptp_data;
 	struct efx_ptp_data *ptp = efx->ptp_data;

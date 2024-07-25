@@ -278,6 +278,7 @@ static void efx_tc_debugfs_dump_one_rule(struct seq_file *file,
 		if (act->encap_md) {
 			enum efx_encap_type type = act->encap_md->type & EFX_ENCAP_TYPES_MASK;
 			bool v6 = act->encap_md->type & EFX_ENCAP_FLAG_IPV6;
+			__be16 tun_flags;
 			char errbuf[16];
 
 			seq_printf(file, "\t\t\tencap (%#x)\n", act->encap_md->fw_id);
@@ -299,8 +300,13 @@ static void efx_tc_debugfs_dump_one_rule(struct seq_file *file,
 				seq_printf(file, "\t\t\t\t\tdst = %pI4\n",
 					   &act->encap_md->key.u.ipv4.dst);
 			}
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_IP_TUNNEL_FLAGS_TO_BE16)
+			tun_flags = ip_tunnel_flags_to_be16(act->encap_md->key.tun_flags);
+#else
+			tun_flags = act->encap_md->key.tun_flags;
+#endif
 			seq_printf(file, "\t\t\t\t\ttun_flags = %#x\n",
-				   be16_to_cpu(act->encap_md->key.tun_flags));
+				   be16_to_cpu(tun_flags));
 			seq_printf(file, "\t\t\t\t\ttos = %#x\n",
 				   act->encap_md->key.tos);
 			seq_printf(file, "\t\t\t\t\tttl = %u\n",
