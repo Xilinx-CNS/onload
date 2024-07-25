@@ -33,12 +33,18 @@ enum efx_auxdev_event_type {
 				 BIT(EFX_AUXDEV_EVENT_LINK_CHANGE) | \
 				 BIT(EFX_AUXDEV_EVENT_POLL))
 
+/* Current state for an EFX_EVENT_IN_RESET event. */
+#define EFX_NOT_IN_RESET	0
+#define EFX_IN_RESET		1
+#define EFX_HARDWARE_DISABLED	2
+
 /**
  * struct efx_auxdev_event - One event for an auxiliary bus driver.
  *
  * @type: Event type as defined in enum efx_event_type.
  * @value: Event specific value. For %EFX_EVENT_IN_RESET this is 1 when the
- *	hardware is resetting, and 0 during normal operation.
+ *	hardware is resetting, and 0 during normal operation. The value 2
+ *	indicates the hardware can not be recovered and has been disabled.
  *	For %EFX_EVENT_LINK_CHANGE this is 1 when the physical link is up,
  *	and 0 when the physical link is down.
  *	For %EFX_EVENT_POLL this is the channel number for which events need

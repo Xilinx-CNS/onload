@@ -18,35 +18,18 @@ me=$(basename "$0")
 
 function generate_kompat_symbols() {
     echo "
-EFX_HAVE_MTD_TABLE			kver	<	2.6.35
-EFX_HAVE_VMALLOC_REG_DUMP_BUF		kver	>=	2.6.37
-EFX_USE_ETHTOOL_OP_GET_LINK		kver	>=	2.6.38
 EFX_WANT_NDO_POLL_CONTROLLER		kver	<	4.19
 EFX_HAVE_GRO				custom
-EFX_NEED_GRO_RESULT_T			nsymbol	gro_result_t		include/linux/netdevice.h
 EFX_HAVE_NAPI_GRO_RECEIVE_GR		symbol	napi_gro_receive_gr	include/linux/netdevice.h
 EFX_HAVE_NET_GRO_H			file				include/net/gro.h
-EFX_NEED_VZALLOC			nsymbol	vzalloc			include/linux/vmalloc.h
-EFX_NEED_MTD_DEVICE_REGISTER		nsymbol	mtd_device_register	include/linux/mtd/mtd.h
-EFX_HAVE_MTD_DIRECT_ACCESS              custom
-EFX_NEED_NETIF_SET_REAL_NUM_TX_QUEUES	nsymbol	netif_set_real_num_tx_queues include/linux/netdevice.h
-EFX_NEED_NETIF_SET_REAL_NUM_RX_QUEUES	nsymbol	netif_set_real_num_rx_queues include/linux/netdevice.h
-EFX_HAVE_ROUND_JIFFIES_UP		symbol	round_jiffies_up	include/linux/timer.h
-EFX_NEED_SKB_CHECKSUM_START_OFFSET	nsymbol	skb_checksum_start_offset	include/linux/skbuff.h
 EFX_HAVE_CSUM_LEVEL			symbol	csum_level		include/linux/skbuff.h
-EFX_HAVE_SKBTX_HW_TSTAMP		symbol	SKBTX_HW_TSTAMP		include/linux/skbuff.h
 EFX_HAVE_SKB_SYSTSTAMP			member	struct_skb_shared_hwtstamps	syststamp	include/linux/skbuff.h
-EFX_HAVE_SKB_TX_TIMESTAMP		symbol	skb_tx_timestamp	include/linux/skbuff.h
 EFX_HAVE_HWTSTAMP_FLAGS         symbol	hwtstamp_flags		include/uapi/linux/net_tstamp.h
 EFX_HAVE_KERNEL_HWTSTAMP_CONFIG         symbol kernel_hwtstamp_config include/linux/net_tstamp.h
 EFX_HAVE_KERNEL_HWTSTAMP_CONFIG_IFR     member struct_kernel_hwtstamp_config ifr include/linux/net_tstamp.h
 EFX_HAVE_NDO_HWTSTAMP_GET               member  struct_net_device_ops ndo_hwtstamp_get include/linux/netdevice.h
 EFX_HAVE_HWTSTAMP_CONFIG_TO_KERNEL      symbol hwtstamp_config_to_kernel    include/linux/net_tstamp.h
 EFX_HAVE_HWTSTAMP_CONFIG_FROM_KERNEL    symbol hwtstamp_config_from_kernel  include/linux/net_tstamp.h
-EFX_NEED_WQ_SYSFS			nsymbol	WQ_SYSFS		include/linux/workqueue.h
-EFX_HAVE_ALLOC_WORKQUEUE		symbol	alloc_workqueue		include/linux/workqueue.h
-EFX_HAVE_NEW_ALLOC_WORKQUEUE		custom
-EFX_NEED_MOD_DELAYED_WORK		nsymbol	mod_delayed_work	include/linux/workqueue.h
 EFX_USE_ETHTOOL_FLAGS			symbol	get_flags		include/linux/ethtool.h
 EFX_USE_ETHTOOL_LP_ADVERTISING		symbol	lp_advertising		include/linux/ethtool.h
 EFX_USE_ETHTOOL_MDIO_SUPPORT		symbol	mdio_support		include/linux/ethtool.h
@@ -155,6 +138,7 @@ EFX_HAVE_ETHTOOL_GET_DUMP_DATA		member	struct_ethtool_ops get_dump_data	include/
 EFX_HAVE_ETHTOOL_SET_DUMP		member	struct_ethtool_ops set_dump	include/linux/ethtool.h
 EFX_HAVE_ETHTOOL_GET_TS_INFO		member	struct_ethtool_ops get_ts_info	include/linux/ethtool.h
 EFX_HAVE_ETHTOOL_EXT_GET_TS_INFO	member	struct_ethtool_ops_ext get_ts_info	include/linux/ethtool.h
+EFX_NEED_KERNEL_ETHTOOL_TS_INFO		nsymbol	struct_kernel_ethtool_ts_info	include/linux/ethtool.h
 EFX_HAVE_OLD___VLAN_PUT_TAG		symtype	__vlan_put_tag		include/linux/if_vlan.h	struct sk_buff *(struct sk_buff *, u16)
 EFX_HAVE_VLAN_INSERT_TAG_SET_PROTO	symbol vlan_insert_tag_set_proto	include/linux/if_vlan.h
 EFX_NEED_NETDEV_NOTIFIER_INFO_TO_DEV	nsymbol	netdev_notifier_info_to_dev	include/linux/netdevice.h
@@ -401,22 +385,12 @@ EFX_NEED_DEBUGFS_LOOKUP_AND_REMOVE	nsymbol	debugfs_lookup_and_remove	include/lin
 EFX_HAVE_XARRAY				symbol	xa_limit		include/linux/xarray.h
 EFX_HAVE_AUXILIARY_BUS			file	include/linux/auxiliary_bus.h
 EFX_HAVE_NET_RPS_H                     file       include/net/rps.h
+EFX_HAVE_IP_TUNNEL_FLAGS_TO_BE16	symbol	ip_tunnel_flags_to_be16	include/net/ip_tunnels.h
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
 
 ######################################################################
 # Implementation for more tricky types
-
-function do_EFX_HAVE_MTD_DIRECT_ACCESS()
-{
-    # RHEL 4 is missing <mtd/mtd-abi.h>; assume old operation names
-    # in this case
-    # kernels post 3.5 changed to use _<operator> for function pointers
-    # kernels post 3.7 changed the location of mtd-abi.h to uapi/..
-    (! test -f $KBUILD_SRC/include/mtd/mtd-abi.h && \
-    ! test -f $KBUILD_SRC/include/uapi/mtd/mtd-abi.h ) || \
-	 defer_test_memtype pos struct_mtd_info erase include/linux/mtd/mtd.h void
-}
 
 function do_EFX_USE_NETDEV_STATS()
 {
@@ -532,20 +506,6 @@ void f(void)
 	t.tv64 = 0;
 }
 "
-}
-
-function do_EFX_HAVE_NEW_ALLOC_WORKQUEUE
-{
-    # The old macro only accepts 3 arguments.
-    defer_test_compile pos '
-#include <linux/workqueue.h>
-
-void f(void);
-void f(void)
-{
-	alloc_workqueue("%s", 0, 0, "test");
-}
-'
 }
 
 function do_EFX_HAVE_TC_ACTION_COOKIE

@@ -179,3 +179,30 @@ int efx_client_init(struct efx_probe_data *pd)
 	return 0;
 }
 #endif	/* EFX_HAVE_XARRAY */
+
+void efx_client_detach(struct efx_probe_data *pd)
+{
+	struct efx_auxdev_event ev = {};
+
+	/* Notify clients of an imminent reset. */
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
+	efx_dl_reset_suspend(&pd->efx.dl_nic);
+#endif
+
+	ev.type = EFX_AUXDEV_EVENT_IN_RESET;
+	ev.value = EFX_IN_RESET;
+	efx_auxbus_send_events(pd, &ev);
+}
+
+void efx_client_attach(struct efx_probe_data *pd, bool ok)
+{
+	struct efx_auxdev_event ev = {};
+
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
+	efx_dl_reset_resume(&pd->efx.dl_nic, ok);
+#endif
+
+	ev.type = EFX_AUXDEV_EVENT_IN_RESET;
+	ev.value = ok ? EFX_NOT_IN_RESET : EFX_HARDWARE_DISABLED;
+	efx_auxbus_send_events(pd, &ev);
+}

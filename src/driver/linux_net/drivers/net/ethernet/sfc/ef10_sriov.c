@@ -619,10 +619,8 @@ static int efx_ef10_sriov_close(struct efx_nic *efx)
 {
 	efx_device_detach_sync(efx);
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	if (efx->state == STATE_NET_UP)
-		efx_dl_reset_suspend(&efx->dl_nic);
-#endif
+		efx_client_detach(efx_nic_to_probe_data(efx));
 #endif
 	efx_net_stop(efx->net_dev);
 
@@ -638,9 +636,8 @@ static int efx_ef10_sriov_reopen(struct efx_nic *efx)
 
 	rc = efx_net_open(efx->net_dev);
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
-	efx_dl_reset_resume(&efx->dl_nic, !rc && efx->state != STATE_DISABLED);
-#endif
+	efx_client_attach(efx_nic_to_probe_data(efx),
+			  !rc && efx->state != STATE_DISABLED);
 #endif
 	return rc;
 }

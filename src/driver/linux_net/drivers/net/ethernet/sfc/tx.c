@@ -16,14 +16,7 @@
 #include <linux/slab.h>
 #include <net/ipv6.h>
 #include <linux/if_ether.h>
-#if !defined(EFX_USE_KCOMPAT)
 #include <linux/highmem.h>
-#else
-#include <linux/version.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,20)
-#include <linux/highmem.h>
-#endif
-#endif
 #include <linux/moduleparam.h>
 #include <linux/cache.h>
 #include "net_driver.h"
@@ -366,13 +359,6 @@ static int efx_enqueue_skb_pio(struct efx_tx_queue *tx_queue,
 	 * of a cache line, as this is required for write-combining to be
 	 * effective on at least x86.
 	 */
-#ifdef EFX_USE_KCOMPAT
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,4,0) && defined(CONFIG_SLOB)
-	#error "This function doesn't work with SLOB and Linux < 3.4"
-	/* SLOB is for tiny embedded systems; you probably want SLAB */
-#endif
-#endif
-
 	if (skb_shinfo(skb)->nr_frags) {
 		/* The size of the copy buffer will ensure all writes
 		 * are the size of a cache line.
@@ -532,9 +518,7 @@ int __efx_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb)
 			goto err;
 	}
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB_TX_TIMESTAMP)
 	skb_tx_timestamp(skb);
-#endif
 
 	efx_tx_maybe_stop_queue(tx_queue);
 

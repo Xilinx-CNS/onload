@@ -931,11 +931,6 @@ void efx_reset_down(struct efx_nic *efx, enum reset_type method)
 {
 	EFX_ASSERT_RESET_SERIALISED(efx);
 
-#ifdef EFX_NOT_UPSTREAM
-	/* Inform other drivers this device is gone. */
-	efx_send_event(efx, EFX_AUXDEV_EVENT_IN_RESET, 1);
-
-#endif
 	if (method == RESET_TYPE_MCDI_TIMEOUT)
 		efx->type->prepare_flr(efx);
 
@@ -1064,11 +1059,6 @@ int efx_reset_up(struct efx_nic *efx, enum reset_type method, bool ok)
 		if (efx->type->pps_reset(efx))
 			netif_warn(efx, drv, efx->net_dev, "failed to reset PPS");
 #endif
-#ifdef EFX_NOT_UPSTREAM
-	/* Inform other drivers this device is back. */
-	efx_send_event(efx, EFX_AUXDEV_EVENT_IN_RESET, 0);
-
-#endif
 	return 0;
 
 fail:
@@ -1144,14 +1134,9 @@ int efx_reset(struct efx_nic *efx, enum reset_type method)
 	bool link_up = efx->link_state.up;
 
 	ASSERT_RTNL();
-
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
-	/* Notify driverlink clients of imminent reset then serialise
-	 * against other driver operations
-	 */
-	efx_dl_reset_suspend(&efx->dl_nic);
-#endif
+	/* Inform other drivers this device is gone. */
+	efx_client_detach(efx_nic_to_probe_data(efx));
 #endif
 
 	netif_info(efx, drv, efx->net_dev, "resetting (%s)\n",
@@ -1212,11 +1197,9 @@ int efx_reset(struct efx_nic *efx, enum reset_type method)
 	}
 
 #ifdef EFX_NOT_UPSTREAM
+	efx_client_attach(efx_nic_to_probe_data(efx), disabled);
 	if (disabled)
 		efx_client_fini(efx_nic_to_probe_data(efx));
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
-	efx_dl_reset_resume(&efx->dl_nic, !disabled);
-#endif
 
 #endif
 	return rc;

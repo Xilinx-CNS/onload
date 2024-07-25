@@ -118,7 +118,6 @@ struct efx_client *efx_client_add(struct efx_probe_data *pd,
  * @client: The client to remove.
  */
 void efx_client_del(struct efx_client *client);
-
 #else	/* EFX_HAVE_XARRAY */
 /* No support is needed for this on old kernels. */
 static inline int efx_client_init(struct efx_probe_data *pd)
@@ -144,5 +143,8 @@ static inline void efx_client_del(struct efx_client *client)
 {
 }
 #endif	/* EFX_HAVE_XARRAY */
+
+void efx_client_detach(struct efx_probe_data *pd);
+void efx_client_attach(struct efx_probe_data *pd, bool ok);
 
 #endif	/* EFX_CLIENT_H */

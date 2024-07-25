@@ -838,15 +838,11 @@ int efx_selftest(struct efx_nic *efx, struct efx_self_tests *tests,
 
 	if (efx->type->test_chip) {
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
-		efx_dl_reset_suspend(&efx->dl_nic);
-#endif
+		efx_client_detach(efx_nic_to_probe_data(efx));
 #endif
 		rc_reset = efx->type->test_chip(efx, tests);
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
-		efx_dl_reset_resume(&efx->dl_nic, rc_reset == 0);
-#endif
+		efx_client_attach(efx_nic_to_probe_data(efx), rc_reset == 0);
 #endif
 
 		if (rc_reset) {

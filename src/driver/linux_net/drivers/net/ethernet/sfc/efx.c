@@ -912,18 +912,6 @@ static void efx_unregister_netdev(struct efx_nic *efx)
 	if (WARN_ON(efx_netdev_priv(efx->net_dev) != efx))
 		return;
 
-#if defined(EFX_NOT_UPSTREAM)
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,18)
-	/* bug11519: This has only been seen on fc4, but the bug has never
-	 * been fully understood - so this workaround is applied to a range
-	 * of kernels. The issue is that if dev_close() is run too close
-	 * to a driver unload, then netlink can allow userspace to leak a
-	 * reference count. Sleeping here for a bit lowers the probability
-	 * of seeing this failure. */
-	schedule_timeout_uninterruptible(HZ * 2);
-
-#endif
-#endif
 	if (efx_dev_registered(efx)) {
 		strscpy(efx->name, pci_name(efx->pci_dev), sizeof(efx->name));
 		efx_fini_devlink(efx);
@@ -1384,14 +1372,6 @@ static int efx_pci_probe(struct pci_dev *pci_dev,
 	rtnl_unlock();
 #endif
 #endif
-
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_MTD_TABLE)
-	if (rc == -EBUSY)
-		netif_warn(efx, probe, efx->net_dev,
-			   "kernel MTD table is full; flash will not be "
-			   "accessible\n");
-	else
-#endif
 	if (rc && rc != -EPERM)
 		netif_warn(efx, probe, efx->net_dev,
 			   "failed to create MTDs (%d)\n", rc);
@@ -1450,11 +1430,8 @@ static int efx_pm_freeze(struct device *dev)
 	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
 
 	rtnl_lock();
-
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
-	efx_dl_reset_suspend(&efx->dl_nic);
-#endif
+	efx_client_detach(efx_nic_to_probe_data(efx));
 #endif
 
 	if (efx->state == STATE_NET_UP) {
@@ -1516,11 +1493,9 @@ static int efx_pm_thaw(struct device *dev)
 	}
 
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
-	efx_dl_reset_resume(&efx->dl_nic, efx->state != STATE_DISABLED);
+	efx_client_attach(efx_nic_to_probe_data(efx),
+			  efx->state != STATE_DISABLED);
 #endif
-#endif
-
 	rtnl_unlock();
 
 	/* Reschedule any quenched resets scheduled during efx_pm_freeze() */
@@ -1530,11 +1505,8 @@ static int efx_pm_thaw(struct device *dev)
 
 fail:
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
-	efx_dl_reset_resume(&efx->dl_nic, false);
+	efx_client_attach(efx_nic_to_probe_data(efx), false);
 #endif
-#endif
-
 	rtnl_unlock();
 
 	return rc;
@@ -1582,9 +1554,7 @@ static int efx_pm_resume(struct device *dev)
 
 fail:
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
-	efx_dl_reset_resume(&efx->dl_nic, false);
-#endif
+	efx_client_attach(efx_nic_to_probe_data(efx), false);
 #endif
 	return rc;
 }

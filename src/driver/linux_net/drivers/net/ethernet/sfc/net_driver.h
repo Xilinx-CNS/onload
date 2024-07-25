@@ -99,7 +99,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.0.0.1004"
+#define EFX_DRIVER_VERSION	"6.0.0.1005"
 #endif
 
 #ifdef DEBUG
@@ -910,10 +910,6 @@ struct efx_channel {
 
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *debug_dir;
-#endif
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_NEED_SAVE_MSIX_MESSAGES)
-	/** @msix_msg: saved message data from MSI-X table */
-	struct msi_msg msix_msg;
 #endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB__LIST)
@@ -1980,7 +1976,10 @@ static inline unsigned int efx_tx_channels(struct efx_nic *efx)
 
 static inline unsigned int efx_extra_channel_offset(struct efx_nic *efx)
 {
-	return efx->n_combined_channels;
+	if (efx->n_rx_only_channels && efx->n_tx_only_channels)
+		return efx->n_rx_only_channels + efx->n_tx_only_channels;
+	else
+		return efx->n_combined_channels;
 }
 
 static inline unsigned int efx_xdp_channel_offset(struct efx_nic *efx)
@@ -2730,7 +2729,6 @@ static inline size_t efx_rx_buffer_step(struct efx_nic *efx)
 		     efx->rx_dma_len + efx->rx_ip_align, EFX_RX_BUF_ALIGNMENT);
 }
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKBTX_HW_TSTAMP)
 static inline bool efx_xmit_with_hwtstamp(struct sk_buff *skb)
 {
 	return skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP;
@@ -2739,40 +2737,6 @@ static inline void efx_xmit_hwtstamp_pending(struct sk_buff *skb)
 {
 	skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
 }
-#elif defined(CONFIG_SFC_PTP) && !defined(EFX_HAVE_SKBTX_HW_TSTAMP)
-static inline bool efx_xmit_with_hwtstamp(struct sk_buff *skb)
-{
-	return skb_shinfo(skb)->tx_flags.hardware;
-}
-static inline void efx_xmit_hwtstamp_pending(struct sk_buff *skb)
-{
-	skb_shinfo(skb)->tx_flags.in_progress = 1;
-}
-#elif defined(CONFIG_SFC_PTP)
-/* No kernel timestamping: must examine the sk_buff */
-static inline bool efx_xmit_with_hwtstamp(struct sk_buff *skb)
-{
-	return (likely(skb->protocol == htons(ETH_P_IP)) &&
-		skb_transport_header_was_set(skb) &&
-		skb_network_header_len(skb) >= sizeof(struct iphdr) &&
-		ip_hdr(skb)->protocol == IPPROTO_UDP &&
-		skb_headlen(skb) >=
-		skb_transport_offset(skb) + sizeof(struct udphdr) &&
-		unlikely(udp_hdr(skb)->dest == htons(319) ||
-			 udp_hdr(skb)->dest == htons(320)));
-}
-static inline void efx_xmit_hwtstamp_pending(struct sk_buff *skb)
-{
-}
-#else
-static inline bool efx_xmit_with_hwtstamp(struct sk_buff *skb)
-{
-	return false;
-}
-static inline void efx_xmit_hwtstamp_pending(struct sk_buff *skb)
-{
-}
-#endif
 
 #ifdef EFX_NOT_UPSTREAM
 static inline int efx_skb_encapsulation(const struct sk_buff *skb)

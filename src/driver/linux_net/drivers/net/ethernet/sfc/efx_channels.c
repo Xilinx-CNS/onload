@@ -456,11 +456,16 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 		return -ENOSPC;
 	}
 
+	efx->n_extra_channels = 0;
 	for (extra_channel_type = 0;
-	     extra_channel_type < EFX_MAX_EXTRA_CHANNELS &&
-	     !separate_tx_channels && n_channels < max_channels;
+	     extra_channel_type < EFX_MAX_EXTRA_CHANNELS;
 	     extra_channel_type++)
-		n_channels += !!efx->extra_channel_type[extra_channel_type];
+		if (n_channels > 1 && n_channels < max_channels &&
+		    efx->n_extra_channels + 1 < efx->max_tx_channels &&
+		    efx->extra_channel_type[extra_channel_type])
+			efx->n_extra_channels++;
+
+	n_channels += efx->n_extra_channels;
 
 	efx_allocate_xdp_channels(efx, max_channels, n_channels);
 	n_channels += efx->n_xdp_channels;
@@ -487,11 +492,11 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 		n_channels = vec_count;
 	}
 
-	/* Ignore XDP tx channels when creating rx channels. */
+	/* Ignore XDP tx and extra channels when creating rx channels. */
 	n_channels -= efx->n_xdp_channels;
+	n_channels -= efx->n_extra_channels;
 
 	if (separate_tx_channels) {
-		efx->n_extra_channels = 0;
 		efx->n_combined_channels = 0;
 		efx->n_tx_only_channels =
 			min(max(n_channels / 2, 1U),
@@ -499,19 +504,8 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 		efx->tx_channel_offset =
 			n_channels - efx->n_tx_only_channels;
 		efx->n_rx_only_channels =
-			max(n_channels -
-			    efx->n_tx_only_channels, 1U);
+			max(n_channels - efx->n_tx_only_channels, 1U);
 	} else {
-		efx->n_extra_channels = 0;
-		/* allocate other channels, leaving at least one channel */
-		for (extra_channel_type = 0;
-		     extra_channel_type < EFX_MAX_EXTRA_CHANNELS &&
-		     n_channels > 1 &&
-		     efx->n_extra_channels + 1 < efx->max_tx_channels;
-		     extra_channel_type++)
-			efx->n_extra_channels += !!efx->extra_channel_type[extra_channel_type];
-		n_channels -= efx->n_extra_channels;
-
 		efx->n_combined_channels = min(n_channels,
 					       efx->max_tx_channels);
 		efx->n_tx_only_channels = 0;
@@ -524,8 +518,7 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 
 	EFX_WARN_ON_PARANOID(efx->n_rx_only_channels &&
 			     efx->n_tx_only_channels &&
-			     (efx->n_combined_channels ||
-			      efx->n_extra_channels));
+			     efx->n_combined_channels);
 
 	return 0;
 }

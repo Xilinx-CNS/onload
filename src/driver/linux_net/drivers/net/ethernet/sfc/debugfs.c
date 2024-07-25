@@ -162,13 +162,17 @@ static int efx_debugfs_read_loop_mode(struct seq_file *file, void *data)
 static const char *const nic_state_names[] = {
 	[STATE_UNINIT] =	"UNINIT",
 	[STATE_PROBED] =	"PROBED",
-	[STATE_NET_UP] =	"READY",
 	[STATE_NET_DOWN] =	"DOWN",
+	[STATE_NET_ALLOCATED] =	"ALLOCATED",
+	[STATE_NET_UP] =	"READY",
 	[STATE_DISABLED] =	"DISABLED",
+#ifdef CONFIG_SFC_VDPA
+	[STATE_VDPA] =		"VDPA",
+#endif
 	[STATE_NET_UP | STATE_RECOVERY] =	"READY_RECOVERY",
 	[STATE_NET_DOWN | STATE_RECOVERY] =	"DOWN_RECOVERY",
 	[STATE_PROBED | STATE_RECOVERY] =	"PROBED_RECOVERY",
-	[STATE_NET_UP | STATE_FROZEN] =	"READY_FROZEN",
+	[STATE_NET_UP | STATE_FROZEN] =		"READY_FROZEN",
 	[STATE_NET_DOWN | STATE_FROZEN] =	"DOWN_FROZEN",
 };
 static const unsigned int nic_state_max = sizeof(nic_state_names);

@@ -108,15 +108,10 @@ static void efx_mtd_scrub(struct efx_mtd_partition *part)
 	 * function. We render that harmless by setting the
 	 * size to 0.
 	 */
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_MTD_DIRECT_ACCESS)
-	part->mtd.erase = NULL;
-	part->mtd.write = NULL;
-	part->mtd.sync = NULL;
-#else
 	part->mtd._erase = NULL;
 	part->mtd._write = NULL;
 	part->mtd._sync = NULL;
-#endif
+
 	part->mtd.priv = NULL;
 	part->mtd.size = 0;
 }
@@ -218,17 +213,11 @@ int efx_mtd_add(struct efx_nic *efx, struct efx_mtd_partition *parts,
 		part->mtd.owner = THIS_MODULE;
 		part->mtd.priv = part;
 		part->mtd.name = part->name;
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_MTD_DIRECT_ACCESS)
-		part->mtd.erase = efx_mtd_erase;
-		part->mtd.read = efx->type->mtd_read;
-		part->mtd.write = efx->type->mtd_write;
-		part->mtd.sync = efx_mtd_sync;
-#else
+
 		part->mtd._erase = efx_mtd_erase;
 		part->mtd._read = efx->type->mtd_read;
 		part->mtd._write = efx->type->mtd_write;
 		part->mtd._sync = efx_mtd_sync;
-#endif
 
 		efx->type->mtd_rename(part);
 
@@ -259,15 +248,8 @@ fail:
 		efx_mtd_remove_partition(mtd_struct, &parts[i]);
 	kref_put(&mtd_struct->parts_kref, efx_mtd_free_parts);
 
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_MTD_TABLE)
-	/* The number of MTDs is limited (to 16 or 32 by default) and
-	 * we probably reached that limit.
-	 */
-	return -EBUSY;
-#else
 	/* Failure is unlikely here, but probably means we're out of memory */
 	return -ENOMEM;
-#endif
 }
 
 void efx_mtd_remove(struct efx_nic *efx)

@@ -7,7 +7,6 @@
  * by the Free Software Foundation, incorporated herein by reference.
  */
 
-#undef EFX_HAVE_ROUND_JIFFIES_UP
 #undef EFX_NEED_NS_TO_TIMESPEC
 #define EFX_NEED_NS_TO_TIMESPEC
 #undef EFX_HAVE_XEN_START_INFO
