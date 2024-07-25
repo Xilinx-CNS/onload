@@ -32,6 +32,8 @@
 #include "efct_test_tx.h"
 #include "efct_test_rx.h"
 
+#include "../../../lib/efhw/mcdi_common.h"
+
 #ifndef page_to_virt
 /* Only RHEL7 doesn't have this macro */
 #define page_to_virt(x)        __va(PFN_PHYS(page_to_pfn(x)))
@@ -412,6 +414,54 @@ static void efct_test_free_rxq(struct efx_auxiliary_client *handle, int rxq_idx)
 }
 
 
+static int efct_test_filter_op(struct efx_auxiliary_client *handle,
+                               struct efx_auxiliary_rpc *rpc)
+{
+  struct efct_test_device *tdev = handle->tdev;
+  uint32_t filter_handle = EFHW_MCDI_DWORD(rpc->inbuf, FILTER_OP_IN_HANDLE_LO);
+  uint32_t filter_meta = EFHW_MCDI_DWORD(rpc->inbuf, FILTER_OP_IN_HANDLE_HI);
+  uint32_t op = EFHW_MCDI_DWORD(rpc->inbuf, FILTER_OP_IN_OP);
+  int rc;
+
+  /* This is super dumb and does no validation or parsing. We just use a counter
+   * to generate new filter handles on insert/subscribe, and check that a
+   * remove handle is within the range we've already dished out. */
+  switch(op) {
+   case MC_CMD_FILTER_OP_IN_OP_INSERT:
+   case MC_CMD_FILTER_OP_IN_OP_SUBSCRIBE:
+    EFHW_MCDI_SET_DWORD(rpc->outbuf, FILTER_OP_IN_HANDLE_HI, op);
+    EFHW_MCDI_SET_DWORD(rpc->outbuf, FILTER_OP_IN_HANDLE_LO,
+                        tdev->filter_handle++);
+    rc = 0;
+    break;
+   case MC_CMD_FILTER_OP_IN_OP_REMOVE:
+   case MC_CMD_FILTER_OP_IN_OP_UNSUBSCRIBE:
+    if( ((op == MC_CMD_FILTER_OP_IN_OP_REMOVE) &&
+         (filter_meta != MC_CMD_FILTER_OP_IN_OP_INSERT)) ||
+        ((op == MC_CMD_FILTER_OP_IN_OP_UNSUBSCRIBE) &&
+         (filter_meta != MC_CMD_FILTER_OP_IN_OP_SUBSCRIBE)) ) {
+      printk(KERN_ERR "%s: ERROR: filter insert op %u removed with %u\n",
+             __func__, filter_meta, op);
+      rc = -EINVAL;
+      break;
+    }
+    if( filter_handle > tdev->filter_handle ) {
+      printk(KERN_ERR "%s: ERROR: filter handle %x outside expected range\n",
+             __func__, filter_handle);
+      rc = -EINVAL;
+      break;
+    }
+    rc = 0;
+    break;
+   default:
+     rc = -EOPNOTSUPP;
+     break;
+  }
+
+  return rc;
+}
+
+
 static int efct_test_fw_rpc(struct efx_auxiliary_client *handle,
                             struct efx_auxiliary_rpc *rpc)
 {
@@ -465,6 +515,9 @@ static int efct_test_fw_rpc(struct efx_auxiliary_client *handle,
       rc = 0;
     }
     break;
+   case MC_CMD_FILTER_OP:
+     rc = efct_test_filter_op(handle, rpc);
+     break;
    default:
     rc = -ENOSYS;
   };

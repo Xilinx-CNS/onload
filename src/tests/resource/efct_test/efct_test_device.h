@@ -102,6 +102,7 @@ struct efct_test_device {
   struct efct_test_txq txqs[EFCT_TEST_TXQS_N];
   struct efct_test_rxq rxqs[EFCT_TEST_RXQS_N];
   uint8_t *evq_window;
+  uint32_t filter_handle;
 };
 
 extern struct efct_test_device* efct_test_add_test_dev(struct device* parent, struct net_device* net_dev);
