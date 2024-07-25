@@ -15,7 +15,7 @@ struct ci_chrdev_registration {
   dev_t devid;
   int count;
   struct class* class;
-  __DECLARE_FLEX_ARRAY(struct cdev*, cdevs);
+  CI_DECLARE_FLEX_ARRAY(struct cdev*, cdevs);
 };
 
 struct ci_chrdev_node_params {

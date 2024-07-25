@@ -536,7 +536,7 @@ void cp_release(struct oo_cplane_handle* cp)
 
 struct cp_message {
   struct list_head link;
-  __DECLARE_FLEX_ARRAY(char, buf);
+  CI_DECLARE_FLEX_ARRAY(char, buf);
 };
 
 struct cp_message_buffer {
