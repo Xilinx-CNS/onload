@@ -62,24 +62,11 @@
 typedef ci_int32 ci_uerr_t; /* range of OS user-mode return codes */
 typedef ci_int32 ci_kerr_t; /* range of OS kernel-mode return codes */
 
-#ifndef __DECLARE_FLEX_ARRAY
-#ifndef __cplusplus
-/* linux < 5.16. */
-/* X-SPDX-Source-URL: https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git */
-/* X-SPDX-Source-Tag: v5.16 */
-/* X-SPDX-Source-File: include/uapi/linux/stddef.h */
-/* X-SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
-/* X-SPDX-Comment: Linux 5.16 got this macro to declare flexible arrays.
- *                 Onload uses it. In order to keep compatibility with
- *                 older kernels, place the macro here. */
-#define __DECLARE_FLEX_ARRAY(TYPE, NAME)	\
-	struct { \
-		struct { } __empty_ ## NAME; \
-		TYPE NAME[]; \
+#define CI_DECLARE_FLEX_ARRAY(type, name)          \
+	struct {                                        \
+		struct { } __empty_ ## name;                 \
+		type name[];                                 \
 	}
-/* X-SPDX-Restore: */
-#endif /* ! __cplusplus */
-#endif /* ! __DECLARE_FLEX_ARRAY */
 
 #define CI_MAX_ERRNO 1024
 #define IS_ERR(ptr) \
