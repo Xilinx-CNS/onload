@@ -22,6 +22,9 @@
 # If you want to ensure that 32-bit lib will be built on 64-bit add:
 #   --define "build32 true"
 #
+# If you don't want to build the devel pacakage, use:
+#   --without devel
+#
 # If you want debug binary packages add:
 #   --define "debug true"
 #
@@ -53,6 +56,7 @@
 # is unavailable at build time:
 #    --define "have_efct 1"
 
+%bcond_without devel # add option to skip devel builds
 
 %define pkgversion 20100910
 
@@ -125,6 +129,7 @@ License   	: Various
 URL             : http://www.openonload.org/
 Vendor		: Xilinx, Inc.
 Provides	: openonload = %{version}-%{release}
+Recommends	: openonload-devel = %{version}-%{release}
 Source0		: openonload-%{pkgversion}.tgz
 BuildRoot   	: %{_builddir}/%{name}-root
 AutoReqProv	: no
@@ -196,7 +201,26 @@ www.openonload.org for more information.
 
 This package comprises the kernel module components of OpenOnload.
 
+###############################################################################
+%if 0%{with devel}
+%package devel
+Summary 	: OpenOnload development header files
+Supplements	: openonload = %{version}-%{release}
+BuildArch	: noarch
 
+%description devel
+OpenOnload is a high performance user-level network stack.  Please see
+www.openonload.org for more information.
+
+This package comprises development headers for the components of OpenOnload.
+
+%files devel
+%defattr(-,root,root)
+%{_includedir}/ci
+%{_includedir}/cplane
+%{_includedir}/etherfabric
+%{_includedir}/onload
+%endif
 ###############################################################################
 %prep
 [ "$RPM_BUILD_ROOT" != / ] && rm -rf "$RPM_BUILD_ROOT"
@@ -247,7 +271,8 @@ mkdir -p "$i_prefix/etc/depmod.d"
   %{?build_profile:--build-profile %build_profile} \
   %{?debug:--debug} %{?setuid:--setuid} \
   --userfiles --modprobe --modulesloadd \
-  --kernelfiles --kernelver "%{kernel}"
+  --kernelfiles --kernelver "%{kernel}" \
+  %{?with_devel: --headers}
 docdir="$i_prefix%{_defaultdocdir}/%{name}-%{pkgversion}"
 mkdir -p "$docdir"
 install -m 644 LICENSE* README* ChangeLog* ReleaseNotes* "$docdir"
@@ -336,8 +361,10 @@ rm -fR $RPM_BUILD_ROOT
 %{_bindir}/*
 %{_sbindir}/*
 /sbin/*
-/usr/include/onload*
-/usr/include/etherfabric/*.h
+%dir %{_includedir}/onload
+%{_includedir}/onload/extensions*.h
+%dir %{_includedir}/etherfabric
+%{_includedir}/etherfabric/*.h
 %docdir %{_defaultdocdir}/%{name}-%{pkgversion}
 %attr(644, -, -) %{_defaultdocdir}/%{name}-%{pkgversion}/*
 %attr(644, -, -) %{_sysconfdir}/modprobe.d/onload.conf
