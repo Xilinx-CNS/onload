@@ -634,6 +634,19 @@ static int
 ef10ct_design_parameters(struct efhw_nic *nic,
                          struct efab_nic_design_parameters *dp)
 {
+  struct device *dev;
+  struct efx_auxiliary_device* edev;
+  struct efx_auxiliary_client* cli;
+  union efx_auxiliary_param_value val;
+  int rc = 0;
+
+  EFCT_PRE(dev, edev, cli, nic, rc)
+  rc = edev->ops->get_param(cli, EFX_AUXILIARY_DESIGN_PARAM, &val);
+  EFCT_POST(dev, edev, cli, nic, rc);
+
+  if( rc < 0 )
+    return rc;
+
   /* Where older versions of ef_vi make assumptions about parameter values, we
    * must check that either they know about the parameter, or that the value
    * matches the assumption.
@@ -647,16 +660,25 @@ ef10ct_design_parameters(struct efhw_nic *nic,
   else if( (VALUE) != EFAB_NIC_DP_DEFAULT(PARAM) ) \
     return -ENODEV;
 
-  /* TODO get the values from the NIC */
-  SET(rx_superbuf_bytes, EFCT_RX_SUPERBUF_BYTES);
-  SET(rx_frame_offset, EFCT_RX_HEADER_NEXT_FRAME_LOC_1 - 2);
-  SET(rx_stride, 4096);
-  SET(rx_queues, 256);
-  SET(tx_aperture_bytes, 0x1000);
-  SET(tx_fifo_bytes, 0x8000);
-  SET(timestamp_subnano_bits, 2);
-  SET(unsol_credit_seq_mask, 0x7f);
-  SET(md_location, 1);
+  SET(rx_superbuf_bytes, val.design_params.rx_buffer_len);
+  if( val.design_params.meta_location == 0 ) {
+    SET(rx_frame_offset, EFCT_RX_HEADER_NEXT_FRAME_LOC_0 - 2);
+  }
+  else if( val.design_params.meta_location == 1 ) {
+    SET(rx_frame_offset, EFCT_RX_HEADER_NEXT_FRAME_LOC_1 - 2);
+  }
+  else {
+    EFHW_ERR("%s: Could not determine frame offset from meta_location %u",
+             __func__, val.design_params.meta_location);
+    return -EOPNOTSUPP;
+  }
+  SET(rx_stride, val.design_params.rx_stride);
+  SET(rx_queues, val.design_params.rx_queues);
+  SET(tx_aperture_bytes, val.design_params.tx_aperture_size);
+  SET(tx_fifo_bytes, val.design_params.tx_fifo_size);
+  SET(timestamp_subnano_bits, val.design_params.ts_subnano_bit);
+  SET(unsol_credit_seq_mask, val.design_params.unsol_credit_seq_mask);
+  SET(md_location, val.design_params.meta_location);
 
   return 0;
 }
