@@ -120,6 +120,37 @@ static int efct_test_buffer_post_addr(struct efx_auxiliary_client *handle,
 }
 
 
+static void efct_test_design_param(struct efx_auxiliary_client *handle,
+                                   struct efx_auxiliary_design_params *dp)
+{
+  /* Caller is trusted and should be providing us with a valid pointer */
+  EFHW_ASSERT(dp);
+
+  dp->rx_stride = 4096;
+  /* NIC reports value to be multiplied by 4k */
+  dp->rx_buffer_len = 256 * 4096;
+  dp->rx_queues = 256;
+  dp->tx_apertures = 256;
+  dp->rx_buf_fifo_size = 128;
+  dp->frame_offset_fixed = 0;
+  dp->rx_metadata_len = 16;
+  dp->tx_max_reorder = 1024;
+  dp->tx_aperture_size = 4096;
+  dp->tx_fifo_size = 0x8000;
+  dp->ts_subnano_bit = 2;
+  dp->unsol_credit_seq_mask = 0x7f;
+  dp->l4_csum_proto = 0;
+  dp->max_runt = 60;
+  dp->evq_sizes = 0x7f;
+  dp->num_filter = 8192;
+  dp->user_bits_width = 0;
+  dp->timestamp_set_sync = 1;
+  dp->label_width = 8;
+  dp->meta_location = 1;
+  dp->rollover_zeros_pkt = 1;
+}
+
+
 static int efct_test_get_param(struct efx_auxiliary_client *handle,
                                enum efx_auxiliary_param p,
                                union efx_auxiliary_param_value *arg)
@@ -160,6 +191,10 @@ static int efct_test_get_param(struct efx_auxiliary_client *handle,
     break;
    case EFX_AUXILIARY_RXQ_POST:
     rc = efct_test_buffer_post_addr(handle, &arg->io_addr);
+    break;
+   case EFX_AUXILIARY_DESIGN_PARAM:
+    efct_test_design_param(handle, &arg->design_params);
+    rc = 0;
     break;
    default:
     break;

@@ -169,6 +169,16 @@ struct efx_auxiliary_design_params {
         u32 evq_sizes;
         /* Number of filters */
         u32 num_filter;
+	/* Width of USER in RX meta */
+	u32 user_bits_width;
+	/* Timestamp contains clock status */
+	u32 timestamp_set_sync;
+	/* Width of LABEL in event */
+	u32 label_width;
+	/* Meta is at start of current packet */
+	u32 meta_location;
+	/* Rollover meta delivers zeroes */
+	u32 rollover_zeros_pkt;
 };
 
 
