@@ -13,6 +13,9 @@ extern void efhw_fini_debugfs_nic(struct efhw_nic *nic);
 extern void efhw_init_debugfs_efct(struct efhw_nic *nic);
 extern void efhw_fini_debugfs_efct(struct efhw_nic *nic);
 
+extern void efhw_init_debugfs_ef10ct(struct efhw_nic *nic);
+extern void efhw_fini_debugfs_ef10ct(struct efhw_nic *nic);
+
 #ifdef CONFIG_DEBUG_FS
 struct seq_file;
 

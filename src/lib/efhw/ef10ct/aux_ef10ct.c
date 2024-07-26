@@ -9,6 +9,7 @@
 
 #include "linux_resource_internal.h"
 #include "efrm_internal.h"
+#include "debugfs.h"
 
 #if CI_HAVE_EF10CT
 
@@ -316,6 +317,8 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
       goto fail4;
   }
 
+  efhw_init_debugfs_ef10ct(nic);
+
   return 0;
 
  fail4:
@@ -348,6 +351,8 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
   nic = efhw_nic_find_by_dev(&auxdev->dev);
   if( !nic )
     return;
+
+  efhw_fini_debugfs_ef10ct(nic);
 
   lnic = linux_efhw_nic(nic);
   client = (struct efx_auxiliary_client*)lnic->drv_device;

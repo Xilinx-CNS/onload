@@ -53,6 +53,7 @@ struct efhw_nic_ef10ct {
     struct efhw_stack_vi_allocator rx;
   } vi_allocator;
   struct efct_filter_state filter_state;
+  struct dentry* debug_dir;
 };
 
 #endif /* CI_EFHW_EF10CT_H */
