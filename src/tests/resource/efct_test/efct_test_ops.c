@@ -124,7 +124,7 @@ static void efct_test_design_param(struct efx_auxiliary_client *handle,
                                    struct efx_auxiliary_design_params *dp)
 {
   /* Caller is trusted and should be providing us with a valid pointer */
-  EFHW_ASSERT(dp);
+  EFRM_ASSERT(dp);
 
   dp->rx_stride = 4096;
   /* NIC reports value to be multiplied by 4k */
