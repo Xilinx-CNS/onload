@@ -13,11 +13,11 @@
 #include <etherfabric/memreg.h>
 #include <etherfabric/efct_vi.h>
 #include <etherfabric/internal/efct_uk_api.h> // for CI_HUGEPAGE_SIZE
+#include <ci/tools/sysdep.h>
 
 #include "shrub_pool.h"
 #include "logging.h"
 #include "bitfield.h"
-
 
 #include <stdlib.h>
 #include <stdbool.h>
@@ -66,12 +66,6 @@ struct ef_shrub_queue {
   struct ef_shrub_connection* closed_connections;
 };
 
-struct shrub_queue_elem {
-  struct ef_shrub_queue *queue;
-  int prev;
-  int next;
-};
-
 struct ef_shrub_server {
   struct {
     int listen;
@@ -80,11 +74,8 @@ struct ef_shrub_server {
   ef_vi* vi;
   size_t buffer_bytes;
   size_t buffer_count;
-  /* Array of size res->vi.efct_rxqs.max_qs. A doubly linked list is formed
-   * using the prev and next indices in each elem.
-   */
-  struct shrub_queue_elem *shrub_queues;
-  int shrub_queue_head;
+  /* Array of size res->vi.efct_rxqs.max_qs. */
+  struct ef_shrub_queue** shrub_queues;
 };
 
 /* Unix server operations */
@@ -501,16 +492,10 @@ static int server_alloc_queue_elems(struct ef_shrub_server *server,
 {
   /* TODO: This is not the max value for HW queues - I suspect we should assign
    * to design params instead. */
-  int i;
   server->shrub_queues = calloc(max_qs, sizeof(server->shrub_queues[0]));
   if( server->shrub_queues == NULL ) {
     return -ENOMEM;
   }
-  for(i = 0; i < max_qs; i++) {
-    server->shrub_queues[i].next = -1;
-    server->shrub_queues[i].prev = -1;
-  }
-  server->shrub_queue_head = -1;
   return 0;
 }
 
@@ -518,7 +503,7 @@ static int server_request_received(struct ef_shrub_server* server, int socket)
 {
   struct ef_shrub_connection* connection;
   struct ef_shrub_queue_request req;
-  struct shrub_queue_elem* q_elem;
+  struct ef_shrub_queue* queue;
   epoll_data_t epoll_data;
   int rc;
 
@@ -533,29 +518,24 @@ static int server_request_received(struct ef_shrub_server* server, int socket)
     goto fail;
   }
 
-  q_elem = &server->shrub_queues[req.qid];
-
-  if( q_elem->queue == NULL ) {
-    rc = ef_shrub_queue_open(server->vi, &q_elem->queue,
+  queue = server->shrub_queues[req.qid];
+  if( queue == NULL ) {
+    rc = ef_shrub_queue_open(server->vi, &queue,
                              server->buffer_bytes, server->buffer_count,
                              req.qid);
     if(rc < 0)
       goto fail;
-
-    q_elem->next = server->shrub_queue_head;
-    if(server->shrub_queue_head != -1)
-      server->shrub_queues[server->shrub_queue_head].prev = req.qid;
-    server->shrub_queue_head = req.qid;
+    server->shrub_queues[req.qid] = queue;
   }
 
-  connection = connection_alloc(q_elem->queue);
+  connection = connection_alloc(queue);
   if( connection == NULL ) {
     rc = -1; /* TODO propogate connection_alloc's rc */
     goto fail;
   }
 
   connection->socket = socket;
-  rc = connection_send_metrics(q_elem->queue, connection);
+  rc = connection_send_metrics(queue, connection);
   if( rc < 0 )
     goto fail2;
 
@@ -564,15 +544,15 @@ static int server_request_received(struct ef_shrub_server* server, int socket)
   if( rc < 0 )
     goto fail2;
   /* TODO synchronise */
-  connection->next = q_elem->queue->connections;
+  connection->next = queue->connections;
   connection->qid = req.qid;
-  q_elem->queue->connections = connection;
-  q_elem->queue->connection_count++;
+  queue->connections = connection;
+  queue->connection_count++;
   return 0;
 
 fail2:
-  connection->next = q_elem->queue->closed_connections;
-  q_elem->queue->closed_connections = connection;
+  connection->next = queue->closed_connections;
+  queue->closed_connections = connection;
 fail:
   close(socket);
   return rc;
@@ -598,7 +578,7 @@ static int server_connection_opened(struct ef_shrub_server* server)
 static int server_connection_closed(struct ef_shrub_server* server, void *data)
 {
   struct ef_shrub_connection* connection = data;
-  struct ef_shrub_queue* queue = server->shrub_queues[connection->qid].queue;
+  struct ef_shrub_queue* queue = server->shrub_queues[connection->qid];
   /* TODO release buffers owned by this connection */
   close(connection->socket);
 
@@ -618,7 +598,7 @@ static int server_connection_closed(struct ef_shrub_server* server, void *data)
 
   connection->next = queue->closed_connections;
   queue->closed_connections = connection;
-  server->shrub_queues[connection->qid].queue->connection_count--;
+  queue->connection_count--;
   return 0;
 }
 
@@ -661,34 +641,27 @@ fail_unix_server_init:
 
 void ef_shrub_server_poll(struct ef_shrub_server* server)
 {
-  /* First poll the server's unix server to detect any client connections
-   * and allocate any necessary shrub queues.
-   * Then poll all active shrub queues using the fact that there is one rxq
-   * per hw queue.
-   */
-  uint64_t qs = *server->vi->efct_rxqs.active_qs;
+  int ix;
+
   unix_server_poll(server);
-  for ( ; ; ) {
-    int i = __builtin_ffsll(qs);
-    int qid;
-    if (i == 0)
-      break;
-    --i;
-    qs &= ~(1ull << i);
-    qid = server->vi->efct_rxqs.q[i].qid;
+  ci_bit_for_each_set(ix, (const ci_bits*)server->vi->efct_rxqs.active_qs,
+                      server->vi->efct_rxqs.max_qs) {
+    int qid = server->vi->efct_rxqs.q[ix].qid;
     ef_shrub_queue_poll(server->vi,
-                        server->shrub_queues[qid].queue, i);
+                        server->shrub_queues[qid], ix);
   }
 }
 
 void ef_shrub_server_close(struct ef_shrub_server* server)
 {
-  int qid;
-  for(qid = server->shrub_queue_head;
-      qid != -1;
-      qid = server->shrub_queues[qid].next) {
-    ef_shrub_queue_close(server->shrub_queues[qid].queue);
+  int ix;
+
+  ci_bit_for_each_set(ix, (const ci_bits*)server->vi->efct_rxqs.active_qs,
+                      server->vi->efct_rxqs.max_qs) {
+    int qid = server->vi->efct_rxqs.q[ix].qid;
+    ef_shrub_queue_close(server->shrub_queues[qid]);
   }
+
   server->vi->efct_rxqs.ops->cleanup(server->vi);
   unix_server_fini(server);
   free(server);
