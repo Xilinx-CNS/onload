@@ -6,7 +6,6 @@
 
 #include "ef_vi_internal.h"
 
-#include <etherfabric/unix_server.h>
 #include <etherfabric/shrub_server.h>
 #include <etherfabric/shrub_shared.h>
 #include <etherfabric/vi.h>
@@ -74,15 +73,151 @@ struct shrub_queue_elem {
 };
 
 struct ef_shrub_server {
-  struct unix_server unix_server;
+  struct {
+    int listen;
+    int epoll;
+  } unix_server;
   ef_vi* vi;
   size_t buffer_bytes;
   size_t buffer_count;
   /* Array of size res->vi.efct_rxqs.max_qs. A doubly linked list is formed
-   * using the prev and next indices in each elem. */
+   * using the prev and next indices in each elem.
+   */
   struct shrub_queue_elem *shrub_queues;
   int shrub_queue_head;
 };
+
+/* Unix server operations */
+
+static int unix_server_epoll_create(struct ef_shrub_server* server)
+{
+  int rc = epoll_create(1);
+  if( rc < 0 )
+    return -errno;
+
+  server->unix_server.epoll = rc;
+  return 0;
+}
+
+static int unix_server_socket(struct ef_shrub_server* server)
+{
+  int rc = socket(AF_UNIX, SOCK_STREAM, 0);
+  if( rc < 0 )
+    return -errno;
+
+  server->unix_server.listen = rc;
+  return 0;
+}
+
+static int unix_server_listen(struct ef_shrub_server* server, const char *server_addr)
+{
+  int rc;
+  struct sockaddr_un addr;
+  size_t path_len = strlen(server_addr);
+
+  rc = unix_server_socket(server);
+  if( rc < 0 )
+    return rc;
+
+  if( path_len >= sizeof(addr.sun_path) ) {
+    rc = -EINVAL;
+    goto fail;
+  }
+
+  addr.sun_family = AF_UNIX;
+  strcpy(addr.sun_path, server_addr);
+
+  rc = bind(server->unix_server.listen, (struct sockaddr*)&addr,
+            offsetof(struct sockaddr_un, sun_path) + path_len + 1);
+  if( rc < 0 )
+    goto fail;
+
+  return listen(server->unix_server.listen, 32);
+
+fail:
+  close(server->unix_server.listen);
+  return rc;
+}
+
+
+static int unix_server_epoll_ctl(struct ef_shrub_server* server, int op, int fd,
+                                 epoll_data_t data)
+{
+  int rc;
+  struct epoll_event event;
+
+  event.events = EPOLLIN;
+  event.data = data;
+
+  rc = epoll_ctl(server->unix_server.epoll, op, fd, &event);
+  if( rc < 0 )
+    return -errno;
+
+  return 0;
+}
+
+static int unix_server_epoll_add(struct ef_shrub_server* server, int fd, epoll_data_t data)
+{
+  return unix_server_epoll_ctl(server, EPOLL_CTL_ADD, fd, data);
+}
+
+static int unix_server_epoll_mod(struct ef_shrub_server* server, int fd, epoll_data_t data)
+{
+  return unix_server_epoll_ctl(server, EPOLL_CTL_MOD, fd, data);
+}
+
+static int unix_server_init(struct ef_shrub_server* server, const char* server_addr)
+{
+  int rc;
+  epoll_data_t epoll_data;
+
+  rc = unix_server_epoll_create(server);
+  if( rc < 0 )
+    return rc;
+
+  rc = unix_server_listen(server, server_addr);
+  if( rc < 0 )
+    goto fail_server_listen;
+
+  epoll_data.ptr = NULL;
+  rc = unix_server_epoll_add(server, server->unix_server.listen, epoll_data);
+  if( rc < 0 )
+    goto fail_epoll_add;
+
+  return 0;
+fail_epoll_add:
+  close(server->unix_server.listen);
+fail_server_listen:
+  close(server->unix_server.epoll);
+  return rc;
+}
+
+static void unix_server_fini(struct ef_shrub_server* server)
+{
+  close(server->unix_server.listen);
+  close(server->unix_server.epoll);
+}
+
+static int server_connection_opened(struct ef_shrub_server* server);
+static int server_request_received(struct ef_shrub_server* server, int socket);
+static int server_connection_closed(struct ef_shrub_server* server, void *data);
+
+static int unix_server_poll(struct ef_shrub_server* server)
+{
+  int rc;
+  struct epoll_event event;
+  rc = epoll_wait(server->unix_server.epoll, &event, 1, 0);
+  if( rc > 0 ) {
+    if( event.data.ptr == NULL )
+      rc = server_connection_opened(server);
+    else if( event.events & EPOLLIN )
+      rc = server_request_received(server, event.data.fd);
+
+    if( event.events & EPOLLHUP )
+      rc = server_connection_closed(server, event.data.ptr);
+  }
+  return rc;
+}
 
 static bool fifo_has_space(struct ef_shrub_queue* queue) {
   return queue->fifo_size > 0 && queue->fifo[queue->fifo_index] == EF_SHRUB_INVALID_BUFFER;
@@ -379,10 +514,8 @@ static int server_alloc_queue_elems(struct ef_shrub_server *server,
   return 0;
 }
 
-static int server_request_received(struct unix_server* unix_server, int socket)
+static int server_request_received(struct ef_shrub_server* server, int socket)
 {
-  struct ef_shrub_server* server = CI_CONTAINER(struct ef_shrub_server,
-                                                unix_server, unix_server);
   struct ef_shrub_connection* connection;
   struct ef_shrub_queue_request req;
   struct shrub_queue_elem* q_elem;
@@ -427,7 +560,7 @@ static int server_request_received(struct unix_server* unix_server, int socket)
     goto fail2;
 
   epoll_data.ptr = connection;
-  rc = unix_server_epoll_mod(&server->unix_server, socket, epoll_data);
+  rc = unix_server_epoll_mod(server, socket, epoll_data);
   if( rc < 0 )
     goto fail2;
   /* TODO synchronise */
@@ -445,29 +578,25 @@ fail:
   return rc;
 }
 
-static int server_connection_opened(struct unix_server* unix_server)
+static int server_connection_opened(struct ef_shrub_server* server)
 {
-  struct ef_shrub_server* server = CI_CONTAINER(struct ef_shrub_server,
-                                                unix_server, unix_server);
   int rc = 0;
-  int socket = accept(unix_server->listen, NULL, NULL);
+  int socket = accept(server->unix_server.listen, NULL, NULL);
   epoll_data_t epoll_data;
 
   if( socket < 0 )
     return socket;
 
   epoll_data.fd = socket;
-  rc = unix_server_epoll_add(&server->unix_server, socket, epoll_data);
+  rc = unix_server_epoll_add(server, socket, epoll_data);
   if( rc < 0 )
     close(socket);
 
   return rc;
 }
 
-static int server_connection_closed(struct unix_server* unix_server, void *data)
+static int server_connection_closed(struct ef_shrub_server* server, void *data)
 {
-  struct ef_shrub_server* server = CI_CONTAINER(struct ef_shrub_server,
-                                                unix_server, unix_server);
   struct ef_shrub_connection* connection = data;
   struct ef_shrub_queue* queue = server->shrub_queues[connection->qid].queue;
   /* TODO release buffers owned by this connection */
@@ -507,12 +636,10 @@ int ef_shrub_server_open(struct ef_vi* vi,
     return -ENOMEM;
 
   remove(EF_SHRUB_CONTROLLER_PATH);
-  rc = unix_server_init(&server->unix_server, EF_SHRUB_CONTROLLER_PATH);
+  rc = unix_server_init(server, EF_SHRUB_CONTROLLER_PATH);
   if( rc < 0 )
     goto fail_unix_server_init;
-  server->unix_server.ops.connection_opened = server_connection_opened;
-  server->unix_server.ops.connection_closed = server_connection_closed;
-  server->unix_server.ops.request_received = server_request_received;
+
   server->vi = vi;
   /* TBD Do this and the above as a single allocation. */
   rc = server_alloc_queue_elems(server, vi->efct_rxqs.max_qs);
@@ -526,7 +653,7 @@ int ef_shrub_server_open(struct ef_vi* vi,
   return 0;
 
 fail_queues_alloc:
-  unix_server_fini(&server->unix_server);
+  unix_server_fini(server);
 fail_unix_server_init:
   free(server);
   return rc;
@@ -540,7 +667,7 @@ void ef_shrub_server_poll(struct ef_shrub_server* server)
    * per hw queue.
    */
   uint64_t qs = *server->vi->efct_rxqs.active_qs;
-  unix_server_poll(&server->unix_server);
+  unix_server_poll(server);
   for ( ; ; ) {
     int i = __builtin_ffsll(qs);
     int qid;
@@ -563,6 +690,6 @@ void ef_shrub_server_close(struct ef_shrub_server* server)
     ef_shrub_queue_close(server->shrub_queues[qid].queue);
   }
   server->vi->efct_rxqs.ops->cleanup(server->vi);
-  unix_server_fini(&server->unix_server);
+  unix_server_fini(server);
   free(server);
 }
