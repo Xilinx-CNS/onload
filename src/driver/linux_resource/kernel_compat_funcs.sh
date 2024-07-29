@@ -547,14 +547,25 @@ vmsg "KPATH      := $KPATH"
 #  CONFIG_PTP_1588_CLOCK: PTP clock support
 
 [ -n "${ARCH:-}" ] && export ARCH
-eval $(read_make_variables KBUILD_SRC ARCH SRCARCH CONFIG_X86_32 CONFIG_X86_64 CONFIG_PTP_1588_CLOCK abs_srctree)
+
+# linux-6.9: $abs_srctree is unexported. It breaks the code below on Debian,
+# due to its kernel headers path split for "arch" and "common" ones.
+# Use $srctree with KBUILD_ABS_SRCTREE=1 instead.
+eval $(EXTRA_MAKEFLAGS="$EXTRA_MAKEFLAGS KBUILD_ABS_SRCTREE=1" read_make_variables \
+    KBUILD_SRC ARCH SRCARCH CONFIG_X86_32 CONFIG_X86_64 CONFIG_PTP_1588_CLOCK srctree)
+
+# $srctree is relative on versions without KBUILD_ABS_SRCTREE (< 5.3).
+# In this case just make it empty.
+[[ $srctree == /* ]] || srctree=
 
 # Define:
-#     KBUILD_SRC:         Was renamed into abs_srctree in linux-5.3
+#     KBUILD_SRC:         Was renamed into abs_srctree in linux-5.3; we use
+#                         srctree with KBUILD_ABS_SRCTREE=1, since abs_srctree
+#                         is unexported in linux-6.9
 #     KBUILD_SRC:         If not already set, same as KPATH
 #     SRCARCH:            If not already set, same as ARCH
 #     WORDSUFFIX:         Suffix added to some filenames by the i386/amd64 merge
-[ -n "${KBUILD_SRC:-}" ] || KBUILD_SRC=${abs_srctree:-}
+[ -n "${KBUILD_SRC:-}" ] || KBUILD_SRC=${srctree:-}
 [ -n "${KBUILD_SRC:-}" ] || KBUILD_SRC=$KPATH
 [ -n "${SRCARCH:-}" ] || SRCARCH=$ARCH
 if [ "$ARCH" = "x86_64" ] || [ "${CONFIG_X86_64:-}" = "y" ]; then
