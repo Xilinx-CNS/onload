@@ -4,11 +4,17 @@
 #ifndef __UNIX_SERVER_H__
 #define __UNIX_SERVER_H__
 
+#include <sys/epoll.h>
+
 struct unix_server;
 
 struct ef_unix_server_ops {
+  /* Connection opened on listen fd callback */
   int (*connection_opened)(struct unix_server *);
-  int (*connection_closed)(struct unix_server *, void *epoll_data);
+  /* Receive event on @fd callback */
+  int (*request_received)(struct unix_server *, int fd);
+  /* Connection closed event callback */
+  int (*connection_closed)(struct unix_server *, void* data);
 };
 
 struct unix_server {
@@ -29,6 +35,11 @@ void unix_server_fini(struct unix_server* server);
 int unix_server_poll(struct unix_server* server);
 
 /* Add fd to unix_server epoll set. */
-int unix_server_epoll_add(struct unix_server* server, int fd, void* data);
+int unix_server_epoll_add(struct unix_server* server, int fd,
+                          epoll_data_t data);
+
+/* mod fd in unix_server epoll set. */
+int unix_server_epoll_mod(struct unix_server* server, int fd,
+                          epoll_data_t data);
 
 #endif /* __UNIX_SERVER_H__ */

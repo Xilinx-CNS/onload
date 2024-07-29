@@ -379,17 +379,15 @@ static int server_alloc_queue_elems(struct ef_shrub_server *server,
   return 0;
 }
 
-static int server_connection_opened(struct unix_server* unix_server) {
+static int server_request_received(struct unix_server* unix_server, int socket)
+{
   struct ef_shrub_server* server = CI_CONTAINER(struct ef_shrub_server,
                                                 unix_server, unix_server);
   struct ef_shrub_connection* connection;
   struct ef_shrub_queue_request req;
   struct shrub_queue_elem* q_elem;
+  epoll_data_t epoll_data;
   int rc;
-  int socket = accept(unix_server->listen, NULL, NULL);
-
-  if( socket < 0 )
-    return socket;
 
   rc = recv(socket, &req, sizeof(req), 0);
   if( rc < 0 ) {
@@ -426,26 +424,43 @@ static int server_connection_opened(struct unix_server* unix_server) {
   connection->socket = socket;
   rc = connection_send_metrics(q_elem->queue, connection);
   if( rc < 0 )
-    goto fail_send;
+    goto fail2;
 
-  rc = unix_server_epoll_add(&server->unix_server, connection->socket,
-                             connection);
+  epoll_data.ptr = connection;
+  rc = unix_server_epoll_mod(&server->unix_server, socket, epoll_data);
   if( rc < 0 )
-    goto fail_epoll;
-
+    goto fail2;
   /* TODO synchronise */
   connection->next = q_elem->queue->connections;
   connection->qid = req.qid;
   q_elem->queue->connections = connection;
   q_elem->queue->connection_count++;
-
   return 0;
-fail_epoll:
-fail_send:
+
+fail2:
   connection->next = q_elem->queue->closed_connections;
   q_elem->queue->closed_connections = connection;
 fail:
   close(socket);
+  return rc;
+}
+
+static int server_connection_opened(struct unix_server* unix_server)
+{
+  struct ef_shrub_server* server = CI_CONTAINER(struct ef_shrub_server,
+                                                unix_server, unix_server);
+  int rc = 0;
+  int socket = accept(unix_server->listen, NULL, NULL);
+  epoll_data_t epoll_data;
+
+  if( socket < 0 )
+    return socket;
+
+  epoll_data.fd = socket;
+  rc = unix_server_epoll_add(&server->unix_server, socket, epoll_data);
+  if( rc < 0 )
+    close(socket);
+
   return rc;
 }
 
@@ -497,7 +512,7 @@ int ef_shrub_server_open(struct ef_vi* vi,
     goto fail_unix_server_init;
   server->unix_server.ops.connection_opened = server_connection_opened;
   server->unix_server.ops.connection_closed = server_connection_closed;
-
+  server->unix_server.ops.request_received = server_request_received;
   server->vi = vi;
   /* TBD Do this and the above as a single allocation. */
   rc = server_alloc_queue_elems(server, vi->efct_rxqs.max_qs);

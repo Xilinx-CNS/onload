@@ -62,6 +62,7 @@ fail:
 int unix_server_init(struct unix_server* server, const char* server_addr)
 {
   int rc;
+  epoll_data_t epoll_data;
   
   rc = unix_server_epoll_create(server);
   if( rc < 0 )
@@ -71,7 +72,8 @@ int unix_server_init(struct unix_server* server, const char* server_addr)
   if( rc < 0 )
     goto fail_server_listen;
 
-  rc = unix_server_epoll_add(server, server->listen, NULL);
+  epoll_data.ptr = NULL;
+  rc = unix_server_epoll_add(server, server->listen, epoll_data);
   if( rc < 0 )
     goto fail_epoll_add;
 
@@ -97,6 +99,8 @@ int unix_server_poll(struct unix_server* server)
   if( rc > 0 ) {
     if( event.data.ptr == NULL )
       rc = server->ops.connection_opened(server);
+    else if( event.events & EPOLLIN )
+      rc = server->ops.request_received(server, event.data.fd);
 
     if( event.events & EPOLLHUP )
       rc = server->ops.connection_closed(server, event.data.ptr);
@@ -104,17 +108,28 @@ int unix_server_poll(struct unix_server* server)
   return rc;
 }
 
-int unix_server_epoll_add(struct unix_server* server, int fd, void* data)
+static int unix_server_epoll_ctl(struct unix_server* server, int op, int fd,
+                                 epoll_data_t data)
 {
   int rc;
   struct epoll_event event;
 
   event.events = EPOLLIN;
-  event.data.ptr = data;
+  event.data = data;
 
-  rc = epoll_ctl(server->epoll, EPOLL_CTL_ADD, fd, &event);
+  rc = epoll_ctl(server->epoll, op, fd, &event);
   if( rc < 0 )
     return -errno;
 
   return 0;
+}
+
+int unix_server_epoll_add(struct unix_server* server, int fd, epoll_data_t data)
+{
+  return unix_server_epoll_ctl(server, EPOLL_CTL_ADD, fd, data);
+}
+
+int unix_server_epoll_mod(struct unix_server* server, int fd, epoll_data_t data)
+{
+  return unix_server_epoll_ctl(server, EPOLL_CTL_MOD, fd, data);
 }
