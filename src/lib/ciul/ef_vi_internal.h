@@ -240,7 +240,7 @@ extern int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh) EF_VI_H
 void efct_rx_sb_free_push(ef_vi* vi, uint32_t qid, uint32_t sbid);
 int16_t efct_rx_sb_free_next(ef_vi* vi, uint32_t qid, uint32_t sbid);
 
-extern int efct_superbufs_reserve(ef_vi* vi, void* space);
+extern int efct_superbufs_reserve(ef_vi* vi);
 extern void efct_superbufs_cleanup(ef_vi* vi);
 
 static inline const void* efct_superbuf_access(const ef_vi* vi, int qid, size_t sbid)

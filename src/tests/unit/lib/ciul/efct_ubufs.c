@@ -31,11 +31,11 @@ void* mmap(void* p, size_t l, int pr, int fl, int fd, off_t off)
 static const size_t sbufs_per_rxq = CI_EFCT_MAX_SUPERBUFS;
 static const size_t sbuf_bytes_per_rxq = sbufs_per_rxq * EFCT_RX_SUPERBUF_BYTES;
 
-int efct_superbufs_reserve(ef_vi* vi, void* space)
+int efct_superbufs_reserve(ef_vi* vi)
 {
   int i;
+  void* space;
 
-  CHECK(space, ==, NULL);
   vi->efct_rxqs.max_qs = EF_VI_MAX_EFCT_RXQS;
   space = mmap(NULL, sbuf_bytes_per_rxq * vi->efct_rxqs.max_qs, PROT_NONE,
                MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
