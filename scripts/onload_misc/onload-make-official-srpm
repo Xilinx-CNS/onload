@@ -39,9 +39,11 @@ cleanup() {
 
 ######################################################################
 # main()
+force=false
 
 while [ $# -gt 0 ]; do
   case "$1" in
+    --force) force=true;;
     -*)	usage;;
     *)	break;;
   esac
@@ -51,9 +53,11 @@ done
 [ $# = 1 ] || usage
 tarball="$1"
 
-# We build Onload source rpm on RHEL6 as the earliest supported distro
-try egrep -q "Red Hat Enterprise Linux.*release 6|CentOS (Linux )*release 6" \
-  /etc/redhat-release
+if ! $force; then
+  # We build Onload source rpm on RHEL6 as the earliest supported distro
+  try egrep -q "Red Hat Enterprise Linux.*release 6|CentOS (Linux )*release 6" \
+    /etc/redhat-release
+fi
 
 tmpd=
 trap cleanup EXIT
@@ -85,7 +89,7 @@ try rpmbuild --nodeps --define "_topdir $PWD/rpmbuild" -ts "$tarball"
 srpm=$(/bin/ls rpmbuild/SRPMS/*.rpm)
 srpmbase=$(basename "$srpm")
 destfile="$original_wd/$(echo "$srpmbase" | sed -e 's/\.el6//')"
-[ -f "$destfile" ] &&
+[ -f "$destfile" ] && ! $force &&
   fail "ERROR: '$destfile' already exists.  I will not overwrite."
 try cp "$srpm" "$destfile"
 echo "$destfile"
