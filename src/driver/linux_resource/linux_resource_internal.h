@@ -46,7 +46,6 @@
 #include <ci/driver/efab/hardware.h>
 #include <ci/efhw/af_xdp.h>
 
-extern int  efrm_driverlink_register(void);
 extern void efrm_driverlink_unregister(void);
 
 extern int

@@ -51,7 +51,6 @@ struct efrm_nic {
         int max_vis;
 	struct efrm_nic_vi      nvi;
 	unsigned rss_channel_count;
-	const struct efx_dl_device_info *dl_dev_info;
 	unsigned stack_id_usage[(EFRM_MAX_STACK_ID + sizeof(unsigned) * 8)
 				/ (sizeof(unsigned) * 8)];
 
@@ -68,10 +67,6 @@ struct efrm_nic {
 #define EFRM_NIC_FLAG_DRIVERLINK_PROHIBITED      0x00000001u
 	/* NIC is administratively enabled/disabled for acceleration in procfs */
 #define EFRM_NIC_FLAG_ADMIN_ENABLED              0x00000002u
-
-	/* Counter incrementing with each reset/hotplug, to avoid races between
-	 * failing operations and resets that would fix them. */
-	unsigned driverlink_generation;
 
         struct {
           struct mutex lock;

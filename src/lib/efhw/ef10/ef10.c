@@ -13,7 +13,6 @@
 #include <ci/efhw/buddy.h>
 
 #include <ci/driver/ci_ef10.h>
-#include <ci/driver/driverlink_api.h>
 #include <ci/driver/resource/driverlink.h>
 
 #include <ci/tools/debug.h>
@@ -927,7 +926,7 @@ ef10_nic_event_queue_enable(struct efhw_nic *nic,
                                                  &params->flags_out,
                                                  __FUNCTION__);
   if( rc != 0 ) {
-    ef10_ef100_mcdi_cmd_event_queue_disable(nic, params->evq);
+    ef10_mcdi_cmd_event_queue_disable(nic, params->evq);
     /* Firmware returns EPERM if you do not have the licence to subscribe to
      * time sync events.  We convert it to ENOKEY which in Onload means you are
      * lacking the appropriate licence.

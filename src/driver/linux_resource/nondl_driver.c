@@ -16,9 +16,8 @@
 static int efrm_nondl_add_device(struct net_device *net_dev, int n_vis)
 {
   struct vi_resource_dimensions res_dim = {};
-  struct efx_dl_ef10_resources *ef10_res = NULL;
   struct linux_efhw_nic *lnic = NULL;
-  unsigned timer_quantum_ns = 0;
+  unsigned timer_quantum_ns = 60000;
   struct efhw_nic *nic;
   struct efhw_device_type dev_type;
   int rc;
@@ -31,20 +30,12 @@ static int efrm_nondl_add_device(struct net_device *net_dev, int n_vis)
     return -EALREADY;
   }
 
-  ef10_res = kmalloc(sizeof(*ef10_res), GFP_KERNEL);
-  memset(ef10_res, 0, sizeof(*ef10_res));
-  ef10_res->rss_channel_count = 1;
-  ef10_res->vi_min = 0;
-  ef10_res->vi_lim = n_vis;
-  ef10_res->hdr.type = EFX_DL_EF10_RESOURCES;
-  timer_quantum_ns = ef10_res->timer_quantum_ns = 60000;
-
   res_dim.efhw_ops = &af_xdp_char_functional_units;
-  res_dim.vi_min = ef10_res->vi_min;
-  res_dim.vi_lim = ef10_res->vi_lim;
-  res_dim.rss_channel_count = ef10_res->rx_channel_count;
-  res_dim.vi_base = ef10_res->vi_base;
-  res_dim.vi_shift = ef10_res->vi_shift;
+  res_dim.vi_min = 0;
+  res_dim.vi_lim = n_vis;
+  res_dim.rss_channel_count = 1;
+  res_dim.vi_base = 0;
+  res_dim.vi_shift = 0;
 
   EFRM_TRACE("Using VI range %d+(%d-%d)<<%d", res_dim.vi_base, res_dim.vi_min,
              res_dim.vi_lim, res_dim.vi_shift);
@@ -62,8 +53,6 @@ static int efrm_nondl_add_device(struct net_device *net_dev, int n_vis)
                     timer_quantum_ns);
   if (rc != 0)
     return rc;
-
-  lnic->efrm_nic.dl_dev_info = &ef10_res->hdr;
 
   nic = &lnic->efrm_nic.efhw_nic;
   nic->mtu = net_dev->mtu + ETH_HLEN; /* ? + ETH_VLAN_HLEN */

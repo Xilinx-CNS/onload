@@ -54,7 +54,6 @@
 
 #include "linux_resource_internal.h"
 #include <ci/driver/kernel_compat.h>
-#include <ci/driver/driverlink_api.h>
 #include <ci/efrm/nic_table.h>
 #include <ci/efhw/eventq.h>
 #include <ci/efhw/nic.h>
@@ -114,12 +113,6 @@ MODULE_PARM_DESC(enable_driverlink,
 		 "Attach SFC devices using native interface."
 		 "When disabled, it is possible to attach SFC devices "
 		 "with AF_XDP interface.");
-
-int enable_legacy_driverlink = 0;
-module_param(enable_legacy_driverlink, int, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(enable_legacy_driverlink,
-		 "Attach SFC devices using legacy driverlink interface."
-		 "By default devices will be attached using aux bus.");
 
 
 /*********************************************************************
@@ -411,9 +404,6 @@ efrm_nic_add(void *drv_device, struct device *dev,
 	lnic->drv_device = drv_device;
 	efrm_nic = &lnic->efrm_nic;
 	nic = &efrm_nic->efhw_nic;
-#if CI_HAVE_SFC
-	efrm_driverlink_resume(nic);
-#endif
 
 	if( timer_quantum_ns )
 		nic->timer_quantum_ns = timer_quantum_ns;
@@ -669,27 +659,16 @@ static int init_sfc_resource(void)
 	efrm_filter_init();
 
 	efrm_init_debugfs();
-        /* efrm_driverlink_register() attempts to create files in
+
+        /* efrm_auxbus_register() attempts to create files in
          * /proc, so it is important that /proc is initialised
          * first. */
-
 	if (efrm_install_proc_entries() != 0) {
 		/* Do not fail, but print a warning */
 		EFRM_WARN("%s: WARNING: failed to install /proc entries",
 			  __func__);
 	}
 	efrm_filter_install_proc_entries();
-
-#if CI_HAVE_SFC
-	/* Register the driver so that our 'probe' function is called for
-	 * each EtherFabric device in the system.
-	 */
-	rc = efrm_driverlink_register();
-	if (rc == -ENODEV)
-		EFRM_ERR("%s: no devices found", __func__);
-	if (rc < 0)
-		goto failed_driverlink;
-#endif
 
 	rc = efrm_auxbus_register();
 	if (rc < 0)
@@ -708,10 +687,6 @@ static int init_sfc_resource(void)
 failed_notifier:
 	efrm_auxbus_unregister();
 failed_auxbus:
-#if CI_HAVE_SFC
-	efrm_driverlink_unregister();
-failed_driverlink:
-#endif
 	efrm_filter_remove_proc_entries();
 	efrm_uninstall_proc_entries();
 	efrm_driver_stop();
@@ -734,11 +709,6 @@ static void cleanup_sfc_resource(void)
 	efrm_nondl_shutdown();
 	efrm_unregister_netdev_notifier();
 	efrm_auxbus_unregister();
-#if CI_HAVE_SFC
-	/* Unregister from driverlink first, free
-	 * the per-NIC structures next. */
-	efrm_driverlink_unregister();
-#endif
 	efrm_nic_shutdown_all();
 	efrm_nic_del_all();
 

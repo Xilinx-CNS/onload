@@ -154,7 +154,6 @@ int efrm_nic_ctor(struct efrm_nic *efrm_nic,
 	INIT_LIST_HEAD(&efrm_nic->clients);
 	efrm_nic->rx_sniff_rxq = EFRM_PORT_SNIFF_NO_OWNER;
 	efrm_nic->tx_sniff_rxq = EFRM_PORT_SNIFF_NO_OWNER;
-	efrm_nic->driverlink_generation = 0;
 
         mutex_init(&efrm_nic->dmaq_state.lock);
         INIT_LIST_HEAD(&efrm_nic->dmaq_state.q[EFHW_EVQ]);

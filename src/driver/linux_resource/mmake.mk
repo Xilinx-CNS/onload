@@ -48,9 +48,7 @@ UTILS_HDRS	:= hugetlb.h iobufset.h
 UTILS_SRCS	:= hugetlb.c iobufset.c
 
 ifeq ($(HAVE_SFC),1)
-RESOURCE_SRCS += driverlink_new.c
 EFHW_EF10_SRCS	:= aux_ef10.c ef10.c
-EFHW_SRCS += ef10.c
 else
 EFHW_EF10_SRCS	:=
 endif
@@ -70,7 +68,6 @@ IMPORT		:= $(EFHW_SRCS:%=../../lib/efhw/%) \
 		   $(EFRM_HDRS:%=../../lib/efrm/%) \
 		   $(UTILS_SRCS:%=../../lib/kernel_utils/%) \
 		   $(UTILS_HDRS:%=../../include/kernel_utils/%) \
-		   ../linux_net/drivers/net/ethernet/sfc/driverlink_api.h
 
 
 RESOURCE_TARGET	:= sfc_resource.o
