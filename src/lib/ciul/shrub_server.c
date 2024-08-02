@@ -265,7 +265,7 @@ static int queue_alloc_shared(struct ef_shrub_queue* queue)
   if( rc < 0 )
     return -errno;
 
-  fd = memfd_create("ef_shrub_queue_fifo", 0);
+  fd = memfd_create("ef_shrub_server_fifo", 0);
   if( fd < 0 )
     return -errno;
   queue->shared_fds[EF_SHRUB_FD_SERVER_FIFO] = fd;
@@ -370,7 +370,7 @@ static int connection_send_metrics(struct ef_shrub_queue* queue,
     .server_version = EF_SHRUB_VERSION,
     .buffer_bytes = queue->buffer_bytes,
     .buffer_count = queue->buffer_count,
-    .queue_fifo_size = fifo_bytes(queue),
+    .server_fifo_size = fifo_bytes(queue),
     .client_fifo_offset = connection->fifo_mmap_offset,
     .client_fifo_size = fifo_bytes(queue)
   };

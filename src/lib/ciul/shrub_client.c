@@ -59,7 +59,7 @@ static size_t buffer_mmap_bytes(struct ef_shrub_client* client)
 
 static size_t server_mmap_bytes(struct ef_shrub_client* client)
 {
-  return client->metrics.queue_fifo_size * sizeof(ef_shrub_buffer_id);
+  return client->metrics.server_fifo_size * sizeof(ef_shrub_buffer_id);
 }
 
 static size_t client_mmap_bytes(struct ef_shrub_client* client)
@@ -219,7 +219,7 @@ int ef_shrub_client_acquire_buffer(struct ef_shrub_client* client,
     return -EAGAIN;
 
   client->server_fifo_index =
-    i == client->metrics.queue_fifo_size - 1 ? 0 : i + 1;
+    i == client->metrics.server_fifo_size - 1 ? 0 : i + 1;
 
   id2.u32[0] = id;
   *buffer_id = CI_DWORD_FIELD(id2, EF_SHRUB_BUFFER_ID);

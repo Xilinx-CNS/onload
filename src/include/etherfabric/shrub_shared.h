@@ -77,7 +77,7 @@ struct ef_shrub_shared_metrics {
   /* Mapping information for the FIFO for the server to post buffers to clients.
    * Read only for clients.
    * Offset is zero, length is sizeof(ef_shrub_buffer_id) * size */
-  uint64_t queue_fifo_size;
+  uint64_t server_fifo_size;
 
   /* Mapping information for the FIFO for clients to release buffers to server.
    * Write only for clients.
