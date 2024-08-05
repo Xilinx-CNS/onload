@@ -185,7 +185,12 @@ extern int ci_format_ip4_addr(char* buf, int len, unsigned addr_be32) CI_HF;
  * Error checking.
  */
 
-#ifdef __GNUC__
+/* Ideally we'd use the noreturn attribute within our kernel modules, however
+ * due to a limitation of objtool all noreturn functions must be included in a
+ * hard-coded global list. This poses obvious issues for our non-upstreamable
+ * out-of-tree modules. For now, don't use the noreturn attribute in the kernel.
+ * TODO: Find a better long-term solution to this problem */
+#if defined(__GNUC__) && !defined(__KERNEL__)
 # define CI_NORETURN __attribute__((noreturn)) void
 #else
 # define CI_NORETURN void
