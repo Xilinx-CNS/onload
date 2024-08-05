@@ -2414,13 +2414,14 @@ oof_socket_add_full_hw(struct oof_manager* fm, struct oof_socket* skf,
        * - Out of space in h/w filter table (EBUSY).
        * - Clash in h/w filter table (EEXIST).
        * - Blocked by Onload iptables (ERFKILL).
+       * - Failed on at least one, but not all, hwports (EFILTERSSOME).
        *
        * Is this where we get to if two sockets try to bind/connect to the
        * same 5-tuple?
        *
        * ?? TODO: Handle the various errors elegantly.
        */
-      if( rc == -EBUSY || rc == -ERFKILL )
+      if( rc == -EBUSY || rc == -ERFKILL || rc == -EFILTERSSOME )
         return rc;
       else
         return -EADDRNOTAVAIL;
@@ -2698,7 +2699,8 @@ __oof_socket_add(struct oof_manager* fm, struct oof_socket* skf, int do_arm_only
           return rc;
         if( (rc = oof_socket_add_full_hw(fm, skf, lpa,
                                          IS_AF_SPACE_IP6(skf->af_space) ?
-                                         AF_INET6 : AF_INET)) != 0 ) {
+                                         AF_INET6 : AF_INET)) != 0 &&
+            rc != -EFILTERSSOME ) {
           oof_socket_del_full_sw(skf, 1);
           return rc;
         }

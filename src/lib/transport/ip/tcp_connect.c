@@ -1042,12 +1042,32 @@ static int ci_tcp_connect_ul_start(ci_netif *ni, ci_tcp_state* ts, ci_fd_t fd,
     /* Perhaps we've run out of filters?  See if we can push a socket out
      * of timewait and steal its filter.
      */
-    ci_assert_nequal(rc, -EFILTERSSOME);
+    if( rc == -EFILTERSSOME ) {
+#ifndef __KERNEL__
+      if( CITP_OPTS.no_fail )
+        rc = 0;
+      else
+#endif
+      {
+        ci_tcp_ep_clear_filters(ni, S_SP(ts), 0);
+        rc = -ENOBUFS;
+      }
+    }
     if( rc != -EBUSY || ! ci_netif_timewait_try_to_free_filter(ni) ||
         (rc = ci_tcp_ep_set_filters(ni, S_SP(ts),
                                     ts->s.cp.so_bindtodevice,
                                     active_wild)) < 0 ) {
-      ci_assert_nequal(rc, -EFILTERSSOME);
+      if( rc == -EFILTERSSOME ) {
+#ifndef __KERNEL__
+        if( CITP_OPTS.no_fail )
+          rc = 0;
+        else
+#endif
+        {
+          ci_tcp_ep_clear_filters(ni, S_SP(ts), 0);
+          rc = -ENOBUFS;
+        }
+      }
       /* Either a different error, or our efforts to free a filter did not
        * work.
        */
