@@ -1,15 +1,19 @@
 /* SPDX-License-Identifier: GPL-2.0 */
+/* SPDX-FileCopyrightText: Copyright (c) 2023 Advanced Micro Devices, Inc. */
 
 #include "ci_arm64_insn.h"
 
 #ifndef EFRM_HAVE_NEW_KALLSYMS
+/* SPDX-SnippetBegin */
+/* SPDX-SnippetCopyrightText: Copyright (C) 2013 Huawei Ltd. */
+/* SPDX-SnippetCopyrightText: Copyright (C) 2014-2016 Zi Shen Lim <zlim.lnx@gmail.com> */
+/* SPDX-License-Identifier: GPL-2.0-only */
 /* X-SPDX-Source-URL: https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git */
 /* X-SPDX-Source-Tag: v5.15.83 */
 /* X-SPDX-Source-File: arch/arm64/lib/insn.c */
-/* X-SPDX-License-Identifier: GPL-2.0-only */
-/* X-SPDX-Comment: Functions to inspect aarch64 instructions for the case when
- *                 efrm_find_ksym() is unavailable. The "ci" prefix is added to
- *                 public functions in order not to clash with kernel names. */
+/* SPDX-SnippetComment: Functions to inspect aarch64 instructions for the case when
+ *                      efrm_find_ksym() is unavailable. The "ci" prefix is added to
+ *                      public functions in order not to clash with kernel names. */
 
 static int aarch64_get_imm_shift_mask(enum aarch64_insn_imm_type type,
 						u32 *maskp, int *shiftp)
@@ -142,5 +146,5 @@ s32 ci_aarch64_insn_adrp_get_offset(u32 insn)
 	BUG_ON(!aarch64_insn_is_adrp(insn));
 	return ci_aarch64_insn_decode_immediate(AARCH64_INSN_IMM_ADR, insn) << 12;
 }
-/* X-SPDX-Restore: */
+/* SPDX-SnippetEnd */
 #endif /* ! EFRM_HAVE_NEW_KALLSYMS */

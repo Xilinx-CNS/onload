@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
+/* SPDX-FileCopyrightText: Copyright (c) 2023 Advanced Micro Devices, Inc. */
+
 #ifndef __CI_ARM64_INSN_H__
 #define __CI_ARM64_INSN_H__
 

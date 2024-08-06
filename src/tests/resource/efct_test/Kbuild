@@ -1,1 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0
+# SPDX-FileCopyrightText: (c) Copyright 2021 Advanced Micro Devices, Inc.
+
 include $(src)/mmake.mk

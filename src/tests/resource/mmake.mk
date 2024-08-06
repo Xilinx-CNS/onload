@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0
-# X-SPDX-Copyright-Text: (c) Copyright 002-2020 Xilinx, Inc.
+# SPDX-FileCopyrightText: (c) Copyright 2002-2020 Advanced Micro Devices, Inc.
 
 DRIVER_SUBDIRS	:= efct_test
 

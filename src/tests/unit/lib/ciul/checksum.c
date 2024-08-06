@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: BSD-2-Clause */
+/* SPDX-FileCopyrightText: (c) Copyright 2024 Advanced Micro Devices, Inc. */
+
 #include <stdio.h>
 #include <stdbool.h>
 
