@@ -1871,11 +1871,7 @@ static void efx_mcdi_filter_netdev_mc_addrs(struct efx_nic *efx,
 {
 	struct net_device *net_dev = efx->net_dev;
 	struct efx_mcdi_dev_addr addr;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_DEVICE_MC)
 	struct netdev_hw_addr *mc;
-#else
-	struct dev_mc_list *mc;
-#endif
 
 #ifdef EFX_NOT_UPSTREAM
 #if IS_MODULE(CONFIG_SFC_DRIVERLINK)
@@ -1889,11 +1885,7 @@ static void efx_mcdi_filter_netdev_mc_addrs(struct efx_nic *efx,
 	*mc_promisc = !!(net_dev->flags & (IFF_PROMISC | IFF_ALLMULTI));
 
 	netdev_for_each_mc_addr(mc, net_dev) {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_DEVICE_MC)
 		ether_addr_copy(addr.addr, mc->addr);
-#else
-		ether_addr_copy(addr.addr, mc->dmi_addr);
-#endif
 		efx_mcdi_filter_mc_addr(efx, &addr);
 	}
 }

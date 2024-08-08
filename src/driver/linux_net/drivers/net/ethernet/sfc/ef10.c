@@ -1953,13 +1953,8 @@ static bool efx_use_vadaptor_stats(struct efx_nic *efx)
 	return false;
 }
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_NETDEV_STATS64)
 static size_t efx_ef10_update_stats_common(struct efx_nic *efx, u64 *full_stats,
 					   struct rtnl_link_stats64 *core_stats)
-#else
-static size_t efx_ef10_update_stats_common(struct efx_nic *efx, u64 *full_stats,
-					   struct net_device_stats *core_stats)
-#endif
 {
 	DECLARE_BITMAP(mask, EF10_STAT_COUNT) = {};
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
@@ -2024,13 +2019,8 @@ static size_t efx_ef10_update_stats_common(struct efx_nic *efx, u64 *full_stats,
 	return stats_count;
 }
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_NETDEV_STATS64)
 static size_t efx_ef10_update_stats_pf(struct efx_nic *efx, u64 *full_stats,
 				       struct rtnl_link_stats64 *core_stats)
-#else
-static size_t efx_ef10_update_stats_pf(struct efx_nic *efx, u64 *full_stats,
-				       struct net_device_stats *core_stats)
-#endif
 	__acquires(efx->stats_lock)
 {
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
@@ -2084,13 +2074,8 @@ static void efx_ef10_pull_stats_pf(struct efx_nic *efx)
 }
 
 #ifdef CONFIG_SFC_SRIOV
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_NETDEV_STATS64)
 static size_t efx_ef10_update_stats_vf(struct efx_nic *efx, u64 *full_stats,
 				       struct rtnl_link_stats64 *core_stats)
-#else
-static size_t efx_ef10_update_stats_vf(struct efx_nic *efx, u64 *full_stats,
-				       struct net_device_stats *core_stats)
-#endif
 	__acquires(efx->stats_lock)
 {
 	/* MCDI is required to update statistics, but it can't be used
@@ -2906,19 +2891,11 @@ static int efx_debugfs_read_netdev_uc_addr(struct seq_file *file, void *data)
 static int efx_debugfs_read_netdev_mc_addr(struct seq_file *file, void *data)
 {
 	struct net_device *net_dev = data;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_DEVICE_MC)
 	struct netdev_hw_addr *mc;
-#else
-	struct dev_mc_list *mc;
-#endif
 	unsigned int i = 0;
 
 	netdev_for_each_mc_addr(mc, net_dev) {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_DEVICE_MC)
 		seq_printf(file, "%d - %pM\n", i, mc->addr);
-#else
-		seq_printf(file, "%d - %pM\n", i, mc->dmi_addr);
-#endif
 		i++;
 	}
 	return 0;
@@ -4325,11 +4302,7 @@ static int efx_ef10_mtd_probe_partition(struct efx_nic *efx,
 	if (!erase_size)
 		part->mtd.flags |= MTD_NO_ERASE;
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_MTD_WRITESIZE)
 	part->mtd.writesize = write_size;
-#else
-	part->writesize = write_size;
-#endif
 
 	return 0;
 }
@@ -5684,16 +5657,13 @@ static void efx_ef10_remove(struct efx_nic *efx)
 static void efx_ef10_remove_vf(struct efx_nic *efx)
 {
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_VF_MAC)
 	struct efx_ef10_nic_data *nic_data_pf;
 	struct pci_dev *pci_dev_pf;
 	struct efx_nic *efx_pf;
 	struct ef10_vf *vf;
-#endif
 
 	efx_ef10_remove(efx);
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_VF_MAC)
 	/* If PCI probe fails early there is no NIC specific data yet */
 	if (!nic_data)
 		return;
@@ -5707,7 +5677,6 @@ static void efx_ef10_remove_vf(struct efx_nic *efx)
 			vf->efx = NULL;
 		}
 	}
-#endif
 }
 
 static int efx_ef10_probe_vf(struct efx_nic *efx)
@@ -5740,7 +5709,6 @@ static int efx_ef10_probe_vf(struct efx_nic *efx)
 
 	nic_data = efx->nic_data;
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_VF_MAC)
 	if (efx->pci_dev->physfn) {
 		struct efx_nic *efx_pf = pci_get_drvdata(efx->pci_dev->physfn);
 		struct efx_ef10_nic_data *nic_data_pf = efx_pf->nic_data;
@@ -5752,7 +5720,6 @@ static int efx_ef10_probe_vf(struct efx_nic *efx)
 		netif_info(efx, drv, efx->net_dev,
 			   "Could not get the PF id from VF\n");
 	}
-#endif
 
 	INIT_DELAYED_WORK(&nic_data->vf_stats_work,
 			  efx_ef10_vf_update_stats_work);
@@ -6105,9 +6072,7 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.sriov_set_vf_mac = efx_ef10_sriov_set_vf_mac,
 	.sriov_set_vf_vlan = efx_ef10_sriov_set_vf_vlan,
 	.sriov_set_vf_spoofchk = efx_ef10_sriov_set_vf_spoofchk,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_VF_MAC)
 	.sriov_get_vf_config = efx_ef10_sriov_get_vf_config,
-#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VF_LINK_STATE)
 	.sriov_set_vf_link_state = efx_ef10_sriov_set_vf_link_state,
 #endif

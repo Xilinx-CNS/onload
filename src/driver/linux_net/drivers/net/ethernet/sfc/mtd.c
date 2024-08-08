@@ -202,10 +202,9 @@ int efx_mtd_add(struct efx_nic *efx, struct efx_mtd_partition *parts,
 	for (i = 0; i < n_parts; i++) {
 		part = &parts[i];
 		part->mtd_struct = mtd_struct;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_MTD_WRITESIZE)
 		if (!part->mtd.writesize)
 			part->mtd.writesize = 1;
-#endif
+
 		if (efx_allow_nvconfig_writes &&
 		    !(part->mtd.flags & MTD_NO_ERASE))
 			part->mtd.flags |= MTD_WRITEABLE;

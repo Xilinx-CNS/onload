@@ -27,10 +27,8 @@ int efx_sriov_set_vf_vlan(struct net_device *net_dev, int vf_i, u16 vlan,
 #endif
 int efx_sriov_set_vf_spoofchk(struct net_device *net_dev, int vf_i,
 			      bool spoofchk);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_VF_MAC)
 int efx_sriov_get_vf_config(struct net_device *net_dev, int vf_i,
 			    struct ifla_vf_info *ivi);
-#endif
 int efx_sriov_set_vf_link_state(struct net_device *net_dev, int vf_i,
 				int link_state);
 #endif /* CONFIG_SFC_SRIOV */

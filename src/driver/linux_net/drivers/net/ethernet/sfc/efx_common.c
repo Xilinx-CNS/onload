@@ -443,9 +443,7 @@ static int efx_start_datapath(struct efx_nic *efx)
 	netdev_features_t old_features = efx->net_dev->features;
 #endif
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
-#if defined(EFX_HAVE_NDO_SET_FEATURES) || defined(EFX_HAVE_EXT_NDO_SET_FEATURES)
 	bool old_lro_available = efx->lro_available;
-#endif
 
 	efx->lro_available = true;
 #endif
@@ -493,17 +491,9 @@ static int efx_start_datapath(struct efx_nic *efx)
 			  efx->rx_bufs_per_page, efx->rx_pages_per_batch);
 
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
-#if defined(EFX_HAVE_NDO_SET_FEATURES) || defined(EFX_HAVE_EXT_NDO_SET_FEATURES)
 	/* This will call back into efx_fix_features() */
 	if (efx->lro_available != old_lro_available)
 		netdev_update_features(efx->net_dev);
-#elif defined(NETIF_F_LRO)
-	if (!efx->lro_available && efx->net_dev->features & NETIF_F_LRO)
-		efx->net_dev->features &= ~NETIF_F_LRO;
-#else
-	if (!efx->lro_available)
-		efx->lro_enabled = false;
-#endif
 #endif
 
 	/* Restore previously fixed features in hw_features and remove
@@ -717,21 +707,12 @@ void efx_stop_all(struct efx_nic *efx)
 /* Context: process, dev_base_lock or RTNL held, non-blocking. */
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NETDEV_STATS64_VOID)
 void efx_net_stats(struct net_device *net_dev, struct rtnl_link_stats64 *stats)
-#elif defined(EFX_USE_NETDEV_STATS64)
+#else
 struct rtnl_link_stats64 *efx_net_stats(struct net_device *net_dev,
 					struct rtnl_link_stats64 *stats)
-#else
-struct net_device_stats *efx_net_stats(struct net_device *net_dev)
 #endif
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_NETDEV_STATS64)
-#if defined(EFX_USE_NETDEV_STATS)
-	struct net_device_stats *stats = &net_dev->stats;
-#else
-	struct net_device_stats *stats = &efx->stats;
-#endif
-#endif
 
 	efx->type->update_stats(efx, NULL, stats);
 	/* release stats_lock obtained in update_stats */
@@ -1463,9 +1444,6 @@ int efx_init_struct(struct efx_nic *efx, struct pci_dev *pci_dev)
 	efx->state = STATE_UNINIT;
 	strscpy(efx->name, pci_name(pci_dev), sizeof(efx->name));
 
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NDO_SET_FEATURES) && !defined(EFX_HAVE_EXT_NDO_SET_FEATURES)
-	efx->rx_checksum_enabled = true;
-#endif
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
 	efx->lro_available = true;
 #ifndef NETIF_F_LRO
@@ -2173,19 +2151,14 @@ int efx_get_phys_port_name(struct net_device *net_dev,
 }
 #endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_FEATURES) || defined(EFX_HAVE_EXT_NDO_SET_FEATURES)
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
 /* This is called by netdev_update_features() to apply any
  * restrictions on offload features.  We must disable LRO whenever RX
  * scattering is on since our implementation (SSR) does not yet
  * support it.
  */
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_FEATURES)
 netdev_features_t efx_fix_features(struct net_device *net_dev,
 				   netdev_features_t data)
-#else
-u32 efx_fix_features(struct net_device *net_dev, u32 data)
-#endif
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
@@ -2199,11 +2172,7 @@ u32 efx_fix_features(struct net_device *net_dev, u32 data)
 }
 #endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_FEATURES)
 int efx_set_features(struct net_device *net_dev, netdev_features_t data)
-#else
-int efx_set_features(struct net_device *net_dev, u32 data)
-#endif
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	int rc;
@@ -2228,7 +2197,6 @@ int efx_set_features(struct net_device *net_dev, u32 data)
 
 	return 0;
 }
-#endif
 
 #ifdef EFX_NOT_UPSTREAM
 #if IS_MODULE(CONFIG_SFC_DRIVERLINK)

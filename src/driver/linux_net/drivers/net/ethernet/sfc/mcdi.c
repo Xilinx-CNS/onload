@@ -2978,11 +2978,7 @@ int efx_mcdi_mtd_write(struct mtd_info *mtd, loff_t start,
 	}
 
 	while (offset < end) {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_MTD_WRITESIZE)
 		chunk = min_t(size_t, end - offset, mtd->writesize);
-#else
-		chunk = min_t(size_t, end - offset, part->common.writesize);
-#endif
 		rc = efx_mcdi_nvram_write(efx, part->nvram_type, offset,
 					  buffer, chunk);
 		if (rc)

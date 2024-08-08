@@ -831,10 +831,8 @@ static int efx_register_netdev(struct efx_nic *efx)
 	net_dev->watchdog_timeo = 5 * HZ;
 	net_dev->irq = efx->pci_dev->irq;
 	net_dev->netdev_ops = &efx_netdev_ops;
-#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_HAVE_NDO_SET_MULTICAST_LIST)
 	if (efx_nic_rev(efx) >= EFX_REV_HUNT_A0)
 		net_dev->priv_flags |= IFF_UNICAST_FLT;
-#endif
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NETDEV_RFS_INFO)
 #ifdef CONFIG_RFS_ACCEL
 	netdev_extended(net_dev)->rfs_data.ndo_rx_flow_steer = efx_filter_rfs;
@@ -1388,7 +1386,6 @@ fail:
    on success*/
 
 #ifdef CONFIG_SFC_SRIOV
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SRIOV_CONFIGURE) || defined(EFX_HAVE_PCI_DRIVER_RH)
 
 static int efx_pci_sriov_configure(struct pci_dev *dev,
 				   int num_vfs)
@@ -1406,7 +1403,6 @@ static int efx_pci_sriov_configure(struct pci_dev *dev,
 	else
 		return -ENOSYS;
 }
-#endif
 #endif
 
 static int efx_pm_freeze(struct device *dev)
@@ -1564,8 +1560,6 @@ static int efx_pm_suspend(struct device *dev)
 	return rc;
 }
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_DEV_PM_OPS)
-
 static const struct dev_pm_ops efx_pm_ops = {
 	.suspend	= efx_pm_suspend,
 	.resume		= efx_pm_resume,
@@ -1575,84 +1569,23 @@ static const struct dev_pm_ops efx_pm_ops = {
 	.restore	= efx_pm_resume,
 };
 
-#elif defined(EFX_USE_PM_EXT_OPS)
-
-static struct pm_ext_ops efx_pm_ops = {
-	.base = {
-		.suspend	= efx_pm_suspend,
-		.resume		= efx_pm_resume,
-		.freeze		= efx_pm_freeze,
-		.thaw		= efx_pm_thaw,
-		.poweroff	= efx_pm_poweroff,
-		.restore	= efx_pm_resume,
-	}
-};
-
-#else /* !EFX_USE_DEV_PM_OPS && !EFX_USE_PM_EXT_OPS */
-
-static int efx_pm_old_suspend(struct pci_dev *dev, pm_message_t state)
-{
-	switch (state.event) {
-	case PM_EVENT_FREEZE:
-#if defined(PM_EVENT_QUIESCE)
-	case PM_EVENT_QUIESCE:
-#elif defined(PM_EVENT_PRETHAW)
-	case PM_EVENT_PRETHAW:
-#endif
-		return efx_pm_freeze(&dev->dev);
-	default:
-		return efx_pm_suspend(&dev->dev);
-	}
-}
-
-static int efx_pm_old_resume(struct pci_dev *dev)
-{
-	return efx_pm_resume(&dev->dev);
-}
-
-#endif /* EFX_USE_PM_EXT_OPS */
-
-#if defined(CONFIG_SFC_SRIOV) && defined(EFX_HAVE_PCI_DRIVER_RH) && !defined(EFX_HAVE_SRIOV_CONFIGURE)
-static struct pci_driver_rh efx_pci_driver_rh = {
-	.sriov_configure = efx_pci_sriov_configure,
-};
-#endif
-
 static struct pci_driver efx_pci_driver = {
 	.name		= KBUILD_MODNAME,
 	.id_table	= efx_pci_table,
 	.probe		= efx_pci_probe,
 	.remove		= efx_pci_remove,
-#if !defined(EFX_USE_KCOMPAT)
 	.driver.pm	= &efx_pm_ops,
-#elif defined(EFX_USE_DEV_PM_OPS)
-	/* May need to cast away const */
-	.driver.pm	= (struct dev_pm_ops *)&efx_pm_ops,
-#elif defined(EFX_USE_PM_EXT_OPS)
-	.pm		= &efx_pm_ops,
-#else
-	.suspend	= efx_pm_old_suspend,
-	.resume		= efx_pm_old_resume,
-#endif
 	.shutdown	= efx_pci_shutdown,
 	.err_handler	= &efx_err_handlers,
 #ifdef CONFIG_SFC_SRIOV
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SRIOV_CONFIGURE)
 	.sriov_configure = efx_pci_sriov_configure,
-#elif defined(EFX_HAVE_PCI_DRIVER_RH)
-	.rh_reserved    = &efx_pci_driver_rh,
-#endif
 #endif
 };
 
 const struct net_device_ops efx_netdev_ops = {
 	.ndo_open		= efx_net_open,
 	.ndo_stop		= efx_net_stop,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_NETDEV_STATS64)
 	.ndo_get_stats64	= efx_net_stats,
-#else
-	.ndo_get_stats		= efx_net_stats,
-#endif
 	.ndo_tx_timeout		= efx_watchdog,
 	.ndo_start_xmit		= efx_hard_start_xmit,
 	.ndo_validate_addr	= eth_validate_addr,
@@ -1673,22 +1606,11 @@ const struct net_device_ops efx_netdev_ops = {
 	.ndo_change_mtu		= efx_change_mtu,
 #endif
 	.ndo_set_mac_address	= efx_set_mac_address,
-#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_HAVE_NDO_SET_MULTICAST_LIST)
-	.ndo_set_rx_mode	= efx_set_rx_mode, /* Lookout */
-#else
-	/* On older kernel versions, set_rx_mode is expected to
-	 * support multiple unicast addresses and set_multicast_list
-	 * is expected to support only one.  On newer versions the
-	 * IFF_UNICAST_FLT flag distinguishes these.
-	 */
-	.ndo_set_multicast_list	= efx_set_rx_mode,
-#endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_FEATURES)
+	.ndo_set_rx_mode	= efx_set_rx_mode,
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
 	.ndo_fix_features	= efx_fix_features,
 #endif
 	.ndo_set_features	= efx_set_features,
-#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_FEATURES_CHECK)
 	.ndo_features_check	= efx_features_check,
 #endif
@@ -1699,7 +1621,6 @@ const struct net_device_ops efx_netdev_ops = {
 	.ndo_hwtstamp_get	= efx_hwtstamp_get,
 #endif
 #ifdef CONFIG_SFC_SRIOV
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_VF_MAC)
 	.ndo_set_vf_mac         = efx_sriov_set_vf_mac,
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_EXT_SET_VF_VLAN_PROTO)
 	.extended.ndo_set_vf_vlan = efx_sriov_set_vf_vlan,
@@ -1707,13 +1628,10 @@ const struct net_device_ops efx_netdev_ops = {
 	.ndo_set_vf_vlan        = efx_sriov_set_vf_vlan,
 #endif
 	.ndo_get_vf_config      = efx_sriov_get_vf_config,
-#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VF_LINK_STATE)
 	.ndo_set_vf_link_state  = efx_sriov_set_vf_link_state,
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_VF_SPOOFCHK)
 	.ndo_set_vf_spoofchk	= efx_sriov_set_vf_spoofchk,
-#endif
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_ID)
 	.ndo_get_phys_port_id	= efx_get_phys_port_id,
@@ -1788,13 +1706,6 @@ const struct net_device_ops efx_netdev_ops = {
 
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NET_DEVICE_OPS_EXT)
 const struct net_device_ops_ext efx_net_device_ops_ext = {
-#ifdef EFX_HAVE_EXT_NDO_SET_FEATURES
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
-	.ndo_fix_features      = efx_fix_features,
-#endif
-	.ndo_set_features      = efx_set_features,
-#endif
-
 #ifdef EFX_HAVE_NET_DEVICE_OPS_EXT_GET_PHYS_PORT_ID
 	.ndo_get_phys_port_id	= efx_get_phys_port_id,
 #endif

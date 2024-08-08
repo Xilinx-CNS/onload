@@ -508,11 +508,7 @@ void __efx_rx_packet(struct efx_rx_queue *rx_queue)
 		goto deliver_now;
 	}
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_FEATURES) || defined(EFX_HAVE_EXT_NDO_SET_FEATURES)
 	if (unlikely(!(efx->net_dev->features & NETIF_F_RXCSUM)))
-#else
-	if (unlikely(!efx->rx_checksum_enabled))
-#endif
 		rx_buf->flags &= ~EFX_RX_PKT_CSUMMED;
 
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)

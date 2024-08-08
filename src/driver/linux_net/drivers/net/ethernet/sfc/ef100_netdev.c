@@ -586,11 +586,7 @@ static const struct net_device_ops ef100_netdev_ops = {
 	.ndo_stop               = ef100_net_stop,
 	.ndo_start_xmit         = ef100_hard_start_xmit,
 	.ndo_tx_timeout         = efx_watchdog,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_NETDEV_STATS64)
 	.ndo_get_stats64        = efx_net_stats,
-#else
-	.ndo_get_stats		= efx_net_stats,
-#endif
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_EXT_CHANGE_MTU)
 	.extended.ndo_change_mtu = efx_change_mtu,
 #else
@@ -605,27 +601,15 @@ static const struct net_device_ops ef100_netdev_ops = {
 #endif
 #endif
 	.ndo_set_mac_address    = efx_set_mac_address,
-#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_HAVE_NDO_SET_MULTICAST_LIST)
-	.ndo_set_rx_mode        = efx_set_rx_mode, /* Lookout */
-#else
-	/* On older kernel versions, set_rx_mode is expected to
-	 * support multiple unicast addresses and set_multicast_list
-	 * is expected to support only one.  On newer versions the
-	 * IFF_UNICAST_FLT flag distinguishes these.
-	 */
-	.ndo_set_multicast_list = efx_set_rx_mode,
-#endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_FEATURES)
+	.ndo_set_rx_mode        = efx_set_rx_mode,
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
 	.ndo_fix_features       = efx_fix_features,
 #endif
 	.ndo_set_features       = efx_set_features,
-#endif
 	.ndo_vlan_rx_add_vid    = efx_vlan_rx_add_vid,
 	.ndo_vlan_rx_kill_vid   = efx_vlan_rx_kill_vid,
 #if 0
 #ifdef CONFIG_SFC_SRIOV
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_VF_MAC)
 	.ndo_set_vf_mac         = efx_sriov_set_vf_mac,
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_EXT_SET_VF_VLAN_PROTO)
 	.extended.ndo_set_vf_vlan = efx_sriov_set_vf_vlan,
@@ -633,13 +617,10 @@ static const struct net_device_ops ef100_netdev_ops = {
 	.ndo_set_vf_vlan        = efx_sriov_set_vf_vlan,
 #endif
 	.ndo_get_vf_config      = efx_sriov_get_vf_config,
-#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VF_LINK_STATE)
 	.ndo_set_vf_link_state  = efx_sriov_set_vf_link_state,
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_VF_SPOOFCHK)
 	.ndo_set_vf_spoofchk    = efx_sriov_set_vf_spoofchk,
-#endif
 #endif
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_ID)

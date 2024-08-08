@@ -589,7 +589,6 @@ fail:
 	return rc;
 }
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SRIOV_CONFIGURE) || (defined(CONFIG_SFC_SRIOV) && defined(EFX_HAVE_PCI_DRIVER_RH))
 static int ef100_pci_sriov_configure(struct pci_dev *dev, int num_vfs)
 {
 	struct efx_nic *efx = pci_get_drvdata(dev);
@@ -605,7 +604,6 @@ static int ef100_pci_sriov_configure(struct pci_dev *dev, int num_vfs)
 	else
 		return -ENOSYS;
 }
-#endif
 
 /* PCI device ID table.
  * On changes make sure to update sfc_pci_table in efx.c
@@ -620,21 +618,11 @@ static const struct pci_device_id ef100_pci_table[] = {
 	{0}                     /* end of list */
 };
 
-#if defined(CONFIG_SFC_SRIOV) && defined(EFX_HAVE_PCI_DRIVER_RH) && !defined(EFX_HAVE_SRIOV_CONFIGURE)
-static struct pci_driver_rh ef100_pci_driver_rh = {
-	.sriov_configure = ef100_pci_sriov_configure,
-};
-#endif
-
 struct pci_driver ef100_pci_driver = {
 	.name           = "sfc_ef100",
 	.id_table       = ef100_pci_table,
 	.probe          = ef100_pci_probe,
 	.remove         = ef100_pci_remove,
 	.err_handler    = &efx_err_handlers,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SRIOV_CONFIGURE)
 	.sriov_configure = ef100_pci_sriov_configure,
-#elif defined(EFX_HAVE_PCI_DRIVER_RH)
-	.rh_reserved    = &ef100_pci_driver_rh,
-#endif
 };

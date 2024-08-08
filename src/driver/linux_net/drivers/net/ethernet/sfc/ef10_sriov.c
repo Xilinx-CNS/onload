@@ -500,7 +500,6 @@ void efx_ef10_sriov_fini(struct efx_nic *efx)
 
 #ifdef CONFIG_SFC_SRIOV
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_VF_MAC)
 int efx_ef10_sriov_get_vf_config(struct efx_nic *efx, int vf_i,
 				 struct ifla_vf_info *ivf)
 {
@@ -545,7 +544,6 @@ int efx_ef10_sriov_get_vf_config(struct efx_nic *efx, int vf_i,
 
 	return 0;
 }
-#endif
 
 static int efx_ef10_vport_del_vf_mac(struct efx_nic *efx, unsigned int port_id,
 				     u8 *mac)
@@ -980,13 +978,11 @@ int efx_ef10_sriov_set_vf_link_state(struct efx_nic *efx, int vf_i,
 
 #else /* CONFIG_SFC_SRIOV */
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_VF_MAC)
 int efx_ef10_sriov_get_vf_config(struct efx_nic *efx, int vf_i,
 				 struct ifla_vf_info *ivf)
 {
 	return -EOPNOTSUPP;
 }
-#endif
 
 int efx_ef10_sriov_set_vf_mac(struct efx_nic *efx, int vf_i, const u8 *mac,
 			      bool *reset)

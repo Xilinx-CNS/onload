@@ -528,13 +528,6 @@ struct ethtool_rxfh_param {
 	#define netdev_mc_count(dev) (dev)->mc_count
 #endif
 
-#ifdef EFX_NEED_DMA_SET_COHERENT_MASK
-	static inline int dma_set_coherent_mask(struct device *dev, u64 mask)
-	{
-		return pci_set_consistent_dma_mask(to_pci_dev(dev), mask);
-	}
-#endif
-
 #ifdef EFX_NEED_DMA_SET_MASK_AND_COHERENT
 	static inline int dma_set_mask_and_coherent(struct device *dev, u64 mask)
 	{
@@ -551,30 +544,6 @@ struct ethtool_rxfh_param {
 			dma_set_coherent_mask(dev, mask);
 		return rc;
 	}
-#endif
-
-/*
- * Recent mainline kernels can be configured so that the resulting
- * image will run both on 'bare metal' and in a Xen domU.
- * xen_domain() or xen_start_info tells us which is the case at
- * run-time.  If neither is defined, assume that CONFIG_XEN tells us
- * at compile-time.
- */
-#if defined(EFX_HAVE_XEN_XEN_H)
-	#include <xen/xen.h>
-#elif defined(CONFIG_XEN) && defined(EFX_HAVE_XEN_START_INFO)
-	/* We should be able to include <asm/xen/hypervisor.h> but that
-	 * is broken (#includes other headers that are not installed) in
-	 * Fedora 10. */
-	extern struct start_info *xen_start_info;
-	#define xen_domain() (xen_start_info ? 1 : 0)
-#endif
-#ifndef xen_domain
-	#ifdef CONFIG_XEN
-		#define xen_domain() 1
-	#else
-		#define xen_domain() 0
-	#endif
 #endif
 
 #ifndef netif_printk
@@ -685,81 +654,11 @@ struct ethtool_rxfh_param {
 	}
 #endif
 
-#ifdef EFX_NEED_ETHER_ADDR_EQUAL
-	static inline bool ether_addr_equal(const u8 *addr1, const u8 *addr2)
-	{
-		return !compare_ether_addr(addr1, addr2);
-	}
-#endif
-
-#ifdef EFX_NEED_ETH_ZERO_ADDR
-	static inline void eth_zero_addr(u8 *addr)
-	{
-		memset(addr, 0x00, ETH_ALEN);
-	}
-#endif
-
-#ifdef EFX_NEED_ETH_BROADCAST_ADDR
-	static inline void eth_broadcast_addr(u8 *addr)
-	{
-		memset(addr, 0xff, ETH_ALEN);
-	}
-#endif
-
-#ifdef EFX_NEED_ETH_RANDOM_ADDR
-/* random_ether_addr was renamed in:
- *  0a4dd594982a ("etherdevice: Rename random_ether_addr to eth_random_addr")
- */
-#define eth_random_addr	random_ether_addr
-#endif
-
 #ifdef EFX_NEED_ETH_HW_ADDR_SET
 	static inline void eth_hw_addr_set(struct net_device *dev, const u8 *addr)
 	{
 		ether_addr_copy(dev->dev_addr, addr);
 	}
-#endif
-
-#ifdef EFX_NEED_MAC_PTON
-	#ifndef EFX_HAVE_HEX_TO_BIN
-		static inline int hex_to_bin(char ch)
-		{
-			if ((ch >= '0') && (ch <= '9'))
-				return ch - '0';
-			ch = tolower(ch);
-			if ((ch >= 'a') && (ch <= 'f'))
-				return ch - 'a' + 10;
-			return -1;
-		}
-	#endif
-
-	static inline int mac_pton(const char *s, u8 *mac)
-	{
-		int i;
-		if (strlen(s) < 3 * ETH_ALEN - 1)
-			return 0;
-		for (i = 0; i < ETH_ALEN; i++) {
-			if (!isxdigit(s[i * 3]) || !isxdigit(s[i * 3 + 1]))
-				return 0;
-			if (i != ETH_ALEN - 1 && s[i * 3 + 2] != ':')
-				return 0;
-			}
-		for (i = 0; i < ETH_ALEN; i++)
-			mac[i] = (hex_to_bin(s[i * 3]) << 4) |
-				  hex_to_bin(s[i * 3 + 1]);
-		return 1;
-	}
-#endif
-
-#ifdef EFX_NEED_IP_IS_FRAGMENT
-	static inline bool ip_is_fragment(const struct iphdr *iph)
-	{
-		return (iph->frag_off & htons(IP_MF | IP_OFFSET)) != 0;
-	}
-#endif
-
-#ifdef EFX_NEED_NETDEV_FEATURES_T
-	typedef u32 netdev_features_t;
 #endif
 
 #ifdef EFX_NEED_NETDEV_NOTIFIER_INFO_TO_DEV
@@ -768,38 +667,6 @@ netdev_notifier_info_to_dev(const void *info)
 {
 	return (struct net_device *) info;
 }
-#endif
-
-#ifdef EFX_NEED_SKB_FRAG_DMA_MAP
-	static inline dma_addr_t skb_frag_dma_map(struct device *dev,
-						  const skb_frag_t *frag,
-						  size_t offset, size_t size,
-						  enum dma_data_direction dir)
-	{
-		return dma_map_page(dev, frag->page,
-				    frag->page_offset + offset, size, dir);
-	}
-#endif
-
-#ifdef EFX_NEED_SKB_FRAG_ADDRESS
-	static inline void *skb_frag_address(const skb_frag_t *frag)
-	{
-		return page_address(frag->page) + frag->page_offset;
-	}
-#endif
-
-#ifdef EFX_NEED_SKB_FRAG_SIZE
-	static inline unsigned int skb_frag_size(const skb_frag_t *frag)
-	{
-		return frag->size;
-	}
-#endif
-
-#ifdef EFX_NEED_SKB_FRAG_PAGE
-	static inline struct page *skb_frag_page(const skb_frag_t *frag)
-	{
-		return frag->page;
-	}
 #endif
 
 #ifdef EFX_NEED_SKB_FRAG_OFF
@@ -1117,10 +984,6 @@ static inline struct tcphdr *inner_tcp_hdr(const struct sk_buff *skb)
 #ifndef EFX_HAVE_XDP_FRAME_API
 #define xdp_frame	xdp_buff
 #endif
-#endif
-
-#if !defined(EFX_USE_NETDEV_STATS64)
-#define rtnl_link_stats64	net_device_stats
 #endif
 
 #ifdef EFX_NEED_PCI_AER_CLEAR_NONFATAL_STATUS
