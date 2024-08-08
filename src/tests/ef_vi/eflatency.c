@@ -39,6 +39,7 @@ static inline void rx_wait_with_ts(struct eflatency_vi*);
 
 static int              cfg_verbose = 0;
 static int              cfg_validate = 0;
+static int              cfg_vlan = 0;
 static int              cfg_iter = 100000;
 static int              cfg_warmups = 10000;
 static int              cfg_payload_len = DEFAULT_PAYLOAD_SIZE;
@@ -65,7 +66,8 @@ static enum ef_vi_flags cfg_vi_flags = 0;
 #define BUF_SIZE        2048
 #define MAX_UDP_PAYLEN	(1500 - sizeof(ci_ip4_hdr) - sizeof(ci_udp_hdr))
 /* Protocol header length: Ethernet + IP + UDP. */
-#define HEADER_SIZE     (14 + 20 + 8)
+#define ETH_HEADER_SIZE (cfg_vlan ? sizeof(ci_ethhdr_vlan_t) : sizeof(ci_ethhdr_t))
+#define HEADER_SIZE     (ETH_HEADER_SIZE + sizeof(ci_ip4_hdr) + sizeof(ci_udp_hdr))
 
 
 struct pkt_buf {
@@ -103,8 +105,7 @@ const uint16_t port_he = 8080;
 
 static void checksum_udp_pkt(void * pkt_buf)
 {
-  ci_ether_hdr * const eth = (ci_ether_hdr*) pkt_buf;
-  ci_ip4_hdr * const ip4 = (void*) ((uint8_t*) eth + 14);
+  ci_ip4_hdr * const ip4 = (void*) ((uint8_t*) pkt_buf + ETH_HEADER_SIZE);
   ci_udp_hdr * const udp = (void*) (ip4 + 1);
   struct iovec iov = {
     .iov_base = udp + 1,
@@ -118,8 +119,9 @@ static void checksum_udp_pkt(void * pkt_buf)
 
 static void init_udp_pkt(void* pkt_buf, int paylen)
 {
-  ci_ether_hdr * const eth = (ci_ether_hdr*) pkt_buf;
-  ci_ip4_hdr * const ip4 = (void*) ((uint8_t*) eth + 14);
+  ci_ethhdr_t * const eth = pkt_buf;
+  ci_ethhdr_vlan_t * const eth_vlan = pkt_buf;
+  ci_ip4_hdr * const ip4 = (void*) ((uint8_t*) pkt_buf + ETH_HEADER_SIZE);
   ci_udp_hdr * const udp = (void*) (ip4 + 1);
   const size_t ip_len = sizeof(*ip4) + sizeof(*udp) + paylen;
 
@@ -129,7 +131,15 @@ static void init_udp_pkt(void* pkt_buf, int paylen)
 
   memcpy(eth->ether_dhost, remote_mac, sizeof(remote_mac));
   ef_vi_get_mac(&rx_vi.vi, driver_handle, eth->ether_shost);
-  eth->ether_type = htons(0x0800);
+
+  if( !cfg_vlan ) {
+    eth->ether_type = CI_ETHERTYPE_IP;
+  } else {
+    eth_vlan->ether_type = CI_ETHERTYPE_IP;
+    eth_vlan->ether_vtype = CI_ETHERTYPE_8021Q;
+    eth_vlan->ether_vtag = htons(cfg_vlan);
+  }
+
   ci_ip4_hdr_init(ip4, CI_NO_OPTS, ip_len, 0, IPPROTO_UDP, htonl(laddr_he),
                   htonl(raddr_he), 0);
   ci_udp_hdr_init(udp, ip4, htons(port_he), htons(port_he), udp + 1, paylen, 0);
@@ -733,6 +743,7 @@ static CI_NORETURN usage(const char* fmt, ...)
   fprintf(stderr, "  -n <iterations>     - set number of iterations\n");
   fprintf(stderr, "  -s <message-size>   - set udp payload size. Accepts Python slices\n");
   fprintf(stderr, "  -w <iterations>     - set number of warmup iterations\n");
+  fprintf(stderr, "  -V <vlan-tag>       - add vlan tag to ethernet header\n");
   fprintf(stderr, "  -c <cut-through>    - CTPIO cut-through threshold\n");
   fprintf(stderr, "  -p                  - CTPIO no-poison mode\n");
   fprintf(stderr, "  -m <modes>          - allow mode of the set: [c]tpio, \n");
@@ -778,7 +789,7 @@ int main(int argc, char* argv[])
     p = (unsigned int)__v;                                   \
   } while( 0 );
 
-  while( (c = getopt (argc, argv, "n:s:w:c:pm:t:o:vr")) != -1 )
+  while( (c = getopt (argc, argv, "n:s:w:c:pm:t:o:V:vr")) != -1 )
     switch( c ) {
     case 'n':
       OPT_INT(optarg, cfg_iter);
@@ -802,6 +813,9 @@ int main(int argc, char* argv[])
       break;
     case 'c':
       OPT_UINT(optarg, cfg_ctpio_thresh);
+      break;
+    case 'V':
+      OPT_INT(optarg, cfg_vlan);
       break;
     case 'p':
       cfg_ctpio_no_poison = 1;
@@ -937,6 +951,7 @@ int main(int argc, char* argv[])
   printf("# warmups: %d\n", cfg_warmups);
   printf("# frame len: %d\n", tx_frame_len);
   printf("# mode: %s\n", t->name);
+  printf("# vlan: %d\n", cfg_vlan);
   printf("# validating: %s\n", cfg_validate ? "yes" : "no");
   if( cfg_verbose )
     printf("# verbose: %d\n", cfg_verbose);
