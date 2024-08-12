@@ -295,9 +295,13 @@ typedef struct {
 } oo_efct_superbuf_config_refresh_t;
 
 typedef struct {
-  ci_uint32     offset;
+  ci_uint64     offset;
   ci_user_ptr_t addr;
 } oo_pkt_buf_map_t;
+
+/* Ensure that the offset field in the above struct is at least big enough to
+ * store the offset into the memfd file used to allocate huge pages. */
+CI_BUILD_ASSERT( sizeof(((oo_pkt_buf_map_t*)0)->offset) >= sizeof(off_t) );
 
 /* Flags & types.  It could be enum if enum had fixed size. */
 typedef ci_uint16 oo_fd_flags;
