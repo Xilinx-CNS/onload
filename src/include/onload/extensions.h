@@ -713,6 +713,26 @@ onload_socket_nonaccel(int domain, int type, int protocol);
 extern int
 onload_socket_unicast_nonaccel(int domain, int type, int protocol);
 
+
+/**********************************************************************
+ * onload_socket_rx_nonaccel: create a socket where no accelerated filters will
+ *                            be installed
+ *
+ * This function creates a socket where no filters will be installed and thus
+ * the receive path will be unaccelerated. The socket can still receive traffic,
+ * but it will be handled by the kernel.
+ *
+ * If a tcp socket is requested (type == SOCK_STREAM) the socket will be handed
+ * over to the kernel.
+ *
+ * This function takes arguments and returns values that correspond
+ * exactly to the standard socket() function call.  In addition, it
+ * will return -1 with errno ENOSYS if the onload extensions library
+ * is not in use.
+ */
+extern int
+onload_socket_rx_nonaccel(int domain, int type, int protocol);
+
 #endif /* ONLOAD_INCLUDE_DS_DATA_ONLY */
 
 #ifdef __cplusplus

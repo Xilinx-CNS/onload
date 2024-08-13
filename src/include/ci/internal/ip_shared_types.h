@@ -2146,6 +2146,7 @@ struct  ci_udp_state_s {
 #define CI_UDPF_MCAST_FILTER    0x00010000  /*!< mcast filter added */
 #define CI_UDPF_NO_UCAST_FILTER 0x00020000  /*!< don't add unicast filters */
 #define CI_UDPF_LAST_SEND_NOMAC 0x00040000  /*!< last send was via nomac path */
+#define CI_UDPF_NO_MCAST_FILTER 0x00080000  /*!< don't add multicast filters */
 
   ci_uint32 future_intf_i; /* Interface to check for incoming future packets */
 

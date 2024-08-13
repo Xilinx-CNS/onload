@@ -152,6 +152,7 @@
     onload_get_tcp_info;
     onload_socket_nonaccel;
     onload_socket_unicast_nonaccel;
+    onload_socket_rx_nonaccel;
   local:
     /* everything else must not be in the dynamic symbol table */
     *;

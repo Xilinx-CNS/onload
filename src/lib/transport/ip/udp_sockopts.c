@@ -98,7 +98,7 @@ static int ci_mcast_join_leave(ci_netif* ni, ci_udp_state* us,
 
   if( NI_OPTS(ni).mcast_join_handover == 2 )
     return CI_SOCKET_HANDOVER;
-  if( ! NI_OPTS(ni).mcast_recv )
+  if( ! NI_OPTS(ni).mcast_recv || UDP_GET_FLAG(us, CI_UDPF_NO_MCAST_FILTER) )
     return 0;
 
   /* Find the RX hwports on which to join the group. */

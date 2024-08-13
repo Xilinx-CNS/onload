@@ -326,7 +326,7 @@
  * UDP
  */
 
-#define CI_UDP_STATE_FLAGS_FMT		"%s%s%s%s%s%s%s%s%s%s%s%s%s%s"
+#define CI_UDP_STATE_FLAGS_FMT		"%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s"
 #define CI_UDP_STATE_FLAGS_PRI_ARG(ts)				\
   (UDP_FLAGS(ts) & CI_UDPF_FILTERED     ? "FILT ":""),          \
   (UDP_FLAGS(ts) & CI_UDPF_MCAST_LOOP   ? "MCAST_LOOP ":""),    \
@@ -341,7 +341,8 @@
   (UDP_FLAGS(ts) & CI_UDPF_MCAST_JOIN   ? "MC ":""),            \
   (UDP_FLAGS(ts) & CI_UDPF_MCAST_FILTER ? "MC_FILT ":""),       \
   (UDP_FLAGS(ts) & CI_UDPF_NO_UCAST_FILTER ? "NO_UC_FILT ":""), \
-  (UDP_FLAGS(ts) & CI_UDPF_LAST_SEND_NOMAC ? "LAST_SEND_NOMAC":"")
+  (UDP_FLAGS(ts) & CI_UDPF_LAST_SEND_NOMAC ? "LAST_SEND_NOMAC":""), \
+  (UDP_FLAGS(ts) & CI_UDPF_NO_MCAST_FILTER ? "NO_MC_FILT ":"") \
 
 
 extern unsigned ci_tp_log CI_HV;

@@ -531,12 +531,11 @@ int ci_udp_connect_conclude(citp_socket* ep, ci_fd_t fd,
   }
 
   /* If we don't want unicast filters installed, and we've now got a unicast
-   * laddr, then we're not going to get any accelerated traffic, so let's
-   * just handover now.
+   * laddr, we may still want accelerated transmits, so don't handover now.
    */
   if( UDP_GET_FLAG(us, CI_UDPF_NO_UCAST_FILTER) &&
       !CI_IPX_IS_MULTICAST(udp_ipx_laddr(us)) )
-    goto handover;
+    goto out;
 
   if( onloadable ) {
     if( (rc = ci_udp_set_filters(ep, us)) != 0 ) {
@@ -727,6 +726,13 @@ void ci_udp_set_no_unicast(citp_socket* ep)
   CHECK_UEP(ep);
 
   UDP_SET_FLAG(SOCK_TO_UDP(ep->s), CI_UDPF_NO_UCAST_FILTER);
+}
+
+void ci_udp_set_no_multicast(citp_socket* ep)
+{
+  CHECK_UEP(ep);
+
+  UDP_SET_FLAG(SOCK_TO_UDP(ep->s), CI_UDPF_NO_MCAST_FILTER);
 }
 
 #endif /* !__ci_driver__*/

@@ -542,14 +542,20 @@ int onload_socket_nonaccel(int domain, int type, int protocol)
 }
 
 
+
+/* Used to determine which type of udp traffic WILL NOT be accelerated. */
+enum onload_nonaccel_flags {
+  ONLOAD_NONACCEL_UCAST = 0x1,
+  ONLOAD_NONACCEL_MCAST = 0x2,
+};
+
 extern int onload_socket(int domain, int type, int protocol);
-int onload_socket_unicast_nonaccel(int domain, int type, int protocol)
+static int onload_socket_nonaccel_flags(int domain, int type, int protocol,
+                                        enum onload_nonaccel_flags flags)
 {
   citp_lib_context_t lib_context;
   citp_fdinfo* fdi;
   int fd;
-
-  Log_CALL(ci_log("%s(%d, %d, %d)", __FUNCTION__, domain, type, protocol));
 
 #if CI_CFG_IPV6 || CI_CFG_FAKE_IPV6
   if( (domain == AF_INET || domain == AF_INET6) &&
@@ -565,7 +571,10 @@ int onload_socket_unicast_nonaccel(int domain, int type, int protocol)
       fdi = citp_fdtable_lookup(fd);
       if( fdi != NULL ) {
         ci_assert_equal(citp_fdinfo_get_type(fdi), CITP_UDP_SOCKET);
-        ci_udp_set_no_unicast(&fdi_to_sock_fdi(fdi)->sock);
+        if( flags & ONLOAD_NONACCEL_UCAST )
+          ci_udp_set_no_unicast(&fdi_to_sock_fdi(fdi)->sock);
+        if( flags & ONLOAD_NONACCEL_MCAST )
+          ci_udp_set_no_multicast(&fdi_to_sock_fdi(fdi)->sock);
         citp_fdinfo_release_ref(fdi, 0);
       }
 
@@ -580,3 +589,23 @@ int onload_socket_unicast_nonaccel(int domain, int type, int protocol)
   return fd;
 }
 
+int onload_socket_unicast_nonaccel(int domain, int type, int protocol)
+{
+  int fd;
+  Log_CALL(ci_log("%s(%d, %d, %d)", __FUNCTION__, domain, type, protocol));
+  fd = onload_socket_nonaccel_flags(domain, type, protocol,
+                                    ONLOAD_NONACCEL_UCAST);
+  Log_CALL_RESULT(fd);
+  return fd;
+}
+
+int onload_socket_rx_nonaccel(int domain, int type, int protocol)
+{
+  int fd;
+  Log_CALL(ci_log("%s(%d, %d, %d)", __FUNCTION__, domain, type, protocol));
+  fd = onload_socket_nonaccel_flags(domain, type, protocol,
+                                    ONLOAD_NONACCEL_UCAST |
+                                    ONLOAD_NONACCEL_MCAST);
+  Log_CALL_RESULT(fd);
+  return fd;
+}

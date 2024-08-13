@@ -224,3 +224,7 @@ wrap_with_fn(int, onload_socket_unicast_nonaccel,
              (int domain, int type, int protocol),
              (domain, type, protocol), socket)
 
+wrap_with_fn(int, onload_socket_rx_nonaccel,
+             (int domain, int type, int protocol),
+             (domain, type, protocol), socket)
+

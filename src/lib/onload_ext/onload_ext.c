@@ -269,3 +269,10 @@ onload_socket_unicast_nonaccel(int domain, int type, int protocol)
   return socket(domain, type, protocol);
 }
 
+__attribute__((weak))
+int
+onload_socket_rx_nonaccel(int domain, int type, int protocol)
+{
+  return socket(domain, type, protocol);
+}
+

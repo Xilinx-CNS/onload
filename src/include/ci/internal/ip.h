@@ -988,6 +988,7 @@ extern int ci_udp_recvmsg(ci_udp_iomsg_args *a, ci_msghdr*,
                           int flags CI_KERNEL_ARG(ci_addr_spc_t addr_spc)) CI_HF;
 
 extern void ci_udp_set_no_unicast(citp_socket* ep) CI_HF;
+extern void ci_udp_set_no_multicast(citp_socket* ep) CI_HF;
 
 #ifndef __KERNEL__
 struct mmsghdr;
