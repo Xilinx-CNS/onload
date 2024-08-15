@@ -36,11 +36,9 @@ void efx_stop_all(struct efx_nic *efx);
 int efx_try_recovery(struct efx_nic *efx);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NETDEV_STATS64_VOID)
 void efx_net_stats(struct net_device *net_dev, struct rtnl_link_stats64 *stats);
-#elif defined(EFX_USE_NETDEV_STATS64)
+#else
 struct rtnl_link_stats64 *efx_net_stats(struct net_device *net_dev,
 					struct rtnl_link_stats64 *stats);
-#else
-struct net_device_stats *efx_net_stats(struct net_device *net_dev);
 #endif
 void efx_reset_sw_stats(struct efx_nic *efx);
 void efx_print_stopped_queues(struct efx_nic *efx);
@@ -138,20 +136,10 @@ int efx_get_phys_port_name(struct net_device *net_dev,
 			   char *name, size_t len);
 #endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_FEATURES) || defined(EFX_HAVE_EXT_NDO_SET_FEATURES)
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_FEATURES)
 netdev_features_t efx_fix_features(struct net_device *net_dev, netdev_features_t data);
-#else
-u32 efx_fix_features(struct net_device *net_dev, u32 data);
 #endif
-#endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_FEATURES)
 int efx_set_features(struct net_device *net_dev, netdev_features_t data);
-#else
-int efx_set_features(struct net_device *net_dev, u32 data);
-#endif
-#endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID_PROTO)
 int efx_vlan_rx_add_vid(struct net_device *net_dev, __be16 proto, u16 vid);

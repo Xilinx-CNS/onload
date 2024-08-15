@@ -57,97 +57,6 @@ static void efx_ethtool_get_regs(struct net_device *net_dev,
 	efx_nic_get_regs(efx, buf);
 }
 
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_ETHTOOL_GET_SSET_COUNT)
-static int efx_ethtool_get_stats_count(struct net_device *net_dev)
-{
-	return efx_ethtool_get_sset_count(net_dev, ETH_SS_STATS);
-}
-static int efx_ethtool_self_test_count(struct net_device *net_dev)
-{
-	return efx_ethtool_get_sset_count(net_dev, ETH_SS_TEST);
-}
-#endif
-
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NDO_SET_FEATURES) && !defined(EFX_HAVE_EXT_NDO_SET_FEATURES)
-
-static int efx_ethtool_set_tso(struct net_device *net_dev, u32 enable)
-{
-	struct efx_nic *efx __attribute__ ((unused)) = efx_netdev_priv(net_dev);
-	u32 features;
-
-	features = NETIF_F_TSO;
-	if (efx->type->offload_features & (NETIF_F_IPV6_CSUM | NETIF_F_HW_CSUM))
-		features |= NETIF_F_TSO6;
-
-	if (enable)
-		net_dev->features |= features;
-	else
-		net_dev->features &= ~features;
-
-	return 0;
-}
-
-static int efx_ethtool_set_tx_csum(struct net_device *net_dev, u32 enable)
-{
-	struct efx_nic *efx = efx_netdev_priv(net_dev);
-	u32 features = efx->type->offload_features & NETIF_F_CSUM_MASK;
-
-	if (enable)
-		net_dev->features |= features;
-	else
-		net_dev->features &= ~features;
-
-	return 0;
-}
-
-static int efx_ethtool_set_rx_csum(struct net_device *net_dev, u32 enable)
-{
-	struct efx_nic *efx = efx_netdev_priv(net_dev);
-
-	/* No way to stop the hardware doing the checks; we just
-	 * ignore the result.
-	 */
-	efx->rx_checksum_enabled = !!enable;
-
-	return 0;
-}
-
-static u32 efx_ethtool_get_rx_csum(struct net_device *net_dev)
-{
-	struct efx_nic *efx = efx_netdev_priv(net_dev);
-
-	return efx->rx_checksum_enabled;
-}
-
-#if defined(EFX_USE_ETHTOOL_FLAGS)
-static int efx_ethtool_set_flags(struct net_device *net_dev, u32 data)
-{
-	struct efx_nic *efx = efx_netdev_priv(net_dev);
-	u32 supported = (efx->type->offload_features &
-			 (ETH_FLAG_RXHASH | ETH_FLAG_NTUPLE));
-	int rc;
-
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
-	if (efx->lro_available)
-		supported |= ETH_FLAG_LRO;
-#endif
-
-	if (data & ~supported)
-		return -EINVAL;
-
-	if (net_dev->features & ~data & ETH_FLAG_NTUPLE) {
-		rc = efx->type->filter_clear_rx(efx, EFX_FILTER_PRI_MANUAL);
-		if (rc)
-			return rc;
-	}
-
-	net_dev->features = (net_dev->features & ~supported) | data;
-	return 0;
-}
-#endif
-
-#endif /* EFX_HAVE_NDO_SET_FEATURES && EFX_HAVE_EXT_NDO_SET_FEATURES */
-
 /*
  * Each channel has a single IRQ and moderation timer, started by any
  * completion (or other event).  Unless the module parameter
@@ -410,11 +319,8 @@ int efx_ethtool_set_dump(struct net_device *net_dev, struct ethtool_dump *val)
 }
 #endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_GET_TS_INFO) || defined(EFX_HAVE_ETHTOOL_EXT_GET_TS_INFO)
-static
-#endif
-int efx_ethtool_get_ts_info(struct net_device *net_dev,
-			    struct kernel_ethtool_ts_info *ts_info)
+static int efx_ethtool_get_ts_info(struct net_device *net_dev,
+				   struct kernel_ethtool_ts_info *ts_info)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
@@ -487,28 +393,7 @@ const struct ethtool_ops efx_ethtool_ops = {
 	.set_ringparam		= efx_ethtool_set_ringparam,
 	.get_pauseparam         = efx_ethtool_get_pauseparam,
 	.set_pauseparam         = efx_ethtool_set_pauseparam,
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NDO_SET_FEATURES) && !defined(EFX_HAVE_EXT_NDO_SET_FEATURES)
-	.get_rx_csum		= efx_ethtool_get_rx_csum,
-	.set_rx_csum		= efx_ethtool_set_rx_csum,
-	.get_tx_csum		= ethtool_op_get_tx_csum,
-	/* Need to enable/disable IPv6 too */
-	.set_tx_csum		= efx_ethtool_set_tx_csum,
-	.get_sg			= ethtool_op_get_sg,
-	.set_sg			= ethtool_op_set_sg,
-	.get_tso		= ethtool_op_get_tso,
-	/* Need to enable/disable TSO-IPv6 too */
-	.set_tso		= efx_ethtool_set_tso,
-#if defined(EFX_USE_ETHTOOL_FLAGS)
-	.get_flags		= ethtool_op_get_flags,
-	.set_flags		= efx_ethtool_set_flags,
-#endif
-#endif /* EFX_HAVE_NDO_SET_FEATURES */
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_ETHTOOL_GET_SSET_COUNT)
 	.get_sset_count		= efx_ethtool_get_sset_count,
-#else
-	.self_test_count	= efx_ethtool_self_test_count,
-	.get_stats_count	= efx_ethtool_get_stats_count,
-#endif
 #if defined(EFX_USE_KCOMPAT) && (!defined(EFX_USE_DEVLINK) || defined(EFX_NEED_ETHTOOL_FLASH_DEVICE))
 	.flash_device		= efx_ethtool_flash_device,
 #endif
@@ -516,17 +401,15 @@ const struct ethtool_ops efx_ethtool_ops = {
 	.set_priv_flags		= efx_ethtool_set_priv_flags,
 	.self_test		= efx_ethtool_self_test,
 	.get_strings		= efx_ethtool_get_strings,
-#if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_ETHTOOL_SET_PHYS_ID) && !defined(EFX_USE_ETHTOOL_OPS_EXT))
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_SET_PHYS_ID)
 	.set_phys_id		= efx_ethtool_phys_id,
-#elif !defined(EFX_USE_ETHTOOL_OPS_EXT)
+#else
 	.phys_id		= efx_ethtool_phys_id_loop,
 #endif
 	.get_ethtool_stats	= efx_ethtool_get_stats,
 	.get_wol                = efx_ethtool_get_wol,
 	.set_wol                = efx_ethtool_set_wol,
-#if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_ETHTOOL_RESET) && !defined(EFX_USE_ETHTOOL_OPS_EXT))
 	.reset			= efx_ethtool_reset,
-#endif
 #if !defined(EFX_USE_KCOMPAT)
 	.get_rxnfc		= efx_ethtool_get_rxnfc,
 	.set_rxnfc		= efx_ethtool_set_rxnfc,
@@ -534,14 +417,6 @@ const struct ethtool_ops efx_ethtool_ops = {
 	.get_rxnfc		= efx_ethtool_get_rxnfc_wrapper,
 	.set_rxnfc		= efx_ethtool_set_rxnfc_wrapper,
 #endif
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_USE_ETHTOOL_OPS_EXT)
-};
-const struct ethtool_ops_ext efx_ethtool_ops_ext = {
-	.size			= sizeof(struct ethtool_ops_ext),
-	.set_phys_id		= efx_ethtool_phys_id,
-	/* Do not set ethtool_ops_ext::reset due to RH BZ 1008678 (SF bug 39031) */
-#endif
-
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR_SIZE)
 	.get_rxfh_indir_size	= efx_ethtool_get_rxfh_indir_size,
 #endif
@@ -555,37 +430,26 @@ const struct ethtool_ops_ext efx_ethtool_ops_ext = {
 	.get_rxfh		= efx_ethtool_get_rxfh_no_hfunc,
 	.set_rxfh		= efx_ethtool_set_rxfh_no_hfunc,
 #elif defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR)
-# if defined(EFX_HAVE_OLD_ETHTOOL_RXFH_INDIR)
-	.get_rxfh_indir		= efx_ethtool_old_get_rxfh_indir,
-	.set_rxfh_indir		= efx_ethtool_old_set_rxfh_indir,
-# else
 	.get_rxfh_indir		= efx_ethtool_get_rxfh_indir,
 	.set_rxfh_indir		= efx_ethtool_set_rxfh_indir,
-# endif
 #endif
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_ETHTOOL_RXFH_CONTEXT)
 	.get_rxfh_context	= efx_ethtool_get_rxfh_context,
 	.set_rxfh_context	= efx_ethtool_set_rxfh_context,
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_GET_DUMP_FLAG) || defined(EFX_HAVE_ETHTOOL_GET_DUMP_DATA) || defined(EFX_HAVE_ETHTOOL_SET_DUMP)
 #ifdef CONFIG_SFC_DUMP
 	.get_dump_flag		= efx_ethtool_get_dump_flag,
 	.get_dump_data		= efx_ethtool_get_dump_data,
 	.set_dump		= efx_ethtool_set_dump,
 #endif
-#endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_GET_TS_INFO) || defined(EFX_HAVE_ETHTOOL_EXT_GET_TS_INFO)
 	.get_ts_info		= efx_ethtool_get_ts_info,
-#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_GMODULEEEPROM)
 	.get_module_info	= efx_ethtool_get_module_info,
 	.get_module_eeprom	= efx_ethtool_get_module_eeprom,
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_CHANNELS) || defined(EFX_HAVE_ETHTOOL_EXT_CHANNELS)
 	.get_channels		= efx_ethtool_get_channels,
 	.set_channels		= efx_ethtool_set_channels,
-#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_LINKSETTINGS)
 	.get_link_ksettings	= efx_ethtool_get_link_ksettings,
 	.set_link_ksettings	= efx_ethtool_set_link_ksettings,

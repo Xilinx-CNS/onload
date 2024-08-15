@@ -39,11 +39,9 @@ void efx_sriov_init_max_vfs(struct efx_nic *efx, unsigned int pf_index)
 	if (!efx->type->sriov_init)
 		return;
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_NUM_VF)
 	/* If there are already VFs, don't initialise more */
 	if (pci_num_vf(efx->pci_dev))
 		return;
-#endif
 
 	idx = pf_index;
 
@@ -63,7 +61,6 @@ void efx_sriov_init_max_vfs(struct efx_nic *efx, unsigned int pf_index)
 		nic_data->max_vfs = MAX_VFS_ENABLE_ALL;
 }
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_VF_MAC)
 int efx_sriov_get_vf_config(struct net_device *net_dev, int vf_i, struct ifla_vf_info *ivi)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
@@ -73,7 +70,6 @@ int efx_sriov_get_vf_config(struct net_device *net_dev, int vf_i, struct ifla_vf
 	else
 		return -EOPNOTSUPP;
 }
-#endif
 
 int efx_sriov_set_vf_mac(struct net_device *net_dev, int vf_i, u8 *mac)
 {

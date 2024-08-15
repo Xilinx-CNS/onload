@@ -78,7 +78,7 @@
  */
 
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,18,0)
 	#error "This kernel version is now unsupported"
 #endif
 
@@ -414,13 +414,6 @@
 	#define ETHTOOL_SRXFHINDIR	0x00000039
 #endif
 
-#ifdef EFX_NEED_ETHTOOL_RXFH_INDIR_DEFAULT
-	static inline u32 ethtool_rxfh_indir_default(u32 index, u32 n_rx_rings)
-	{
-		return index % n_rx_rings;
-	}
-#endif
-
 #ifndef EFX_HAVE_ETHTOOL_SET_PHYS_ID
 	enum ethtool_phys_id_state {
 		ETHTOOL_ID_INACTIVE,
@@ -530,13 +523,6 @@ struct ethtool_rxfh_param {
 	#define netdev_mc_count(dev) (dev)->mc_count
 #endif
 
-#ifdef EFX_NEED_DMA_SET_COHERENT_MASK
-	static inline int dma_set_coherent_mask(struct device *dev, u64 mask)
-	{
-		return pci_set_consistent_dma_mask(to_pci_dev(dev), mask);
-	}
-#endif
-
 #ifdef EFX_NEED_DMA_SET_MASK_AND_COHERENT
 	static inline int dma_set_mask_and_coherent(struct device *dev, u64 mask)
 	{
@@ -553,30 +539,6 @@ struct ethtool_rxfh_param {
 			dma_set_coherent_mask(dev, mask);
 		return rc;
 	}
-#endif
-
-/*
- * Recent mainline kernels can be configured so that the resulting
- * image will run both on 'bare metal' and in a Xen domU.
- * xen_domain() or xen_start_info tells us which is the case at
- * run-time.  If neither is defined, assume that CONFIG_XEN tells us
- * at compile-time.
- */
-#if defined(EFX_HAVE_XEN_XEN_H)
-	#include <xen/xen.h>
-#elif defined(CONFIG_XEN) && defined(EFX_HAVE_XEN_START_INFO)
-	/* We should be able to include <asm/xen/hypervisor.h> but that
-	 * is broken (#includes other headers that are not installed) in
-	 * Fedora 10. */
-	extern struct start_info *xen_start_info;
-	#define xen_domain() (xen_start_info ? 1 : 0)
-#endif
-#ifndef xen_domain
-	#ifdef CONFIG_XEN
-		#define xen_domain() 1
-	#else
-		#define xen_domain() 0
-	#endif
 #endif
 
 #ifndef netif_printk
@@ -687,81 +649,11 @@ struct ethtool_rxfh_param {
 	}
 #endif
 
-#ifdef EFX_NEED_ETHER_ADDR_EQUAL
-	static inline bool ether_addr_equal(const u8 *addr1, const u8 *addr2)
-	{
-		return !compare_ether_addr(addr1, addr2);
-	}
-#endif
-
-#ifdef EFX_NEED_ETH_ZERO_ADDR
-	static inline void eth_zero_addr(u8 *addr)
-	{
-		memset(addr, 0x00, ETH_ALEN);
-	}
-#endif
-
-#ifdef EFX_NEED_ETH_BROADCAST_ADDR
-	static inline void eth_broadcast_addr(u8 *addr)
-	{
-		memset(addr, 0xff, ETH_ALEN);
-	}
-#endif
-
-#ifdef EFX_NEED_ETH_RANDOM_ADDR
-/* random_ether_addr was renamed in:
- *  0a4dd594982a ("etherdevice: Rename random_ether_addr to eth_random_addr")
- */
-#define eth_random_addr	random_ether_addr
-#endif
-
 #ifdef EFX_NEED_ETH_HW_ADDR_SET
 	static inline void eth_hw_addr_set(struct net_device *dev, const u8 *addr)
 	{
 		ether_addr_copy(dev->dev_addr, addr);
 	}
-#endif
-
-#ifdef EFX_NEED_MAC_PTON
-	#ifndef EFX_HAVE_HEX_TO_BIN
-		static inline int hex_to_bin(char ch)
-		{
-			if ((ch >= '0') && (ch <= '9'))
-				return ch - '0';
-			ch = tolower(ch);
-			if ((ch >= 'a') && (ch <= 'f'))
-				return ch - 'a' + 10;
-			return -1;
-		}
-	#endif
-
-	static inline int mac_pton(const char *s, u8 *mac)
-	{
-		int i;
-		if (strlen(s) < 3 * ETH_ALEN - 1)
-			return 0;
-		for (i = 0; i < ETH_ALEN; i++) {
-			if (!isxdigit(s[i * 3]) || !isxdigit(s[i * 3 + 1]))
-				return 0;
-			if (i != ETH_ALEN - 1 && s[i * 3 + 2] != ':')
-				return 0;
-			}
-		for (i = 0; i < ETH_ALEN; i++)
-			mac[i] = (hex_to_bin(s[i * 3]) << 4) |
-				  hex_to_bin(s[i * 3 + 1]);
-		return 1;
-	}
-#endif
-
-#ifdef EFX_NEED_IP_IS_FRAGMENT
-	static inline bool ip_is_fragment(const struct iphdr *iph)
-	{
-		return (iph->frag_off & htons(IP_MF | IP_OFFSET)) != 0;
-	}
-#endif
-
-#ifdef EFX_NEED_NETDEV_FEATURES_T
-	typedef u32 netdev_features_t;
 #endif
 
 #ifdef EFX_NEED_NETDEV_NOTIFIER_INFO_TO_DEV
@@ -770,38 +662,6 @@ netdev_notifier_info_to_dev(const void *info)
 {
 	return (struct net_device *) info;
 }
-#endif
-
-#ifdef EFX_NEED_SKB_FRAG_DMA_MAP
-	static inline dma_addr_t skb_frag_dma_map(struct device *dev,
-						  const skb_frag_t *frag,
-						  size_t offset, size_t size,
-						  enum dma_data_direction dir)
-	{
-		return dma_map_page(dev, frag->page,
-				    frag->page_offset + offset, size, dir);
-	}
-#endif
-
-#ifdef EFX_NEED_SKB_FRAG_ADDRESS
-	static inline void *skb_frag_address(const skb_frag_t *frag)
-	{
-		return page_address(frag->page) + frag->page_offset;
-	}
-#endif
-
-#ifdef EFX_NEED_SKB_FRAG_SIZE
-	static inline unsigned int skb_frag_size(const skb_frag_t *frag)
-	{
-		return frag->size;
-	}
-#endif
-
-#ifdef EFX_NEED_SKB_FRAG_PAGE
-	static inline struct page *skb_frag_page(const skb_frag_t *frag)
-	{
-		return frag->page;
-	}
 #endif
 
 #ifdef EFX_NEED_SKB_FRAG_OFF
@@ -825,17 +685,6 @@ static inline unsigned int skb_frag_off(const skb_frag_t *frag)
 	#else
 		typedef u64 compat_u64;
 	#endif
-#endif
-
-#ifdef EFX_NEED_BYTE_QUEUE_LIMITS
-static inline void netdev_tx_sent_queue(struct netdev_queue *dev_queue,
-					unsigned int bytes)
-{}
-static inline void netdev_tx_completed_queue(struct netdev_queue *dev_queue,
-					     unsigned int pkts,
-					     unsigned int bytes)
-{}
-static inline void netdev_tx_reset_queue(struct netdev_queue *q) {}
 #endif
 
 #ifdef EFX_NEED___BQL
@@ -866,26 +715,13 @@ static inline bool __netdev_tx_sent_queue(struct netdev_queue *dev_queue,
 	#if !defined(CONFIG_COMPAT)
 		return 0;
 	#elif defined(CONFIG_X86_64)
-		#if defined(EFX_HAVE_TIF_ADDR32)
 		return test_thread_flag(TIF_ADDR32);
-		#else
-		return test_thread_flag(TIF_IA32);
-		#endif
 	#elif defined(CONFIG_PPC64)
 		return test_thread_flag(TIF_32BIT);
 	#else
 	#error "cannot define is_compat_task() for this architecture"
 	#endif
 	}
-#endif
-
-#ifdef EFX_NEED_SKB_CHECKSUM_NONE_ASSERT
-static inline void skb_checksum_none_assert(const struct sk_buff *skb)
-{
-#ifdef DEBUG
-	BUG_ON(skb->ip_summed != CHECKSUM_NONE);
-#endif
-}
 #endif
 
 #ifndef NETIF_F_TSO_MANGLEID
@@ -907,49 +743,8 @@ static inline void skb_checksum_none_assert(const struct sk_buff *skb)
        #define NETIF_F_HW_VLAN_CTAG_RX NETIF_F_HW_VLAN_RX
 #endif
 
-#ifdef EFX_HAVE_OLD___VLAN_HWACCEL_PUT_TAG
-static inline struct sk_buff *
-	efx___vlan_hwaccel_put_tag(struct sk_buff *skb, __be16 vlan_proto,
-				   u16 vlan_tci)
-	{
-		WARN_ON(vlan_proto != htons(ETH_P_8021Q));
-		return __vlan_hwaccel_put_tag(skb, vlan_tci);
-	}
-	#define __vlan_hwaccel_put_tag efx___vlan_hwaccel_put_tag
-#endif
 #ifndef NETIF_F_HW_VLAN_CTAG_FILTER
 	#define NETIF_F_HW_VLAN_CTAG_FILTER NETIF_F_HW_VLAN_FILTER
-#endif
-
-#ifdef EFX_NEED___SET_BIT_LE
-	/* Depending on kernel version, BITOP_LE_SWIZZLE may be
-	 * defined the way we want or unconditionally as the
-	 * big-endian value (or not at all).  Use our own name.
-	 */
-	#if defined(__LITTLE_ENDIAN)
-	#define EFX_BITOP_LE_SWIZZLE        0
-	#elif defined(__BIG_ENDIAN)
-	#define EFX_BITOP_LE_SWIZZLE        ((BITS_PER_LONG-1) & ~0x7)
-	#endif
-
-	/* __set_bit_le() and __clear_bit_le() may already be defined
-	 * as macros with the wrong effective parameter type (volatile
-	 * unsigned long *), so use brute force to replace them.
-	 */
-
-	static inline void efx__set_bit_le(int nr, void *addr)
-	{
-		__set_bit(nr ^ EFX_BITOP_LE_SWIZZLE, addr);
-	}
-	#undef __set_bit_le
-	#define __set_bit_le efx__set_bit_le
-
-	static inline void efx__clear_bit_le(int nr, void *addr)
-	{
-		__clear_bit(nr ^ EFX_BITOP_LE_SWIZZLE, addr);
-	}
-	#undef __clear_bit_le
-	#define __clear_bit_le efx__clear_bit_le
 #endif
 
 #ifndef for_each_set_bit
@@ -981,19 +776,6 @@ static inline struct sk_buff *
 	#define efx_ioremap(phys,size)	ioremap(phys,size)
 #endif
 
-#ifdef EFX_NEED_SKB_TRANSPORT_HEADER_WAS_SET
-	#define skb_transport_header_was_set(skb)		\
-		(!!(skb)->transport_header)
-#endif
-
-#ifndef EFX_HAVE_NAPI_STRUCT
-/* We use a napi_struct pointer as context in some compat functions even if the
- * kernel doesn't use this structure at all.
- */
-struct efx_napi_dummy {};
-#define napi_struct efx_napi_dummy
-#endif
-
 #ifndef NAPI_POLL_WEIGHT
 #define NAPI_POLL_WEIGHT	64
 #endif
@@ -1023,10 +805,6 @@ static inline void skb_mark_napi_id(struct sk_buff *skb,
 				    struct napi_struct *napi) {}
 #endif
 
-#ifdef EFX_NEED_USLEEP_RANGE
-void usleep_range(unsigned long min, unsigned long max);
-#endif
-
 #ifdef EFX_NEED_SKB_VLAN_TAG_GET
 #define skb_vlan_tag_get	vlan_tx_tag_get
 #define skb_vlan_tag_present	vlan_tx_tag_present
@@ -1040,28 +818,11 @@ static inline void page_ref_add(struct page *page, int nr)
 #endif
 
 #ifdef EFX_HAVE_SKB_ENCAPSULATION
-#ifdef EFX_SKB_HAS_INNER_NETWORK_HEADER
 #define EFX_CAN_SUPPORT_ENCAP_TSO
-#ifndef EFX_HAVE_SKB_INNER_NETWORK_HEADER
-static inline unsigned char *skb_inner_network_header(const struct sk_buff *skb)
-{
-	return skb->head + skb->inner_network_header;
-}
-#endif
-
 #ifndef EFX_HAVE_INNER_IP_HDR
 static inline struct iphdr *inner_ip_hdr(const struct sk_buff *skb)
 {
 	return (struct iphdr *)skb_inner_network_header(skb);
-}
-#endif
-#endif /* EFX_SKB_HAS_INNER_NETWORK_HEADER */
-
-#ifdef EFX_SKB_HAS_INNER_TRANSPORT_HEADER
-#ifndef EFX_HAVE_SKB_INNER_TRANSPORT_HEADER
-static inline unsigned char *skb_inner_transport_header(const struct sk_buff *skb)
-{
-	return skb->head + skb->inner_transport_header;
 }
 #endif
 
@@ -1071,9 +832,7 @@ static inline struct tcphdr *inner_tcp_hdr(const struct sk_buff *skb)
 	return (struct tcphdr *)skb_inner_transport_header(skb);
 }
 #endif
-#else /* !EFX_SKB_HAS_INNER_TRANSPORT_HEADER */
-#undef EFX_CAN_SUPPORT_ENCAP_TSO
-#endif /* EFX_SKB_HAS_INNER_TRANSPORT_HEADER */
+
 #ifndef NETIF_F_GSO_GRE
 #undef EFX_CAN_SUPPORT_ENCAP_TSO
 #endif /* !NETIF_F_GSO_GRE */
@@ -1119,10 +878,6 @@ static inline struct tcphdr *inner_tcp_hdr(const struct sk_buff *skb)
 #ifndef EFX_HAVE_XDP_FRAME_API
 #define xdp_frame	xdp_buff
 #endif
-#endif
-
-#if !defined(EFX_USE_NETDEV_STATS64)
-#define rtnl_link_stats64	net_device_stats
 #endif
 
 #ifdef EFX_NEED_PCI_AER_CLEAR_NONFATAL_STATUS
@@ -1642,10 +1397,8 @@ static inline void netif_set_tso_max_size(struct net_device *dev,
 static inline void netif_set_tso_max_segs(struct net_device *dev,
 					  unsigned int segs)
 {
-#ifdef EFX_HAVE_GSO_MAX_SEGS
 	/* dev->gso_max_segs is read locklessly from sk_setup_caps() */
 	WRITE_ONCE(dev->gso_max_segs, segs);
-#endif
 }
 #endif
 

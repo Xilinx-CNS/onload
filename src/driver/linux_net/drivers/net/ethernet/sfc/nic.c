@@ -133,11 +133,7 @@ int efx_nic_init_interrupt(struct efx_nic *efx)
 	}
 
 #ifdef CONFIG_RFS_ACCEL
-#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_HAVE_NETDEV_RFS_INFO)
 	efx->net_dev->rx_cpu_rmap = cpu_rmap;
-#else
-	netdev_extended(efx->net_dev)->rfs_data.rx_cpu_rmap = cpu_rmap;
-#endif
 #endif
 	efx->irqs_hooked = true;
 	return 0;
@@ -164,15 +160,9 @@ void efx_nic_fini_interrupt(struct efx_nic *efx)
 	struct efx_channel *channel;
 
 #ifdef CONFIG_RFS_ACCEL
-#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_HAVE_NETDEV_RFS_INFO)
 	if (efx->net_dev->rx_cpu_rmap)
 		free_irq_cpu_rmap(efx->net_dev->rx_cpu_rmap);
 	efx->net_dev->rx_cpu_rmap = NULL;
-#else
-	if (netdev_extended(efx->net_dev)->rfs_data.rx_cpu_rmap)
-		free_irq_cpu_rmap(netdev_extended(efx->net_dev)->rfs_data.rx_cpu_rmap);
-	netdev_extended(efx->net_dev)->rfs_data.rx_cpu_rmap = NULL;
-#endif
 #endif
 
 	if (efx->irqs_hooked)

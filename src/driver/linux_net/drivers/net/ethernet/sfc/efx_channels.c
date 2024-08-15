@@ -10,9 +10,7 @@
 #include "net_driver.h"
 #include <linux/module.h>
 #include <linux/filter.h>
-#ifndef EFX_USE_KCOMPAT
 #include <xen/xen.h>
-#endif
 #include "efx_channels.h"
 #include "efx.h"
 #include "efx_common.h"
@@ -681,8 +679,7 @@ void efx_remove_interrupts(struct efx_nic *efx)
 	/* Remove MSI/MSI-X interrupts */
 	efx_for_each_channel(channel, efx)
 		channel->irq = 0;
-	pci_disable_msi(efx->pci_dev);
-	pci_disable_msix(efx->pci_dev);
+	pci_free_irq_vectors(efx->pci_dev);
 #ifdef EFX_NOT_UPSTREAM
 #if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	kfree(efx->irq_resources);
@@ -691,15 +688,7 @@ void efx_remove_interrupts(struct efx_nic *efx)
 #endif
 }
 
-#if !defined(CONFIG_SMP)
-void efx_set_interrupt_affinity(struct efx_nic *efx __always_unused)
-{
-}
-
-void efx_clear_interrupt_affinity(struct efx_nic *efx __always_unused)
-{
-}
-#else
+#ifdef CONFIG_SMP
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NETIF_SET_XPS_QUEUE)
 #if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_XPS)
 static bool auto_config_xps = true;
@@ -771,15 +760,15 @@ static int efx_set_cpu_affinity(struct efx_channel *channel, int cpu)
 	if (!efx_irq_set_affinity)
 		return 0;
 
-        rc = irq_set_affinity_hint(channel->irq, cpumask_of(cpu));
-        if (rc) {
-                netif_err(channel->efx, drv, channel->efx->net_dev,
-                          "Unable to set affinity hint for channel %d"
-                          " interrupt %d\n", channel->channel, channel->irq);
-                return rc;
-        }
-        efx_set_xps_queue(channel, cpumask_of(cpu));
-        return rc;
+	rc = irq_set_affinity_hint(channel->irq, cpumask_of(cpu));
+	if (rc) {
+		netif_err(channel->efx, drv, channel->efx->net_dev,
+			  "Unable to set affinity hint for channel %d interrupt %d\n",
+			  channel->channel, channel->irq);
+		return rc;
+	}
+	efx_set_xps_queue(channel, cpumask_of(cpu));
+	return rc;
 }
 
 /* Count of number of RSS channels allocated to each CPU

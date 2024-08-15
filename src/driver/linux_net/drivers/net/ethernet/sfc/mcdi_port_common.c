@@ -1966,10 +1966,8 @@ static u8 mcdi_to_ethtool_media(struct efx_nic *efx)
 void efx_mcdi_phy_get_settings(struct efx_nic *efx, struct ethtool_cmd *ecmd)
 {
 	struct efx_mcdi_phy_data *phy_cfg = efx->phy_data;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_ETHTOOL_LP_ADVERTISING)
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_LINK_OUT_LEN);
 	int rc;
-#endif
 
 	ecmd->supported = mcdi_to_ethtool_cap(efx, phy_cfg->media,
 					      phy_cfg->supported_cap);
@@ -1981,7 +1979,6 @@ void efx_mcdi_phy_get_settings(struct efx_nic *efx, struct ethtool_cmd *ecmd)
 	ecmd->transceiver = XCVR_INTERNAL;
 	ecmd->autoneg = !!(efx->link_advertising[0] & ADVERTISED_Autoneg);
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_ETHTOOL_LP_ADVERTISING)
 	BUILD_BUG_ON(MC_CMD_GET_LINK_IN_LEN != 0);
 	rc = efx_mcdi_rpc(efx, MC_CMD_GET_LINK, NULL, 0,
 			  outbuf, sizeof(outbuf), NULL);
@@ -1990,7 +1987,6 @@ void efx_mcdi_phy_get_settings(struct efx_nic *efx, struct ethtool_cmd *ecmd)
 	ecmd->lp_advertising =
 		mcdi_to_ethtool_cap(efx, phy_cfg->media,
 				    MCDI_DWORD(outbuf, GET_LINK_OUT_LP_CAP));
-#endif
 }
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_LINKSETTINGS)
@@ -2166,3 +2162,12 @@ int efx_mcdi_phy_get_module_info(struct efx_nic *efx,
 	return ret;
 }
 
+int efx_mcdi_phy_krrecal(struct efx_nic *efx)
+{
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_KR_TUNE_RECAL_IN_LEN);
+
+	MCDI_SET_DWORD(inbuf, KR_TUNE_IN_KR_TUNE_OP,
+		       MC_CMD_KR_TUNE_IN_RECAL);
+	return efx_mcdi_rpc(efx, MC_CMD_KR_TUNE, inbuf, sizeof(inbuf),
+			    NULL, 0, NULL);
+}

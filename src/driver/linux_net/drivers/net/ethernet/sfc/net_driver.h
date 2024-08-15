@@ -99,7 +99,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.0.0.1005"
+#define EFX_DRIVER_VERSION	"6.0.0.1007"
 #endif
 
 #ifdef DEBUG
@@ -116,9 +116,7 @@
 #ifndef EFX_HAVE_CSUM_LEVEL
 #define EFX_USE_FAKE_VLAN_RX_ACCEL 1
 #endif
-#ifdef EFX_HAVE_SKB_VLANTCI
 #define EFX_USE_FAKE_VLAN_TX_ACCEL 1
-#endif
 #endif
 #endif
 
@@ -1746,10 +1744,6 @@ struct efx_nic {
 	bool mc_bist_for_other_fn;
 	bool port_initialized;
 	struct net_device *net_dev;
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NDO_SET_FEATURES) && !defined(EFX_HAVE_EXT_NDO_SET_FEATURES)
-	/** @rx_checksum_enabled: Is RX checksum offload enabled ? */
-	bool rx_checksum_enabled;
-#endif
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
 	/** @lro_available: Is LRO supported ? */
 	bool lro_available;
@@ -1884,10 +1878,6 @@ struct efx_nic {
 	struct delayed_work monitor_work ____cacheline_aligned_in_smp;
 	spinlock_t biu_lock;
 	int last_irq_cpu;
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_NETDEV_STATS)
-	/** @stats: net device statistics */
-	struct net_device_stats stats;
-#endif
 	spinlock_t stats_lock;
 	atomic_t n_rx_noskb_drops;
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_FCS)
@@ -2002,9 +1992,6 @@ struct efx_mtd_partition {
 	struct list_head node;
 	struct efx_mtd *mtd_struct;
 	struct mtd_info mtd;
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_MTD_WRITESIZE)
-	size_t writesize;
-#endif
 	const char *dev_type_name;
 	const char *type_name;
 	char name[IFNAMSIZ + 40];
@@ -2260,15 +2247,9 @@ struct efx_nic_type {
 	void (*prepare_flr)(struct efx_nic *efx);
 	void (*finish_flr)(struct efx_nic *efx);
 	size_t (*describe_stats)(struct efx_nic *efx, u8 *names);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_NETDEV_STATS64)
 	size_t (*update_stats)(struct efx_nic *efx, u64 *full_stats,
 			       struct rtnl_link_stats64 *core_stats)
 		__acquires(efx->stats_lock);
-#else
-	size_t (*update_stats)(struct efx_nic *efx, u64 *full_stats,
-			       struct net_device_stats *core_stats)
-		__acquires(efx->stats_lock);
-#endif
 	void (*start_stats)(struct efx_nic *efx);
 	void (*pull_stats)(struct efx_nic *efx);
 	void (*stop_stats)(struct efx_nic *efx);
@@ -2438,10 +2419,8 @@ struct efx_nic_type {
 				 u8 qos);
 	int (*sriov_set_vf_spoofchk)(struct efx_nic *efx, int vf_i,
 				     bool spoofchk);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_VF_MAC)
 	int (*sriov_get_vf_config)(struct efx_nic *efx, int vf_i,
 				   struct ifla_vf_info *ivi);
-#endif
 	int (*sriov_set_vf_link_state)(struct efx_nic *efx, int vf_i,
 				       int link_state);
 	int (*vswitching_probe)(struct efx_nic *efx);

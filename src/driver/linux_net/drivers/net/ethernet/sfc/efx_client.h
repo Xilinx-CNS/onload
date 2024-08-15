@@ -28,7 +28,7 @@ struct efx_probe_data;
  * @type: Type of client.
  * @pd: Parent device.
  * @type_data: Specifics for a client type.
- * @open_lock: Protect removal of entries in the @open array. This includes
+ * @in_callback: Protect removal of entries in the @open array. This includes
  *	the zeroing of fields in a client, and freeing of client memory.
  * @open: All open clients that use this type. Each entry points to
  *	a struct efx_client.
@@ -50,7 +50,7 @@ struct efx_client_type_data {
 	bool vis_allocated;
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined (EFX_HAVE_XARRAY)
-	struct rw_semaphore open_lock;
+	refcount_t in_callback;
 	struct xarray open;
 #endif
 };

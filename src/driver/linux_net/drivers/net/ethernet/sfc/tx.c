@@ -47,11 +47,7 @@ static unsigned int tx_cb_size __read_mostly = (1 << TX_CB_ORDER_DEF) - NET_IP_A
 
 #if defined(EFX_NOT_UPSTREAM)
 static int __init
-#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_HAVE_NON_CONST_KERNEL_PARAM)
 tx_copybreak_set(const char *val, const struct kernel_param *kp)
-#else
-tx_copybreak_set(const char *val, struct kernel_param *kp)
-#endif
 {
 	int rc;
 
@@ -73,16 +69,11 @@ tx_copybreak_set(const char *val, struct kernel_param *kp)
 	tx_cb_size = (1 << tx_cb_order) - NET_IP_ALIGN;
 	return 0;
 }
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_KERNEL_PARAM_OPS)
 static const struct kernel_param_ops tx_copybreak_ops = {
 	.set = tx_copybreak_set,
 	.get = param_get_uint,
 };
 module_param_cb(tx_copybreak, &tx_copybreak_ops, &tx_cb_size, 0444);
-#else
-module_param_call(tx_copybreak, tx_copybreak_set, param_get_uint,
-		  &tx_cb_size, 0444);
-#endif
 MODULE_PARM_DESC(tx_copybreak,
 		 "Maximum size of packet that may be copied to a new buffer on transmit, minimum is 16 bytes or 0 to disable (uint)");
 #endif /* EFX_NOT_UPSTREAM */
@@ -99,11 +90,7 @@ unsigned int efx_piobuf_size __read_mostly = EFX_PIOBUF_SIZE_DEF;
 #define EFX_PIOBUF_SIZE_MAX ER_DZ_TX_PIOBUF_SIZE
 
 static int __init
-#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_HAVE_NON_CONST_KERNEL_PARAM)
 efx_piobuf_size_set(const char *val, const struct kernel_param *kp)
-#else
-efx_piobuf_size_set(const char *val, struct kernel_param *kp)
-#endif
 {
 	int rc;
 
@@ -118,16 +105,11 @@ efx_piobuf_size_set(const char *val, struct kernel_param *kp)
 				EFX_PIOBUF_SIZE_MAX);
 	return 0;
 }
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_KERNEL_PARAM_OPS)
 static const struct kernel_param_ops efx_piobuf_size_ops = {
 	.set = efx_piobuf_size_set,
 	.get = param_get_uint,
 };
 module_param_cb(piobuf_size, &efx_piobuf_size_ops, &efx_piobuf_size, 0444);
-#else
-module_param_call(piobuf_size, efx_piobuf_size_set, param_get_uint,
-		  &efx_piobuf_size, 0444);
-#endif
 MODULE_PARM_DESC(piobuf_size,
 		 "[SFC9100-family] Maximum size of packet that may be copied to a PIO buffer on transmit (uint)");
 #endif /* EFX_NOT_UPSTREAM */

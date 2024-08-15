@@ -71,6 +71,7 @@ void efx_mcdi_phy_remove(struct efx_nic *efx);
 void efx_mcdi_phy_get_settings(struct efx_nic *efx, struct ethtool_cmd *ecmd);
 int efx_mcdi_phy_set_settings(struct efx_nic *efx, struct ethtool_cmd *ecmd,
 			      unsigned long *new_adv);
+int efx_mcdi_phy_krrecal(struct efx_nic *efx);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_LINKSETTINGS)
 int efx_mcdi_phy_set_ksettings(struct efx_nic *efx,
 			       const struct ethtool_link_ksettings *settings,

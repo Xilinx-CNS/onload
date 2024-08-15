@@ -605,11 +605,7 @@ static const struct net_device_ops ef100_netdev_ops = {
 	.ndo_stop               = ef100_net_stop,
 	.ndo_start_xmit         = ef100_hard_start_xmit,
 	.ndo_tx_timeout         = efx_watchdog,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_NETDEV_STATS64)
 	.ndo_get_stats64        = efx_net_stats,
-#else
-	.ndo_get_stats		= efx_net_stats,
-#endif
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_EXT_CHANGE_MTU)
 	.extended.ndo_change_mtu = efx_change_mtu,
 #else
@@ -624,27 +620,15 @@ static const struct net_device_ops ef100_netdev_ops = {
 #endif
 #endif
 	.ndo_set_mac_address    = efx_set_mac_address,
-#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_HAVE_NDO_SET_MULTICAST_LIST)
-	.ndo_set_rx_mode        = efx_set_rx_mode, /* Lookout */
-#else
-	/* On older kernel versions, set_rx_mode is expected to
-	 * support multiple unicast addresses and set_multicast_list
-	 * is expected to support only one.  On newer versions the
-	 * IFF_UNICAST_FLT flag distinguishes these.
-	 */
-	.ndo_set_multicast_list = efx_set_rx_mode,
-#endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_FEATURES)
+	.ndo_set_rx_mode        = efx_set_rx_mode,
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
 	.ndo_fix_features       = efx_fix_features,
 #endif
 	.ndo_set_features       = efx_set_features,
-#endif
 	.ndo_vlan_rx_add_vid    = efx_vlan_rx_add_vid,
 	.ndo_vlan_rx_kill_vid   = efx_vlan_rx_kill_vid,
 #if 0
 #ifdef CONFIG_SFC_SRIOV
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_VF_MAC)
 	.ndo_set_vf_mac         = efx_sriov_set_vf_mac,
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_EXT_SET_VF_VLAN_PROTO)
 	.extended.ndo_set_vf_vlan = efx_sriov_set_vf_vlan,
@@ -652,13 +636,10 @@ static const struct net_device_ops ef100_netdev_ops = {
 	.ndo_set_vf_vlan        = efx_sriov_set_vf_vlan,
 #endif
 	.ndo_get_vf_config      = efx_sriov_get_vf_config,
-#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VF_LINK_STATE)
 	.ndo_set_vf_link_state  = efx_sriov_set_vf_link_state,
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_VF_SPOOFCHK)
 	.ndo_set_vf_spoofchk    = efx_sriov_set_vf_spoofchk,
-#endif
 #endif
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_ID)
@@ -679,10 +660,8 @@ static const struct net_device_ops ef100_netdev_ops = {
 	.ndo_busy_poll          = efx_busy_poll,
 #endif
 #endif
-#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_HAVE_NETDEV_RFS_INFO)
 #ifdef CONFIG_RFS_ACCEL
 	.ndo_rx_flow_steer      = efx_filter_rfs,
-#endif
 #endif
 
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER) && !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER)
@@ -915,15 +894,9 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_HW_ENC_FEATURES)
 	net_dev->hw_enc_features |= efx->type->offload_features;
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_GSO_MAX_SEGS)
-#if !defined(EFX_HAVE_GSO_MAX_SEGS)
-	if (!READ_ONCE(net_dev->tso_max_segs))
-#else
 	if (!READ_ONCE(net_dev->gso_max_segs))
-#endif
 		netif_set_tso_max_segs(net_dev,
 				       ESE_EF100_DP_GZ_TSO_MAX_HDR_NUM_SEGS_DEFAULT);
-#endif
 #ifdef EFX_NOT_UPSTREAM
 #if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	efx_dl_probe(efx);

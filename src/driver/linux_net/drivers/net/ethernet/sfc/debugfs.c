@@ -340,9 +340,6 @@ static const struct efx_debugfs_parameter efx_debugfs_port_parameters[] = {
 #if defined(EFX_USE_KCOMPAT) && !defined(NETIF_F_LRO)
 	EFX_BOOL_PARAMETER(struct efx_nic, lro_enabled),
 #endif
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NDO_SET_FEATURES) && !defined(EFX_HAVE_EXT_NDO_SET_FEATURES)
-	EFX_BOOL_PARAMETER(struct efx_nic, rx_checksum_enabled),
-#endif
 	EFX_NAMED_PARAMETER(link_up, struct efx_nic, link_state.up,
 			    bool, efx_debugfs_read_bool),
 	EFX_NAMED_PARAMETER(link_fd, struct efx_nic, link_state.fd,

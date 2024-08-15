@@ -5228,27 +5228,26 @@
  * 134 for 50G PHY.
  */
 #define          MC_CMD_FEC_ETCS_RS_LL 0x4
+/* enum: FEC mode selected automatically */
+#define          MC_CMD_FEC_AUTO 0x5
 #define       FEC_TYPE_TYPE_LBN 0
 #define       FEC_TYPE_TYPE_WIDTH 32
 
 /* MC_CMD_ETH_TECH structuredef: Ethernet technology as defined by IEEE802.3,
- * Ethernet Technology Consortium, proprietary technologies
+ * Ethernet Technology Consortium, proprietary technologies. The driver must
+ * not use technologies labelled NONE and AUTO.
  */
-#define    MC_CMD_ETH_TECH_LEN 8
+#define    MC_CMD_ETH_TECH_LEN 16
 /* The enums in this field can be used either as bitwise indices into a tech
  * mask (e.g. see MC_CMD_ETH_AN_FIELDS/TECH_MASK for example) or as regular
- * enums (e.g. see MC_CMD_LINK_CTRL_IN/ADVERTISED_TECH_ABILITIES_MASK).
+ * enums (e.g. see MC_CMD_LINK_CTRL_IN/ADVERTISED_TECH_ABILITIES_MASK). This
+ * structure must be updated to add new technologies when projects that need
+ * them arise. An incomplete list of possible expansion in the future include:
+ * 100GBASE_KP4, 800GBASE_CR8, 800GBASE_KR8, 800GBASE_DR8, 800GBASE_SR8
+ * 800GBASE_VR8
  */
 #define       MC_CMD_ETH_TECH_TECH_OFST 0
-#define       MC_CMD_ETH_TECH_TECH_LEN 8
-#define       MC_CMD_ETH_TECH_TECH_LO_OFST 0
-#define       MC_CMD_ETH_TECH_TECH_LO_LEN 4
-#define       MC_CMD_ETH_TECH_TECH_LO_LBN 0
-#define       MC_CMD_ETH_TECH_TECH_LO_WIDTH 32
-#define       MC_CMD_ETH_TECH_TECH_HI_OFST 4
-#define       MC_CMD_ETH_TECH_TECH_HI_LEN 4
-#define       MC_CMD_ETH_TECH_TECH_HI_LBN 32
-#define       MC_CMD_ETH_TECH_TECH_HI_WIDTH 32
+#define       MC_CMD_ETH_TECH_TECH_LEN 16
 /* enum: 1000BASE-KX - 1000BASE-X PCS/PMA over an electrical backplane PMD. See
  * IEEE 802.3 Clause 70
  */
@@ -5456,8 +5455,18 @@
  * specified in Clause 162 of IEEE 802.3ck.
  */
 #define          MC_CMD_ETH_TECH_400GBASE_CR4 0x38
+/* enum: Automatic tech mode. The driver must not use this. */
+#define          MC_CMD_ETH_TECH_AUTO 0x39
+/* enum: See IEEE 802.3cc-2017 Clause 114 */
+#define          MC_CMD_ETH_TECH_25GBASE_LR_ER 0x3a
+/* enum: Up to 7 m over twinaxial copper cable assembly (10 lanes, 10 Gbit/s
+ * each) See IEEE 802.3ba-2010 Clause 85
+ */
+#define          MC_CMD_ETH_TECH_100GBASE_CR10 0x3b
+/* enum: Invalid tech mode. The driver must not use this. */
+#define          MC_CMD_ETH_TECH_NONE 0x7f
 #define       MC_CMD_ETH_TECH_TECH_LBN 0
-#define       MC_CMD_ETH_TECH_TECH_WIDTH 64
+#define       MC_CMD_ETH_TECH_TECH_WIDTH 128
 
 /* MC_CMD_LINK_STATUS_FLAGS structuredef */
 #define    MC_CMD_LINK_STATUS_FLAGS_LEN 8
@@ -5568,40 +5577,40 @@
  * structure is used to define autonegotiable abilities (advertised, link
  * partner and supported abilities).
  */
-#define    MC_CMD_ETH_AN_FIELDS_LEN 13
+#define    MC_CMD_ETH_AN_FIELDS_LEN 25
 /* Mask of Ethernet technologies. The bit indices in this mask are taken from
  * the TECH field in the MC_CMD_ETH_TECH structure.
  */
 #define       MC_CMD_ETH_AN_FIELDS_TECH_MASK_OFST 0
-#define       MC_CMD_ETH_AN_FIELDS_TECH_MASK_LEN 8
-#define       MC_CMD_ETH_AN_FIELDS_TECH_MASK_LO_OFST 0
-#define       MC_CMD_ETH_AN_FIELDS_TECH_MASK_LO_LEN 4
-#define       MC_CMD_ETH_AN_FIELDS_TECH_MASK_LO_LBN 0
-#define       MC_CMD_ETH_AN_FIELDS_TECH_MASK_LO_WIDTH 32
-#define       MC_CMD_ETH_AN_FIELDS_TECH_MASK_HI_OFST 4
-#define       MC_CMD_ETH_AN_FIELDS_TECH_MASK_HI_LEN 4
-#define       MC_CMD_ETH_AN_FIELDS_TECH_MASK_HI_LBN 32
-#define       MC_CMD_ETH_AN_FIELDS_TECH_MASK_HI_WIDTH 32
+#define       MC_CMD_ETH_AN_FIELDS_TECH_MASK_LEN 16
 /* enum property: bitshift */
 /*            Enum values, see field(s): */
 /*               MC_CMD_ETH_TECH/TECH */
 #define       MC_CMD_ETH_AN_FIELDS_TECH_MASK_LBN 0
-#define       MC_CMD_ETH_AN_FIELDS_TECH_MASK_WIDTH 64
-/* Mask of FEC modes */
-#define       MC_CMD_ETH_AN_FIELDS_FEC_MASK_OFST 8
+#define       MC_CMD_ETH_AN_FIELDS_TECH_MASK_WIDTH 128
+/* Mask of supported FEC modes */
+#define       MC_CMD_ETH_AN_FIELDS_FEC_MASK_OFST 16
 #define       MC_CMD_ETH_AN_FIELDS_FEC_MASK_LEN 4
 /* enum property: bitshift */
 /*            Enum values, see field(s): */
 /*               FEC_TYPE/TYPE */
-#define       MC_CMD_ETH_AN_FIELDS_FEC_MASK_LBN 64
+#define       MC_CMD_ETH_AN_FIELDS_FEC_MASK_LBN 128
 #define       MC_CMD_ETH_AN_FIELDS_FEC_MASK_WIDTH 32
+/* Mask of requested FEC modes */
+#define       MC_CMD_ETH_AN_FIELDS_FEC_REQ_OFST 20
+#define       MC_CMD_ETH_AN_FIELDS_FEC_REQ_LEN 4
+/* enum property: bitshift */
+/*            Enum values, see field(s): */
+/*               FEC_TYPE/TYPE */
+#define       MC_CMD_ETH_AN_FIELDS_FEC_REQ_LBN 160
+#define       MC_CMD_ETH_AN_FIELDS_FEC_REQ_WIDTH 32
 /* Bitmask of negotiated pause modes */
-#define       MC_CMD_ETH_AN_FIELDS_PAUSE_MASK_OFST 12
+#define       MC_CMD_ETH_AN_FIELDS_PAUSE_MASK_OFST 24
 #define       MC_CMD_ETH_AN_FIELDS_PAUSE_MASK_LEN 1
 /* enum property: bitshift */
 /*            Enum values, see field(s): */
 /*               MC_CMD_PAUSE_MODE/TYPE */
-#define       MC_CMD_ETH_AN_FIELDS_PAUSE_MASK_LBN 96
+#define       MC_CMD_ETH_AN_FIELDS_PAUSE_MASK_LBN 192
 #define       MC_CMD_ETH_AN_FIELDS_PAUSE_MASK_WIDTH 8
 
 /* MC_CMD_LOOPBACK_V2 structuredef: Loopback modes for use with the new
@@ -5670,7 +5679,7 @@
 #define MC_CMD_0x6b_PRIVILEGE_CTG SRIOV_CTG_LINK
 
 /* MC_CMD_LINK_CTRL_IN msgrequest */
-#define    MC_CMD_LINK_CTRL_IN_LEN 22
+#define    MC_CMD_LINK_CTRL_IN_LEN 40
 /* Handle to the port to set link state for. */
 #define       MC_CMD_LINK_CTRL_IN_PORT_HANDLE_OFST 0
 #define       MC_CMD_LINK_CTRL_IN_PORT_HANDLE_LEN 4
@@ -5680,17 +5689,22 @@
 /* enum property: bitshift */
 /*            Enum values, see field(s): */
 /*               MC_CMD_LINK_FLAGS/MASK */
+/* Reserved for future expansion, and included to provide padding for alignment
+ * purposes.
+ */
+#define       MC_CMD_LINK_CTRL_IN_RESERVED_OFST 8
+#define       MC_CMD_LINK_CTRL_IN_RESERVED_LEN 8
+#define       MC_CMD_LINK_CTRL_IN_RESERVED_LO_OFST 8
+#define       MC_CMD_LINK_CTRL_IN_RESERVED_LO_LEN 4
+#define       MC_CMD_LINK_CTRL_IN_RESERVED_LO_LBN 64
+#define       MC_CMD_LINK_CTRL_IN_RESERVED_LO_WIDTH 32
+#define       MC_CMD_LINK_CTRL_IN_RESERVED_HI_OFST 12
+#define       MC_CMD_LINK_CTRL_IN_RESERVED_HI_LEN 4
+#define       MC_CMD_LINK_CTRL_IN_RESERVED_HI_LBN 96
+#define       MC_CMD_LINK_CTRL_IN_RESERVED_HI_WIDTH 32
 /* Technology abilities to advertise during auto-negotiation */
-#define       MC_CMD_LINK_CTRL_IN_ADVERTISED_TECH_ABILITIES_MASK_OFST 8
-#define       MC_CMD_LINK_CTRL_IN_ADVERTISED_TECH_ABILITIES_MASK_LEN 8
-#define       MC_CMD_LINK_CTRL_IN_ADVERTISED_TECH_ABILITIES_MASK_LO_OFST 8
-#define       MC_CMD_LINK_CTRL_IN_ADVERTISED_TECH_ABILITIES_MASK_LO_LEN 4
-#define       MC_CMD_LINK_CTRL_IN_ADVERTISED_TECH_ABILITIES_MASK_LO_LBN 64
-#define       MC_CMD_LINK_CTRL_IN_ADVERTISED_TECH_ABILITIES_MASK_LO_WIDTH 32
-#define       MC_CMD_LINK_CTRL_IN_ADVERTISED_TECH_ABILITIES_MASK_HI_OFST 12
-#define       MC_CMD_LINK_CTRL_IN_ADVERTISED_TECH_ABILITIES_MASK_HI_LEN 4
-#define       MC_CMD_LINK_CTRL_IN_ADVERTISED_TECH_ABILITIES_MASK_HI_LBN 96
-#define       MC_CMD_LINK_CTRL_IN_ADVERTISED_TECH_ABILITIES_MASK_HI_WIDTH 32
+#define       MC_CMD_LINK_CTRL_IN_ADVERTISED_TECH_ABILITIES_MASK_OFST 16
+#define       MC_CMD_LINK_CTRL_IN_ADVERTISED_TECH_ABILITIES_MASK_LEN 16
 /* enum property: bitshift */
 /*            Enum values, see field(s): */
 /*               MC_CMD_ETH_TECH/TECH */
@@ -5699,7 +5713,7 @@
  * MC_CMD_FCNTL_AUTO. If auto-negotiation is disabled the driver must
  * explicitly configure pause mode with MC_CMD_SET_MAC.
  */
-#define       MC_CMD_LINK_CTRL_IN_ADVERTISED_PAUSE_ABILITIES_MASK_OFST 16
+#define       MC_CMD_LINK_CTRL_IN_ADVERTISED_PAUSE_ABILITIES_MASK_OFST 32
 #define       MC_CMD_LINK_CTRL_IN_ADVERTISED_PAUSE_ABILITIES_MASK_LEN 1
 /* enum property: bitshift */
 /*            Enum values, see field(s): */
@@ -5710,7 +5724,7 @@
  * actual negotiated FEC mode. When auto-negotiation is disabled, this is the
  * forced FEC mode.
  */
-#define       MC_CMD_LINK_CTRL_IN_FEC_MODE_OFST 17
+#define       MC_CMD_LINK_CTRL_IN_FEC_MODE_OFST 33
 #define       MC_CMD_LINK_CTRL_IN_FEC_MODE_LEN 1
 /* enum property: value */
 /*            Enum values, see field(s): */
@@ -5719,18 +5733,18 @@
  * loopback mode). If the specified value does not align with the values
  * defined in the enum MC_CMD_ETH_TECH/TECH, it is considered invalid.
  */
-#define       MC_CMD_LINK_CTRL_IN_LINK_TECHNOLOGY_OFST 18
+#define       MC_CMD_LINK_CTRL_IN_LINK_TECHNOLOGY_OFST 36
 #define       MC_CMD_LINK_CTRL_IN_LINK_TECHNOLOGY_LEN 2
 /* enum property: value */
 /*            Enum values, see field(s): */
-/*               FEC_TYPE/TYPE */
+/*               MC_CMD_ETH_TECH/TECH */
 /* The sequence number of the last MODULECHANGE event. If this doesn't match,
  * fail with EAGAIN.
  */
-#define       MC_CMD_LINK_CTRL_IN_MODULE_SEQ_OFST 20
+#define       MC_CMD_LINK_CTRL_IN_MODULE_SEQ_OFST 38
 #define       MC_CMD_LINK_CTRL_IN_MODULE_SEQ_LEN 1
 /* Loopback Mode. Only valid when auto-negotiation is disabled. */
-#define       MC_CMD_LINK_CTRL_IN_LOOPBACK_OFST 21
+#define       MC_CMD_LINK_CTRL_IN_LOOPBACK_OFST 39
 #define       MC_CMD_LINK_CTRL_IN_LOOPBACK_LEN 1
 /* enum property: value */
 /*            Enum values, see field(s): */
@@ -18067,6 +18081,562 @@
 
 /* MC_CMD_ENABLE_OFFLINE_BIST_OUT msgresponse */
 #define    MC_CMD_ENABLE_OFFLINE_BIST_OUT_LEN 0
+
+
+/***********************************/
+/* MC_CMD_KR_TUNE
+ * Get or set KR Serdes RXEQ and TX Driver settings
+ */
+#define MC_CMD_KR_TUNE 0xf1
+#undef MC_CMD_0xf1_PRIVILEGE_CTG
+
+#define MC_CMD_0xf1_PRIVILEGE_CTG SRIOV_CTG_ADMIN_TSA_UNBOUND
+
+/* MC_CMD_KR_TUNE_IN msgrequest */
+#define    MC_CMD_KR_TUNE_IN_LENMIN 4
+#define    MC_CMD_KR_TUNE_IN_LENMAX 252
+#define    MC_CMD_KR_TUNE_IN_LENMAX_MCDI2 1020
+#define    MC_CMD_KR_TUNE_IN_LEN(num) (4+4*(num))
+#define    MC_CMD_KR_TUNE_IN_KR_TUNE_ARGS_NUM(len) (((len)-4)/4)
+/* Requested operation */
+#define       MC_CMD_KR_TUNE_IN_KR_TUNE_OP_OFST 0
+#define       MC_CMD_KR_TUNE_IN_KR_TUNE_OP_LEN 1
+/* enum: Get current RXEQ settings */
+#define          MC_CMD_KR_TUNE_IN_RXEQ_GET 0x0
+/* enum: Override RXEQ settings */
+#define          MC_CMD_KR_TUNE_IN_RXEQ_SET 0x1
+/* enum: Get current TX Driver settings */
+#define          MC_CMD_KR_TUNE_IN_TXEQ_GET 0x2
+/* enum: Override TX Driver settings */
+#define          MC_CMD_KR_TUNE_IN_TXEQ_SET 0x3
+/* enum: Force KR Serdes reset / recalibration */
+#define          MC_CMD_KR_TUNE_IN_RECAL 0x4
+/* enum: Start KR Serdes Eye diagram plot on a given lane. Lane must have valid
+ * signal.
+ */
+#define          MC_CMD_KR_TUNE_IN_START_EYE_PLOT 0x5
+/* enum: Poll KR Serdes Eye diagram plot. Returns one row of BER data. The
+ * caller should call this command repeatedly after starting eye plot, until no
+ * more data is returned.
+ */
+#define          MC_CMD_KR_TUNE_IN_POLL_EYE_PLOT 0x6
+/* enum: Read Figure Of Merit (eye quality, higher is better). */
+#define          MC_CMD_KR_TUNE_IN_READ_FOM 0x7
+/* enum: Start/stop link training frames */
+#define          MC_CMD_KR_TUNE_IN_LINK_TRAIN_RUN 0x8
+/* enum: Issue KR link training command (control training coefficients) */
+#define          MC_CMD_KR_TUNE_IN_LINK_TRAIN_CMD 0x9
+/* Align the arguments to 32 bits */
+#define       MC_CMD_KR_TUNE_IN_KR_TUNE_RSVD_OFST 1
+#define       MC_CMD_KR_TUNE_IN_KR_TUNE_RSVD_LEN 3
+/* Arguments specific to the operation */
+#define       MC_CMD_KR_TUNE_IN_KR_TUNE_ARGS_OFST 4
+#define       MC_CMD_KR_TUNE_IN_KR_TUNE_ARGS_LEN 4
+#define       MC_CMD_KR_TUNE_IN_KR_TUNE_ARGS_MINNUM 0
+#define       MC_CMD_KR_TUNE_IN_KR_TUNE_ARGS_MAXNUM 62
+#define       MC_CMD_KR_TUNE_IN_KR_TUNE_ARGS_MAXNUM_MCDI2 254
+
+/* MC_CMD_KR_TUNE_OUT msgresponse */
+#define    MC_CMD_KR_TUNE_OUT_LEN 0
+
+/* MC_CMD_KR_TUNE_RXEQ_GET_IN msgrequest */
+#define    MC_CMD_KR_TUNE_RXEQ_GET_IN_LEN 4
+/* Requested operation */
+#define       MC_CMD_KR_TUNE_RXEQ_GET_IN_KR_TUNE_OP_OFST 0
+#define       MC_CMD_KR_TUNE_RXEQ_GET_IN_KR_TUNE_OP_LEN 1
+/* Align the arguments to 32 bits */
+#define       MC_CMD_KR_TUNE_RXEQ_GET_IN_KR_TUNE_RSVD_OFST 1
+#define       MC_CMD_KR_TUNE_RXEQ_GET_IN_KR_TUNE_RSVD_LEN 3
+
+/* MC_CMD_KR_TUNE_RXEQ_GET_OUT msgresponse */
+#define    MC_CMD_KR_TUNE_RXEQ_GET_OUT_LENMIN 4
+#define    MC_CMD_KR_TUNE_RXEQ_GET_OUT_LENMAX 252
+#define    MC_CMD_KR_TUNE_RXEQ_GET_OUT_LENMAX_MCDI2 1020
+#define    MC_CMD_KR_TUNE_RXEQ_GET_OUT_LEN(num) (0+4*(num))
+#define    MC_CMD_KR_TUNE_RXEQ_GET_OUT_PARAM_NUM(len) (((len)-0)/4)
+/* RXEQ Parameter */
+#define       MC_CMD_KR_TUNE_RXEQ_GET_OUT_PARAM_OFST 0
+#define       MC_CMD_KR_TUNE_RXEQ_GET_OUT_PARAM_LEN 4
+#define       MC_CMD_KR_TUNE_RXEQ_GET_OUT_PARAM_MINNUM 1
+#define       MC_CMD_KR_TUNE_RXEQ_GET_OUT_PARAM_MAXNUM 63
+#define       MC_CMD_KR_TUNE_RXEQ_GET_OUT_PARAM_MAXNUM_MCDI2 255
+#define        MC_CMD_KR_TUNE_RXEQ_GET_OUT_PARAM_ID_OFST 0
+#define        MC_CMD_KR_TUNE_RXEQ_GET_OUT_PARAM_ID_LBN 0
+#define        MC_CMD_KR_TUNE_RXEQ_GET_OUT_PARAM_ID_WIDTH 8
+/* enum: Attenuation (0-15, Huntington) */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_ATT 0x0
+/* enum: CTLE Boost (0-15, Huntington) */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_BOOST 0x1
+/* enum: Edge DFE Tap1 (Huntington - 0 - max negative, 64 - zero, 127 - max
+ * positive, Medford - 0-31)
+ */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_EDFE_TAP1 0x2
+/* enum: Edge DFE Tap2 (Huntington - 0 - max negative, 32 - zero, 63 - max
+ * positive, Medford - 0-31)
+ */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_EDFE_TAP2 0x3
+/* enum: Edge DFE Tap3 (Huntington - 0 - max negative, 32 - zero, 63 - max
+ * positive, Medford - 0-16)
+ */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_EDFE_TAP3 0x4
+/* enum: Edge DFE Tap4 (Huntington - 0 - max negative, 32 - zero, 63 - max
+ * positive, Medford - 0-16)
+ */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_EDFE_TAP4 0x5
+/* enum: Edge DFE Tap5 (Huntington - 0 - max negative, 32 - zero, 63 - max
+ * positive, Medford - 0-16)
+ */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_EDFE_TAP5 0x6
+/* enum: Edge DFE DLEV (0-128 for Medford) */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_EDFE_DLEV 0x7
+/* enum: Variable Gain Amplifier (0-15, Medford) */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_VGA 0x8
+/* enum: CTLE EQ Capacitor (0-15, Medford) */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_CTLE_EQC 0x9
+/* enum: CTLE EQ Resistor (0-7, Medford) */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_CTLE_EQRES 0xa
+/* enum: CTLE gain (0-31, Medford2) */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_CTLE_GAIN 0xb
+/* enum: CTLE pole (0-31, Medford2) */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_CTLE_POLE 0xc
+/* enum: CTLE peaking (0-31, Medford2) */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_CTLE_PEAK 0xd
+/* enum: DFE Tap1 - even path (Medford2 - 6 bit signed (-29 - +29)) */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_DFE_TAP1_EVEN 0xe
+/* enum: DFE Tap1 - odd path (Medford2 - 6 bit signed (-29 - +29)) */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_DFE_TAP1_ODD 0xf
+/* enum: DFE Tap2 (Medford2 - 6 bit signed (-20 - +20)) */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_DFE_TAP2 0x10
+/* enum: DFE Tap3 (Medford2 - 6 bit signed (-20 - +20)) */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_DFE_TAP3 0x11
+/* enum: DFE Tap4 (Medford2 - 6 bit signed (-20 - +20)) */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_DFE_TAP4 0x12
+/* enum: DFE Tap5 (Medford2 - 6 bit signed (-24 - +24)) */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_DFE_TAP5 0x13
+/* enum: DFE Tap6 (Medford2 - 6 bit signed (-24 - +24)) */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_DFE_TAP6 0x14
+/* enum: DFE Tap7 (Medford2 - 6 bit signed (-24 - +24)) */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_DFE_TAP7 0x15
+/* enum: DFE Tap8 (Medford2 - 6 bit signed (-24 - +24)) */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_DFE_TAP8 0x16
+/* enum: DFE Tap9 (Medford2 - 6 bit signed (-24 - +24)) */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_DFE_TAP9 0x17
+/* enum: DFE Tap10 (Medford2 - 6 bit signed (-24 - +24)) */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_DFE_TAP10 0x18
+/* enum: DFE Tap11 (Medford2 - 6 bit signed (-24 - +24)) */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_DFE_TAP11 0x19
+/* enum: DFE Tap12 (Medford2 - 6 bit signed (-24 - +24)) */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_DFE_TAP12 0x1a
+/* enum: I/Q clk offset (Medford2 - 4 bit signed (-5 - +5))) */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_IQ_OFF 0x1b
+/* enum: Negative h1 polarity data sampler offset calibration code, even path
+ * (Medford2 - 6 bit signed (-29 - +29)))
+ */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_H1N_OFF_EVEN 0x1c
+/* enum: Negative h1 polarity data sampler offset calibration code, odd path
+ * (Medford2 - 6 bit signed (-29 - +29)))
+ */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_H1N_OFF_ODD 0x1d
+/* enum: Positive h1 polarity data sampler offset calibration code, even path
+ * (Medford2 - 6 bit signed (-29 - +29)))
+ */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_H1P_OFF_EVEN 0x1e
+/* enum: Positive h1 polarity data sampler offset calibration code, odd path
+ * (Medford2 - 6 bit signed (-29 - +29)))
+ */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_H1P_OFF_ODD 0x1f
+/* enum: CDR calibration loop code (Medford2) */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_CDR_PVT 0x20
+/* enum: CDR integral loop code (Medford2) */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_CDR_INTEG 0x21
+/* enum: CTLE Boost stages - retimer lineside (Medford2 with DS250x retimer - 4
+ * stages, 2 bits per stage)
+ */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_BOOST_RT_LS 0x22
+/* enum: DFE Tap1 - retimer lineside (Medford2 with DS250x retimer (-31 - 31))
+ */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_DFE_TAP1_RT_LS 0x23
+/* enum: DFE Tap2 - retimer lineside (Medford2 with DS250x retimer (-15 - 15))
+ */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_DFE_TAP2_RT_LS 0x24
+/* enum: DFE Tap3 - retimer lineside (Medford2 with DS250x retimer (-15 - 15))
+ */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_DFE_TAP3_RT_LS 0x25
+/* enum: DFE Tap4 - retimer lineside (Medford2 with DS250x retimer (-15 - 15))
+ */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_DFE_TAP4_RT_LS 0x26
+/* enum: DFE Tap5 - retimer lineside (Medford2 with DS250x retimer (-15 - 15))
+ */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_DFE_TAP5_RT_LS 0x27
+/* enum: CTLE Boost stages - retimer hostside (Medford2 with DS250x retimer - 4
+ * stages, 2 bits per stage)
+ */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_BOOST_RT_HS 0x28
+/* enum: DFE Tap1 - retimer hostside (Medford2 with DS250x retimer (-31 - 31))
+ */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_DFE_TAP1_RT_HS 0x29
+/* enum: DFE Tap2 - retimer hostside (Medford2 with DS250x retimer (-15 - 15))
+ */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_DFE_TAP2_RT_HS 0x2a
+/* enum: DFE Tap3 - retimer hostside (Medford2 with DS250x retimer (-15 - 15))
+ */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_DFE_TAP3_RT_HS 0x2b
+/* enum: DFE Tap4 - retimer hostside (Medford2 with DS250x retimer (-15 - 15))
+ */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_DFE_TAP4_RT_HS 0x2c
+/* enum: DFE Tap5 - retimer hostside (Medford2 with DS250x retimer (-15 - 15))
+ */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_DFE_TAP5_RT_HS 0x2d
+#define        MC_CMD_KR_TUNE_RXEQ_GET_OUT_PARAM_LANE_OFST 0
+#define        MC_CMD_KR_TUNE_RXEQ_GET_OUT_PARAM_LANE_LBN 8
+#define        MC_CMD_KR_TUNE_RXEQ_GET_OUT_PARAM_LANE_WIDTH 3
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_LANE_0 0x0 /* enum */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_LANE_1 0x1 /* enum */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_LANE_2 0x2 /* enum */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_LANE_3 0x3 /* enum */
+#define          MC_CMD_KR_TUNE_RXEQ_GET_OUT_LANE_ALL 0x4 /* enum */
+#define        MC_CMD_KR_TUNE_RXEQ_GET_OUT_PARAM_AUTOCAL_OFST 0
+#define        MC_CMD_KR_TUNE_RXEQ_GET_OUT_PARAM_AUTOCAL_LBN 11
+#define        MC_CMD_KR_TUNE_RXEQ_GET_OUT_PARAM_AUTOCAL_WIDTH 1
+#define        MC_CMD_KR_TUNE_RXEQ_GET_OUT_RESERVED_OFST 0
+#define        MC_CMD_KR_TUNE_RXEQ_GET_OUT_RESERVED_LBN 12
+#define        MC_CMD_KR_TUNE_RXEQ_GET_OUT_RESERVED_WIDTH 4
+#define        MC_CMD_KR_TUNE_RXEQ_GET_OUT_PARAM_INITIAL_OFST 0
+#define        MC_CMD_KR_TUNE_RXEQ_GET_OUT_PARAM_INITIAL_LBN 16
+#define        MC_CMD_KR_TUNE_RXEQ_GET_OUT_PARAM_INITIAL_WIDTH 8
+#define        MC_CMD_KR_TUNE_RXEQ_GET_OUT_PARAM_CURRENT_OFST 0
+#define        MC_CMD_KR_TUNE_RXEQ_GET_OUT_PARAM_CURRENT_LBN 24
+#define        MC_CMD_KR_TUNE_RXEQ_GET_OUT_PARAM_CURRENT_WIDTH 8
+
+/* MC_CMD_KR_TUNE_RXEQ_SET_IN msgrequest */
+#define    MC_CMD_KR_TUNE_RXEQ_SET_IN_LENMIN 8
+#define    MC_CMD_KR_TUNE_RXEQ_SET_IN_LENMAX 252
+#define    MC_CMD_KR_TUNE_RXEQ_SET_IN_LENMAX_MCDI2 1020
+#define    MC_CMD_KR_TUNE_RXEQ_SET_IN_LEN(num) (4+4*(num))
+#define    MC_CMD_KR_TUNE_RXEQ_SET_IN_PARAM_NUM(len) (((len)-4)/4)
+/* Requested operation */
+#define       MC_CMD_KR_TUNE_RXEQ_SET_IN_KR_TUNE_OP_OFST 0
+#define       MC_CMD_KR_TUNE_RXEQ_SET_IN_KR_TUNE_OP_LEN 1
+/* Align the arguments to 32 bits */
+#define       MC_CMD_KR_TUNE_RXEQ_SET_IN_KR_TUNE_RSVD_OFST 1
+#define       MC_CMD_KR_TUNE_RXEQ_SET_IN_KR_TUNE_RSVD_LEN 3
+/* RXEQ Parameter */
+#define       MC_CMD_KR_TUNE_RXEQ_SET_IN_PARAM_OFST 4
+#define       MC_CMD_KR_TUNE_RXEQ_SET_IN_PARAM_LEN 4
+#define       MC_CMD_KR_TUNE_RXEQ_SET_IN_PARAM_MINNUM 1
+#define       MC_CMD_KR_TUNE_RXEQ_SET_IN_PARAM_MAXNUM 62
+#define       MC_CMD_KR_TUNE_RXEQ_SET_IN_PARAM_MAXNUM_MCDI2 254
+#define        MC_CMD_KR_TUNE_RXEQ_SET_IN_PARAM_ID_OFST 4
+#define        MC_CMD_KR_TUNE_RXEQ_SET_IN_PARAM_ID_LBN 0
+#define        MC_CMD_KR_TUNE_RXEQ_SET_IN_PARAM_ID_WIDTH 8
+/*             Enum values, see field(s): */
+/*                MC_CMD_KR_TUNE_RXEQ_GET_OUT/PARAM_ID */
+#define        MC_CMD_KR_TUNE_RXEQ_SET_IN_PARAM_LANE_OFST 4
+#define        MC_CMD_KR_TUNE_RXEQ_SET_IN_PARAM_LANE_LBN 8
+#define        MC_CMD_KR_TUNE_RXEQ_SET_IN_PARAM_LANE_WIDTH 3
+/*             Enum values, see field(s): */
+/*                MC_CMD_KR_TUNE_RXEQ_GET_OUT/PARAM_LANE */
+#define        MC_CMD_KR_TUNE_RXEQ_SET_IN_PARAM_AUTOCAL_OFST 4
+#define        MC_CMD_KR_TUNE_RXEQ_SET_IN_PARAM_AUTOCAL_LBN 11
+#define        MC_CMD_KR_TUNE_RXEQ_SET_IN_PARAM_AUTOCAL_WIDTH 1
+#define        MC_CMD_KR_TUNE_RXEQ_SET_IN_RESERVED_OFST 4
+#define        MC_CMD_KR_TUNE_RXEQ_SET_IN_RESERVED_LBN 12
+#define        MC_CMD_KR_TUNE_RXEQ_SET_IN_RESERVED_WIDTH 4
+#define        MC_CMD_KR_TUNE_RXEQ_SET_IN_PARAM_INITIAL_OFST 4
+#define        MC_CMD_KR_TUNE_RXEQ_SET_IN_PARAM_INITIAL_LBN 16
+#define        MC_CMD_KR_TUNE_RXEQ_SET_IN_PARAM_INITIAL_WIDTH 8
+#define        MC_CMD_KR_TUNE_RXEQ_SET_IN_RESERVED2_OFST 4
+#define        MC_CMD_KR_TUNE_RXEQ_SET_IN_RESERVED2_LBN 24
+#define        MC_CMD_KR_TUNE_RXEQ_SET_IN_RESERVED2_WIDTH 8
+
+/* MC_CMD_KR_TUNE_RXEQ_SET_OUT msgresponse */
+#define    MC_CMD_KR_TUNE_RXEQ_SET_OUT_LEN 0
+
+/* MC_CMD_KR_TUNE_TXEQ_GET_IN msgrequest */
+#define    MC_CMD_KR_TUNE_TXEQ_GET_IN_LEN 4
+/* Requested operation */
+#define       MC_CMD_KR_TUNE_TXEQ_GET_IN_KR_TUNE_OP_OFST 0
+#define       MC_CMD_KR_TUNE_TXEQ_GET_IN_KR_TUNE_OP_LEN 1
+/* Align the arguments to 32 bits */
+#define       MC_CMD_KR_TUNE_TXEQ_GET_IN_KR_TUNE_RSVD_OFST 1
+#define       MC_CMD_KR_TUNE_TXEQ_GET_IN_KR_TUNE_RSVD_LEN 3
+
+/* MC_CMD_KR_TUNE_TXEQ_GET_OUT msgresponse */
+#define    MC_CMD_KR_TUNE_TXEQ_GET_OUT_LENMIN 4
+#define    MC_CMD_KR_TUNE_TXEQ_GET_OUT_LENMAX 252
+#define    MC_CMD_KR_TUNE_TXEQ_GET_OUT_LENMAX_MCDI2 1020
+#define    MC_CMD_KR_TUNE_TXEQ_GET_OUT_LEN(num) (0+4*(num))
+#define    MC_CMD_KR_TUNE_TXEQ_GET_OUT_PARAM_NUM(len) (((len)-0)/4)
+/* TXEQ Parameter */
+#define       MC_CMD_KR_TUNE_TXEQ_GET_OUT_PARAM_OFST 0
+#define       MC_CMD_KR_TUNE_TXEQ_GET_OUT_PARAM_LEN 4
+#define       MC_CMD_KR_TUNE_TXEQ_GET_OUT_PARAM_MINNUM 1
+#define       MC_CMD_KR_TUNE_TXEQ_GET_OUT_PARAM_MAXNUM 63
+#define       MC_CMD_KR_TUNE_TXEQ_GET_OUT_PARAM_MAXNUM_MCDI2 255
+#define        MC_CMD_KR_TUNE_TXEQ_GET_OUT_PARAM_ID_OFST 0
+#define        MC_CMD_KR_TUNE_TXEQ_GET_OUT_PARAM_ID_LBN 0
+#define        MC_CMD_KR_TUNE_TXEQ_GET_OUT_PARAM_ID_WIDTH 8
+/* enum: TX Amplitude (Huntington, Medford, Medford2) */
+#define          MC_CMD_KR_TUNE_TXEQ_GET_OUT_TX_LEV 0x0
+/* enum: De-Emphasis Tap1 Magnitude (0-7) (Huntington) */
+#define          MC_CMD_KR_TUNE_TXEQ_GET_OUT_TX_MODE 0x1
+/* enum: De-Emphasis Tap1 Fine */
+#define          MC_CMD_KR_TUNE_TXEQ_GET_OUT_TX_DTLEV 0x2
+/* enum: De-Emphasis Tap2 Magnitude (0-6) (Huntington) */
+#define          MC_CMD_KR_TUNE_TXEQ_GET_OUT_TX_D2 0x3
+/* enum: De-Emphasis Tap2 Fine (Huntington) */
+#define          MC_CMD_KR_TUNE_TXEQ_GET_OUT_TX_D2TLEV 0x4
+/* enum: Pre-Emphasis Magnitude (Huntington) */
+#define          MC_CMD_KR_TUNE_TXEQ_GET_OUT_TX_E 0x5
+/* enum: Pre-Emphasis Fine (Huntington) */
+#define          MC_CMD_KR_TUNE_TXEQ_GET_OUT_TX_ETLEV 0x6
+/* enum: TX Slew Rate Coarse control (Huntington) */
+#define          MC_CMD_KR_TUNE_TXEQ_GET_OUT_TX_PREDRV_DLY 0x7
+/* enum: TX Slew Rate Fine control (Huntington) */
+#define          MC_CMD_KR_TUNE_TXEQ_GET_OUT_TX_SR_SET 0x8
+/* enum: TX Termination Impedance control (Huntington) */
+#define          MC_CMD_KR_TUNE_TXEQ_GET_OUT_TX_RT_SET 0x9
+/* enum: TX Amplitude Fine control (Medford) */
+#define          MC_CMD_KR_TUNE_TXEQ_GET_OUT_TX_LEV_FINE 0xa
+/* enum: Pre-cursor Tap (Medford, Medford2) */
+#define          MC_CMD_KR_TUNE_TXEQ_GET_OUT_TAP_ADV 0xb
+/* enum: Post-cursor Tap (Medford, Medford2) */
+#define          MC_CMD_KR_TUNE_TXEQ_GET_OUT_TAP_DLY 0xc
+/* enum: TX Amplitude (Retimer Lineside) */
+#define          MC_CMD_KR_TUNE_TXEQ_GET_OUT_TX_LEV_RT_LS 0xd
+/* enum: Pre-cursor Tap (Retimer Lineside) */
+#define          MC_CMD_KR_TUNE_TXEQ_GET_OUT_TAP_ADV_RT_LS 0xe
+/* enum: Post-cursor Tap (Retimer Lineside) */
+#define          MC_CMD_KR_TUNE_TXEQ_GET_OUT_TAP_DLY_RT_LS 0xf
+/* enum: TX Amplitude (Retimer Hostside) */
+#define          MC_CMD_KR_TUNE_TXEQ_GET_OUT_TX_LEV_RT_HS 0x10
+/* enum: Pre-cursor Tap (Retimer Hostside) */
+#define          MC_CMD_KR_TUNE_TXEQ_GET_OUT_TAP_ADV_RT_HS 0x11
+/* enum: Post-cursor Tap (Retimer Hostside) */
+#define          MC_CMD_KR_TUNE_TXEQ_GET_OUT_TAP_DLY_RT_HS 0x12
+#define        MC_CMD_KR_TUNE_TXEQ_GET_OUT_PARAM_LANE_OFST 0
+#define        MC_CMD_KR_TUNE_TXEQ_GET_OUT_PARAM_LANE_LBN 8
+#define        MC_CMD_KR_TUNE_TXEQ_GET_OUT_PARAM_LANE_WIDTH 3
+#define          MC_CMD_KR_TUNE_TXEQ_GET_OUT_LANE_0 0x0 /* enum */
+#define          MC_CMD_KR_TUNE_TXEQ_GET_OUT_LANE_1 0x1 /* enum */
+#define          MC_CMD_KR_TUNE_TXEQ_GET_OUT_LANE_2 0x2 /* enum */
+#define          MC_CMD_KR_TUNE_TXEQ_GET_OUT_LANE_3 0x3 /* enum */
+#define          MC_CMD_KR_TUNE_TXEQ_GET_OUT_LANE_ALL 0x4 /* enum */
+#define        MC_CMD_KR_TUNE_TXEQ_GET_OUT_RESERVED_OFST 0
+#define        MC_CMD_KR_TUNE_TXEQ_GET_OUT_RESERVED_LBN 11
+#define        MC_CMD_KR_TUNE_TXEQ_GET_OUT_RESERVED_WIDTH 5
+#define        MC_CMD_KR_TUNE_TXEQ_GET_OUT_PARAM_INITIAL_OFST 0
+#define        MC_CMD_KR_TUNE_TXEQ_GET_OUT_PARAM_INITIAL_LBN 16
+#define        MC_CMD_KR_TUNE_TXEQ_GET_OUT_PARAM_INITIAL_WIDTH 8
+#define        MC_CMD_KR_TUNE_TXEQ_GET_OUT_RESERVED2_OFST 0
+#define        MC_CMD_KR_TUNE_TXEQ_GET_OUT_RESERVED2_LBN 24
+#define        MC_CMD_KR_TUNE_TXEQ_GET_OUT_RESERVED2_WIDTH 8
+
+/* MC_CMD_KR_TUNE_TXEQ_SET_IN msgrequest */
+#define    MC_CMD_KR_TUNE_TXEQ_SET_IN_LENMIN 8
+#define    MC_CMD_KR_TUNE_TXEQ_SET_IN_LENMAX 252
+#define    MC_CMD_KR_TUNE_TXEQ_SET_IN_LENMAX_MCDI2 1020
+#define    MC_CMD_KR_TUNE_TXEQ_SET_IN_LEN(num) (4+4*(num))
+#define    MC_CMD_KR_TUNE_TXEQ_SET_IN_PARAM_NUM(len) (((len)-4)/4)
+/* Requested operation */
+#define       MC_CMD_KR_TUNE_TXEQ_SET_IN_KR_TUNE_OP_OFST 0
+#define       MC_CMD_KR_TUNE_TXEQ_SET_IN_KR_TUNE_OP_LEN 1
+/* Align the arguments to 32 bits */
+#define       MC_CMD_KR_TUNE_TXEQ_SET_IN_KR_TUNE_RSVD_OFST 1
+#define       MC_CMD_KR_TUNE_TXEQ_SET_IN_KR_TUNE_RSVD_LEN 3
+/* TXEQ Parameter */
+#define       MC_CMD_KR_TUNE_TXEQ_SET_IN_PARAM_OFST 4
+#define       MC_CMD_KR_TUNE_TXEQ_SET_IN_PARAM_LEN 4
+#define       MC_CMD_KR_TUNE_TXEQ_SET_IN_PARAM_MINNUM 1
+#define       MC_CMD_KR_TUNE_TXEQ_SET_IN_PARAM_MAXNUM 62
+#define       MC_CMD_KR_TUNE_TXEQ_SET_IN_PARAM_MAXNUM_MCDI2 254
+#define        MC_CMD_KR_TUNE_TXEQ_SET_IN_PARAM_ID_OFST 4
+#define        MC_CMD_KR_TUNE_TXEQ_SET_IN_PARAM_ID_LBN 0
+#define        MC_CMD_KR_TUNE_TXEQ_SET_IN_PARAM_ID_WIDTH 8
+/*             Enum values, see field(s): */
+/*                MC_CMD_KR_TUNE_TXEQ_GET_OUT/PARAM_ID */
+#define        MC_CMD_KR_TUNE_TXEQ_SET_IN_PARAM_LANE_OFST 4
+#define        MC_CMD_KR_TUNE_TXEQ_SET_IN_PARAM_LANE_LBN 8
+#define        MC_CMD_KR_TUNE_TXEQ_SET_IN_PARAM_LANE_WIDTH 3
+/*             Enum values, see field(s): */
+/*                MC_CMD_KR_TUNE_TXEQ_GET_OUT/PARAM_LANE */
+#define        MC_CMD_KR_TUNE_TXEQ_SET_IN_RESERVED_OFST 4
+#define        MC_CMD_KR_TUNE_TXEQ_SET_IN_RESERVED_LBN 11
+#define        MC_CMD_KR_TUNE_TXEQ_SET_IN_RESERVED_WIDTH 5
+#define        MC_CMD_KR_TUNE_TXEQ_SET_IN_PARAM_INITIAL_OFST 4
+#define        MC_CMD_KR_TUNE_TXEQ_SET_IN_PARAM_INITIAL_LBN 16
+#define        MC_CMD_KR_TUNE_TXEQ_SET_IN_PARAM_INITIAL_WIDTH 8
+#define        MC_CMD_KR_TUNE_TXEQ_SET_IN_RESERVED2_OFST 4
+#define        MC_CMD_KR_TUNE_TXEQ_SET_IN_RESERVED2_LBN 24
+#define        MC_CMD_KR_TUNE_TXEQ_SET_IN_RESERVED2_WIDTH 8
+
+/* MC_CMD_KR_TUNE_TXEQ_SET_OUT msgresponse */
+#define    MC_CMD_KR_TUNE_TXEQ_SET_OUT_LEN 0
+
+/* MC_CMD_KR_TUNE_RECAL_IN msgrequest */
+#define    MC_CMD_KR_TUNE_RECAL_IN_LEN 4
+/* Requested operation */
+#define       MC_CMD_KR_TUNE_RECAL_IN_KR_TUNE_OP_OFST 0
+#define       MC_CMD_KR_TUNE_RECAL_IN_KR_TUNE_OP_LEN 1
+/* Align the arguments to 32 bits */
+#define       MC_CMD_KR_TUNE_RECAL_IN_KR_TUNE_RSVD_OFST 1
+#define       MC_CMD_KR_TUNE_RECAL_IN_KR_TUNE_RSVD_LEN 3
+
+/* MC_CMD_KR_TUNE_RECAL_OUT msgresponse */
+#define    MC_CMD_KR_TUNE_RECAL_OUT_LEN 0
+
+/* MC_CMD_KR_TUNE_START_EYE_PLOT_IN msgrequest */
+#define    MC_CMD_KR_TUNE_START_EYE_PLOT_IN_LEN 8
+/* Requested operation */
+#define       MC_CMD_KR_TUNE_START_EYE_PLOT_IN_KR_TUNE_OP_OFST 0
+#define       MC_CMD_KR_TUNE_START_EYE_PLOT_IN_KR_TUNE_OP_LEN 1
+/* Align the arguments to 32 bits */
+#define       MC_CMD_KR_TUNE_START_EYE_PLOT_IN_KR_TUNE_RSVD_OFST 1
+#define       MC_CMD_KR_TUNE_START_EYE_PLOT_IN_KR_TUNE_RSVD_LEN 3
+/* Port-relative lane to scan eye on */
+#define       MC_CMD_KR_TUNE_START_EYE_PLOT_IN_LANE_OFST 4
+#define       MC_CMD_KR_TUNE_START_EYE_PLOT_IN_LANE_LEN 4
+
+/* MC_CMD_KR_TUNE_START_EYE_PLOT_V2_IN msgrequest */
+#define    MC_CMD_KR_TUNE_START_EYE_PLOT_V2_IN_LEN 12
+/* Requested operation */
+#define       MC_CMD_KR_TUNE_START_EYE_PLOT_V2_IN_KR_TUNE_OP_OFST 0
+#define       MC_CMD_KR_TUNE_START_EYE_PLOT_V2_IN_KR_TUNE_OP_LEN 1
+/* Align the arguments to 32 bits */
+#define       MC_CMD_KR_TUNE_START_EYE_PLOT_V2_IN_KR_TUNE_RSVD_OFST 1
+#define       MC_CMD_KR_TUNE_START_EYE_PLOT_V2_IN_KR_TUNE_RSVD_LEN 3
+#define       MC_CMD_KR_TUNE_START_EYE_PLOT_V2_IN_LANE_OFST 4
+#define       MC_CMD_KR_TUNE_START_EYE_PLOT_V2_IN_LANE_LEN 4
+#define        MC_CMD_KR_TUNE_START_EYE_PLOT_V2_IN_LANE_NUM_OFST 4
+#define        MC_CMD_KR_TUNE_START_EYE_PLOT_V2_IN_LANE_NUM_LBN 0
+#define        MC_CMD_KR_TUNE_START_EYE_PLOT_V2_IN_LANE_NUM_WIDTH 8
+#define        MC_CMD_KR_TUNE_START_EYE_PLOT_V2_IN_LANE_ABS_REL_OFST 4
+#define        MC_CMD_KR_TUNE_START_EYE_PLOT_V2_IN_LANE_ABS_REL_LBN 31
+#define        MC_CMD_KR_TUNE_START_EYE_PLOT_V2_IN_LANE_ABS_REL_WIDTH 1
+/* Scan duration / cycle count */
+#define       MC_CMD_KR_TUNE_START_EYE_PLOT_V2_IN_BER_OFST 8
+#define       MC_CMD_KR_TUNE_START_EYE_PLOT_V2_IN_BER_LEN 4
+
+/* MC_CMD_KR_TUNE_START_EYE_PLOT_OUT msgresponse */
+#define    MC_CMD_KR_TUNE_START_EYE_PLOT_OUT_LEN 0
+
+/* MC_CMD_KR_TUNE_POLL_EYE_PLOT_IN msgrequest */
+#define    MC_CMD_KR_TUNE_POLL_EYE_PLOT_IN_LEN 4
+/* Requested operation */
+#define       MC_CMD_KR_TUNE_POLL_EYE_PLOT_IN_KR_TUNE_OP_OFST 0
+#define       MC_CMD_KR_TUNE_POLL_EYE_PLOT_IN_KR_TUNE_OP_LEN 1
+/* Align the arguments to 32 bits */
+#define       MC_CMD_KR_TUNE_POLL_EYE_PLOT_IN_KR_TUNE_RSVD_OFST 1
+#define       MC_CMD_KR_TUNE_POLL_EYE_PLOT_IN_KR_TUNE_RSVD_LEN 3
+
+/* MC_CMD_KR_TUNE_POLL_EYE_PLOT_OUT msgresponse */
+#define    MC_CMD_KR_TUNE_POLL_EYE_PLOT_OUT_LENMIN 0
+#define    MC_CMD_KR_TUNE_POLL_EYE_PLOT_OUT_LENMAX 252
+#define    MC_CMD_KR_TUNE_POLL_EYE_PLOT_OUT_LENMAX_MCDI2 1020
+#define    MC_CMD_KR_TUNE_POLL_EYE_PLOT_OUT_LEN(num) (0+2*(num))
+#define    MC_CMD_KR_TUNE_POLL_EYE_PLOT_OUT_SAMPLES_NUM(len) (((len)-0)/2)
+#define       MC_CMD_KR_TUNE_POLL_EYE_PLOT_OUT_SAMPLES_OFST 0
+#define       MC_CMD_KR_TUNE_POLL_EYE_PLOT_OUT_SAMPLES_LEN 2
+#define       MC_CMD_KR_TUNE_POLL_EYE_PLOT_OUT_SAMPLES_MINNUM 0
+#define       MC_CMD_KR_TUNE_POLL_EYE_PLOT_OUT_SAMPLES_MAXNUM 126
+#define       MC_CMD_KR_TUNE_POLL_EYE_PLOT_OUT_SAMPLES_MAXNUM_MCDI2 510
+
+/* MC_CMD_KR_TUNE_READ_FOM_IN msgrequest */
+#define    MC_CMD_KR_TUNE_READ_FOM_IN_LEN 8
+/* Requested operation */
+#define       MC_CMD_KR_TUNE_READ_FOM_IN_KR_TUNE_OP_OFST 0
+#define       MC_CMD_KR_TUNE_READ_FOM_IN_KR_TUNE_OP_LEN 1
+/* Align the arguments to 32 bits */
+#define       MC_CMD_KR_TUNE_READ_FOM_IN_KR_TUNE_RSVD_OFST 1
+#define       MC_CMD_KR_TUNE_READ_FOM_IN_KR_TUNE_RSVD_LEN 3
+#define       MC_CMD_KR_TUNE_READ_FOM_IN_LANE_OFST 4
+#define       MC_CMD_KR_TUNE_READ_FOM_IN_LANE_LEN 4
+#define        MC_CMD_KR_TUNE_READ_FOM_IN_LANE_NUM_OFST 4
+#define        MC_CMD_KR_TUNE_READ_FOM_IN_LANE_NUM_LBN 0
+#define        MC_CMD_KR_TUNE_READ_FOM_IN_LANE_NUM_WIDTH 8
+#define        MC_CMD_KR_TUNE_READ_FOM_IN_LANE_ABS_REL_OFST 4
+#define        MC_CMD_KR_TUNE_READ_FOM_IN_LANE_ABS_REL_LBN 31
+#define        MC_CMD_KR_TUNE_READ_FOM_IN_LANE_ABS_REL_WIDTH 1
+
+/* MC_CMD_KR_TUNE_READ_FOM_OUT msgresponse */
+#define    MC_CMD_KR_TUNE_READ_FOM_OUT_LEN 4
+#define       MC_CMD_KR_TUNE_READ_FOM_OUT_FOM_OFST 0
+#define       MC_CMD_KR_TUNE_READ_FOM_OUT_FOM_LEN 4
+
+/* MC_CMD_KR_TUNE_LINK_TRAIN_RUN_IN msgrequest */
+#define    MC_CMD_KR_TUNE_LINK_TRAIN_RUN_IN_LEN 8
+/* Requested operation */
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_RUN_IN_KR_TUNE_OP_OFST 0
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_RUN_IN_KR_TUNE_OP_LEN 1
+/* Align the arguments to 32 bits */
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_RUN_IN_KR_TUNE_RSVD_OFST 1
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_RUN_IN_KR_TUNE_RSVD_LEN 3
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_RUN_IN_RUN_OFST 4
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_RUN_IN_RUN_LEN 4
+#define          MC_CMD_KR_TUNE_LINK_TRAIN_RUN_IN_STOP 0x0 /* enum */
+#define          MC_CMD_KR_TUNE_LINK_TRAIN_RUN_IN_START 0x1 /* enum */
+
+/* MC_CMD_KR_TUNE_LINK_TRAIN_CMD_IN msgrequest */
+#define    MC_CMD_KR_TUNE_LINK_TRAIN_CMD_IN_LEN 28
+/* Requested operation */
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_IN_KR_TUNE_OP_OFST 0
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_IN_KR_TUNE_OP_LEN 1
+/* Align the arguments to 32 bits */
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_IN_KR_TUNE_RSVD_OFST 1
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_IN_KR_TUNE_RSVD_LEN 3
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_IN_LANE_OFST 4
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_IN_LANE_LEN 4
+/* Set INITIALIZE state */
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_IN_INITIALIZE_OFST 8
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_IN_INITIALIZE_LEN 4
+/* Set PRESET state */
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_IN_PRESET_OFST 12
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_IN_PRESET_LEN 4
+/* C(-1) request */
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_IN_CM1_OFST 16
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_IN_CM1_LEN 4
+#define          MC_CMD_KR_TUNE_LINK_TRAIN_CMD_IN_REQ_HOLD 0x0 /* enum */
+#define          MC_CMD_KR_TUNE_LINK_TRAIN_CMD_IN_REQ_INCREMENT 0x1 /* enum */
+#define          MC_CMD_KR_TUNE_LINK_TRAIN_CMD_IN_REQ_DECREMENT 0x2 /* enum */
+/* C(0) request */
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_IN_C0_OFST 20
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_IN_C0_LEN 4
+/*            Enum values, see field(s): */
+/*               MC_CMD_KR_TUNE_LINK_TRAIN_CMD_IN/CM1 */
+/* C(+1) request */
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_IN_CP1_OFST 24
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_IN_CP1_LEN 4
+/*            Enum values, see field(s): */
+/*               MC_CMD_KR_TUNE_LINK_TRAIN_CMD_IN/CM1 */
+
+/* MC_CMD_KR_TUNE_LINK_TRAIN_CMD_OUT msgresponse */
+#define    MC_CMD_KR_TUNE_LINK_TRAIN_CMD_OUT_LEN 24
+/* C(-1) status */
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_OUT_CM1_STATUS_OFST 0
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_OUT_CM1_STATUS_LEN 4
+#define          MC_CMD_KR_TUNE_LINK_TRAIN_CMD_OUT_STATUS_NOT_UPDATED 0x0 /* enum */
+#define          MC_CMD_KR_TUNE_LINK_TRAIN_CMD_OUT_STATUS_UPDATED 0x1 /* enum */
+#define          MC_CMD_KR_TUNE_LINK_TRAIN_CMD_OUT_STATUS_MINIMUM 0x2 /* enum */
+#define          MC_CMD_KR_TUNE_LINK_TRAIN_CMD_OUT_STATUS_MAXIMUM 0x3 /* enum */
+/* C(0) status */
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_OUT_C0_STATUS_OFST 4
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_OUT_C0_STATUS_LEN 4
+/*            Enum values, see field(s): */
+/*               MC_CMD_KR_TUNE_LINK_TRAIN_CMD_IN/CM1 */
+/* C(+1) status */
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_OUT_CP1_STATUS_OFST 8
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_OUT_CP1_STATUS_LEN 4
+/*            Enum values, see field(s): */
+/*               MC_CMD_KR_TUNE_LINK_TRAIN_CMD_IN/CM1 */
+/* C(-1) value */
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_OUT_CM1_VALUE_OFST 12
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_OUT_CM1_VALUE_LEN 4
+/* C(0) value */
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_OUT_C0_VALUE_OFST 16
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_OUT_C0_VALUE_LEN 4
+/* C(+1) status */
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_OUT_CP1_VALUE_OFST 20
+#define       MC_CMD_KR_TUNE_LINK_TRAIN_CMD_OUT_CP1_VALUE_LEN 4
 
 
 /***********************************/

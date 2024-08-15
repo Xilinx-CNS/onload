@@ -134,11 +134,13 @@ static void efx_auxbus_close(struct efx_auxdev_client *cdev)
 	if (!cdev)
 		return;
 
+	/* Disable event delivery from efx_auxbus_send_events() */
 	cdev->event_handler = NULL;
-	/* Avoid a race with event callbacks */
+	smp_wmb();
+	/* Wait until any event callbacks are done */
 	client = container_of(cdev, struct efx_client, auxiliary_info);
 	client_type = client->client_type;
-	down_write(&client_type->open_lock);
+	efx_auxbus_wait_for_event_callbacks(client_type);
 
 	cdev->net_dev = NULL;
 	cdev->client_id = 0;
@@ -152,7 +154,6 @@ static void efx_auxbus_close(struct efx_auxdev_client *cdev)
 		efx_auxbus_dl_unpublish(cdev);
 	}
 	efx_client_del(client);
-	up_write(&client_type->open_lock);
 }
 
 static int efx_auxbus_fw_rpc(struct efx_auxdev_client *cdev,
@@ -744,21 +745,25 @@ int efx_auxbus_send_events(struct efx_probe_data *pd,
 			continue;
 
 		/* Notify open clients that want this event */
-		down_read(&client_type->open_lock);
+		refcount_inc(&client_type->in_callback);
 		xa_for_each(&client_type->open, idx, client) {
+			efx_auxdev_event_handler *event_handler;
+
 			if (!client)
 				continue;
 
 			cdev = &client->auxiliary_info;
-			if (!cdev || !cdev->event_handler ||
-			    !(cdev->events_requested & BIT(event->type)))
+			if (!(cdev->events_requested & BIT(event->type)))
+				continue;
+			event_handler = READ_ONCE(cdev->event_handler);
+			if (!event_handler)
 				continue;
 
-			rc = (*cdev->event_handler)(cdev, event);
+			rc = (*event_handler)(cdev, event);
 			if (rc > 0)
 				count += rc;
 		}
-		up_read(&client_type->open_lock);
+		refcount_dec(&client_type->in_callback);
 	}
 	return count;
 }

@@ -87,11 +87,17 @@ struct efx_client *efx_client_add(struct efx_probe_data *pd,
 }
 
 void efx_client_del(struct efx_client *client)
-	__must_hold(client->client_type->open_lock)
 {
 	if (!client)
 		return;
 
+#ifdef CONFIG_AUXILIARY_BUS
+	/* Disable event delivery from efx_auxbus_send_events() */
+	client->auxiliary_info.event_handler = NULL;
+	smp_wmb();
+	/* Wait until any event callbacks are done */
+	efx_auxbus_wait_for_event_callbacks(client->client_type);
+#endif
 	efx_client_free_id(client);
 	kfree(client);
 }
@@ -114,11 +120,10 @@ static void efx_client_del_type(struct efx_probe_data *pd,
 	 * could cause auxiliary bus drivers to close their clients.
 	 */
 	efx_auxbus_del_dev(client_type);
-	down_write(&client_type->open_lock);
+
 	xa_for_each(&client_type->open, index, client)
 		efx_client_del(client);
 	xa_destroy(&client_type->open);
-	up_write(&client_type->open_lock);
 
 	pd->client_type[type] = NULL;
 	kfree(client_type);
@@ -139,7 +144,7 @@ static void efx_client_add_type(struct efx_probe_data *pd,
 	new->type = type;
 	new->pd = pd;
 	xa_init_flags(&new->open, XA_FLAGS_ALLOC1);
-	init_rwsem(&new->open_lock);
+	refcount_set(&new->in_callback, 1);
 	pd->client_type[type] = new;
 
 	rc = efx_auxbus_add_dev(new);

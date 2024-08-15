@@ -30,46 +30,24 @@ EFX_HAVE_KERNEL_HWTSTAMP_CONFIG_IFR     member struct_kernel_hwtstamp_config ifr
 EFX_HAVE_NDO_HWTSTAMP_GET               member  struct_net_device_ops ndo_hwtstamp_get include/linux/netdevice.h
 EFX_HAVE_HWTSTAMP_CONFIG_TO_KERNEL      symbol hwtstamp_config_to_kernel    include/linux/net_tstamp.h
 EFX_HAVE_HWTSTAMP_CONFIG_FROM_KERNEL    symbol hwtstamp_config_from_kernel  include/linux/net_tstamp.h
-EFX_USE_ETHTOOL_FLAGS			symbol	get_flags		include/linux/ethtool.h
-EFX_USE_ETHTOOL_LP_ADVERTISING		symbol	lp_advertising		include/linux/ethtool.h
-EFX_USE_ETHTOOL_MDIO_SUPPORT		symbol	mdio_support		include/linux/ethtool.h
-EFX_USE_MTD_WRITESIZE			symbol	writesize		include/linux/mtd/mtd.h
 EFX_HAVE_MTD_USECOUNT			member  struct_mtd_info	usecount		include/linux/mtd/mtd.h
-EFX_USE_NETDEV_STATS			custom
-EFX_USE_NETDEV_STATS64			member	struct_net_device_ops	ndo_get_stats64 include/linux/netdevice.h
 EFX_HAVE_NETDEV_STATS64_VOID		memtype	struct_net_device_ops	ndo_get_stats64	include/linux/netdevice.h	void(*)(struct net_device *, struct rtnl_link_stats64 *)
-EFX_HAVE_NET_DEVICE_MC			memtype	struct_net_device	mc	include/linux/netdevice.h	struct netdev_hw_addr_list
 EFX_NEED_HWMON_T_ALARM			nsymbol	HWMON_T_ALARM		include/linux/hwmon.h
 EFX_HAVE_HWMON_READ_STRING		member	struct_hwmon_ops	read_string	include/linux/hwmon.h
 EFX_HAVE_HWMON_READ_STRING_CONST	memtype	struct_hwmon_ops	read_string	include/linux/hwmon.h	int(*)(struct device *, enum hwmon_sensor_types, u32, int, const char **)
-EFX_USE_ETHTOOL_GET_SSET_COUNT		symbol	get_sset_count		include/linux/ethtool.h
-# Do not use struct ethtool_ops_ext due to RH BZ 1008678 (SF bug 39031)
-EFX_HAVE_ETHTOOL_RESET			member	struct_ethtool_ops reset include/linux/ethtool.h
 EFX_HAVE_ETHTOOL_SET_PHYS_ID		symbol	set_phys_id		include/linux/ethtool.h
 EFX_HAVE_ETHTOOL_GMODULEEEPROM		symbol	get_module_eeprom	include/linux/ethtool.h
-EFX_NEED_DMA_SET_COHERENT_MASK		nsymbol	dma_set_coherent_mask	include/linux/dma-mapping.h
 EFX_NEED_DMA_SET_MASK_AND_COHERENT		nsymbol	dma_set_mask_and_coherent	include/linux/dma-mapping.h
 EFX_NEED_BITMAP_ZALLOC			nsymbol	bitmap_zalloc		include/linux/bitmap.h
-EFX_USE_PM_EXT_OPS			symbol	pm_ext_ops		include/linux/pm.h
-EFX_USE_DEV_PM_OPS			symbol	dev_pm_ops		include/linux/pm.h
-EFX_HAVE_XEN_XEN_H			file				include/xen/xen.h
 EFX_HAVE_ASM_SYSTEM_H			file				asm/system.h
 EFX_HAVE_XEN_START_INFO			custom
 EFX_HAVE_EXPORTED_CPU_SIBLING_MAP	export	(per_cpu__)?cpu_sibling_map	include/asm/smp.h	arch/$SRCARCH/include/asm/smp.h	arch/$SRCARCH/kernel/smpboot.c	drivers/xen/core/smpboot.c
-EFX_HAVE_PCI_NUM_VF			export	pci_num_vf		include/linux/pci.h	drivers/pci/iov.c
-EFX_HAVE_SRIOV_CONFIGURE                member  struct_pci_driver       sriov_configure        include/linux/pci.h
-EFX_HAVE_PCI_DRIVER_RH                  member  struct_pci_driver_rh    sriov_configure        include/linux/pci.h
 EFX_HAVE_NDO_SIZE			member	struct_net_device_ops	ndo_size		include/linux/netdevice.h
 EFX_HAVE_NDO_SIZE_RH			member	struct_net_device_ops	ndo_size_rh		include/linux/netdevice.h
-EFX_HAVE_NDO_SET_VF_MAC 		member	struct_net_device_ops	ndo_set_vf_mac		include/linux/netdevice.h
 EFX_HAVE_NDO_SET_VF_VLAN_PROTO		memtype	struct_net_device_ops	ndo_set_vf_vlan		include/linux/netdevice.h	int (*)(struct net_device *, int, u16, u8, __be16)
 EFX_HAVE_NDO_EXT_SET_VF_VLAN_PROTO		memtype struct_net_device_ops_extended	ndo_set_vf_vlan	include/linux/netdevice.h	int (*)(struct net_device *, int, u16, u8, __be16)
-EFX_HAVE_NDO_SET_VF_SPOOFCHK		member	struct_net_device_ops	ndo_set_vf_spoofchk	include/linux/netdevice.h
-EFX_HAVE_NDO_SET_FEATURES		member	struct_net_device_ops	ndo_set_features	include/linux/netdevice.h
 EFX_HAVE_NDO_FEATURES_CHECK		member	struct_net_device_ops	ndo_features_check	include/linux/netdevice.h
-EFX_HAVE_EXT_NDO_SET_FEATURES           member  struct_net_device_ops_ext ndo_set_features      include/linux/netdevice.h
 EFX_HAVE_VF_LINK_STATE			member	struct_net_device_ops	ndo_set_vf_link_state	include/linux/netdevice.h
-EFX_HAVE_NDO_SET_MULTICAST_LIST		member	struct_net_device_ops	ndo_set_multicast_list	include/linux/netdevice.h
 EFX_HAVE_NDO_BUSY_POLL			member	struct_net_device_ops	ndo_busy_poll	        include/linux/netdevice.h
 EFX_HAVE_NDO_GET_PHYS_PORT_ID		member	struct_net_device_ops	ndo_get_phys_port_id	include/linux/netdevice.h
 EFX_HAVE_NDO_GET_PHYS_PORT_NAME		member	struct_net_device_ops	ndo_get_phys_port_name	include/linux/netdevice.h
@@ -77,13 +55,7 @@ EFX_HAVE_NDO_GET_PORT_PARENT_ID		member	struct_net_device_ops	ndo_get_port_paren
 EFX_HAVE_NDO_VLAN_RX_ADD_VID_PROTO	memtype	struct_net_device_ops	ndo_vlan_rx_add_vid	include/linux/netdevice.h	int (*)(struct net_device *, __be16, u16)
 EFX_HAVE_NDO_VLAN_RX_ADD_VID_RC		memtype	struct_net_device_ops	ndo_vlan_rx_add_vid	include/linux/netdevice.h	int (*)(struct net_device *, u16)
 EFX_NEED_ETHER_ADDR_COPY		nsymbol ether_addr_copy		include/linux/etherdevice.h
-EFX_NEED_ETHER_ADDR_EQUAL		nsymbol	ether_addr_equal	include/linux/etherdevice.h
-EFX_NEED_ETH_ZERO_ADDR			nsymbol eth_zero_addr		include/linux/etherdevice.h
-EFX_NEED_ETH_BROADCAST_ADDR		nsymbol	eth_broadcast_addr	include/linux/etherdevice.h
-EFX_NEED_ETH_RANDOM_ADDR		nsymbol	eth_random_addr		include/linux/etherdevice.h
 EFX_NEED_ETH_HW_ADDR_SET		nsymbol	eth_hw_addr_set		include/linux/etherdevice.h
-EFX_NEED_MAC_PTON			nsymbol mac_pton		include/linux/kernel.h	include/linux/hex.h include/linux/if_ether.h
-EFX_HAVE_HEX_TO_BIN			symbol hex_to_bin		include/linux/kernel.h include/linux/hex.h
 EFX_NEED_NS_TO_TIMESPEC			nexport ns_to_timespec		include/linux/time.h	kernel/time.c
 EFX_HAVE_TIMESPEC64			symbol	timespec64		include/linux/time64.h	include/linux/time.h
 EFX_NEED_KTIME_GET_REAL_TS64		nsymbol	ktime_get_real_ts64	include/linux/timekeeping.h	include/linux/ktime.h
@@ -105,54 +77,30 @@ EFX_NEED_PPS_SUB_TS			nsymbol pps_sub_ts		include/linux/pps_kernel.h
 EFX_NEED_PPS_EVENT_TIME			nsymbol	pps_event_time		include/linux/pps_kernel.h
 EFX_HAVE_PPS_EVENT_TIME_TIMESPEC	nmemtype	struct_pps_event_time	ts_real	include/linux/pps_kernel.h	struct timespec64
 EFX_NEED_PPS_GET_TS			nsymbol	pps_get_ts		include/linux/pps_kernel.h
-EFX_NEED_IP_IS_FRAGMENT			nsymbol	ip_is_fragment		include/net/ip.h
-EFX_NEED_NETDEV_FEATURES_T		nsymbol	netdev_features_t	include/linux/netdevice.h
-EFX_NEED_SKB_FRAG_DMA_MAP		nsymbol	skb_frag_dma_map	include/linux/skbuff.h
-EFX_NEED_SKB_FRAG_ADDRESS		nsymbol skb_frag_address	include/linux/skbuff.h
-EFX_NEED_SKB_FRAG_SIZE			nsymbol	skb_frag_size		include/linux/skbuff.h
-EFX_NEED_SKB_FRAG_PAGE			nsymbol	skb_frag_page		include/linux/skbuff.h
 EFX_NEED_SKB_FRAG_OFF			nsymbol	skb_frag_off		include/linux/skbuff.h
 EFX_HAVE_ETHTOOL_GET_RXFH_INDIR	symbol	get_rxfh_indir	include/linux/ethtool.h
 EFX_HAVE_ETHTOOL_GET_RXFH_INDIR_SIZE	symbol	get_rxfh_indir_size	include/linux/ethtool.h
 EFX_HAVE_ETHTOOL_GET_RXFH		symbol	get_rxfh	include/linux/ethtool.h
 EFX_HAVE_ETHTOOL_GET_RXFH_KEY_SIZE		symbol	get_rxfh_key_size	include/linux/ethtool.h
 EFX_HAVE_ETHTOOL_SET_RXFH_NOCONST	custom
-EFX_HAVE_OLD_ETHTOOL_RXFH_INDIR		custom
-EFX_NEED_ETHTOOL_RXFH_INDIR_DEFAULT	nsymbol	ethtool_rxfh_indir_default	include/linux/ethtool.h
 EFX_NEED_IS_COMPAT_TASK			custom
-EFX_HAVE_TIF_ADDR32			symbol	TIF_ADDR32		arch/x86/include/asm/thread_info.h
 EFX_NEED_COMPAT_U64			nsymbol	compat_u64		include/asm/compat.h arch/$SRCARCH/include/asm/compat.h include/asm-$SRCARCH/compat.h
 EFX_HAVE_IRQ_NOTIFIERS			symbol  irq_affinity_notify	include/linux/interrupt.h
-EFX_HAVE_GSO_MAX_SEGS			member	struct_net_device	gso_max_segs		include/linux/netdevice.h
 EFX_NEED_SET_TSO_MAX_SIZE		nsymbol netif_set_tso_max_size	include/linux/netdevice.h
 EFX_NEED_SET_TSO_MAX_SEGS		nsymbol netif_set_tso_max_segs	include/linux/netdevice.h
-EFX_NEED_BYTE_QUEUE_LIMITS		nsymbol	netdev_tx_sent_queue	include/linux/netdevice.h
 EFX_NEED___BQL				nsymbol __netdev_tx_sent_queue	include/linux/netdevice.h
-EFX_NEED_SKB_CHECKSUM_NONE_ASSERT	nsymbol	skb_checksum_none_assert	include/linux/skbuff.h
-EFX_HAVE_NON_CONST_KERNEL_PARAM		symtype	param_set_uint		include/linux/moduleparam.h	int (const char *, struct kernel_param *)
-EFX_HAVE_KERNEL_PARAM_OPS		symbol kernel_param_ops		include/linux/moduleparam.h
-EFX_NEED___SET_BIT_LE			nsymtype __set_bit_le		include/asm-generic/bitops/le.h	void (int, void *)
-EFX_USE_ETHTOOL_OPS_EXT			symbol	ethtool_ops_ext		include/linux/ethtool.h
-EFX_HAVE_ETHTOOL_GET_DUMP_FLAG		member	struct_ethtool_ops get_dump_flag	include/linux/ethtool.h
-EFX_HAVE_ETHTOOL_GET_DUMP_DATA		member	struct_ethtool_ops get_dump_data	include/linux/ethtool.h
-EFX_HAVE_ETHTOOL_SET_DUMP		member	struct_ethtool_ops set_dump	include/linux/ethtool.h
-EFX_HAVE_ETHTOOL_GET_TS_INFO		member	struct_ethtool_ops get_ts_info	include/linux/ethtool.h
-EFX_HAVE_ETHTOOL_EXT_GET_TS_INFO	member	struct_ethtool_ops_ext get_ts_info	include/linux/ethtool.h
 EFX_NEED_KERNEL_ETHTOOL_TS_INFO		nsymbol	struct_kernel_ethtool_ts_info	include/linux/ethtool.h
 EFX_HAVE_OLD___VLAN_PUT_TAG		symtype	__vlan_put_tag		include/linux/if_vlan.h	struct sk_buff *(struct sk_buff *, u16)
 EFX_HAVE_VLAN_INSERT_TAG_SET_PROTO	symbol vlan_insert_tag_set_proto	include/linux/if_vlan.h
 EFX_NEED_NETDEV_NOTIFIER_INFO_TO_DEV	nsymbol	netdev_notifier_info_to_dev	include/linux/netdevice.h
 EFX_HAVE_NETDEV_REGISTER_RH		symbol	register_netdevice_notifier_rh	include/linux/netdevice.h
-EFX_HAVE_NETDEV_RFS_INFO		symbol	netdev_rfs_info		include/linux/netdevice.h
 EFX_NEED_PCI_AER_CLEAR_NONFATAL_STATUS	nsymbol pci_aer_clear_nonfatal_status	include/linux/aer.h
 EFX_HAVE_PCI_ENABLE_PCIE_ERROR_REPORTING	symbol	pci_enable_pcie_error_reporting	include/linux/aer.h
 EFX_HAVE_EEH_DEV_CHECK_FAILURE		symbol	eeh_dev_check_failure	arch/powerpc/include/asm/eeh.h
 EFX_NEED_PCI_DEV_TO_EEH_DEV		nsymbol	pci_dev_to_eeh_dev	include/linux/pci.h
 EFX_HAVE_IOREMAP_WC			symbol	ioremap_wc		arch/$SRCARCH/include/asm/io.h include/asm-$SRCARCH/io.h include/asm-generic/io.h
 EFX_HAVE_IOREMAP_NOCACHE		symbol	ioremap_nocache		include/asm-generic/io.h
-EFX_NEED_SKB_TRANSPORT_HEADER_WAS_SET	nsymbol	skb_transport_header_was_set include/linux/skbuff.h
 EFX_HAVE_OLD_KMAP_ATOMIC		custom
-EFX_HAVE_NAPI_STRUCT			symbol	napi_struct		include/linux/netdevice.h
 EFX_HAVE_NAPI_STRUCT_NAPI_ID		member	struct_napi_struct	napi_id	include/linux/netdevice.h
 EFX_HAVE_NAPI_HASH_ADD			symbol	napi_hash_add		include/linux/netdevice.h
 EFX_HAVE_NAPI_HASH_DEL_RETURN		symtype	napi_hash_del		include/linux/netdevice.h	int (struct napi_struct *)
@@ -160,20 +108,10 @@ EFX_NEED_NETIF_NAPI_ADD_WEIGHT		nsymbol	netif_napi_add_weight	include/linux/netd
 EFX_HAVE_OLD_NETIF_NAPI_ADD		symtype	netif_napi_add		include/linux/netdevice.h	void (struct net_device *, struct napi_struct *, int (*)(struct napi_struct *, int), int)
 EFX_NEED_SKB_SET_HASH			nsymbol skb_set_hash		include/linux/skbuff.h
 EFX_HAVE_SKB_L4HASH			member	struct_sk_buff l4_rxhash	include/linux/skbuff.h
-EFX_HAVE_SKB_VLANTCI                     member    struct_sk_buff vlan_tci        include/linux/skbuff.h
 EFX_HAVE_BUSY_POLL			file				include/net/busy_poll.h
-EFX_NEED_USLEEP_RANGE			nsymbol	usleep_range		include/linux/delay.h
-EFX_HAVE_SRIOV_GET_TOTALVFS		symbol	pci_sriov_get_totalvfs	include/linux/pci.h
 EFX_NEED_SKB_VLAN_TAG_GET		nsymbol	skb_vlan_tag_get	include/linux/if_vlan.h
-EFX_HAVE_OLD___VLAN_HWACCEL_PUT_TAG	symtype	__vlan_hwaccel_put_tag	include/linux/if_vlan.h	struct sk_buff *(struct sk_buff *, u16)
-EFX_HAVE_ETHTOOL_CHANNELS		member	struct_ethtool_ops get_channels	include/linux/ethtool.h
-EFX_HAVE_ETHTOOL_EXT_CHANNELS		member	struct_ethtool_ops_ext get_channels	include/linux/ethtool.h
 EFX_NEED_IPV6_NFC			nsymbol	ethtool_tcpip6_spec	include/uapi/linux/ethtool.h
 EFX_HAVE_SKB_HASH			member	struct_sk_buff hash	include/linux/skbuff.h
-EFX_HAVE_SKB_INNER_NETWORK_HEADER	symbol	skb_inner_network_header	include/linux/skbuff.h
-EFX_SKB_HAS_INNER_NETWORK_HEADER	member	struct_sk_buff	inner_network_header	include/linux/skbuff.h
-EFX_HAVE_SKB_INNER_TRANSPORT_HEADER	symbol	skb_inner_transport_header	include/linux/skbuff.h
-EFX_SKB_HAS_INNER_TRANSPORT_HEADER	member	struct_sk_buff	inner_transport_header	include/linux/skbuff.h
 EFX_HAVE_SKB_FRAG_TRUESIZE		symtype	skb_add_rx_frag		include/linux/skbuff.h	void (struct sk_buff *, int, struct page *, int, int, unsigned int)
 EFX_HAVE_INNER_IP_HDR			symbol	inner_ip_hdr		include/linux/ip.h
 EFX_HAVE_INNER_TCP_HDR			symbol	inner_tcp_hdr		include/linux/tcp.h
@@ -392,16 +330,6 @@ EFX_HAVE_IP_TUNNEL_FLAGS_TO_BE16	symbol	ip_tunnel_flags_to_be16	include/net/ip_t
 ######################################################################
 # Implementation for more tricky types
 
-function do_EFX_USE_NETDEV_STATS()
-{
-    local source="
-#include <linux/netdevice.h>
-struct net_device_stats *stats;
-void test(struct net_device *net_dev);
-void test(struct net_device *net_dev) { stats = &net_dev->stats; }"
-    defer_test_compile pos "$source"
-}
-
 function do_EFX_HAVE_XEN_START_INFO()
 {
     case $SRCARCH in
@@ -439,12 +367,6 @@ function do_EFX_NEED_SET_NORMALIZED_TIMESPEC
 {
     ! test_inline_symbol set_normalized_timespec include/linux/time.h && \
 	! test_export set_normalized_timespec include/linux/time.h kernel/time.c
-}
-
-function do_EFX_HAVE_OLD_ETHTOOL_RXFH_INDIR
-{
-    test_symbol ETHTOOL_GRXFHINDIR include/linux/ethtool.h && \
-	! test_symbol get_rxfh_indir_size include/linux/ethtool.h
 }
 
 function do_EFX_HAVE_ETHTOOL_SET_RXFH_NOCONST
