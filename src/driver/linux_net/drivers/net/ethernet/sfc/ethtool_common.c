@@ -833,7 +833,6 @@ void efx_ethtool_get_stats(struct net_device *net_dev,
 	efx_ptp_update_stats(efx, data);
 }
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_CHANNELS) || defined(EFX_HAVE_ETHTOOL_EXT_CHANNELS)
 void efx_ethtool_get_channels(struct net_device *net_dev,
 			      struct ethtool_channels *channels)
 {
@@ -907,7 +906,6 @@ int efx_ethtool_set_channels(struct net_device *net_dev,
 		rc2 = dev_open(net_dev, NULL);
 	return (rc ? rc : rc2);
 }
-#endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_LINKSETTINGS)
 int efx_ethtool_get_link_ksettings(struct net_device *net_dev,
@@ -2006,48 +2004,7 @@ int efx_ethtool_set_rxfh_no_hfunc(struct net_device *net_dev,
 # endif
 #endif
 
-#if defined(EFX_HAVE_OLD_ETHTOOL_RXFH_INDIR)
-int efx_ethtool_old_get_rxfh_indir(struct net_device *net_dev,
-				   struct ethtool_rxfh_indir *indir)
-{
-	u32 user_size = indir->size, dev_size;
-
-	dev_size = efx_ethtool_get_rxfh_indir_size(net_dev);
-	if (dev_size == 0)
-		return -EOPNOTSUPP;
-
-	if (user_size < dev_size) {
-		indir->size = dev_size;
-		return user_size == 0 ? 0 : -EINVAL;
-	}
-
-	return efx_ethtool_get_rxfh(net_dev, indir->ring_index, NULL, NULL);
-}
-
-int efx_ethtool_old_set_rxfh_indir(struct net_device *net_dev,
-				   const struct ethtool_rxfh_indir *indir)
-{
-	struct efx_nic *efx = efx_netdev_priv(net_dev);
-	u32 user_size = indir->size, dev_size, i;
-
-	dev_size = efx_ethtool_get_rxfh_indir_size(net_dev);
-	if (dev_size == 0)
-		return -EOPNOTSUPP;
-
-	if (user_size != dev_size)
-		return -EINVAL;
-
-	/* Validate ring indices */
-	for (i = 0; i < dev_size; i++)
-		if (indir->ring_index[i] >= efx_rx_channels(efx))
-			return -EINVAL;
-
-	return efx_ethtool_set_rxfh(net_dev, indir->ring_index, NULL,
-			ETH_RSS_HASH_NO_CHANGE);
-}
-#endif
-
-#if defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR) && !defined(EFX_HAVE_ETHTOOL_GET_RXFH) && !defined(EFX_HAVE_OLD_ETHTOOL_RXFH_INDIR)
+#if defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR) && !defined(EFX_HAVE_ETHTOOL_GET_RXFH)
 /* Wrappers that only set the indirection table, not the key. */
 int efx_ethtool_get_rxfh_indir(struct net_device *net_dev, u32 *indir)
 {

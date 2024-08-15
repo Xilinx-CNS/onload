@@ -17,7 +17,7 @@
 #include "ef10_sriov.h"
 #include "workarounds.h"
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SRIOV_GET_TOTALVFS) || defined(CONFIG_SFC_SRIOV)
+#ifdef CONFIG_SFC_SRIOV
 /*
  * Force allocation of a vswitch.
  */
@@ -25,9 +25,6 @@ static bool enable_vswitch;
 module_param(enable_vswitch, bool, 0444);
 MODULE_PARM_DESC(enable_vswitch,
 		 "Force allocation of a VEB vswitch on supported adapters");
-#endif
-
-#ifdef CONFIG_SFC_SRIOV
 
 static bool vfs_vlan_restrict;
 module_param(vfs_vlan_restrict, bool, 0444);
@@ -202,11 +199,7 @@ int efx_ef10_vswitching_probe_pf(struct efx_nic *efx)
 	struct net_device *net_dev = efx->net_dev;
 	int rc;
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SRIOV_GET_TOTALVFS)
 	if (pci_sriov_get_totalvfs(efx->pci_dev) <= 0 && !enable_vswitch) {
-#else
-	if (nic_data->max_vfs <= 0 && !enable_vswitch) {
-#endif
 		/* vswitch not needed as we have no VFs */
 		efx_ef10_vadaptor_alloc_set_features(efx);
 		return 0;

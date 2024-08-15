@@ -49,16 +49,6 @@
  * This file provides functionality missing from earlier kernels.
  */
 
-#ifdef EFX_NEED_USLEEP_RANGE
-
-void usleep_range(unsigned long min, unsigned long max)
-{
-	unsigned long delay = DIV_ROUND_UP(min, 1000) ? : 1;
-	msleep(delay);
-}
-
-#endif
-
 #ifdef EFX_NEED_NS_TO_TIMESPEC
 #ifndef EFX_HAVE_TIMESPEC64
 

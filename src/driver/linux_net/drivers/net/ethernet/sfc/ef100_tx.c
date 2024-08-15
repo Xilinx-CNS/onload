@@ -78,10 +78,8 @@ static bool ef100_tx_can_tso(struct efx_tx_queue *tx_queue, struct sk_buff *skb)
 		return false;
 
 	if (skb_shinfo(skb)->gso_segs > nic_data->tso_max_payload_num_segs) {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_GSO_MAX_SEGS)
 		/* net_dev->gso_max_segs should've caught this */
 		WARN_ON_ONCE(1);
-#endif
 		return false;
 	}
 

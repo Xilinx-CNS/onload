@@ -40,12 +40,10 @@ int efx_ethtool_set_priv_flags(struct net_device *net_dev, u32 flags);
 void efx_ethtool_get_stats(struct net_device *net_dev,
 			   struct ethtool_stats *stats __attribute__ ((unused)),
 			   u64 *data);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_CHANNELS) || defined(EFX_HAVE_ETHTOOL_EXT_CHANNELS)
 void efx_ethtool_get_channels(struct net_device *net_dev,
 			      struct ethtool_channels *channels);
 int efx_ethtool_set_channels(struct net_device *net_dev,
 			     struct ethtool_channels *channels);
-#endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_LINKSETTINGS)
 int efx_ethtool_get_link_ksettings(struct net_device *net_dev,
@@ -120,16 +118,10 @@ int efx_sfctool_set_rxfh(struct efx_nic *efx,
 
 
 #if defined(EFX_USE_KCOMPAT)
-#if defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR) && !defined(EFX_HAVE_ETHTOOL_GET_RXFH) && !defined(EFX_HAVE_OLD_ETHTOOL_RXFH_INDIR)
+#if defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR) && !defined(EFX_HAVE_ETHTOOL_GET_RXFH)
 /* Wrappers that only set the indirection table, not the key. */
 int efx_ethtool_get_rxfh_indir(struct net_device *net_dev, u32 *indir);
 int efx_ethtool_set_rxfh_indir(struct net_device *net_dev,const u32 *indir);
-#endif
-#if defined(EFX_HAVE_OLD_ETHTOOL_RXFH_INDIR)
-int efx_ethtool_old_get_rxfh_indir(struct net_device *net_dev,
-				   struct ethtool_rxfh_indir *indir);
-int efx_ethtool_old_set_rxfh_indir(struct net_device *net_dev,
-				   const struct ethtool_rxfh_indir *indir);
 #endif
 
 #if defined(EFX_HAVE_ETHTOOL_GET_RXFH) && !defined(EFX_HAVE_CONFIGURABLE_RSS_HASH)

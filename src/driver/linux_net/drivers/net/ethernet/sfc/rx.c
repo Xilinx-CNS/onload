@@ -550,32 +550,20 @@ out:
 
 #if defined(EFX_NOT_UPSTREAM)
 static int __init
-#ifndef EFX_HAVE_NON_CONST_KERNEL_PARAM
 efx_rx_alloc_method_set(const char *val, const struct kernel_param *kp)
-#else
-efx_rx_alloc_method_set(const char *val, struct kernel_param *kp)
-#endif
 {
 	pr_warn("sfc: module parameter rx_alloc_method is obsolete\n");
 	return 0;
 }
-#ifdef EFX_HAVE_KERNEL_PARAM_OPS
 static const struct kernel_param_ops efx_rx_alloc_method_ops = {
 	.set = efx_rx_alloc_method_set
 };
 module_param_cb(rx_alloc_method, &efx_rx_alloc_method_ops, NULL, 0);
-#else
-module_param_call(rx_alloc_method, efx_rx_alloc_method_set, NULL, NULL, 0);
-#endif
 #endif
 
 #if defined(EFX_NOT_UPSTREAM)
 static int __init
-#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_HAVE_NON_CONST_KERNEL_PARAM)
 rx_copybreak_set(const char *val, const struct kernel_param *kp)
-#else
-rx_copybreak_set(const char *val, struct kernel_param *kp)
-#endif
 {
 	int rc = param_set_uint(val, kp);
 
@@ -594,11 +582,7 @@ rx_copybreak_set(const char *val, struct kernel_param *kp)
 	return 0;
 }
 
-#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_HAVE_NON_CONST_KERNEL_PARAM)
 static int rx_copybreak_get(char *buffer, const struct kernel_param *kp)
-#else
-static int rx_copybreak_get(char *buffer, struct kernel_param *kp)
-#endif
 {
 	int rc = param_get_uint(buffer, kp);
 
@@ -608,16 +592,11 @@ static int rx_copybreak_get(char *buffer, struct kernel_param *kp)
 	return rc;
 }
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_KERNEL_PARAM_OPS)
 static const struct kernel_param_ops rx_copybreak_ops = {
 	.set = rx_copybreak_set,
 	.get = rx_copybreak_get,
 };
 module_param_cb(rx_copybreak, &rx_copybreak_ops, &rx_cb_size, 0444);
-#else
-module_param_call(rx_copybreak, rx_copybreak_set, rx_copybreak_get,
-		  &rx_cb_size, 0444);
-#endif
 MODULE_PARM_DESC(rx_copybreak,
 		 "Size of headers copied into skb linear data area");
 #endif /* EFX_NOT_UPSTREAM */

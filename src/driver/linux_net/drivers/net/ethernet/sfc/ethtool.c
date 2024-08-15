@@ -319,11 +319,8 @@ int efx_ethtool_set_dump(struct net_device *net_dev, struct ethtool_dump *val)
 }
 #endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_GET_TS_INFO) || defined(EFX_HAVE_ETHTOOL_EXT_GET_TS_INFO)
-static
-#endif
-int efx_ethtool_get_ts_info(struct net_device *net_dev,
-			    struct kernel_ethtool_ts_info *ts_info)
+static int efx_ethtool_get_ts_info(struct net_device *net_dev,
+				   struct kernel_ethtool_ts_info *ts_info)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
@@ -404,17 +401,15 @@ const struct ethtool_ops efx_ethtool_ops = {
 	.set_priv_flags		= efx_ethtool_set_priv_flags,
 	.self_test		= efx_ethtool_self_test,
 	.get_strings		= efx_ethtool_get_strings,
-#if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_ETHTOOL_SET_PHYS_ID) && !defined(EFX_USE_ETHTOOL_OPS_EXT))
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_SET_PHYS_ID)
 	.set_phys_id		= efx_ethtool_phys_id,
-#elif !defined(EFX_USE_ETHTOOL_OPS_EXT)
+#else
 	.phys_id		= efx_ethtool_phys_id_loop,
 #endif
 	.get_ethtool_stats	= efx_ethtool_get_stats,
 	.get_wol                = efx_ethtool_get_wol,
 	.set_wol                = efx_ethtool_set_wol,
-#if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_ETHTOOL_RESET) && !defined(EFX_USE_ETHTOOL_OPS_EXT))
 	.reset			= efx_ethtool_reset,
-#endif
 #if !defined(EFX_USE_KCOMPAT)
 	.get_rxnfc		= efx_ethtool_get_rxnfc,
 	.set_rxnfc		= efx_ethtool_set_rxnfc,
@@ -422,14 +417,6 @@ const struct ethtool_ops efx_ethtool_ops = {
 	.get_rxnfc		= efx_ethtool_get_rxnfc_wrapper,
 	.set_rxnfc		= efx_ethtool_set_rxnfc_wrapper,
 #endif
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_USE_ETHTOOL_OPS_EXT)
-};
-const struct ethtool_ops_ext efx_ethtool_ops_ext = {
-	.size			= sizeof(struct ethtool_ops_ext),
-	.set_phys_id		= efx_ethtool_phys_id,
-	/* Do not set ethtool_ops_ext::reset due to RH BZ 1008678 (SF bug 39031) */
-#endif
-
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR_SIZE)
 	.get_rxfh_indir_size	= efx_ethtool_get_rxfh_indir_size,
 #endif
@@ -443,37 +430,26 @@ const struct ethtool_ops_ext efx_ethtool_ops_ext = {
 	.get_rxfh		= efx_ethtool_get_rxfh_no_hfunc,
 	.set_rxfh		= efx_ethtool_set_rxfh_no_hfunc,
 #elif defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR)
-# if defined(EFX_HAVE_OLD_ETHTOOL_RXFH_INDIR)
-	.get_rxfh_indir		= efx_ethtool_old_get_rxfh_indir,
-	.set_rxfh_indir		= efx_ethtool_old_set_rxfh_indir,
-# else
 	.get_rxfh_indir		= efx_ethtool_get_rxfh_indir,
 	.set_rxfh_indir		= efx_ethtool_set_rxfh_indir,
-# endif
 #endif
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_ETHTOOL_RXFH_CONTEXT)
 	.get_rxfh_context	= efx_ethtool_get_rxfh_context,
 	.set_rxfh_context	= efx_ethtool_set_rxfh_context,
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_GET_DUMP_FLAG) || defined(EFX_HAVE_ETHTOOL_GET_DUMP_DATA) || defined(EFX_HAVE_ETHTOOL_SET_DUMP)
 #ifdef CONFIG_SFC_DUMP
 	.get_dump_flag		= efx_ethtool_get_dump_flag,
 	.get_dump_data		= efx_ethtool_get_dump_data,
 	.set_dump		= efx_ethtool_set_dump,
 #endif
-#endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_GET_TS_INFO) || defined(EFX_HAVE_ETHTOOL_EXT_GET_TS_INFO)
 	.get_ts_info		= efx_ethtool_get_ts_info,
-#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_GMODULEEEPROM)
 	.get_module_info	= efx_ethtool_get_module_info,
 	.get_module_eeprom	= efx_ethtool_get_module_eeprom,
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_CHANNELS) || defined(EFX_HAVE_ETHTOOL_EXT_CHANNELS)
 	.get_channels		= efx_ethtool_get_channels,
 	.set_channels		= efx_ethtool_set_channels,
-#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_LINKSETTINGS)
 	.get_link_ksettings	= efx_ethtool_get_link_ksettings,
 	.set_link_ksettings	= efx_ethtool_set_link_ksettings,

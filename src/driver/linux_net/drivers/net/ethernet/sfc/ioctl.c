@@ -74,16 +74,6 @@ static int efx_ioctl_do_mcdi_old(struct efx_nic *efx, union efx_ioctl_data *data
 	return 0;
 }
 
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_RESET)
-
-static int
-efx_ioctl_reset_flags(struct efx_nic *efx, union efx_ioctl_data *data)
-{
-	return efx_ethtool_reset(efx->net_dev, &data->reset_flags.flags);
-}
-
-#endif
-
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_RXFH_INDIR)
 
 static int
@@ -279,12 +269,6 @@ int efx_private_ioctl(struct efx_nic *efx, u16 cmd,
 		size = sizeof(data->mcdi_request);
 		op = efx_ioctl_do_mcdi_old;
 		break;
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_RESET)
-	case EFX_RESET_FLAGS:
-		size = sizeof(data->reset_flags);
-		op = efx_ioctl_reset_flags;
-		break;
-#endif
 #ifdef EFX_USE_KCOMPAT
 	case EFX_RXNFC:
 		/* This command has variable length */

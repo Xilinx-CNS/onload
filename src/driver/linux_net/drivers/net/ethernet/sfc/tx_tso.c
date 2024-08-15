@@ -512,21 +512,6 @@ int efx_nic_tx_tso_sw(struct efx_tx_queue *tx_queue, struct sk_buff *skb,
 	int frag_i, rc;
 	struct tso_state state;
 
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_GSO_MAX_SEGS)
-	/* Since the stack does not limit the number of segments per
-	 * skb, we must do so.  Otherwise an attacker may be able to
-	 * make the TCP produce skbs that will never fit in our TX
-	 * queue, causing repeated resets.
-	 */
-	if (unlikely(skb_shinfo(skb)->gso_segs > EFX_TSO_MAX_SEGS)) {
-		unsigned int excess =
-			(skb_shinfo(skb)->gso_segs - EFX_TSO_MAX_SEGS) *
-			skb_shinfo(skb)->gso_size;
-		if (__pskb_trim(skb, skb->len - excess))
-			return -E2BIG;
-	}
-#endif
-
 	prefetch(skb->data);
 
 	/* Find the packet protocol and sanity-check it */

@@ -641,10 +641,8 @@ static const struct net_device_ops ef100_netdev_ops = {
 	.ndo_busy_poll          = efx_busy_poll,
 #endif
 #endif
-#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_HAVE_NETDEV_RFS_INFO)
 #ifdef CONFIG_RFS_ACCEL
 	.ndo_rx_flow_steer      = efx_filter_rfs,
-#endif
 #endif
 
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER) && !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER)
@@ -877,15 +875,9 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_HW_ENC_FEATURES)
 	net_dev->hw_enc_features |= efx->type->offload_features;
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_GSO_MAX_SEGS)
-#if !defined(EFX_HAVE_GSO_MAX_SEGS)
-	if (!READ_ONCE(net_dev->tso_max_segs))
-#else
 	if (!READ_ONCE(net_dev->gso_max_segs))
-#endif
 		netif_set_tso_max_segs(net_dev,
 				       ESE_EF100_DP_GZ_TSO_MAX_HDR_NUM_SEGS_DEFAULT);
-#endif
 #ifdef EFX_NOT_UPSTREAM
 #if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	efx_dl_probe(efx);

@@ -322,14 +322,7 @@ int efx_ethtool_get_dump_data(struct net_device *net_dev,
 			      struct ethtool_dump *dump, void *buffer);
 int efx_ethtool_set_dump(struct net_device *net_dev, struct ethtool_dump *val);
 #endif
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_GET_TS_INFO) && !defined(EFX_HAVE_ETHTOOL_EXT_GET_TS_INFO)
-int efx_ethtool_get_ts_info(struct net_device *net_dev,
-			    struct ethtool_ts_info *ts_info);
-#endif
 extern const struct ethtool_ops efx_ethtool_ops;
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_USE_ETHTOOL_OPS_EXT)
-extern const struct ethtool_ops_ext efx_ethtool_ops_ext;
-#endif
 
 /* Global */
 unsigned int efx_usecs_to_ticks(struct efx_nic *efx, unsigned int usecs);

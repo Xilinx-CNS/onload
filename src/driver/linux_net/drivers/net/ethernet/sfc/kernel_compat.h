@@ -414,13 +414,6 @@
 	#define ETHTOOL_SRXFHINDIR	0x00000039
 #endif
 
-#ifdef EFX_NEED_ETHTOOL_RXFH_INDIR_DEFAULT
-	static inline u32 ethtool_rxfh_indir_default(u32 index, u32 n_rx_rings)
-	{
-		return index % n_rx_rings;
-	}
-#endif
-
 #ifndef EFX_HAVE_ETHTOOL_SET_PHYS_ID
 	enum ethtool_phys_id_state {
 		ETHTOOL_ID_INACTIVE,
@@ -692,17 +685,6 @@ static inline unsigned int skb_frag_off(const skb_frag_t *frag)
 	#endif
 #endif
 
-#ifdef EFX_NEED_BYTE_QUEUE_LIMITS
-static inline void netdev_tx_sent_queue(struct netdev_queue *dev_queue,
-					unsigned int bytes)
-{}
-static inline void netdev_tx_completed_queue(struct netdev_queue *dev_queue,
-					     unsigned int pkts,
-					     unsigned int bytes)
-{}
-static inline void netdev_tx_reset_queue(struct netdev_queue *q) {}
-#endif
-
 #ifdef EFX_NEED___BQL
 /* Variant of netdev_tx_sent_queue() for drivers that are aware
  * that they should not test BQL status themselves.
@@ -731,26 +713,13 @@ static inline bool __netdev_tx_sent_queue(struct netdev_queue *dev_queue,
 	#if !defined(CONFIG_COMPAT)
 		return 0;
 	#elif defined(CONFIG_X86_64)
-		#if defined(EFX_HAVE_TIF_ADDR32)
 		return test_thread_flag(TIF_ADDR32);
-		#else
-		return test_thread_flag(TIF_IA32);
-		#endif
 	#elif defined(CONFIG_PPC64)
 		return test_thread_flag(TIF_32BIT);
 	#else
 	#error "cannot define is_compat_task() for this architecture"
 	#endif
 	}
-#endif
-
-#ifdef EFX_NEED_SKB_CHECKSUM_NONE_ASSERT
-static inline void skb_checksum_none_assert(const struct sk_buff *skb)
-{
-#ifdef DEBUG
-	BUG_ON(skb->ip_summed != CHECKSUM_NONE);
-#endif
-}
 #endif
 
 #ifndef NETIF_F_TSO_MANGLEID
@@ -772,49 +741,8 @@ static inline void skb_checksum_none_assert(const struct sk_buff *skb)
        #define NETIF_F_HW_VLAN_CTAG_RX NETIF_F_HW_VLAN_RX
 #endif
 
-#ifdef EFX_HAVE_OLD___VLAN_HWACCEL_PUT_TAG
-static inline struct sk_buff *
-	efx___vlan_hwaccel_put_tag(struct sk_buff *skb, __be16 vlan_proto,
-				   u16 vlan_tci)
-	{
-		WARN_ON(vlan_proto != htons(ETH_P_8021Q));
-		return __vlan_hwaccel_put_tag(skb, vlan_tci);
-	}
-	#define __vlan_hwaccel_put_tag efx___vlan_hwaccel_put_tag
-#endif
 #ifndef NETIF_F_HW_VLAN_CTAG_FILTER
 	#define NETIF_F_HW_VLAN_CTAG_FILTER NETIF_F_HW_VLAN_FILTER
-#endif
-
-#ifdef EFX_NEED___SET_BIT_LE
-	/* Depending on kernel version, BITOP_LE_SWIZZLE may be
-	 * defined the way we want or unconditionally as the
-	 * big-endian value (or not at all).  Use our own name.
-	 */
-	#if defined(__LITTLE_ENDIAN)
-	#define EFX_BITOP_LE_SWIZZLE        0
-	#elif defined(__BIG_ENDIAN)
-	#define EFX_BITOP_LE_SWIZZLE        ((BITS_PER_LONG-1) & ~0x7)
-	#endif
-
-	/* __set_bit_le() and __clear_bit_le() may already be defined
-	 * as macros with the wrong effective parameter type (volatile
-	 * unsigned long *), so use brute force to replace them.
-	 */
-
-	static inline void efx__set_bit_le(int nr, void *addr)
-	{
-		__set_bit(nr ^ EFX_BITOP_LE_SWIZZLE, addr);
-	}
-	#undef __set_bit_le
-	#define __set_bit_le efx__set_bit_le
-
-	static inline void efx__clear_bit_le(int nr, void *addr)
-	{
-		__clear_bit(nr ^ EFX_BITOP_LE_SWIZZLE, addr);
-	}
-	#undef __clear_bit_le
-	#define __clear_bit_le efx__clear_bit_le
 #endif
 
 #ifndef for_each_set_bit
@@ -846,19 +774,6 @@ static inline struct sk_buff *
 	#define efx_ioremap(phys,size)	ioremap(phys,size)
 #endif
 
-#ifdef EFX_NEED_SKB_TRANSPORT_HEADER_WAS_SET
-	#define skb_transport_header_was_set(skb)		\
-		(!!(skb)->transport_header)
-#endif
-
-#ifndef EFX_HAVE_NAPI_STRUCT
-/* We use a napi_struct pointer as context in some compat functions even if the
- * kernel doesn't use this structure at all.
- */
-struct efx_napi_dummy {};
-#define napi_struct efx_napi_dummy
-#endif
-
 #ifndef NAPI_POLL_WEIGHT
 #define NAPI_POLL_WEIGHT	64
 #endif
@@ -888,10 +803,6 @@ static inline void skb_mark_napi_id(struct sk_buff *skb,
 				    struct napi_struct *napi) {}
 #endif
 
-#ifdef EFX_NEED_USLEEP_RANGE
-void usleep_range(unsigned long min, unsigned long max);
-#endif
-
 #ifdef EFX_NEED_SKB_VLAN_TAG_GET
 #define skb_vlan_tag_get	vlan_tx_tag_get
 #define skb_vlan_tag_present	vlan_tx_tag_present
@@ -905,28 +816,11 @@ static inline void page_ref_add(struct page *page, int nr)
 #endif
 
 #ifdef EFX_HAVE_SKB_ENCAPSULATION
-#ifdef EFX_SKB_HAS_INNER_NETWORK_HEADER
 #define EFX_CAN_SUPPORT_ENCAP_TSO
-#ifndef EFX_HAVE_SKB_INNER_NETWORK_HEADER
-static inline unsigned char *skb_inner_network_header(const struct sk_buff *skb)
-{
-	return skb->head + skb->inner_network_header;
-}
-#endif
-
 #ifndef EFX_HAVE_INNER_IP_HDR
 static inline struct iphdr *inner_ip_hdr(const struct sk_buff *skb)
 {
 	return (struct iphdr *)skb_inner_network_header(skb);
-}
-#endif
-#endif /* EFX_SKB_HAS_INNER_NETWORK_HEADER */
-
-#ifdef EFX_SKB_HAS_INNER_TRANSPORT_HEADER
-#ifndef EFX_HAVE_SKB_INNER_TRANSPORT_HEADER
-static inline unsigned char *skb_inner_transport_header(const struct sk_buff *skb)
-{
-	return skb->head + skb->inner_transport_header;
 }
 #endif
 
@@ -936,9 +830,7 @@ static inline struct tcphdr *inner_tcp_hdr(const struct sk_buff *skb)
 	return (struct tcphdr *)skb_inner_transport_header(skb);
 }
 #endif
-#else /* !EFX_SKB_HAS_INNER_TRANSPORT_HEADER */
-#undef EFX_CAN_SUPPORT_ENCAP_TSO
-#endif /* EFX_SKB_HAS_INNER_TRANSPORT_HEADER */
+
 #ifndef NETIF_F_GSO_GRE
 #undef EFX_CAN_SUPPORT_ENCAP_TSO
 #endif /* !NETIF_F_GSO_GRE */
@@ -1503,10 +1395,8 @@ static inline void netif_set_tso_max_size(struct net_device *dev,
 static inline void netif_set_tso_max_segs(struct net_device *dev,
 					  unsigned int segs)
 {
-#ifdef EFX_HAVE_GSO_MAX_SEGS
 	/* dev->gso_max_segs is read locklessly from sk_setup_caps() */
 	WRITE_ONCE(dev->gso_max_segs, segs);
-#endif
 }
 #endif
 

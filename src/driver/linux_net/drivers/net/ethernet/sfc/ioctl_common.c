@@ -255,15 +255,6 @@ static int efx_ioctl_ts_set_sync_status(struct efx_nic *efx,
 	return efx_ptp_ts_set_sync_status(efx, &data->ts_set_sync_status);
 }
 
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_GET_TS_INFO) && !defined(EFX_HAVE_ETHTOOL_EXT_GET_TS_INFO)
-static int efx_ioctl_get_ts_info(struct efx_nic *efx,
-				 union efx_ioctl_data *data)
-{
-	memset(&data->ts_info, 0, sizeof(data->ts_info));
-	data->ts_info.cmd = ETHTOOL_GET_TS_INFO;
-	return efx_ethtool_get_ts_info(efx->net_dev, &data->ts_info);
-}
-#endif
 #endif
 #endif
 
@@ -496,12 +487,6 @@ int efx_private_ioctl_common(struct efx_nic *efx, u16 cmd,
 		size = sizeof(data->ts_set_sync_status);
 		op = efx_ioctl_ts_set_sync_status;
 		break;
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_GET_TS_INFO) && !defined(EFX_HAVE_ETHTOOL_EXT_GET_TS_INFO)
-	case EFX_GET_TS_INFO:
-		size = sizeof(data->ts_info);
-		op = efx_ioctl_get_ts_info;
-		break;
-#endif
 #endif
 #endif
 	case EFX_SFCTOOL:

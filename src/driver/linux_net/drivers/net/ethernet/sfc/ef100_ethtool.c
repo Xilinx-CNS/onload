@@ -152,9 +152,9 @@ const struct ethtool_ops ef100_ethtool_ops = {
 	.get_fecparam		= efx_ethtool_get_fecparam,
 	.set_fecparam		= efx_ethtool_set_fecparam,
 #endif
-#if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_ETHTOOL_SET_PHYS_ID) && !defined(EFX_USE_ETHTOOL_OPS_EXT))
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_SET_PHYS_ID)
 	.set_phys_id            = efx_ethtool_phys_id,
-#elif !defined(EFX_USE_ETHTOOL_OPS_EXT)
+#else
 	.phys_id                = efx_ethtool_phys_id_loop,
 #endif
 	.get_ethtool_stats	= efx_ethtool_get_stats,
@@ -168,10 +168,7 @@ const struct ethtool_ops ef100_ethtool_ops = {
 #if defined(EFX_USE_KCOMPAT) && (!defined(EFX_USE_DEVLINK) || defined(EFX_NEED_ETHTOOL_FLASH_DEVICE))
 	.flash_device		= efx_ethtool_flash_device,
 #endif
-#if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_ETHTOOL_RESET) && !defined(EFX_USE_ETHTOOL_OPS_EXT))
 	.reset                  = efx_ethtool_reset,
-#endif
-#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_USE_ETHTOOL_OPS_EXT)
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR_SIZE)
 	.get_rxfh_indir_size	= efx_ethtool_get_rxfh_indir_size,
 #endif
@@ -185,13 +182,8 @@ const struct ethtool_ops ef100_ethtool_ops = {
 	.get_rxfh		= efx_ethtool_get_rxfh_no_hfunc,
 	.set_rxfh		= efx_ethtool_set_rxfh_no_hfunc,
 #elif defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR)
-# if defined(EFX_HAVE_OLD_ETHTOOL_RXFH_INDIR)
-	.get_rxfh_indir		= efx_ethtool_old_get_rxfh_indir,
-	.set_rxfh_indir		= efx_ethtool_old_set_rxfh_indir,
-# else
 	.get_rxfh_indir		= efx_ethtool_get_rxfh_indir,
 	.set_rxfh_indir		= efx_ethtool_set_rxfh_indir,
-# endif
 #endif
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_ETHTOOL_RXFH_CONTEXT)
 	.get_rxfh_context	= efx_ethtool_get_rxfh_context,
@@ -203,10 +195,7 @@ const struct ethtool_ops ef100_ethtool_ops = {
 	.get_module_eeprom	= efx_ethtool_get_module_eeprom,
 #endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_CHANNELS) || defined(EFX_HAVE_ETHTOOL_EXT_CHANNELS)
 	.get_channels		= efx_ethtool_get_channels,
 	.set_channels		= efx_ethtool_set_channels,
-#endif
-#endif /* EFX_USE_ETHTOOL_OPS_EXT */
 };
 

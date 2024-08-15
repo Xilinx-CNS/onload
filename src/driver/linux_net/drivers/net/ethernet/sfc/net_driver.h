@@ -97,7 +97,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"5.3.19.1003"
+#define EFX_DRIVER_VERSION	"5.3.19.1004"
 #endif
 
 #ifdef DEBUG
@@ -114,9 +114,7 @@
 #ifndef EFX_HAVE_CSUM_LEVEL
 #define EFX_USE_FAKE_VLAN_RX_ACCEL 1
 #endif
-#ifdef EFX_HAVE_SKB_VLANTCI
 #define EFX_USE_FAKE_VLAN_TX_ACCEL 1
-#endif
 #endif
 #endif
 

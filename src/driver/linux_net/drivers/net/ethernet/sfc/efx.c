@@ -833,18 +833,10 @@ static int efx_register_netdev(struct efx_nic *efx)
 	net_dev->netdev_ops = &efx_netdev_ops;
 	if (efx_nic_rev(efx) >= EFX_REV_HUNT_A0)
 		net_dev->priv_flags |= IFF_UNICAST_FLT;
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NETDEV_RFS_INFO)
-#ifdef CONFIG_RFS_ACCEL
-	netdev_extended(net_dev)->rfs_data.ndo_rx_flow_steer = efx_filter_rfs;
-#endif
-#endif
 #if !defined(EFX_USE_KCOMPAT) || !defined(SET_ETHTOOL_OPS)
 	net_dev->ethtool_ops = &efx_ethtool_ops;
 #else
 	SET_ETHTOOL_OPS(net_dev, &efx_ethtool_ops);
-#endif
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_USE_ETHTOOL_OPS_EXT)
-	set_ethtool_ops_ext(net_dev, &efx_ethtool_ops_ext);
 #endif
 	netif_set_tso_max_segs(net_dev, EFX_TSO_MAX_SEGS);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NETDEV_MTU_LIMITS)
@@ -1646,10 +1638,8 @@ const struct net_device_ops efx_netdev_ops = {
 	.ndo_busy_poll		= efx_busy_poll,
 #endif
 #endif
-#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_HAVE_NETDEV_RFS_INFO)
 #ifdef CONFIG_RFS_ACCEL
 	.ndo_rx_flow_steer	= efx_filter_rfs,
-#endif
 #endif
 
 #if defined(EFX_USE_KCOMPAT)
