@@ -19,7 +19,7 @@ Options:
   V=1               Print full build command lines
   NDEBUG=1          Create optimized build
   MMAKE_LIBERAL=1   Turn off -Werror
-  HAVE_SFC=0        Build without netdriver and driverlink support to work in
+  HAVE_SFC=0        Build without sfc netdriver support to work in
                     AF_XDP mode only
   HAVE_EFCT=0       Build without EFCT support.
   HAVE_EF10CT=0     Build without EF10CT support.

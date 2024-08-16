@@ -84,10 +84,6 @@ arm64_TARGET_SRCS := syscall_aarch64.o ci_arm64_patching.o ci_arm64_insn.o
 # linux kbuild support
 #
 
-ifeq ($(HAVE_SFC),1)
-KBUILD_EXTRA_SYMBOLS := $(BUILDPATH)/driver/linux_net/drivers/net/ethernet/sfc/Module.symvers
-endif
-
 ifndef CONFIG_AUXILIARY_BUS
 ifneq ($(HAVE_CNS_AUX),0)
 KBUILD_EXTRA_SYMBOLS += $(AUX_BUS_PATH)/drivers/base/Module.symvers
