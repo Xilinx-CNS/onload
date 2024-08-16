@@ -574,45 +574,6 @@ detect_lib64_path() {
     lib64dir="$usrdir/$(dirname $libc)"
   fi
 }
-######################################################################
-
-do_rpm_install() {
-  build=false
-  uninstall=false
-  ldconfig=false
-  check_install=false
-  sfccheck=false
-  adduser=false
-}
-
-
-do_pkg_post() {
-  # Invoked by the rpm/deb install.
-  install_adduser
-  exit
-}
-
-
-do_deb_user_install() {
-  build=false
-  uninstall=false
-  ldconfig=false
-  check_install=false
-  sfccheck=false
-  adduser=false
-  install_modules=false
-
-  python_install_layout="--install-layout deb"
-}
-
-do_deb_module_install() {
-  build=false
-  uninstall=false
-  ldconfig=false
-  check_install=false
-  sfccheck=false
-  install_user=false
-}
 
 ######################################################################
 # main
@@ -629,6 +590,7 @@ ldconfig=
 adduser=
 kernelfiles=
 modprobe=
+modulesloadd=
 uninstall=true
 test=false
 do=
@@ -642,8 +604,6 @@ allow_unsupported_cpu=false
 check_install=true
 logprog=true
 sfccheck=true
-install_modules=true
-install_user=true
 ppc_at=
 noinitramfs=false
 devel=false
@@ -651,6 +611,7 @@ devel=false
 # versions, and need to select between them.
 debug_dir=
 nosfc=false
+python_install_layout=
 
 sbindir="/sbin"
 usrdir="/usr"
@@ -685,12 +646,15 @@ while [ $# -gt 0 ]; do
   --adduser) all=false; adduser=true;;
   --kernelfiles)all=false; kernelfiles=true;;
   --modprobe)	all=false; modprobe=true;;
+  --modulesloadd) all=false; modulesloadd=true;;
+  --packaged) set -x; build=false; sfccheck=false; check_install=false uninstall=false;;
   --uninstall)  uninstall=true;;
   --nouserfiles)userfiles=false;;
   --noldconfig) ldconfig=false;;
   --noadduser) adduser=false;;
   --nokernelfiles)kernelfiles=false;;
   --nomodprobe)	modprobe=false;;
+  --nomodulesloadd) modulesloadd=false;;
   --nouninstall)uninstall=false;;
   --noinstallcheck) check_install=false;;
   --nosfccheck) sfccheck=false;;
@@ -703,6 +667,7 @@ while [ $# -gt 0 ]; do
   --build-profile)   [ $# -gt 1 ] || usage; buildargs="$buildargs $1=$2";
                      build_profile="$2"; shift;;
   --build-profile=*) buildargs="$buildargs $1"; build_profile="${1#--build-profile=}";;
+  --python-layout=*) python_install_layout="--install-layout ${1#--python-layout=}";;
   --no-initramfs) noinitramfs=true;;
   --devel) devel=true; build=false; noinitramfs=true;debug_dir=;;
   --sbindir=*) sbindir=${1#--sbindir=};;
@@ -731,16 +696,6 @@ check_unsupported_cpu
 # continue.
 case $# in
   0)
-    ;;
-  1)
-    case "$1" in
-      rpm_install)        do_rpm_install;;
-      rpm_post)           do_pkg_post;;
-      deb_post)           do_pkg_post;;
-      deb_user_install)   do_deb_user_install;;
-      deb_module_install) do_deb_module_install;;
-      *)           usage;;
-    esac
     ;;
   *)
     usage
@@ -774,19 +729,14 @@ fi
 
 logprog "Installing OpenOnload."
 manifest=
-if $install_user; then
-${uninstall:-$all}   && install_uninstall
-${userfiles:-$all}   && install_userland
-${ldconfig:-$all}    && install_ldconfig
-${modprobe:-$all}    && install_modprobe_conf
-${adduser:-$all}     && install_adduser
-fi
-if $install_modules; then
-${kernelfiles:-$all} && install_kernel_modules
-fi
-if $install_user; then
-install_modules_load_d
-fi
+
+$uninstall            && install_uninstall
+${userfiles:-$all}    && install_userland
+${ldconfig:-$all}     && install_ldconfig
+${modprobe:-$all}     && install_modprobe_conf
+${adduser:-$all}      && install_adduser
+${kernelfiles:-$all}  && install_kernel_modules
+${modulesloadd:-$all} && install_modules_load_d
 
 logprog "Install complete."
 

@@ -243,9 +243,11 @@ export HAVE_EFCT=%{?have_efct:%have_efct}
 export i_prefix=%{buildroot}
 mkdir -p "$i_prefix/etc/modprobe.d"
 mkdir -p "$i_prefix/etc/depmod.d"
-./scripts/onload_install --verbose --kernelver "%{kernel}" \
+./scripts/onload_install --packaged \
   %{?build_profile:--build-profile %build_profile} \
-  %{?debug:--debug} %{?setuid:--setuid} rpm_install
+  %{?debug:--debug} %{?setuid:--setuid} \
+  --userfiles --modprobe --modulesloadd \
+  --kernelfiles --kernelver "%{kernel}"
 docdir="$i_prefix%{_defaultdocdir}/%{name}-%{pkgversion}"
 mkdir -p "$docdir"
 install -m 644 LICENSE* README* ChangeLog* ReleaseNotes* "$docdir"
@@ -268,7 +270,7 @@ else
   cp /usr/share/onload/sysconfig_onload_modules /etc/sysconfig/modules/onload.modules
 fi
 
-/lib/onload/onload_install rpm_post
+/lib/onload/onload_install --packaged --adduser
 ldconfig -n /usr/lib /usr/lib64
 
 %preun

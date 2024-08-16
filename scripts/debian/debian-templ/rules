@@ -98,7 +98,8 @@ binary-modules:
 	scripts/onload_build #BUILDPROFILE# --kernel
 
 	# Install the module
-	i_prefix=$(CURDIR)/debian/$(PKGNAME) scripts/onload_install --verbose deb_module_install
+	i_prefix=$(CURDIR)/debian/$(PKGNAME) scripts/onload_install --verbose \
+		--packaged --kernelfiles
 
 	dh_installdocs
 	dh_installchangelogs
@@ -241,7 +242,8 @@ binary-arch: build install
 	# Create the directories to install the source into
 	dh_installdirs -p$(userpackage) lib/onload
 
-	i_prefix=$(CURDIR)/debian/$(userpackage) scripts/onload_install --verbose deb_user_install
+	i_prefix=$(CURDIR)/debian/$(userpackage) scripts/onload_install --verbose \
+		--packaged --userfiles --modprobe --modulesloadd --python-layout=deb
 	cp -r scripts/onload_install --verbose debian/$(userpackage)/lib/onload/
 	dh_builddeb -a
 

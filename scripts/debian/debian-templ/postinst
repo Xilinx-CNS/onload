@@ -20,7 +20,7 @@ set -e
 
 case "$1" in
     configure)
-      /lib/onload/onload_install deb_post
+      /lib/onload/onload_install --packaged --adduser
       ldconfig -n /usr/lib /usr/lib32 /usr/lib64
     ;;
 
