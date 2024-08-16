@@ -410,9 +410,10 @@ install_modprobe_conf() {
   try $docd "$TOP/scripts"
 
   install_f onload_misc/onload_modprobe.conf "$i_etc/modprobe.d/onload.conf"
-
-  try mkdir -p "$i_etc/depmod.d"
   install_f onload_misc/onload_depmod.conf "$i_etc/depmod.d/onload.conf"
+
+  try $do sed -i -e "s|extra|$install_mod_dir|" "$i_etc/modprobe.d/onload.conf"
+  try $do sed -i -e "s|extra|$install_mod_dir|" "$i_etc/depmod.d/onload.conf"
 }
 
 install_modules_load_d() {
@@ -493,11 +494,9 @@ check_whether_installed() {
              "To remove, run: rpm -qa | grep 'openonload' | xargs rpm -e"
     return
   fi
-  local drv where
+  local drv
   for drv in sfc.ko onload.ko; do
-    for where in updates extra; do
-      check_file_installed "$i_prefix/lib/modules/$KVER/$where/$drv"
-    done
+    check_file_installed "$i_kernelmodules/$drv"
   done
 }
 
@@ -561,7 +560,7 @@ calculate_install_paths() {
   i_usrlocal="$i_prefix$usrlocaldir"
   i_etc="$i_prefix$sysconfdir"
   i_include="$i_prefix$includedir"
-  i_kernelmodules="$i_prefix$kernelmodulesdir/$KVER/extra"
+  i_kernelmodules="$i_prefix$kernelmodulesdir/$KVER/${install_mod_dir#/}"
 
   # look for biarch/multiarch library directories
 
@@ -621,6 +620,7 @@ sbindir="/sbin"
 usrdir="/usr"
 sysconfdir="/etc"
 kernelmodulesdir="/lib/modules"
+install_mod_dir="extra"
 
 KVER=$(uname -r)
 export KVER
@@ -685,6 +685,7 @@ while [ $# -gt 0 ]; do
   --lib32dir=*) lib32dir=${1#--lib32dir=};;
   --lib64dir=*) lib64dir=${1#--lib64dir=};;
   --kernelmodulesdir=*) kernelmodulesdir=${1#--kernelmodulesdir=};;
+  --moddir=*) install_mod_dir="${1#--moddir=}";;
   --no-sfc) nosfc=true;;
   -*)           usage;;
   *)            break;;
