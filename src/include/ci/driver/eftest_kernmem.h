@@ -57,7 +57,7 @@ struct eftest_kmcount_req {
 
 struct eftest_kmretrieve_req {
   int count_in_out; /* IN: expected OUT: actual */
-  __DECLARE_FLEX_ARRAY(struct eftest_kmem_req, reqs_out);
+  CI_DECLARE_FLEX_ARRAY(struct eftest_kmem_req, reqs_out);
 } __attribute__((packed));
 
 #define EFTEST_KM_IOC_MAGIC     ('k')

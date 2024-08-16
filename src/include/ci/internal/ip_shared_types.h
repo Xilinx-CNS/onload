@@ -470,7 +470,7 @@ struct ci_ip_pkt_fmt_s {
    */
   union {
     ci_uint8 padding;
-    __DECLARE_FLEX_ARRAY(ci_uint8, dma_start) CI_ALIGN(EF_VI_DMA_ALIGN);
+    CI_DECLARE_FLEX_ARRAY(ci_uint8, dma_start) CI_ALIGN(EF_VI_DMA_ALIGN);
   };
 };
 
@@ -487,11 +487,11 @@ struct ci_pkt_zc_payload {
     struct {
       ci_uint64 app_cookie CI_ALIGN(8);  /* From onload_zc_iovec::app_cookie */
       ef_addrspace addr_space CI_ALIGN(8); /* Address space of this data segment */
-      __DECLARE_FLEX_ARRAY(ef_addr, dma_addr) CI_ALIGN(8); /* Length is oo_stack_intf_max() */
+      CI_DECLARE_FLEX_ARRAY(ef_addr, dma_addr) CI_ALIGN(8); /* Length is oo_stack_intf_max() */
     } remote;
     union {
       char padding;
-       __DECLARE_FLEX_ARRAY(char, local);
+       CI_DECLARE_FLEX_ARRAY(char, local);
     };
   };
 };
@@ -517,7 +517,7 @@ struct ci_pkt_zc_header {
   ci_uint16 end;         /* Offset from start of this struct to the first
                           * unused byte of the ci_ip_pkt_fmt */
   ci_uint8 segs;         /* Number of zc_payload structs following */
-  __DECLARE_FLEX_ARRAY(struct ci_pkt_zc_payload, data);
+  CI_DECLARE_FLEX_ARRAY(struct ci_pkt_zc_payload, data);
 };
 
 
@@ -616,12 +616,12 @@ typedef struct {
   CI_ULCONST unsigned              table_size_mask;
   /* table[1] declaration is invalid in linux-6.5 and triggers UBSAN
    * "array-index-out-of-bounds" warnings. Instead declare it as table[] with
-   * __DECLARE_FLEX_ARRAY macro.
+   * CI_DECLARE_FLEX_ARRAY macro.
    * Use a union here (and in other similar places) to keep the same size
    * of the structure to avoid any potential side effects. */
   union {
     ci_netif_filter_table_entry_fast padding;
-    __DECLARE_FLEX_ARRAY(ci_netif_filter_table_entry_fast, table);
+    CI_DECLARE_FLEX_ARRAY(ci_netif_filter_table_entry_fast, table);
   };
 } ci_netif_filter_table;
 
@@ -650,7 +650,7 @@ typedef struct {
   CI_ULCONST unsigned table_size_mask;
   union {
     ci_ip6_netif_filter_table_entry padding;
-    __DECLARE_FLEX_ARRAY(ci_ip6_netif_filter_table_entry, table);
+    CI_DECLARE_FLEX_ARRAY(ci_ip6_netif_filter_table_entry, table);
   };
 } ci_ip6_netif_filter_table;
 #endif
@@ -873,7 +873,7 @@ typedef struct {
   /* Packet buffers allocated.  This is [sets_n * PKTS_PER_SET]. */
   CI_ULCONST ci_int32  n_pkts_allocated;
 
-  __DECLARE_FLEX_ARRAY(oo_pktbuf_set, set);
+  CI_DECLARE_FLEX_ARRAY(oo_pktbuf_set, set);
 } oo_pktbuf_manager;
 
 
