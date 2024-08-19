@@ -354,7 +354,6 @@ install_kernel_modules() {
   fi
   try $docd "$TOP/build/$d/driver/linux"
   if ! $nosfc; then
-    install_f sfc_driverlink.ko "$i_kernelmodules/sfc_driverlink.ko"
     install_f sfc.ko "$i_kernelmodules/sfc.ko"
   fi
   install_f sfc_resource.ko "$i_kernelmodules/sfc_resource.ko"
@@ -398,7 +397,6 @@ install_kernel_modules() {
   if ! $nosfc; then
     try $docd "$TOP/"
     # Install driver headers
-    install_f src/driver/linux_net/drivers/net/ethernet/sfc/driverlink_api.h "$i_kernelmodules/driverlink_api.h"
     install_f src/driver/linux_net/drivers/net/ethernet/sfc/filter.h "$i_kernelmodules/filter.h"
   fi
 }

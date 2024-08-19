@@ -311,7 +311,6 @@ donet () {
     fi
 
     # Net driver
-    loadmod sfc_driverlink
     for m in $LINUX_NET; do
       loadmod $m $N_MOD_ARGS
     done

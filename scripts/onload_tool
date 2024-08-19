@@ -270,7 +270,7 @@ do_unload() {
   if [ ${onload_only} != "1" ]; then
     tryunload sfc
     tryunload sfc_ef100      # Present in historical Onload versions.
-    tryunload sfc_driverlink
+    tryunload sfc_driverlink # Present in historical Onload versions.
     tryunload virtual_bus    # Present in historical Onload versions.
     grep -q sfc/sfc.ko /lib/modules/$(uname -r)/modules.dep && \
         log "WARNING: sfc driver may reload due to an in-distro driver"
@@ -311,9 +311,9 @@ cmd_reload() {
   do_unload ${onload_only} || fail "ERROR: could not unload all drivers"
   if [ ${onload_only} != "1" ]; then
     # After v5_2_1_1003 net driver version, Onload module doesn't depend on sfc
-      # module (only on sfc_driverlink), so need to load sfc driver separately
-      trylog /sbin/modprobe sfc
-      isloaded sfc || fail "ERROR: sfc driver did not load"
+    # module, so need to load sfc driver separately
+    trylog /sbin/modprobe sfc
+    isloaded sfc || fail "ERROR: sfc driver did not load"
   fi
   trylog /sbin/modprobe onload
   isloaded onload || fail "ERROR: onload module did not load"

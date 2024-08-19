@@ -24,28 +24,25 @@ fi
 # to move the in-tree module back into the right place.  So if there
 # is an in-tree module make sure it's set appropriately.
 
-BUILT_MODULE_NAME[0]="sfc_driverlink"
-BUILT_MODULE_NAME[1]="sfc"
-BUILT_MODULE_NAME[2]="sfc_resource"
-BUILT_MODULE_NAME[3]="sfc_char"
-BUILT_MODULE_NAME[4]="onload"
+BUILT_MODULE_NAME[0]="sfc"
+BUILT_MODULE_NAME[1]="sfc_resource"
+BUILT_MODULE_NAME[2]="sfc_char"
+BUILT_MODULE_NAME[3]="onload"
 
 BUILT_MODULE_LOCATION[0]="build/${arch}_linux-${kernelver}/driver/linux"
 BUILT_MODULE_LOCATION[1]="build/${arch}_linux-${kernelver}/driver/linux"
 BUILT_MODULE_LOCATION[2]="build/${arch}_linux-${kernelver}/driver/linux"
 BUILT_MODULE_LOCATION[3]="build/${arch}_linux-${kernelver}/driver/linux"
-BUILT_MODULE_LOCATION[4]="build/${arch}_linux-${kernelver}/driver/linux"
 
 DEST_MODULE_LOCATION[0]="/extra"
 DEST_MODULE_LOCATION[1]="/extra"
 DEST_MODULE_LOCATION[2]="/extra"
 DEST_MODULE_LOCATION[3]="/extra"
-DEST_MODULE_LOCATION[4]="/extra"
 
 if grep -q "^CONFIG_SFC=m" "${kernel_source_dir}/.config" 2>/dev/null; then
-  DEST_MODULE_LOCATION[1]="/kernel/drivers/net/"
+  DEST_MODULE_LOCATION[0]="/kernel/drivers/net/"
 else
-  DEST_MODULE_LOCATION[1]="/extra"
+  DEST_MODULE_LOCATION[0]="/extra"
 fi
 
 AUTOINSTALL="yes"
