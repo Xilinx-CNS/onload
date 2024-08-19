@@ -479,17 +479,25 @@ static void efct_grant_unsol_credit(ef_vi* vi, bool clear_overflow, uint32_t cre
 }
 
 /* handle a tx completion event */
-static void efct_tx_handle_event(ef_vi* vi, ci_qword_t event, ef_event* ev_out)
+static void efct_tx_handle_event(ef_vi* vi, ci_qword_t event, ef_event* ev_out,
+                                bool* again)
 {
   ef_vi_txq* q = &vi->vi_txq;
   ef_vi_txq_state* qs = &vi->ep_state->txq;
   struct efct_tx_descriptor* desc = vi->vi_txq.descriptors;
 
+  unsigned count;
   unsigned seq = CI_QWORD_FIELD(event, EFCT_TX_EVENT_SEQUENCE);
   unsigned seq_mask = (1 << EFCT_TX_EVENT_SEQUENCE_WIDTH) - 1;
 
-  /* Fully inclusive range as both previous and seq are both inclusive */
-  while( (qs->previous & seq_mask) != ((seq + 1) & seq_mask) ) {
+  /* Count is inclusive bound of descriptors but should be limited to
+   * advancing EF_VI_TRANSMIT_BATCH descriptors per ef_event*/
+  count =  (seq + 1 - qs->previous) & seq_mask;
+  *again = count > EF_VI_TRANSMIT_BATCH;
+  if( unlikely(*again) )
+    count = EF_VI_TRANSMIT_BATCH;
+
+  while( count-- ) {
     BUG_ON(qs->previous == qs->added);
     qs->ct_removed += desc[qs->previous & q->mask].len;
     qs->previous += 1;
@@ -1027,6 +1035,7 @@ int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
 {
   ef_eventq_state* evq = &vi->ep_state->evq;
   ci_qword_t* event;
+  bool again = false;
   int n_evs = 0;
 
   /* Check for overflow. If the previous entry has been overwritten already,
@@ -1041,8 +1050,13 @@ int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
 
     switch( CI_QWORD_FIELD(*event, EFCT_EVENT_TYPE) ) {
       case EFCT_EVENT_TYPE_TX:
-        efct_tx_handle_event(vi, *event, &evs[n_evs]);
+        efct_tx_handle_event(vi, *event, &evs[n_evs], &again);
         n_evs++;
+        /* More than EF_VI_TRANSMIT_BATCH descriptors returned from HW event
+         * we will complete rest on the next poll. Therefore, we move back
+         * the evq_ptr.*/
+        if(unlikely(again))
+            evq->evq_ptr -= sizeof(*event);
         /* Don't report more than one tx event per poll. This is to avoid a
          * horrendous sequencing problem if a simple TX event is followed by a
          * TX_WITH_TIMESTAMP; we'd need to update the queue state for the
