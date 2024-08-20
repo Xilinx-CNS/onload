@@ -175,9 +175,10 @@ static int init_resource_info(struct efx_auxdev *edev,
 }
 
 
-static void ef10_reset_suspend(struct efhw_nic *nic)
+static void ef10_reset_suspend(struct efx_auxdev_client * client,
+                               struct efhw_nic *nic)
 {
-  EFRM_NOTICE("%s:", __func__);
+  EFRM_NOTICE("%s: %s", __func__, dev_name(&client->auxdev->auxdev.dev));
 
   efrm_nic_reset_suspend(nic);
   ci_atomic32_or(&nic->resetting, NIC_RESETTING_FLAG_RESET);
@@ -192,7 +193,7 @@ static void ef10_reset_resume(struct efx_auxdev_client * client,
                         ((struct ef10_aux_arch_extra*)nic->arch_extra)->dl_res;
   int rc;
 
-  EFRM_NOTICE("%s:", __func__);
+  EFRM_NOTICE("%s: %s", __func__, dev_name(&client->auxdev->auxdev.dev));
 
   if( nic->vi_base != vi_resources->vi_base ) {
     EFRM_TRACE("%s: vi_base changed from %d to %d\n",
@@ -231,6 +232,29 @@ static void ef10_reset_resume(struct efx_auxdev_client * client,
   efrm_nic_post_reset(nic);
 }
 
+static void ef10_post_reset(struct efx_auxdev_client *client,
+                           struct efhw_nic *nic, int result)
+{
+  switch(result) {
+    case EFX_IN_RESET:
+      ef10_reset_suspend(client, nic);
+      break;
+    case EFX_NOT_IN_RESET:
+      ef10_reset_resume(client, nic);
+      break;
+    case EFX_HARDWARE_DISABLED:
+      /* We treat this in the same way as if the NIC never came back, by
+       * just ignoring it. */
+      EFRM_ERR("%s: ERROR: %s not available post reset", __func__,
+               dev_name(&client->auxdev->auxdev.dev));
+      break;
+    default:
+      EFRM_ERR("%s: ERROR: Unknown result %d for dev %s post reset", __func__,
+               result, dev_name(&client->auxdev->auxdev.dev));
+      break;
+  };
+}
+
 static int ef10_handler(struct efx_auxdev_client *client,
                         const struct efx_auxdev_event *event)
 {
@@ -260,10 +284,7 @@ static int ef10_handler(struct efx_auxdev_client *client,
         rc = event->budget;
       break;
     case EFX_AUXDEV_EVENT_IN_RESET:
-      if( event->value )
-        ef10_reset_suspend(nic);
-      else
-        ef10_reset_resume(client, nic);
+      ef10_post_reset(client, nic, event->value);
       break;
     case EFX_AUXDEV_EVENT_LINK_CHANGE:
       break;
