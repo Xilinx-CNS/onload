@@ -194,19 +194,11 @@ int efch_capabilities_op(struct efch_capabilities_in* in,
     get_from_nic_flags(nic, NIC_FLAG_RX_FILTER_TYPE_ETH_LOCAL_VLAN, out);
     break;
 
-  /* We can support "all" filters either by using an all filter, if the fw
-   * supports it, or using a mismatch filter, together with kernel block in
-   * the net driver, so check for either of the NIC capabilties.
-   */
   case EF_VI_CAP_RX_FILTER_TYPE_UCAST_ALL:
     get_from_nic_flags(nic, NIC_FLAG_RX_FILTER_TYPE_UCAST_ALL, out);
-    if( out->support_rc != 0 )
-      get_from_nic_flags(nic, NIC_FLAG_RX_FILTER_TYPE_UCAST_MISMATCH, out);
     break;
   case EF_VI_CAP_RX_FILTER_TYPE_MCAST_ALL:
     get_from_nic_flags(nic, NIC_FLAG_RX_FILTER_TYPE_MCAST_ALL, out);
-    if( out->support_rc != 0 )
-      get_from_nic_flags(nic, NIC_FLAG_RX_FILTER_TYPE_MCAST_MISMATCH, out);
     break;
   case EF_VI_CAP_RX_FILTER_TYPE_UCAST_MISMATCH:
     get_from_nic_flags(nic, NIC_FLAG_RX_FILTER_TYPE_UCAST_MISMATCH, out);
