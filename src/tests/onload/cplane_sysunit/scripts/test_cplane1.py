@@ -293,7 +293,8 @@ def build_intf(netns, ifname, address,
         addrmask = address.split('/')
         if len(addrmask) == 1:
             addrmask = [address, 32]
-        addr_add(netns, index=ix, address=addrmask[0], mask=int(addrmask[1]))
+        addr_add(netns, index=ix, address=addrmask[0],
+                 prefixlen=int(addrmask[1]))
     if state is not None:
         netns.link('set', index=ix, state=state)
 
@@ -487,11 +488,12 @@ def create_bond(cpserver, netns, ifname, ifnames, mode):
     return ifix
 
 def prep_bond(cpserver,cp,netns,hwports,v6=False,mode=1,
-              include_non_sf_intf=False, ifname='bond2', address=None, mask=None):
+              include_non_sf_intf=False, ifname='bond2', address=None,
+              prefixlen=None):
     if address is None:
         address = fake_ip_str(v6, 0, 2)
-    if mask is None:
-        mask = 112 if v6 else 24
+    if prefixlen is None:
+        prefixlen = 112 if v6 else 24
     ifnames = []
     for hwport in hwports:
         if include_non_sf_intf and hwport == 0:
@@ -504,7 +506,7 @@ def prep_bond(cpserver,cp,netns,hwports,v6=False,mode=1,
 
     ifix = create_bond(cpserver, netns, ifname, ifnames, mode)
     if address:
-        addr_add(netns, index=ifix, address=address, mask=mask)
+        addr_add(netns, index=ifix, address=address, prefixlen=prefixlen)
     netns.link('set', index=ifix, state='up')
 
     return (ifname, ifnames)
@@ -804,7 +806,7 @@ def do_test_nic_order(myns, encap):
     for link in netns.get_links():
         netns.link('set', index=link['index'], state='up')
 
-    addr_add(netns, '192.168.0.2', mask=24, index=bond2ix)
+    addr_add(netns, '192.168.0.2', prefixlen=24, index=bond2ix)
 
     v = cicp_verinfo(0,0)
     k = cp_fwd_key(any_ip4, IP('192.168.0.1'))
@@ -878,7 +880,7 @@ def do_test_multi_ns(main_ns, myns, encap):
     print('ix=',ix,'iface=',vifname)
     for l in myns.netns.get_links():
         print(l)
-    addr_add(myns.netns, '192.168.0.2', index=ix, mask=24)
+    addr_add(myns.netns, '192.168.0.2', index=ix, prefixlen=24)
     myns.netns.link('set', index=ix, state='up')
 
     v = cicp_verinfo(0,0)
@@ -911,7 +913,7 @@ def do_test_multi_ns_bond(main_ns, myns, encap):
                        net_ns_fd=myns.cpserver.getNetNsPath())
 
     addr_add(myns.netns, index=myns.netns.link_lookup(ifname='bond2mv')[0],
-             address='192.168.0.2', mask=24)
+             address='192.168.0.2', prefixlen=24)
     myns.netns.link('set', index=myns.netns.link_lookup(ifname='bond2mv')[0],
                     state='up')
 
@@ -1077,7 +1079,7 @@ def do_combination(cpserver,cp,netns,combination):
 
     # last interface gets an address
     ifix = netns.link_lookup(ifname=all_ifnames[-1])[0]
-    netns.addr('add', index=ifix, address='192.168.0.2', mask=24)
+    netns.addr('add', index=ifix, address='192.168.0.2', prefixlen=24)
 
     # we only up interfaces now as e.g. bond cannot add upped slaves
     for ifname in all_ifnames:
