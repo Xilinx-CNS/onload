@@ -83,7 +83,7 @@ int efhw_sfc_device_type_init(struct efhw_device_type *dt, struct pci_dev* dev)
 	/* cosim */
 	case 0x7778:
 	case 0x0803:
-    case 0x0813:
+	case 0x0813:
 		printk(KERN_NOTICE "6000-series and earlier adapters are not "
 		                   "supported by Onload\n");
 		return -ENODEV;
@@ -92,11 +92,10 @@ int efhw_sfc_device_type_init(struct efhw_device_type *dt, struct pci_dev* dev)
 	case 0x0923:
 	case 0x0903:
 	case 0x0901:
-		ef10_device_type_init(dt, 'A', dev->device, class_revision);
-		break;
-	case 0x1913:
+		printk(KERN_NOTICE "7000-series and earlier adapters are not "
+		                   "supported by Onload\n");
+		return -ENODEV;
 	case 0x1a03:
-	case 0x0913:
 	case 0x0a03:
 		ef10_device_type_init(dt, 'B', dev->device, class_revision);
 		break;
@@ -111,6 +110,7 @@ int efhw_sfc_device_type_init(struct efhw_device_type *dt, struct pci_dev* dev)
 		ef10_device_type_init(dt, 'F', dev->device, class_revision);
 		break;
 	default:
+		printk(KERN_NOTICE "Ignoring unsupported adapter\n");
 		return -ENODEV;
 	}
 
