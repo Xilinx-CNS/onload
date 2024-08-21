@@ -54,7 +54,7 @@ extern int efhw_nondl_device_type_init(struct efhw_device_type *dt);
 
 
 /* Initialise fields that do not involve touching hardware. */
-extern void efhw_nic_ctor(struct efhw_nic *nic, unsigned flags,
+extern void efhw_nic_ctor(struct efhw_nic *nic,
 			  const struct vi_resource_dimensions *nic_res,
 			  const struct efhw_device_type *dev_type,
 			  struct net_device *net_dev, struct device *dev);

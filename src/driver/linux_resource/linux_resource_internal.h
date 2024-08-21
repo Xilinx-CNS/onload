@@ -50,7 +50,7 @@ extern void efrm_driverlink_unregister(void);
 
 extern int
 efrm_nic_add(void *drv_device, struct device *dev,
-             const struct efhw_device_type *dev_type, unsigned int opts,
+             const struct efhw_device_type *dev_type,
 	     struct net_device *net_dev,
 	     struct linux_efhw_nic **lnic_inout,
 	     const struct vi_resource_dimensions *,

@@ -276,7 +276,7 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
   if( rc < 0 )
     goto fail2;
 
-  rc = efrm_nic_add(client, &auxdev->dev, &dev_type, 0, val.net_dev, &lnic,
+  rc = efrm_nic_add(client, &auxdev->dev, &dev_type, val.net_dev, &lnic,
                     &res_dim, 0);
   if( rc < 0 )
     goto fail3;

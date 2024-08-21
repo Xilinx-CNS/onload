@@ -356,7 +356,7 @@ static int ef10_probe(struct auxiliary_device *auxdev,
   lnic = efrm_get_rediscovered_nic(&dev_type, &res_dim);
 
   rtnl_lock();
-  rc = efrm_nic_add(client, &auxdev->dev, &dev_type, 0,
+  rc = efrm_nic_add(client, &auxdev->dev, &dev_type,
                     (/*no const*/ struct net_device *)net_dev, &lnic, &res_dim,
                     timer_quantum_ns);
   if( rc < 0 ) {

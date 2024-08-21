@@ -456,7 +456,7 @@ int efct_probe(struct auxiliary_device *auxdev,
     goto fail2;
 
   rtnl_lock();
-  rc = efrm_nic_add(client, &auxdev->dev, &dev_type, 0, net_dev, &lnic,
+  rc = efrm_nic_add(client, &auxdev->dev, &dev_type, net_dev, &lnic,
                     &res_dim, 0);
   if( rc < 0 )
     goto fail3;

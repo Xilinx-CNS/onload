@@ -196,7 +196,6 @@ irq_ranges_init(struct efhw_nic *nic, const struct vi_resource_dimensions *res_d
 
 static int
 linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct device *dev,
-		    unsigned nic_flags,
 		    struct net_device *net_dev,
 		    const struct vi_resource_dimensions *res_dim,
 		    const struct efhw_device_type *dev_type)
@@ -209,7 +208,7 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct device *dev,
 		get_device(dev);
 	dev_hold(net_dev);
 
-	efhw_nic_ctor(nic, nic_flags, res_dim, dev_type, net_dev, dev);
+	efhw_nic_ctor(nic, res_dim, dev_type, net_dev, dev);
 	irq_ranges_init(nic, res_dim);
 
 	init_rwsem(&lnic->drv_sem);
@@ -344,7 +343,7 @@ int efrm_nic_get_accel_allowed(struct efhw_nic* nic)
  ****************************************************************************/
 int
 efrm_nic_add(void *drv_device, struct device *dev,
-	     const struct efhw_device_type* dev_type, unsigned flags,
+	     const struct efhw_device_type* dev_type,
 	     struct net_device *net_dev,
 	     struct linux_efhw_nic **lnic_inout,
 	     const struct vi_resource_dimensions *res_dim,
@@ -376,8 +375,7 @@ efrm_nic_add(void *drv_device, struct device *dev,
 		memset(lnic, 0, sizeof(*lnic));
 
 		/* OS specific hardware mappings */
-		rc = linux_efrm_nic_ctor(lnic, dev, flags,
-					 net_dev, res_dim, dev_type);
+		rc = linux_efrm_nic_ctor(lnic, dev, net_dev, res_dim, dev_type);
 		if (rc < 0) {
 			EFRM_ERR("%s: ERROR: linux_efrm_nic_ctor failed (%d)",
 				 __func__, rc);
