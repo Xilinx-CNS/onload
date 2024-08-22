@@ -62,11 +62,13 @@
 typedef ci_int32 ci_uerr_t; /* range of OS user-mode return codes */
 typedef ci_int32 ci_kerr_t; /* range of OS kernel-mode return codes */
 
+#ifndef CI_DECLARE_FLEX_ARRAY
 #define CI_DECLARE_FLEX_ARRAY(type, name)          \
 	struct {                                        \
 		struct { } __empty_ ## name;                 \
 		type name[];                                 \
 	}
+#endif /* ! CI_DECLARE_FLEX_ARRAY */
 
 #define CI_MAX_ERRNO 1024
 #define IS_ERR(ptr) \
