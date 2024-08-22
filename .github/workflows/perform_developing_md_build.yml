@@ -59,6 +59,33 @@ jobs:
         run: |
           make -C "$(mmaketool --toppath)/build/$(mmaketool --userbuild)" -j $(nproc)
 
+      - name: Check ef_vi char interface version hash
+        run: |
+          cd "$(mmaketool --toppath)"
+
+          # Get the hard-coded hash
+          pattern="^ *if\( strcmp\(EFCH_INTF_VER, \"([0-9a-f]+)\"\) \) \{$"
+          comparison=$(grep -E "$pattern" "./src/lib/ciul/pt_endpoint.c")
+          fixed_hash=$(echo "$comparison" | sed -E -e "s/$pattern/\1/g")
+          echo "Found fixed version hash: \"$fixed_hash\""
+
+          # Get the auto-generated hash
+          generated_hash=$(
+            cat "./build/$(mmaketool --userbuild)/lib/ciul/efch_intf_ver.h" \
+            | sed -E -e "s/^#define +EFCH_INTF_VER +\"([0-9a-f]+)\"$/\1/g"
+          )
+          echo "Found generated version hash: \"$generated_hash\""
+
+          # Compare the hashes, and make sure they aren't the empty string
+          if [ -n "$fixed_hash" ] && [ "$fixed_hash" = "$generated_hash" ]; then
+            echo "Succesfully found version hashes, and confirmed they match!"
+          else
+            echo "Failed to find version hashes, or they don't match!"
+            echo "Audit the change to check for compat breakages."
+            echo "If compatible, then update the fixed hash in pt_endpoint.c"
+            exit 1
+          fi
+
       - name: cplane unit tests
         if: ${{ ! cancelled() && steps.cloud_build_user.conclusion == 'success' }}
         run: |
