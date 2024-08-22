@@ -310,6 +310,10 @@ efct_nic_init_hardware(struct efhw_nic *nic,
 
   nic->filter_flags |= efct_nic_supported_filter_flags(nic);
   nic->filter_flags |= NIC_FILTER_FLAG_IPX_VLAN_SW;
+  /* The net driver doesn't install any of its own multicast filters, so on
+   * efct a mismatch filter is the same as an all filter */
+  if( nic->filter_flags & NIC_FILTER_FLAG_RX_TYPE_MCAST_MISMATCH )
+    nic->filter_flags |= NIC_FILTER_FLAG_RX_TYPE_MCAST_ALL;
   efct_nic_tweak_hardware(nic);
   return 0;
 }
