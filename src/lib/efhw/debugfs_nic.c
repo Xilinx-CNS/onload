@@ -98,6 +98,7 @@ static const struct efrm_debugfs_parameter efhw_debugfs_nic_parameters[] = {
   _EFRM_RAW_PARAMETER(net_dev, efhw_debugfs_read_netdev_name),
   EFRM_NIC_DEVTYPE_PARAMETER(struct efhw_nic, devtype),
   EFRM_X64_PARAMETER(struct efhw_nic, flags),
+  EFRM_X64_PARAMETER(struct efhw_nic, filter_flags),
   EFRM_U32_PARAMETER(struct efhw_nic, resetting),
   EFRM_U32_PARAMETER(struct efhw_nic, mtu),
   EFRM_U32_PARAMETER(struct efhw_nic, num_evqs),
