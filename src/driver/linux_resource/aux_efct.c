@@ -555,6 +555,7 @@ void efct_remove(struct auxiliary_device *auxdev)
   vfree(efct->rxq);
   vfree(efct->evq);
   vfree(efct);
+  nic->arch_extra = NULL;
 }
 
 

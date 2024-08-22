@@ -427,24 +427,46 @@ static int efct_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc,
                          unsigned n_vis)
 {
   struct efhw_nic_efct *efct = nic->arch_extra;
-  if(n_vis != 1) {
+  struct xlnx_efct_client* cli;
+  int rc = 0;
+
+  if( n_vis != 1 )
     return -EOPNOTSUPP;
-  }
-  if( evc->want_txq ) {
-    return efhw_stack_vi_alloc(&efct->vi_allocator.tx, efct_accept_tx_vi_constraints, efct);
-  }
-  return efhw_stack_vi_alloc(&efct->vi_allocator.rx, efct_accept_rx_vi_constraints, efct);
+
+  /* Acquire efct device as in EFCT_PRE to protect access to arch_extra which
+   * goes away after aux detach*/
+  cli = efhw_nic_acquire_efct_device(nic);
+  if( cli == NULL )
+    return -ENETDOWN;
+
+  if( evc->want_txq )
+    rc = efhw_stack_vi_alloc(&efct->vi_allocator.tx,
+                             efct_accept_tx_vi_constraints, efct);
+  else
+    rc = efhw_stack_vi_alloc(&efct->vi_allocator.rx,
+                             efct_accept_rx_vi_constraints, efct);
+
+  efhw_nic_release_efct_device(nic, cli);
+
+  return rc;
 }
 
 static void efct_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis)
 {
   struct efhw_nic_efct* efct = nic->arch_extra;
+  struct xlnx_efct_client* cli;
+
   EFHW_ASSERT(n_vis == 1);
-  /* If this vi is in the range [0..efct->evq_n) it has a txq */
-  if( instance < efct->evq_n )
-    efhw_stack_vi_free(&efct->vi_allocator.tx, instance);
-  else
-    efhw_stack_vi_free(&efct->vi_allocator.rx, instance);
+  cli = efhw_nic_acquire_efct_device(nic);
+  if( cli != NULL ) {
+    /* If this vi is in the range [0..efct->evq_n) it has a txq */
+    if( instance < efct->evq_n )
+      efhw_stack_vi_free(&efct->vi_allocator.tx, instance);
+    else
+      efhw_stack_vi_free(&efct->vi_allocator.rx, instance);
+
+    efhw_nic_release_efct_device(nic, cli);
+  }
 }
 
 /*----------------------------------------------------------------------------

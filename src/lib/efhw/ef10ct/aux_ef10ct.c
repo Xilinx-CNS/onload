@@ -112,10 +112,12 @@ static int ef10ct_vi_allocator_ctor(struct efhw_nic_ef10ct *nic,
   int rc = 0;
   /* tx vis are allocated in the range [res_dim->vi_min,ef10ct->evq_n)
    * The space above this is used for virtual rx vis */
-  rc = efhw_stack_vi_allocator_ctor(&nic->vi_allocator.tx, res_dim->vi_min, nic->evq_n);
+  rc = efhw_stack_vi_allocator_ctor(&nic->vi_allocator.tx, res_dim->vi_min,
+                                    nic->evq_n);
   if(rc < 0)
     goto fail1;
-  rc = efhw_stack_vi_allocator_ctor(&nic->vi_allocator.rx, nic->evq_n, res_dim->vi_lim);
+  rc = efhw_stack_vi_allocator_ctor(&nic->vi_allocator.rx, nic->evq_n,
+                                    res_dim->vi_lim);
   if(rc < 0)
     goto fail2;
   return rc;
@@ -366,6 +368,7 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
   vfree(ef10ct->rxq);
   vfree(ef10ct->shared);
   vfree(ef10ct);
+  nic->arch_extra = NULL;
 }
 
 

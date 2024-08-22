@@ -287,24 +287,46 @@ static int ef10ct_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc
                          unsigned n_vis)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
-  if(n_vis != 1) {
+  struct efx_auxiliary_client* cli;
+  int rc = 0;
+
+  if( n_vis != 1 )
     return -EOPNOTSUPP;
-  }
-  if( evc->want_txq ) {
-    return efhw_stack_vi_alloc(&ef10ct->vi_allocator.tx, ef10ct_accept_tx_vi_constraints, ef10ct);
-  }
-  return efhw_stack_vi_alloc(&ef10ct->vi_allocator.rx, ef10ct_accept_rx_vi_constraints, ef10ct);
+
+  /* Acquire ef10ct device as in EFCT_PRE to protect access to arch_extra which
+   * goes away after aux detach*/
+  cli = efhw_nic_acquire_ef10ct_device(nic);
+  if( cli == NULL )
+    return -ENETDOWN;
+
+  if( evc->want_txq )
+    rc = efhw_stack_vi_alloc(&ef10ct->vi_allocator.tx,
+                             ef10ct_accept_tx_vi_constraints, ef10ct);
+  else
+    rc = efhw_stack_vi_alloc(&ef10ct->vi_allocator.rx,
+                             ef10ct_accept_rx_vi_constraints, ef10ct);
+
+  efhw_nic_release_ef10ct_device(nic, cli);
+
+  return rc;
 }
 
 static void ef10ct_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis)
 {
-  struct efhw_nic_ef10ct* ef10ct = nic->arch_extra;
+  struct efx_auxiliary_client* cli;
+
   EFHW_ASSERT(n_vis == 1);
-  /* If this vi is in the range [0..ef10ct->evq_n) it has a txq */
-  if( instance < ef10ct->evq_n )
-    efhw_stack_vi_free(&ef10ct->vi_allocator.tx, instance);
-  else
-    efhw_stack_vi_free(&ef10ct->vi_allocator.rx, instance);
+  cli = efhw_nic_acquire_ef10ct_device(nic);
+  if( cli != NULL ) {
+    struct efhw_nic_ef10ct* ef10ct = nic->arch_extra;
+    /* If this vi is in the range [0..ef10ct->evq_n) it has a txq */
+    if( instance < ef10ct->evq_n )
+      efhw_stack_vi_free(&ef10ct->vi_allocator.tx, instance);
+    else
+      efhw_stack_vi_free(&ef10ct->vi_allocator.rx, instance);
+
+    efhw_nic_release_ef10ct_device(nic, cli);
+  }
 }
 
 /*----------------------------------------------------------------------------
