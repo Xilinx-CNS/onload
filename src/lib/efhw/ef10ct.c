@@ -88,19 +88,20 @@ ef10ct_nic_init_hardware(struct efhw_nic *nic,
   nic->flags |= NIC_FLAG_TX_CTPIO | NIC_FLAG_CTPIO_ONLY
              | NIC_FLAG_HW_RX_TIMESTAMPING | NIC_FLAG_HW_TX_TIMESTAMPING
              | NIC_FLAG_RX_SHARED
-             | NIC_FLAG_RX_FILTER_TYPE_IP_LOCAL
-             | NIC_FLAG_RX_FILTER_TYPE_IP_FULL
-             | NIC_FLAG_VLAN_FILTERS
-             | NIC_FLAG_RX_FILTER_ETHERTYPE
              | NIC_FLAG_HW_MULTICAST_REPLICATION
              | NIC_FLAG_SHARED_PD
-             /* TODO: This will need to be updated to check for nic capabilities. */
-             | NIC_FLAG_RX_FILTER_TYPE_ETH_LOCAL
-             | NIC_FLAG_RX_FILTER_TYPE_ETH_LOCAL_VLAN
              | NIC_FLAG_PHYS_CONTIG_EVQ
              | NIC_FLAG_EVQ_IRQ
              | NIC_FLAG_LLCT
              ;
+  nic->filter_flags |= NIC_FILTER_FLAG_RX_TYPE_IP_LOCAL
+                    | NIC_FILTER_FLAG_RX_TYPE_IP_FULL
+                    | NIC_FILTER_FLAG_IPX_VLAN_HW
+                    | NIC_FILTER_FLAG_RX_ETHERTYPE
+                    /* TODO: This will need to be updated to check for nic capabilities. */
+                    | NIC_FILTER_FLAG_RX_TYPE_ETH_LOCAL
+                    | NIC_FILTER_FLAG_RX_TYPE_ETH_LOCAL_VLAN
+                    ;
 
   nic->sw_bts = kzalloc(EFHW_MAX_SW_BTS * sizeof(struct efhw_sw_bt),
                         GFP_KERNEL);

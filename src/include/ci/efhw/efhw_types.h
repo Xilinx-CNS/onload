@@ -527,6 +527,7 @@ struct efhw_nic {
 
 	/*! Internal flags that indicate hardware properties at runtime. */
 	uint64_t flags;
+	uint64_t filter_flags;
 
 	ci_uint32 resetting;	/*!< Flags indicating unavailability of HW */
 # define NIC_RESETTING_FLAG_RESET       0x00000001

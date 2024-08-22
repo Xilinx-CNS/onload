@@ -161,6 +161,7 @@ void efhw_nic_ctor(struct efhw_nic *nic,
 	nic->efhw_func = nic_res->efhw_ops;
 	nic->devtype = *dev_type;
 	nic->flags = 0;
+	nic->filter_flags = 0;
 	nic->resetting = 0;
 	nic->int_prime_reg = 0;
 	nic->vi_irq_n_ranges = 0;

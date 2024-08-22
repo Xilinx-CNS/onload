@@ -19,10 +19,10 @@ static void get_from_queue_sizes(struct efhw_nic* nic, int q_type,
 }
 
 
-static void get_from_nic_flags(struct efhw_nic* nic, uint64_t flags,
-                               struct efch_capabilities_out* out)
+static void get_from_flags(uint64_t have_flags, uint64_t want_flags,
+                           struct efch_capabilities_out* out)
 {
-  if( (nic->flags & flags) == flags ) {
+  if( (have_flags & want_flags) == want_flags ) {
     out->support_rc = 0;
     out->val = 1;
   }
@@ -30,6 +30,18 @@ static void get_from_nic_flags(struct efhw_nic* nic, uint64_t flags,
     out->support_rc = -EOPNOTSUPP;
     out->val = 0;
   }
+}
+
+static void get_from_nic_flags(struct efhw_nic* nic, uint64_t flags,
+                               struct efch_capabilities_out* out)
+{
+  get_from_flags(nic->flags, flags, out);
+}
+
+static void get_from_filter_flags(struct efhw_nic* nic, uint64_t flags,
+                                  struct efch_capabilities_out* out)
+{
+  get_from_flags(nic->filter_flags, flags, out);
 }
 
 int efch_capabilities_op(struct efch_capabilities_in* in,
@@ -157,14 +169,14 @@ int efch_capabilities_op(struct efch_capabilities_in* in,
    */
   case EF_VI_CAP_RX_FILTER_TYPE_UDP_LOCAL:
   case EF_VI_CAP_RX_FILTER_TYPE_TCP_LOCAL:
-    get_from_nic_flags(nic, NIC_FLAG_RX_FILTER_TYPE_IP_LOCAL, out);
+    get_from_filter_flags(nic, NIC_FILTER_FLAG_RX_TYPE_IP_LOCAL, out);
     break;
   case EF_VI_CAP_RX_FILTER_TYPE_UDP_FULL:
   case EF_VI_CAP_RX_FILTER_TYPE_TCP_FULL:
-    get_from_nic_flags(nic, NIC_FLAG_RX_FILTER_TYPE_IP_FULL, out);
+    get_from_filter_flags(nic, NIC_FILTER_FLAG_RX_TYPE_IP_FULL, out);
     break;
   case EF_VI_CAP_RX_FILTER_TYPE_IP_VLAN:
-    get_from_nic_flags(nic, NIC_FLAG_VLAN_FILTERS, out);
+    get_from_filter_flags(nic, NIC_FILTER_FLAG_IPX_VLAN_HW, out);
     break;
 
   /* Hardware support for IPv6 doesn't imply software support - however this
@@ -173,38 +185,38 @@ int efch_capabilities_op(struct efch_capabilities_in* in,
    */
   case EF_VI_CAP_RX_FILTER_TYPE_UDP6_LOCAL:
   case EF_VI_CAP_RX_FILTER_TYPE_TCP6_LOCAL:
-    get_from_nic_flags(nic,NIC_FLAG_RX_FILTER_TYPE_IP_LOCAL |
-                      NIC_FLAG_RX_FILTER_TYPE_IP6, out);
+    get_from_filter_flags(nic,NIC_FILTER_FLAG_RX_TYPE_IP_LOCAL |
+                          NIC_FILTER_FLAG_RX_TYPE_IP6, out);
     break;
   case EF_VI_CAP_RX_FILTER_TYPE_UDP6_FULL:
   case EF_VI_CAP_RX_FILTER_TYPE_TCP6_FULL:
-    get_from_nic_flags(nic, NIC_FLAG_RX_FILTER_TYPE_IP_FULL |
-                      NIC_FLAG_RX_FILTER_TYPE_IP6, out);
+    get_from_filter_flags(nic, NIC_FILTER_FLAG_RX_TYPE_IP_FULL |
+                          NIC_FILTER_FLAG_RX_TYPE_IP6, out);
     break;
   case EF_VI_CAP_RX_FILTER_TYPE_IP6_VLAN:
-    get_from_nic_flags(nic, NIC_FLAG_VLAN_FILTERS | NIC_FLAG_RX_FILTER_TYPE_IP6,
-                      out);
+    get_from_filter_flags(nic, NIC_FILTER_FLAG_IPX_VLAN_HW |
+                          NIC_FILTER_FLAG_RX_TYPE_IP6, out);
     break;
 
   case EF_VI_CAP_RX_FILTER_TYPE_ETH_LOCAL:
-    get_from_nic_flags(nic, NIC_FLAG_RX_FILTER_TYPE_ETH_LOCAL, out);
+    get_from_filter_flags(nic, NIC_FILTER_FLAG_RX_TYPE_ETH_LOCAL, out);
     break;
 
   case EF_VI_CAP_RX_FILTER_TYPE_ETH_LOCAL_VLAN:
-    get_from_nic_flags(nic, NIC_FLAG_RX_FILTER_TYPE_ETH_LOCAL_VLAN, out);
+    get_from_filter_flags(nic, NIC_FILTER_FLAG_RX_TYPE_ETH_LOCAL_VLAN, out);
     break;
 
   case EF_VI_CAP_RX_FILTER_TYPE_UCAST_ALL:
-    get_from_nic_flags(nic, NIC_FLAG_RX_FILTER_TYPE_UCAST_ALL, out);
+    get_from_filter_flags(nic, NIC_FILTER_FLAG_RX_TYPE_UCAST_ALL, out);
     break;
   case EF_VI_CAP_RX_FILTER_TYPE_MCAST_ALL:
-    get_from_nic_flags(nic, NIC_FLAG_RX_FILTER_TYPE_MCAST_ALL, out);
+    get_from_filter_flags(nic, NIC_FILTER_FLAG_RX_TYPE_MCAST_ALL, out);
     break;
   case EF_VI_CAP_RX_FILTER_TYPE_UCAST_MISMATCH:
-    get_from_nic_flags(nic, NIC_FLAG_RX_FILTER_TYPE_UCAST_MISMATCH, out);
+    get_from_filter_flags(nic, NIC_FILTER_FLAG_RX_TYPE_UCAST_MISMATCH, out);
     break;
   case EF_VI_CAP_RX_FILTER_TYPE_MCAST_MISMATCH:
-    get_from_nic_flags(nic, NIC_FLAG_RX_FILTER_TYPE_MCAST_MISMATCH, out);
+    get_from_filter_flags(nic, NIC_FILTER_FLAG_RX_TYPE_MCAST_MISMATCH, out);
     break;
 
   case EF_VI_CAP_RX_FILTER_TYPE_SNIFF:
@@ -217,11 +229,11 @@ int efch_capabilities_op(struct efch_capabilities_in* in,
     break;
 
   case EF_VI_CAP_RX_FILTER_IP4_PROTO:
-    get_from_nic_flags(nic, NIC_FLAG_RX_FILTER_IP4_PROTO, out);
+    get_from_filter_flags(nic, NIC_FILTER_FLAG_RX_IP4_PROTO, out);
     break;
 
   case EF_VI_CAP_RX_FILTER_ETHERTYPE:
-    get_from_nic_flags(nic, NIC_FLAG_RX_FILTER_ETHERTYPE, out);
+    get_from_filter_flags(nic, NIC_FILTER_FLAG_RX_ETHERTYPE, out);
     break;
 
   case EF_VI_CAP_RXQ_SIZES:
@@ -327,7 +339,7 @@ int efch_capabilities_op(struct efch_capabilities_in* in,
   }
 
   case EF_VI_CAP_RX_FILTER_MAC_IP4_PROTO:
-    get_from_nic_flags(nic, NIC_FLAG_RX_FILTER_MAC_IP4_PROTO, out);
+    get_from_filter_flags(nic, NIC_FILTER_FLAG_RX_MAC_IP4_PROTO, out);
     break;
 
   default:

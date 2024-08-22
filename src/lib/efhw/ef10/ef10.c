@@ -300,17 +300,17 @@ ef10_nic_check_supported_filters(struct efhw_nic *nic) {
   num_matches = EFHW_MCDI_VAR_ARRAY_LEN(out_size,
                                    GET_PARSER_DISP_INFO_OUT_SUPPORTED_MATCHES);
 
-  nic->flags |= mcdi_parser_info_to_nic_flags(out, num_matches);
+  nic->filter_flags |= mcdi_parser_info_to_filter_flags(out, num_matches);
 
   /* If we have the hardware mismatch filters we can turn them into all filters
    * by blocking kernel traffic, so we can claim the all equivalents too */
-  if( nic->flags & NIC_FLAG_RX_FILTER_TYPE_UCAST_MISMATCH )
-    nic->flags |= NIC_FLAG_RX_FILTER_TYPE_UCAST_ALL;
-  if( nic->flags & NIC_FLAG_RX_FILTER_TYPE_MCAST_MISMATCH )
-    nic->flags |= NIC_FLAG_RX_FILTER_TYPE_MCAST_ALL;
+  if( nic->filter_flags & NIC_FILTER_FLAG_RX_TYPE_UCAST_MISMATCH )
+    nic->filter_flags |= NIC_FILTER_FLAG_RX_TYPE_UCAST_ALL;
+  if( nic->filter_flags & NIC_FILTER_FLAG_RX_TYPE_MCAST_MISMATCH )
+    nic->filter_flags |= NIC_FILTER_FLAG_RX_TYPE_MCAST_ALL;
 
   /* All fw variants support IPv6 filters */
-  nic->flags |= NIC_FLAG_RX_FILTER_TYPE_IP6;
+  nic->filter_flags |= NIC_FILTER_FLAG_RX_TYPE_IP6;
 }
 
 

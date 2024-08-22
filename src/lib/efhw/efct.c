@@ -260,16 +260,23 @@ efct_nic_init_hardware(struct efhw_nic *nic,
   nic->flags |= NIC_FLAG_TX_CTPIO | NIC_FLAG_CTPIO_ONLY
              | NIC_FLAG_HW_RX_TIMESTAMPING | NIC_FLAG_HW_TX_TIMESTAMPING
              | NIC_FLAG_RX_SHARED
-             | NIC_FLAG_RX_FILTER_TYPE_IP_LOCAL
-             | NIC_FLAG_RX_FILTER_TYPE_IP_FULL
-             | NIC_FLAG_VLAN_FILTERS
-             | NIC_FLAG_RX_FILTER_ETHERTYPE
              | NIC_FLAG_HW_MULTICAST_REPLICATION
              | NIC_FLAG_SHARED_PD
-             /* TODO: This will need to be updated to check for nic capabilities. */
-             | NIC_FLAG_RX_FILTER_TYPE_ETH_LOCAL
-             | NIC_FLAG_RX_FILTER_TYPE_ETH_LOCAL_VLAN
              ;
+  nic->filter_flags |= NIC_FILTER_FLAG_RX_TYPE_IP_LOCAL
+                    | NIC_FILTER_FLAG_RX_TYPE_IP_FULL
+                    | NIC_FILTER_FLAG_IPX_VLAN_SW
+                    | NIC_FILTER_FLAG_RX_ETHERTYPE
+                    /* TODO: This will need to be updated to check for nic capabilities. */
+                    | NIC_FILTER_FLAG_RX_TYPE_ETH_LOCAL
+                    | NIC_FILTER_FLAG_RX_TYPE_ETH_LOCAL_VLAN
+                    ;
+  /* This isn't true, but previously we had a single flag for HW and SW, so
+   * to maintain equivalent behaviour we need to claim the HW flag too until
+   * we follow up with the rest of the work which unravels the various
+   * inconsistencies in this area. */
+  nic->filter_flags |= NIC_FILTER_FLAG_IPX_VLAN_HW;
+
   efct_nic_tweak_hardware(nic);
   return 0;
 }
