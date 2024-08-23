@@ -599,36 +599,6 @@ ef10_nic_tweak_hardware(struct efhw_nic *nic)
   nic->rx_prefix_len = (nic->flags & NIC_FLAG_14BYTE_PREFIX) ? 14 : 0;
 }
 
-static int ef10_vi_allocator_ctor(struct efhw_nic* nic,
-                                  unsigned vi_min, unsigned vi_lim)
-{
-  struct ef10_aux_arch_extra *arch_extra = nic->arch_extra;
-  struct efhw_buddy_allocator *vi_allocator = arch_extra->vi_allocator;
-  int rc = efhw_buddy_range_ctor(vi_allocator, vi_min, vi_lim);
-  if (rc < 0) {
-    EFHW_ERR("%s: efhw_buddy_range_ctor(%d, %d) " "failed (%d)",
-             __FUNCTION__, vi_min, vi_lim, rc);
-  }
-  return rc;
-}
-
-static int ef10_init_vi_allocator(struct efhw_nic *nic)
-{
-  int rc;
-  struct ef10_aux_arch_extra *arch_extra = nic->arch_extra;
-  struct efhw_buddy_allocator* vi_allocator = vzalloc(sizeof(*vi_allocator));
-  if( !vi_allocator )
-    return -ENOMEM;
-  arch_extra->vi_allocator = vi_allocator;
-  rc = ef10_vi_allocator_ctor(nic, nic->vi_min, nic->vi_lim);
-  if( rc < 0 ) {
-    vfree(vi_allocator);
-    arch_extra->vi_allocator = NULL;
-    return rc;
-  }
-  return 0;
-}
-
 static int
 ef10_nic_init_hardware(struct efhw_nic *nic,
                        struct efhw_ev_handler *ev_handlers,
@@ -641,14 +611,6 @@ ef10_nic_init_hardware(struct efhw_nic *nic,
 
   nic->ev_handlers = ev_handlers;
   ef10_nic_tweak_hardware(nic);
-
-  nic->arch_extra = kmalloc(sizeof(struct ef10_aux_arch_extra), GFP_KERNEL);
-  if( !nic->arch_extra )
-    return -ENOMEM;
-
-  rc = ef10_init_vi_allocator(nic);
-  if( rc < 0 )
-    return rc;
 
   rc = ef10_nic_get_timestamp_correction(nic, &(nic->rx_ts_correction),
                                          &(nic->tx_ts_correction),
@@ -695,18 +657,7 @@ ef10_nic_init_hardware(struct efhw_nic *nic,
 
 static void ef10_nic_release_hardware(struct efhw_nic *nic)
 {
-  struct ef10_aux_arch_extra *arch_extra = nic->arch_extra;
   EFHW_TRACE("%s:", __FUNCTION__);
-
-  if( arch_extra ) {
-    if( arch_extra->vi_allocator ) {
-      efhw_buddy_dtor(arch_extra->vi_allocator);
-      vfree(arch_extra->vi_allocator);
-      arch_extra->vi_allocator = NULL;
-    }
-    kfree(arch_extra);
-    nic->arch_extra = NULL;
-  }
 }
 
 
@@ -1014,24 +965,39 @@ bool ef10_accept_vi_constraints(int low, unsigned order, void* arg)
 
 int ef10_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc,
                   unsigned n_vis) {
-  unsigned order = fls(n_vis - 1);
-  struct ef10_aux_arch_extra *arch_extra = nic->arch_extra;
-  struct efhw_buddy_allocator *vi_allocator = arch_extra->vi_allocator;
-  struct ef10_ef100_alloc_vi_constraints avc = {
-    .nic = nic,
-    .evc = evc,
-  };
-  int alloc = efhw_buddy_alloc_special(vi_allocator, order,
-                                       ef10_accept_vi_constraints, &avc);
-  return alloc;
+  struct efx_auxdev_client *cli;
+  int rc;
+
+  cli = efhw_nic_acquire_auxdev(nic);
+  if(cli != NULL) {
+    unsigned order = fls(n_vis - 1);
+    struct ef10_aux_arch_extra *arch_extra = nic->arch_extra;
+    struct efhw_buddy_allocator *vi_allocator = arch_extra->vi_allocator;
+    struct ef10_ef100_alloc_vi_constraints avc = {
+      .nic = nic,
+      .evc = evc,
+    };
+    rc = efhw_buddy_alloc_special(vi_allocator, order,
+                                  ef10_accept_vi_constraints, &avc);
+    efhw_nic_release_auxdev(nic, cli);
+  }
+  else
+    rc = -ENETDOWN;
+  return rc;
 }
 
 
 void ef10_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis) {
-  unsigned order = fls(n_vis - 1);
-  struct ef10_aux_arch_extra *arch_extra = nic->arch_extra;
-  struct efhw_buddy_allocator *vi_allocator = arch_extra->vi_allocator;
-  efhw_buddy_free(vi_allocator, instance, order);
+  struct efx_auxdev_client *cli;
+
+  cli = efhw_nic_acquire_auxdev(nic);
+  if(cli != NULL) {
+    unsigned order = fls(n_vis - 1);
+    struct ef10_aux_arch_extra *arch_extra = nic->arch_extra;
+    struct efhw_buddy_allocator *vi_allocator = arch_extra->vi_allocator;
+    efhw_buddy_free(vi_allocator, instance, order);
+    efhw_nic_release_auxdev(nic, cli);
+  }
 }
 
 /*--------------------------------------------------------------------

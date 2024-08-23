@@ -15,6 +15,7 @@
 #include <ci/efrm/nic_table.h>
 #include <ci/efhw/ef10.h>
 #include <ci/efhw/nic.h>
+#include <ci/efhw/buddy.h>
 #include <ci/tools/sysdep.h>
 #include <ci/internal/transport_config_opt.h>
 #include <ci/driver/resource/linux_efhw_nic.h>
@@ -293,6 +294,55 @@ static int ef10_handler(struct efx_auxdev_client *client,
   return rc;
 }
 
+static struct efhw_buddy_allocator *
+ef10_vi_allocator_ctor(struct vi_resource_dimensions *res_dim)
+{
+  int rc;
+  struct efhw_buddy_allocator *vi_allocator = vzalloc(sizeof(*vi_allocator));
+  if( !vi_allocator )
+    return NULL;
+
+  rc = efhw_buddy_range_ctor(vi_allocator, res_dim->vi_min, res_dim->vi_lim);
+  if ( rc < 0 ) {
+    EFHW_ERR("%s: efhw_buddy_range_ctor(%d, %d) failed (%d)",
+             __FUNCTION__, res_dim->vi_min, res_dim->vi_lim, rc);
+    vfree(vi_allocator);
+    return NULL;
+  }
+  return vi_allocator;
+}
+
+static struct ef10_aux_arch_extra *
+ef10_arch_extra_ctor(struct efx_auxdev_dl_vi_resources *dl_res,
+                     struct vi_resource_dimensions *res_dim)
+{
+  struct ef10_aux_arch_extra *arch_extra;
+
+  arch_extra = kmalloc(sizeof(struct ef10_aux_arch_extra), GFP_KERNEL);
+  if( !arch_extra )
+    return NULL;
+
+  arch_extra->dl_res = dl_res;
+  arch_extra->vi_allocator = ef10_vi_allocator_ctor(res_dim);
+  if( !arch_extra->vi_allocator ) {
+    kfree(arch_extra);
+    arch_extra = NULL;
+  }
+  return arch_extra;
+}
+
+static void ef10_arch_extra_dtor(struct ef10_aux_arch_extra *arch_extra)
+{
+  if( arch_extra ) {
+    if( arch_extra->vi_allocator ) {
+      efhw_buddy_dtor(arch_extra->vi_allocator);
+      vfree(arch_extra->vi_allocator);
+      arch_extra->vi_allocator = NULL;
+    }
+    kfree(arch_extra);
+  }
+}
+
 static int ef10_probe(struct auxiliary_device *auxdev,
                       const struct auxiliary_device_id *id)
 {
@@ -305,6 +355,7 @@ static int ef10_probe(struct auxiliary_device *auxdev,
   unsigned timer_quantum_ns;
   struct linux_efhw_nic *lnic;
   struct efhw_nic *nic;
+  struct ef10_aux_arch_extra *arch_extra;
   struct net_device *net_dev;
   int rc;
 
@@ -338,12 +389,18 @@ static int ef10_probe(struct auxiliary_device *auxdev,
   if( rc < 0 )
     goto fail3;
 
+  arch_extra = ef10_arch_extra_ctor(dl_res, &res_dim);
+  if( !arch_extra ) {
+    rc = -ENOMEM;
+    goto fail3;
+  }
+
   rc = efhw_sfc_device_type_init(&dev_type, res_dim.pci_dev);
   if( rc < 0 ) {
     EFRM_ERR("%s: efhw_device_type_init failed %04x:%04x rc %d",
     __func__, (unsigned) res_dim.pci_dev->vendor,
     (unsigned) res_dim.pci_dev->device, rc);
-    goto fail3;
+    goto fail4;
   }
 
   EFRM_NOTICE("%s pci_dev=%04x:%04x(%d) type=%d:%c%d ifindex=%d",
@@ -361,7 +418,7 @@ static int ef10_probe(struct auxiliary_device *auxdev,
                     timer_quantum_ns);
   if( rc < 0 ) {
     rtnl_unlock();
-    goto fail3;
+    goto fail4;
   }
 
   efrm_nic_add_sysfs(net_dev, &auxdev->dev);
@@ -370,7 +427,7 @@ static int ef10_probe(struct auxiliary_device *auxdev,
   nic->mtu = net_dev->mtu + ETH_HLEN; /* ? + ETH_VLAN_HLEN */
   nic->rss_channel_count = res_dim.rss_channel_count;
   nic->pci_dev = res_dim.pci_dev;
-  ((struct ef10_aux_arch_extra*)nic->arch_extra)->dl_res = dl_res;
+  nic->arch_extra = (void *)arch_extra;
 
   val.driver_data = nic;
   rc = edev->ops->set_param(client, EFX_DRIVER_DATA, &val);
@@ -382,6 +439,8 @@ static int ef10_probe(struct auxiliary_device *auxdev,
   rtnl_unlock();
   return 0;
 
+ fail4:
+  ef10_arch_extra_dtor(arch_extra);
  fail3:
   edev->ops->dl_unpublish(client);
  fail2:
@@ -434,6 +493,8 @@ void ef10_remove(struct auxiliary_device *auxdev)
 
   edev->ops->dl_unpublish(client);
   edev->ops->close(client);
+  ef10_arch_extra_dtor(nic->arch_extra);
+  nic->arch_extra = NULL;
 }
 
 
