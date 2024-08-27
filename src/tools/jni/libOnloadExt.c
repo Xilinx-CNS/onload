@@ -29,7 +29,6 @@
 #include "OnloadZeroCopy.h"
 #include "OnloadTemplateSend.h"
 #include "OnloadWireOrderDelivery.h"
-#include "OnloadWireOrderDelivery_FdEvent.h"
 #include "OnloadWireOrderDelivery_FdSet.h"
 
 struct native_zc_userdata {
