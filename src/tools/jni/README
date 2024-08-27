@@ -30,24 +30,22 @@ where java is installed:
 
 And now we can build the java classes, and create the headers from them:
 	cd $TMP
-	javac $ONLOAD/src/tools/jni/OnloadExt.java -d $ONLOAD_LIB
-	javac $ONLOAD/src/tools/jni/OnloadZeroCopy.java -d $ONLOAD_LIB
-	javac $ONLOAD/src/tools/jni/OnloadTemplateSend.java -d $ONLOAD_LIB
-	javac $ONLOAD/src/tools/jni/OnloadWireOrderDelivery.java -d $ONLOAD_LIB
-	javah -classpath $ONLOAD_LIB -d $TMP OnloadExt
-	javah -classpath $ONLOAD_LIB -d $TMP OnloadZeroCopy
-	javah -classpath $ONLOAD_LIB -d $TMP OnloadTemplateSend
-	javah -classpath $ONLOAD_LIB -d $TMP OnloadWireOrderDelivery
+	javac $ONLOAD/src/tools/jni/OnloadExt.java -d $ONLOAD_LIB -h $TMP
+	javac $ONLOAD/src/tools/jni/OnloadZeroCopy.java -d $ONLOAD_LIB -h $TMP
+	javac $ONLOAD/src/tools/jni/OnloadTemplateSend.java -d $ONLOAD_LIB -h $TMP
+	javac $ONLOAD/src/tools/jni/OnloadWireOrderDelivery.java -d $ONLOAD_LIB -h $TMP
 
 Result should be files (class files in the $ONLOAD_LIB directory and header
 files in $TMP):
 	OnloadExt.h, OnloadExt.class,
-	OnloadExt_Stat.h, OnloadExt$Stat.class,
+		OnloadExt$Stat.class,
 	OnloadZeroCopy.h, OnloadZeroCopy.class,
-	OnloadZeroCopy_Callback.h,  OnloadZeroCopy_Callback.class,
+		OnloadZeroCopy$Callback.class,
+		OnloadZeroCopy$1CallbackTest.class,
 	OnloadTemplateSend.h, OnloadTemplateSend.class,
-	OnloadWireOrderDelivery.class, OnloadZeroCopy$1CallbackTest.class
-        OnloadWireOrderDelivery$FdEvent.class, OnloadWireOrderDelivery_FdEvent.h
+	OnloadWireOrderDelivery.h, OnloadWireOrderDelivery.class,
+		OnloadWireOrderDelivery_FdSet.h, OnloadWireOrderDelivery$FdSet.class
+		OnloadWireOrderDelivery$FdEvent.class
 
 
 5. And finally build the actual JNI implementation:
