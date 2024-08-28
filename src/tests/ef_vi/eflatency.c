@@ -151,13 +151,13 @@ static void output_results(struct timeval start, struct timeval end)
 {
   unsigned freq = 0;
   double div;
+  int i;
   int usec = (end.tv_sec - start.tv_sec) * 1000000;
   usec += end.tv_usec - start.tv_usec;
 
   ci_get_cpu_khz(&freq);
   div = freq / 1e3;
   if( cfg_save_file ) {
-    int i;
     char* subst = strstr(cfg_save_file, "$s");
     FILE* fp;
 
@@ -181,9 +181,13 @@ static void output_results(struct timeval start, struct timeval end)
   }
 
   qsort(timings, cfg_iter, sizeof(timings[0]), cmp_u64);
+  double sum = 0;
+  for( i = 0 ; i < cfg_iter ; i++ )
+    sum += timings[i];
+
   printf("%d\t%0.3lf\t%0.3lf\t%0.3lf\t%0.3lf\t%0.3lf\t%0.3lf\n",
          cfg_payload_len,
-         (double) usec / cfg_iter,
+         sum / cfg_iter / div,
          timings[0] / div,
          timings[cfg_iter / 2] / div,
          timings[cfg_iter - cfg_iter / 20] / div,
