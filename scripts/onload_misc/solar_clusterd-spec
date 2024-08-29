@@ -21,8 +21,8 @@ Release:        0
 Summary:        Onload's Application Clustering daemon
 Group:          Applications/Internet
 License:        Various
-URL:            http://www.solarflare.com/
-Vendor:         Solarflare
+URL:            http://www.openonload.org/
+Vendor:         Advanced Micro Devices, Inc.
 Source0:        openonload-%{version}.tgz
 BuildRoot:      %{_builddir}/%{name}-root
 
