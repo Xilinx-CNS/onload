@@ -846,7 +846,7 @@ static inline int oo_epoll1_wake_other_callback(wait_queue_entry_t* wait,
 /* this is essentially sys_poll([home_filp,other_filp], timeout_ms) */
 static int oo_epoll1_block_on(struct file* home_filp,
                               struct file* other_filp,
-                              ci_uint64 timeout_us)
+                              ci_uint64 timeout_ns)
 {
   struct oo_epoll_poll_table ept;
   int rc, ret = 0;
@@ -886,8 +886,8 @@ static int oo_epoll1_block_on(struct file* home_filp,
          * Onload want pretty good timing. Note that Linux will tend to wait
          * for the total timeout+slack if there's no other reason for it to
          * wake. */
-        int slack_ns = timeout_us < 10000 ? 0 : 10000;
-        kt = ktime_set(0, timeout_us * 1000);
+        int slack_ns = timeout_ns < 10000000 ? 0 : 10000;
+        kt = ktime_set(0, timeout_ns);
         schedule_hrtimeout_range(&kt, slack_ns, HRTIMER_MODE_REL);
       }
       __set_current_state(TASK_RUNNING);
