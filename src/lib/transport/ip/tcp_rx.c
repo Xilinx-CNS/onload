@@ -718,8 +718,11 @@ static void handle_unacceptable_ack(ci_netif* netif, ci_tcp_state* ts,
     }
   }
   else {
+    ci_ip_pkt_fmt* pkt = rxp->pkt;
+    ci_tcp_hdr* tcp = rxp->tcp;
     CITP_STATS_NETIF_INC(netif, rst_sent_unacceptable_ack);
-    ci_tcp_reply_with_rst(netif, &ts->s.cp, rxp);
+    if( ci_tcp_can_rst(netif, RX_PKT_SADDR(pkt), tcp->tcp_source_be16) )
+      ci_tcp_reply_with_rst(netif, &ts->s.cp, rxp);
   }
 
   CI_TCP_STATS_INC_OUT_SEGS( netif );
@@ -2695,7 +2698,8 @@ static void handle_rx_synrecv_ack(ci_netif* netif, ci_tcp_socket_listen* tls,
   return;
  reset_out:
   /* LOG_U already printed in all paths to here */
-  ci_tcp_reply_with_rst(netif, &tls->s.cp, rxp);
+  if( ci_tcp_can_rst(netif, RX_PKT_SADDR(pkt), tcp->tcp_source_be16) )
+    ci_tcp_reply_with_rst(netif, &tls->s.cp, rxp);
   return;
 }
 
@@ -3179,7 +3183,8 @@ static void handle_rx_listen(ci_netif* netif, ci_tcp_socket_listen* tls,
 
  reset_out:
   /* LOG_U already printed in all three paths to this point */
-  ci_tcp_reply_with_rst(netif, &tls->s.cp, rxp);
+  if( ci_tcp_can_rst(netif, RX_PKT_SADDR(pkt), tcp->tcp_source_be16) )
+    ci_tcp_reply_with_rst(netif, &tls->s.cp, rxp);
   return;
 }
 
@@ -3193,6 +3198,8 @@ static int handle_syn_sent_opts(ci_netif* netif, ci_tcp_state* ts,
   ci_tcp_options tcpopts;
   int optlen = 0;
   int af = ipcache_af(&ts->s.pkt);
+  ci_ip_pkt_fmt* pkt = rxp->pkt;
+  ci_tcp_hdr* tcp = rxp->tcp;
 
   /* parse TCP options */
   memset(&tcpopts, 0, sizeof(tcpopts));
@@ -3208,7 +3215,8 @@ static int handle_syn_sent_opts(ci_netif* netif, ci_tcp_state* ts,
     /* We should set ACK in our RST */
     ci_tcp_set_flags(ts, CI_TCP_FLAG_ACK);
     CITP_STATS_NETIF_INC(netif, rst_sent_bad_options);
-    ci_tcp_reply_with_rst(netif, &ts->s.cp, rxp);
+    if( ci_tcp_can_rst(netif, RX_PKT_SADDR(pkt), tcp->tcp_source_be16) )
+      ci_tcp_reply_with_rst(netif, &ts->s.cp, rxp);
     return -1;
 #endif
   }
@@ -3323,7 +3331,8 @@ static void handle_rx_syn_sent(ci_netif* netif, ci_tcp_state* ts,
       LOG_U(log(LPF "%d SYN-SENT unacceptable ACK will reset",
                 S_FMT(ts)));
       CITP_STATS_NETIF_INC(netif, rst_sent_unacceptable_ack);
-      ci_tcp_reply_with_rst(netif, &ts->s.cp, rxp);
+      if( ci_tcp_can_rst(netif, RX_PKT_SADDR(pkt), tcp->tcp_source_be16) )
+        ci_tcp_reply_with_rst(netif, &ts->s.cp, rxp);
       return;
     }
   }
@@ -3682,7 +3691,8 @@ static int handle_rx_minor_states(ci_tcp_state* ts, ci_netif* netif,
       LOG_E(ci_log(LNT_FMT "ERROR demux to CLOSED socket",
                    LNT_PRI_ARGS(netif, ts)));
     CITP_STATS_NETIF_INC(netif, rst_sent_no_match);
-    ci_tcp_reply_with_rst(netif, &ts->s.cp, rxp);
+    if( ci_tcp_can_rst(netif, RX_PKT_SADDR(pkt), tcp->tcp_source_be16) )
+      ci_tcp_reply_with_rst(netif, &ts->s.cp, rxp);
     break;
   default:
     return 0;
@@ -3898,7 +3908,8 @@ static void handle_unacceptable_seq(ci_netif* netif, ci_tcp_state* ts,
     LOG_U(log(LPF "%d handle unacceptable seq RSTACK needed because "
               "not in synchronized state",S_FMT(ts)));
     CITP_STATS_NETIF_INC(netif, rst_sent_bad_seq);
-    ci_tcp_reply_with_rst(netif, &ts->s.cp, rxp);
+    if( ci_tcp_can_rst(netif, RX_PKT_SADDR(pkt), tcp->tcp_source_be16) )
+      ci_tcp_reply_with_rst(netif, &ts->s.cp, rxp);
     /* because we're not going to send an ACK here, the dsack block needs
        to be cleared to prevent the next packet getting confused when
        it finds there is a old block still waiting */
@@ -4092,7 +4103,8 @@ static void handle_rx_slow(ci_tcp_state* ts, ci_netif* netif,
           LOG_U(log(LNTS_FMT" data arrived with SHUT_RD (rx=%x tx=%x)",
                     LNTS_PRI_ARGS(netif, ts), ts->s.rx_errno, ts->s.tx_errno));
           ci_netif_pkt_release_rx(netif, pkt);
-          ci_tcp_send_rst_with_flags(netif, ts, 0);
+          if( ci_tcp_can_rst(netif, RX_PKT_SADDR(pkt), tcp->tcp_source_be16) )
+            ci_tcp_send_rst_with_flags(netif, ts, 0);
           ci_tcp_drop(netif, ts, ECONNRESET);
           return;
         }
@@ -4470,7 +4482,8 @@ static void handle_no_match(ci_netif* ni, ciip_tcp_rx_pkt* rxp)
      * only case where we actually need a sock_cp is when our local address is
      * being NAT-ed.  In that case we'll to send the RST if we can't find a
      * route over which to send it, but the same is true for the kernel. */
-    ci_tcp_reply_with_rst(ni, NULL, rxp);
+    if( ci_tcp_can_rst(ni, RX_PKT_SADDR(pkt), tcp->tcp_source_be16) )
+      ci_tcp_reply_with_rst(ni, NULL, rxp);
   }
   else
     ci_netif_pkt_release_rx_1ref(ni, pkt);
