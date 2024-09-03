@@ -712,23 +712,43 @@ efct_nic_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
     params.efct_params.flags |= XLNX_EFCT_FILTER_F_ANYQUEUE_LOOSE;
   if( flags & EFHW_FILTER_F_PREF_RXQ )
     params.efct_params.flags |= XLNX_EFCT_FILTER_F_PREF_QUEUE;
+
   if( flags & EFHW_FILTER_F_EXCL_RXQ ) {
     params.efct_params.flags |= XLNX_EFCT_FILTER_F_EXCLUSIVE_QUEUE;
 
+    /* For exclusive queues we need to use exactly the filter requested to avoid
+     * the need for SW filtering in the app, so check for filter support before
+     * furtling the filter. */
     EFCT_PRE(dev, edev, cli, nic, rc);
     rc = edev->ops->is_filter_supported(cli, &hw_filter);
     EFCT_POST(dev, edev, cli, nic, rc);
 
     if( !rc )
       return -EPERM;
-  }
 
-  /* For some filter types we use wider HW filters to represent a more specific
-   * SW filter. This function handles any modifications that are needed to do
-   * this. */
-  rc = sanitise_ethtool_flow(&hw_filter);
-  if( rc < 0 )
-    return rc;
+    flags |= EFHW_FILTER_F_USE_HW;
+  }
+  else {
+    /* With non-exclusive queues we can match a superset of the user requested
+     * filter, so for some filter types we use wider HW filters to represent a
+     * more specific SW filter. This function handles any modifications that are
+     * needed to do this. */
+    rc = sanitise_ethtool_flow(&hw_filter);
+    if( rc < 0 )
+      return rc;
+
+    EFCT_PRE(dev, edev, cli, nic, rc);
+    rc = edev->ops->is_filter_supported(cli, &hw_filter);
+    EFCT_POST(dev, edev, cli, nic, rc);
+
+    /* Some filter types are only supported on certain HW, so querying here lets
+     * us tell the common filter management code what we expect. */
+    if( rc )
+      flags |= EFHW_FILTER_F_USE_HW;
+
+    /* We're not using an exclusive queue, so can allow fallback to SW. */
+    flags |= EFHW_FILTER_F_USE_SW;
+  }
 
   return efct_filter_insert(&efct->filter_state, spec, &hw_filter, rxq,
                             pd_excl_token, flags, filter_insert_op, &params);

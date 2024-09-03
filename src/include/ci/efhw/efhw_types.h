@@ -219,6 +219,14 @@ struct efx_filter_spec;
 #define EFHW_FILTER_F_PREF_RXQ 0x0002
 #define EFHW_FILTER_F_ANY_RXQ  0x0004
 #define EFHW_FILTER_F_EXCL_RXQ 0x0008
+/* The below flags indicate acceptable filter types.
+ *
+ * If _USE_HW is set then use of a HW filter will be attempted.
+ * If _USE_HW is not set or HW filter installation fails then
+ * fallback to SW filtering will be attempted if _USE_SW is set.
+ */
+#define EFHW_FILTER_F_USE_HW   0x0010
+#define EFHW_FILTER_F_USE_SW   0x0020
 
 #define EFHW_PD_NON_EXC_TOKEN 0xFFFFFFFF
 

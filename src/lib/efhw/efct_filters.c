@@ -475,9 +475,7 @@ efct_filter_insert(struct efct_filter_state *state, struct efx_filter_spec *spec
     }
   }
 
-  if( (spec->match_flags & EFX_FILTER_MATCH_LOC_HOST &&
-      node.ethertype == htons(ETH_P_IP)) ||
-      (spec->match_flags & EFX_FILTER_MATCH_LOC_MAC) ) {
+  if( flags & EFHW_FILTER_F_USE_HW ) {
     int i;
     int avail = -1;
     for( i = 0; i < state->hw_filters_n; ++i ) {
@@ -518,6 +516,13 @@ efct_filter_insert(struct efct_filter_state *state, struct efx_filter_spec *spec
         insert_hw_filter = true;
       }
     }
+  }
+
+  /* If we aren't going to have a hw filter and we're not allowed to fall back
+   * to SW filtering, then bail out now. */
+  if( node.hw_filter < 0 && !(flags & EFHW_FILTER_F_USE_SW) ) {
+    mutex_unlock(&state->driver_filters_mtx);
+    return -ENOSPC;
   }
 
   /* If we aren't going to have a hw filter, then we definitely don't have an
