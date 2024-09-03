@@ -3098,9 +3098,23 @@ ci_inline int ci_netif_pkt_release_check_keep(ci_netif* ni, ci_ip_pkt_fmt* pkt)
   }
 }
 
-ci_inline ci_uint32 ci_netif_pkt_sets_max_size(ci_netif* ni)
+/* Functions below are used to compute maximum socket buffer size limit when
+ * setting it via RCVBUFFORCE/SNDBUFFORCE socket options. The aim is to not
+ * allow user to set a buffer big enough to let a single socket grab all the
+ * packets available for the stack.
+ * Additionally, the returned value must be halved before comparing with user's
+ * request to behave as Linux. See usage in ci_set_sol_socket() and
+ * ci_udp_setsockopt_lk(). */
+ci_inline ci_uint32 ci_netif_max_rx_packets_size_per_socket(const ci_netif* ni)
 {
-  return pkt_sets_max(ni) * PKTS_PER_SET * CI_CFG_PKT_BUF_SIZE;
+  /* Allow only 1/5 of all packets for rx socket buffer. Keep the rest for other
+   * sockets and rx ring. */
+  return NI_OPTS(ni).max_rx_packets * CI_CFG_PKT_BUF_SIZE / 5;
+}
+ci_inline ci_uint32 ci_netif_max_tx_packets_size_per_socket(const ci_netif* ni)
+{
+  /* Use '/4' for tx socket buffer as we don't have such strict constraints. */
+  return NI_OPTS(ni).max_tx_packets * CI_CFG_PKT_BUF_SIZE / 4;
 }
 
 /*********************************************************************

@@ -1595,7 +1595,7 @@ int ci_set_sol_socket(ci_netif* netif, ci_sock_cmn* s,
     }
     else {
       int lim = CI_MAX((int)NI_OPTS(netif).tcp_sndbuf_max,
-                       ci_netif_pkt_sets_max_size(netif) / 2);
+                       ci_netif_max_tx_packets_size_per_socket(netif) / 2);
       if( v > lim ) {
         NI_LOG_ONCE(netif, RESOURCE_WARNINGS,
                     "SO_SNDBUFFORCE: limiting user-provided value %d to %d.  "
@@ -1631,7 +1631,7 @@ int ci_set_sol_socket(ci_netif* netif, ci_sock_cmn* s,
     }
     else {
       int lim = CI_MAX((int)NI_OPTS(netif).tcp_rcvbuf_max,
-                       ci_netif_pkt_sets_max_size(netif) / 2);
+                       ci_netif_max_rx_packets_size_per_socket(netif) / 2);
       if( v > lim ) {
         NI_LOG_ONCE(netif, RESOURCE_WARNINGS,
                     "SO_RCVBUFFORCE: limiting user-provided value %d to %d.  "
