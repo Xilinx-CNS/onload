@@ -171,6 +171,12 @@ oo_p_dllink_assert_empty(ci_netif* ni, struct oo_p_dllink_state l,
        link.l != list.l;                            \
        link = oo_p_dllink_statep(ni, link.l->next) )
 
+/* Iterate through the list backwards */
+#define oo_p_dllink_for_each_rev(ni, link, list) \
+  for( link = oo_p_dllink_statep(ni, list.l->prev);  \
+       link.l != list.l;                            \
+       link = oo_p_dllink_statep(ni, link.l->prev) )
+
 /* Iterate through the list, protecting against removal */
 #define oo_p_dllink_for_each_safe(ni, link, n, list) \
   for( link = oo_p_dllink_statep(ni, list.l->next),  \
