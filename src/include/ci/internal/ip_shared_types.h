@@ -1200,6 +1200,27 @@ struct ci_netif_state_s {
   CI_ULCONST ci_uint32  buf_ofs;         /**< offset of packet metadata */
   CI_ULCONST ci_uint32  dma_ofs;         /**< offset of dma_addrs */
 
+#define CI_TCP_RST_COOLDOWN_DEFAULT     (3000) /* 3ms */
+#define CI_TCP_RST_COOLDOWN_MAP_SIZE    (4)
+#define CI_TCP_RST_COOLDOWN_BUFFER_SIZE (CI_TCP_RST_COOLDOWN_MAP_SIZE)
+  struct {
+    /* This array is a hash map containing the heads of linked lists. Any real
+     * data in the linked list is stored inside the below `buffer`.
+     * All linked lists in this map are monotonic. */
+    struct oo_p_dllink map[CI_TCP_RST_COOLDOWN_MAP_SIZE];
+    /* This is a ring buffer of TCP RST cooldowns, it behaves as an allocator
+     * for the above hash map. If we run out of space to allocate a new item,
+     * we evict the oldest item. */
+    struct tcp_rst_time {
+      struct oo_p_dllink link;
+      ci_uint64          time;
+      ci_addr_t          ip;
+      ci_uint16          port;
+    } buffer[CI_TCP_RST_COOLDOWN_BUFFER_SIZE];
+    ci_uint64            cooldown_cycles;
+    ci_uint16            added;
+  } tcp_rst_cooldowns;
+
   ci_ip_timer_state     iptimer_state CI_ALIGN(8);
 
   ci_ip_timer           timeout_tid CI_ALIGN(8); /**< time-out timer */

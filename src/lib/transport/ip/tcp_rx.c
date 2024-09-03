@@ -87,6 +87,166 @@ ci_ip_pkt_fmt* __ci_netif_pkt_rx_to_tx(ci_netif* ni, ci_ip_pkt_fmt* pkt,
 }
 
 
+ci_inline ci_uint16 ci_tcp_rst_cooldown_hash_key(ci_addr_t ip, ci_uint16 port)
+{
+  return (
+#if CI_CFG_IPV6
+      ip.u16[0] ^ ip.u16[1] ^ ip.u16[2] ^ ip.u16[3] ^
+      ip.u16[4] ^ ip.u16[5] ^ ip.u16[6] ^ ip.u16[7] ^ port
+#else /* if CI_CFG_IPV6 */
+      (ip.ip4 & 0xffff) ^ (ip.ip4 >> 16) ^ port
+#endif /* if CI_CFG_IPV6 */
+    ) % CI_TCP_RST_COOLDOWN_MAP_SIZE;
+}
+
+
+static void
+ci_tcp_rst_cooldown_map_insert(ci_netif *ni, struct tcp_rst_time *element)
+{
+  ci_uint16 hash;
+  struct oo_p_dllink_state list_state, link_state;
+
+  hash = ci_tcp_rst_cooldown_hash_key(element->ip, element->port);
+  list_state = oo_p_dllink_ptr(ni, &ni->state->tcp_rst_cooldowns.map[hash]);
+  link_state = oo_p_dllink_ptr(ni, &element->link);
+
+  /* By adding to the tail, we ensure each linked-list is monotonically
+   * increasing to satisfy the assumptions when removing/retrieving data. */
+  oo_p_dllink_add_tail(ni, list_state, link_state);
+}
+
+
+static void
+ci_tcp_rst_cooldown_map_remove(ci_netif *ni, ci_addr_t ip, ci_uint16 port)
+{
+  ci_uint16 hash;
+  struct oo_p_dllink_state list, link;
+  struct tcp_rst_time *rst_time;
+
+  hash = ci_tcp_rst_cooldown_hash_key(ip, port);
+  list = oo_p_dllink_ptr(ni, &ni->state->tcp_rst_cooldowns.map[hash]);
+
+  /* Iterate forward to remove the oldest entries first. We may have newer
+   * entries for the same (ip, port) pair in a given list, so must avoid
+   * deleting a potentially valid (still active) cooldown. */
+  /* OPTIMISATION NOTE: because we always delete the oldest entry, and the
+   * lists are monotonically increasing, this is just tantamount to dropping
+   * the first entry in the list. */
+  oo_p_dllink_for_each(ni, link, list)
+  {
+    rst_time = CI_CONTAINER(struct tcp_rst_time, link, link.l);
+    if( CI_IPX_ADDR_EQ(rst_time->ip, ip) && rst_time->port == port )
+    {
+      oo_p_dllink_del_init(ni, link);
+      break;
+    }
+  }
+}
+
+
+void ci_tcp_rst_cooldown_init(ci_netif* ni)
+{
+  int i;
+
+  /* The code is written such that these assertions aren't required, but for
+   * the sake of avoiding modulo division, these should be powers of two. */
+  CI_BUILD_ASSERT(CI_IS_POW2(CI_TCP_RST_COOLDOWN_MAP_SIZE));
+  CI_BUILD_ASSERT(CI_IS_POW2(CI_TCP_RST_COOLDOWN_BUFFER_SIZE));
+
+  ni->state->tcp_rst_cooldowns.cooldown_cycles =
+    oo_usec_to_cycles64(ni, CI_TCP_RST_COOLDOWN_DEFAULT);
+
+  for( i = 0; i < CI_TCP_RST_COOLDOWN_MAP_SIZE; i++ )
+  {
+    struct oo_p_dllink_state dllink_state =
+      oo_p_dllink_ptr(ni, &ni->state->tcp_rst_cooldowns.map[i]);
+    oo_p_dllink_init(ni, dllink_state);
+  }
+
+  for( i = 0; i < CI_TCP_RST_COOLDOWN_BUFFER_SIZE; i++ )
+  {
+    struct tcp_rst_time *rst_time = &ni->state->tcp_rst_cooldowns.buffer[i];
+    oo_p_dllink_init(ni, oo_p_dllink_ptr(ni, &rst_time->link));
+    rst_time->ip = (ci_addr_t) { 0 };
+    rst_time->port = i;
+    rst_time->time = 0;
+    /* We add an invalid entry, with IP 0 and port i, to the map such that in
+     * normal operation we can always assume evicting the last item means also
+     * removing something from the map. */
+    ci_tcp_rst_cooldown_map_insert(ni, rst_time);
+  }
+  ni->state->tcp_rst_cooldowns.added = 0;
+}
+
+
+static bool ci_tcp_rst_cooldown_expired(ci_netif* ni, ci_addr_t ip, ci_uint16 port)
+{
+  struct oo_p_dllink_state list, link;
+  struct tcp_rst_time *rst_time;
+  ci_uint16 hash;
+  ci_uint64 now;
+
+  ci_frc64(&now);
+
+  hash = ci_tcp_rst_cooldown_hash_key(ip, port);
+  list = oo_p_dllink_ptr(ni, &ni->state->tcp_rst_cooldowns.map[hash]);
+
+  /* Iterate backwards such that we see the latest entries first. This should
+   * help in finding the desired entry faster; it is also required as we don't
+   * garden the map so there may be duplicate entries for a given (ip, port)
+   * pair (although only one has not expired). */
+  oo_p_dllink_for_each_rev(ni, link, list)
+  {
+    rst_time = CI_CONTAINER(struct tcp_rst_time, link, link.l);
+
+    /* If we find any rst_time that has an expired cooldown, we can exit early
+     * as any future cooldowns will have also expired. */
+    if( rst_time->time <= now )
+      return true;
+    /* If we find a matching rst_time entry for this (ip, port), and the above
+     * condition isn't hit then we can't reset. */
+    else if( CI_IPX_ADDR_EQ(rst_time->ip, ip) && rst_time->port == port )
+      return false;
+  }
+
+  return true;
+}
+
+
+static void ci_tcp_rst_cooldown_set(ci_netif *ni, ci_addr_t ip, ci_uint16 port)
+{
+  struct tcp_rst_time *rst_time;
+
+  /* Take the next slot in the ring buffer, evicting the last entry */
+  rst_time =
+    &ni->state->tcp_rst_cooldowns.buffer[ni->state->tcp_rst_cooldowns.added];
+
+  ci_tcp_rst_cooldown_map_remove(ni, rst_time->ip, rst_time->port);
+
+  rst_time->ip = ip;
+  rst_time->port = port;
+  ci_frc64(&rst_time->time);
+  rst_time->time += ni->state->tcp_rst_cooldowns.cooldown_cycles;
+
+  ni->state->tcp_rst_cooldowns.added =
+    (ni->state->tcp_rst_cooldowns.added + 1) % CI_TCP_RST_COOLDOWN_BUFFER_SIZE;
+
+  ci_tcp_rst_cooldown_map_insert(ni, rst_time);
+}
+
+
+static bool ci_tcp_can_rst(ci_netif* ni, ci_addr_t ip, ci_uint16 port)
+{
+  if( ci_tcp_rst_cooldown_expired(ni, ip, port) )
+  {
+    ci_tcp_rst_cooldown_set(ni, ip, port);
+    return true;
+  }
+
+  return false;
+}
+
+
 ci_inline void ci_tcp_rx_update_state_on_add(ci_tcp_state* ts, int recvd)
 {
   /* Ensure packet has been enqueued onto async receive queue. */

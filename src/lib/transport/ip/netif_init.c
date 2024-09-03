@@ -13,6 +13,7 @@
 
 #include "ip_internal.h"
 #include "uk_intf_ver.h"
+#include "tcp_rx.h"
 #include <ci/internal/efabcfg.h>
 #include <ci/internal/banner.h>
 #include <onload/version.h>
@@ -242,6 +243,8 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
   assert_zero(nis->kernel_packets_last_forwarded);
   assert_zero(nis->kernel_packets_pending);
 #endif
+
+  ci_tcp_rst_cooldown_init(ni);
 }
 
 #endif
