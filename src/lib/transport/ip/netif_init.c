@@ -1127,6 +1127,9 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
   if ( (s = getenv("EF_KEEPALIVE_PROBES")))
     opts->keepalive_probes = atoi(s);
 
+  if ( (s = getenv("EF_TCP_RST_COOLDOWN")))
+    opts->tcp_rst_cooldown = atoi(s);
+
 #ifndef NDEBUG
   if( (s = getenv("EF_TCP_MAX_SEQERR_MSGS")))
     opts->tcp_max_seqerr_msg = atoi(s);

@@ -1313,6 +1313,11 @@ CI_CFG_OPT("EF_KEEPALIVE_PROBES", keepalive_probes, ci_uint32,
 "The value from /proc/sys/net/ipv4/tcp_keepalive_probes is used by default.",
            , , CI_TCP_KEEPALIVE_PROBES, MIN, MAX, count)
 
+CI_CFG_OPT("EF_TCP_RST_COOLDOWN", tcp_rst_cooldown, ci_uint32,
+"Minimum time, in us, between consecutive sends of TCP RSTs to the same "
+"destination (ip, port) pair.",
+           , , CI_TCP_RST_COOLDOWN_DEFAULT, MIN, MAX, time:usec)
+
 #ifndef NDEBUG
 CI_CFG_OPT("EF_TCP_MAX_SEQERR_MSGS", tcp_max_seqerr_msg, ci_uint32,
 "Maximum number of unacceptable sequence error messages to emit, per socket.",

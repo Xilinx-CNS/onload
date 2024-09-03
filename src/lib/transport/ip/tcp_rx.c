@@ -154,7 +154,7 @@ void ci_tcp_rst_cooldown_init(ci_netif* ni)
   CI_BUILD_ASSERT(CI_IS_POW2(CI_TCP_RST_COOLDOWN_BUFFER_SIZE));
 
   ni->state->tcp_rst_cooldowns.cooldown_cycles =
-    oo_usec_to_cycles64(ni, CI_TCP_RST_COOLDOWN_DEFAULT);
+    oo_usec_to_cycles64(ni, NI_OPTS(ni).tcp_rst_cooldown);
 
   for( i = 0; i < CI_TCP_RST_COOLDOWN_MAP_SIZE; i++ )
   {
