@@ -167,6 +167,11 @@ hw_filters_are_equal(const struct efct_filter_node *node,
         hw_filter->port == node->lport)
       return true;
     break;
+  case FILTER_CLASS_ipproto:
+    if (hw_filter->ethertype == node->ethertype &&
+        hw_filter->proto == node->proto)
+      return true;
+    break;
   case FILTER_CLASS_mac:
   case FILTER_CLASS_mac_vlan:
   /* The vlan id is checked for every filter, including MAC filters without a
@@ -389,6 +394,20 @@ efct_filter_insert(struct efct_filter_state *state, struct efx_filter_spec *spec
     clas = FILTER_CLASS_ethertype;
     node_len = offsetof(struct efct_filter_node, proto);
     node.ethertype = spec->ether_type;
+  }
+  else if( no_vlan_flags == (EFX_FILTER_MATCH_ETHER_TYPE |
+                             EFX_FILTER_MATCH_IP_PROTO) ) {
+    if (spec->match_flags & EFX_FILTER_MATCH_OUTER_VID) {
+      clas = FILTER_CLASS_ipproto_vlan;
+      node.vlan = spec->outer_vid;
+    }
+    else {
+      clas = FILTER_CLASS_ipproto;
+      node.vlan = -1;
+    }
+    node_len = offsetof(struct efct_filter_node, rport);
+    node.ethertype = spec->ether_type;
+    node.proto = spec->ip_proto;
   }
   else if( no_vlan_flags == (EFX_FILTER_MATCH_ETHER_TYPE |
                              EFX_FILTER_MATCH_IP_PROTO |
@@ -786,6 +805,21 @@ bool efct_packet_matches_filter(struct efct_filter_state *state,
                           &node, semi_wild_node_len, false) )
       return true;
   }
+
+  /* First check with the vlan included in the vlan filters */
+  if( is_outer_vlan &&
+      filter_matches(state->filters.ipproto_vlan,
+                     HASH_BITS(state->filters.ipproto_vlan), &node,
+                     offsetof(struct efct_filter_node, rport), true) )
+    return true;
+  vlan = node.vlan;
+  node.vlan = -1;
+  /* Then check ignoring the vlan in the non-vlan filters */
+  if( filter_matches(state->filters.ipproto,
+                     HASH_BITS(state->filters.ipproto),
+                     &node, offsetof(struct efct_filter_node, rport), false) )
+    return true;
+  node.vlan = vlan;
 
   if( filter_matches(state->filters.ethertype,
                         HASH_BITS(state->filters.ethertype),

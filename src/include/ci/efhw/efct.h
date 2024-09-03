@@ -144,6 +144,10 @@ struct efct_filter_set {
   size_t full_match_n;
   struct hlist_head semi_wild[16384];
   size_t semi_wild_n;
+  struct hlist_head ipproto[64];
+  size_t ipproto_n;
+  struct hlist_head ipproto_vlan[64];
+  size_t ipproto_vlan_n;
   struct hlist_head ethertype[64];
   size_t ethertype_n;
   struct hlist_head mac[64];
@@ -155,6 +159,8 @@ struct efct_filter_set {
 /* Totally arbitrary numbers: */
 static const size_t MAX_ALLOWED_full_match = 32768;
 static const size_t MAX_ALLOWED_semi_wild = 32768;
+static const size_t MAX_ALLOWED_ipproto = 128;
+static const size_t MAX_ALLOWED_ipproto_vlan = 128;
 static const size_t MAX_ALLOWED_ethertype = 128;
 static const size_t MAX_ALLOWED_mac = 128;
 static const size_t MAX_ALLOWED_mac_vlan = 128;
@@ -162,6 +168,8 @@ static const size_t MAX_ALLOWED_mac_vlan = 128;
 #define FOR_EACH_FILTER_CLASS(action) \
   action(full_match) \
   action(semi_wild) \
+  action(ipproto) \
+  action(ipproto_vlan) \
   action(ethertype) \
   action(mac) \
   action(mac_vlan)
@@ -171,6 +179,7 @@ struct efct_hw_filter {
   unsigned refcount;
   uint32_t hw_id;
   uint8_t rxq;
+  uint16_t ethertype;
   uint8_t proto;
   uint16_t port;
   uint32_t ip;

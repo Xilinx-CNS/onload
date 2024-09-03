@@ -106,4 +106,19 @@ experimental onload extensions hlrx API defined in extensions_zc_hlrx.h have
 been removed.
 
 
+Filter feature reporting for X3522 through ef_vi capabilities API
+-----------------------------------------------------------------
+
+Previous versions of onload were inconsistent in how filter support was
+reported in the case of X3522 where some filters are provided through hardware
+support and some are emulated in software. The behaviour has now changed such
+that a filter is only reported as supported if it can be provided in hardware.
+
+
+Additional hardware filter support on X3522
+-------------------------------------------
+
+Support has been added for ef_vi to use the hardware support for IP Proto and
+multicast-mismatch filters where supported by the NIC.
+
 (c) Copyright 2024 Advanced Micro Devices, Inc.
