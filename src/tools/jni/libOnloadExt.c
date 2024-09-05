@@ -1217,3 +1217,9 @@ Java_OnloadWireOrderDelivery_GetFd__Ljava_nio_channels_spi_AbstractSelectableCha
 {
   return GetFdFromUnknown(env, obj);
 }
+JNIEXPORT jint JNICALL
+Java_OnloadWireOrderDelivery_GetFd__Ljava_io_FileDescriptor_2
+  (JNIEnv* env, jclass cls, jobject obj)
+{
+  return GetFdFromUnknown(env, obj);
+}
