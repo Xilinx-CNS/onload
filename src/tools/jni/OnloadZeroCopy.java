@@ -63,7 +63,7 @@ public class OnloadZeroCopy {
   /** Flag that can be set when calling into Recv()
    * Requests that kernel packets may also be received this way.
    * @see Recv() */
-  public static final int ONLOAD_MSG_RECV_OS_INLINE  = 0x1;
+  public static final int ONLOAD_MSG_RECV_OS_INLINE  = 0x40000000;
   /** Flag that can be set when calling into Recv()
    * Requests that the Recv() call not block if no data available. 
    * @see Recv() */
