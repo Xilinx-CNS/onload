@@ -968,15 +968,11 @@ static int efx_init_rx_buffers_nzc(struct efx_rx_queue *rx_queue, bool atomic)
 			 * context in such a case.  So, use __GFP_NO_WARN
 			 * in case of atomic.
 			 */
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ALLOC_PAGES_NODE)
 			struct efx_channel *channel;
 
 			channel = efx_rx_queue_channel(rx_queue);
 			page = alloc_pages_node(channel->irq_mem_node,
 						__GFP_COMP |
-#else
-			page = alloc_pages(__GFP_COMP |
-#endif
 						(atomic ?
 						 (GFP_ATOMIC | __GFP_NOWARN)
 						 : GFP_KERNEL),
@@ -1132,11 +1128,10 @@ efx_rx_packet_gro(struct efx_rx_queue *rx_queue, struct efx_rx_buffer *rx_buf,
 		return;
 	}
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RXHASH_SUPPORT)
 	if (efx->net_dev->features & NETIF_F_RXHASH &&
 	    efx_rx_buf_hash_valid(efx, eh))
 		skb_set_hash(skb, efx_rx_buf_hash(efx, eh), PKT_HASH_TYPE_L4);
-#endif
+
 	if (csum) {
 		skb->csum = csum;
 		skb->ip_summed = CHECKSUM_COMPLETE;

@@ -439,9 +439,7 @@ static int efx_start_datapath(struct efx_nic *efx)
 	bool old_rx_scatter = efx->rx_scatter;
 	size_t rx_page_buf_step;
 	int rc = 0;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NETDEV_FEATURES_CHANGE)
 	netdev_features_t old_features = efx->net_dev->features;
-#endif
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
 	bool old_lro_available = efx->lro_available;
 
@@ -499,19 +497,11 @@ static int efx_start_datapath(struct efx_nic *efx)
 	/* Restore previously fixed features in hw_features and remove
 	 * features which are fixed now.
 	 */
-	efx_add_hw_features(efx, efx->net_dev->features);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NETDEV_HW_FEATURES)
+	efx->net_dev->hw_features |= efx->net_dev->features;
 	efx->net_dev->hw_features &= ~efx->fixed_features;
-#elif defined(EFX_HAVE_NETDEV_EXTENDED_HW_FEATURES)
-	netdev_extended(efx->net_dev)->hw_features &= ~efx->fixed_features;
-#else
-	efx->hw_features &= ~efx->fixed_features;
-#endif
 	efx->net_dev->features |= efx->fixed_features;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NETDEV_FEATURES_CHANGE)
 	if (efx->net_dev->features != old_features)
 		netdev_features_change(efx->net_dev);
-#endif
 
 	/* RX filters may also have scatter-enabled flags */
 	if ((efx->rx_scatter != old_rx_scatter) &&
@@ -768,7 +758,7 @@ void efx_print_stopped_queues(struct efx_nic *efx)
 		if (!netif_xmit_stopped(core_txq))
 			continue;
 
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
 #ifdef CONFIG_NET_RX_BUSY_POLL
 		busy_poll_state = channel->busy_poll_state;
 #endif
@@ -1595,10 +1585,8 @@ void efx_fini_io(struct efx_nic *efx)
 		efx->membase_phys = 0;
 		efx->mem_bar = UINT_MAX;
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_DEV_FLAGS_ASSIGNED)
 		/* Don't disable bus-mastering if VFs are assigned */
 		if (!pci_vfs_assigned(efx->pci_dev))
-#endif
 			pci_disable_device(efx->pci_dev);
 	}
 }
@@ -2022,18 +2010,13 @@ int efx_rx_queue_id_internal(struct efx_nic *efx, int rxq_id)
  * with our request for slot reset the mmio_enabled callback will never be
  * called, and the link_reset callback is not used by AER or EEH mechanisms.
  */
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_CONST_PCI_ERR_HANDLER)
 const struct pci_error_handlers efx_err_handlers = {
-#else
-struct pci_error_handlers efx_err_handlers = {
-#endif
 	.error_detected = efx_io_error_detected,
 	.slot_reset	= efx_io_slot_reset,
 	.resume		= efx_io_resume,
 };
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_FEATURES_CHECK)
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB_ENCAPSULATION)
 /* Determine whether the NIC will be able to handle TX offloads for a given
  * encapsulated packet.
  */
@@ -2099,13 +2082,11 @@ static bool efx_can_encap_offloads(struct efx_nic *efx, struct sk_buff *skb)
 	}
 #endif
 }
-#endif
 
 netdev_features_t efx_features_check(struct sk_buff *skb,
 					    struct net_device *dev,
 					    netdev_features_t features)
 {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB_ENCAPSULATION)
 	struct efx_nic *efx = efx_netdev_priv(dev);
 
 	if (skb->encapsulation) {
@@ -2121,12 +2102,11 @@ netdev_features_t efx_features_check(struct sk_buff *skb,
 				features &= ~(NETIF_F_GSO_MASK |
 					      NETIF_F_CSUM_MASK);
 	}
-#endif
 	return features;
 }
 #endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_NEED_GET_PHYS_PORT_ID)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_ID)
 int efx_get_phys_port_id(struct net_device *net_dev,
 			 struct netdev_phys_item_id *ppid)
 {

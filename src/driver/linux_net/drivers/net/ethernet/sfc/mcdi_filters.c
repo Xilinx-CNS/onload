@@ -2254,14 +2254,7 @@ int efx_mcdi_filter_table_init(struct efx_nic *efx, bool mc_chaining,
 			   "VLAN filters are not supported in this firmware variant\n");
 		net_dev->features &= ~NETIF_F_HW_VLAN_CTAG_FILTER;
 		efx->fixed_features &= ~NETIF_F_HW_VLAN_CTAG_FILTER;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NETDEV_HW_FEATURES)
 		net_dev->hw_features &= ~NETIF_F_HW_VLAN_CTAG_FILTER;
-#elif defined(EFX_HAVE_NETDEV_EXTENDED_HW_FEATURES)
-		netdev_extended(net_dev)->hw_features &=
-			~NETIF_F_HW_VLAN_CTAG_FILTER;
-#else
-		efx->hw_features &= ~NETIF_F_HW_VLAN_CTAG_FILTER;
-#endif
 	}
 	table->vlan_filter = efx_mcdi_filter_vlan_filter(efx);
 

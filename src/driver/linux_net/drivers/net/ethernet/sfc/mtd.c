@@ -9,11 +9,7 @@
  */
 
 #include <linux/module.h>
-#ifndef EFX_USE_KCOMPAT
 #include <linux/mtd/mtd.h>
-#else
-#include "linux_mtd_mtd.h"
-#endif
 #include <linux/slab.h>
 #ifndef EFX_USE_KCOMPAT
 #include <linux/rtnetlink.h>

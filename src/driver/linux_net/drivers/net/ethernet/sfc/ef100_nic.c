@@ -241,14 +241,13 @@ int efx_ef100_init_datapath_caps(struct efx_nic *efx)
 
 	if (efx_ef100_has_cap(nic_data->datapath_caps2, TX_TSO_V3)) {
 		struct net_device *net_dev = efx->net_dev;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_HW_ENC_FEATURES)
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_GSO_PARTIAL)
 		netdev_features_t tso = NETIF_F_TSO | NETIF_F_TSO6 | NETIF_F_GSO_PARTIAL |
 					NETIF_F_GSO_UDP_TUNNEL | NETIF_F_GSO_UDP_TUNNEL_CSUM |
 					NETIF_F_GSO_GRE | NETIF_F_GSO_GRE_CSUM;
 
 		net_dev->features |= tso;
-		efx_add_hw_features(efx, tso);
+		net_dev->hw_features |= tso;
 		net_dev->hw_enc_features |= tso;
 		/* EF100 HW can only offload outer checksums if they are UDP,
 		 * so for GRE_CSUM we have to use GSO_PARTIAL.
@@ -260,14 +259,8 @@ int efx_ef100_init_datapath_caps(struct efx_nic *efx)
 					NETIF_F_GSO_GRE;
 
 		net_dev->features |= tso;
-		efx_add_hw_features(efx, tso);
+		net_dev->hw_features |= tso;
 		net_dev->hw_enc_features |= tso;
-#endif
-#else
-		netdev_features_t tso = NETIF_F_TSO | NETIF_F_TSO6;
-
-		net_dev->features |= tso;
-		efx_add_hw_features(efx, tso);
 #endif
 	}
 	efx->num_mac_stats = MCDI_WORD(outbuf,
@@ -942,7 +935,7 @@ static void ef100_pull_stats(struct efx_nic *efx)
 	}
 }
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_NEED_GET_PHYS_PORT_ID)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_ID)
 static int efx_ef100_get_phys_port_id(struct efx_nic *efx,
 				      struct netdev_phys_item_id *ppid)
 {
@@ -1940,7 +1933,7 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.vlan_rx_add_vid = efx_mcdi_filter_add_vid,
 	.vlan_rx_kill_vid = efx_mcdi_filter_del_vid,
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_NEED_GET_PHYS_PORT_ID)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_ID)
 	.get_phys_port_id = efx_ef100_get_phys_port_id,
 #endif
 

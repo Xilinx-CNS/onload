@@ -62,11 +62,6 @@ static bool ef100_tx_can_tso(struct efx_tx_queue *tx_queue, struct sk_buff *skb)
 	if (!(efx->net_dev->features & NETIF_F_TSO))
 		return false;
 
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_HW_ENC_FEATURES) && defined(EFX_HAVE_SKB_ENCAPSULATION)
-	if (skb->encapsulation)
-		return false;
-#endif
-
 	mss = skb_shinfo(skb)->gso_size;
 	if (unlikely(mss < 4)) {
 		WARN_ONCE(1, "MSS of %u is too small for TSO\n", mss);
@@ -225,11 +220,7 @@ static void ef100_make_tso_desc(struct efx_nic *efx,
 	unsigned int outer_ip_offset, outer_l4_offset;
 	u16 vlan_tci = skb_vlan_tag_get(skb);
 	u32 mss = skb_shinfo(skb)->gso_size;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB_ENCAPSULATION)
 	bool encap = skb->encapsulation;
-#else
-	bool encap = false;
-#endif
 	bool vlan_enable = false;
 	bool udp_encap = false;
 	struct tcphdr *tcp;
@@ -245,7 +236,6 @@ static void ef100_make_tso_desc(struct efx_nic *efx,
 	/* We use 1 for the TSO descriptor and 1 for the header */
 	payload_segs = segment_count - 2;
 	if (encap) {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_HW_ENC_FEATURES)
 		outer_ip_offset = skb_network_offset(skb);
 		outer_l4_offset = skb_transport_offset(skb);
 		ip_offset = skb_inner_network_offset(skb);
@@ -253,11 +243,6 @@ static void ef100_make_tso_desc(struct efx_nic *efx,
 		if (skb_shinfo(skb)->gso_type &
 		    (SKB_GSO_UDP_TUNNEL | SKB_GSO_UDP_TUNNEL_CSUM))
 			udp_encap = true;
-#else
-		/* can't happen */
-		WARN_ON_ONCE(1);
-		return;
-#endif
 	} else {
 		ip_offset =  skb_network_offset(skb);
 		tcp_offset = skb_transport_offset(skb);

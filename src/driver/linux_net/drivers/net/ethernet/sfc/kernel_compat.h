@@ -38,10 +38,6 @@
 #include <linux/ctype.h>
 #include <linux/aer.h>
 #include <linux/iommu.h>
-#ifdef CONFIG_SFC_MTD
-/* This is conditional because it's fairly disgusting */
-#include "linux_mtd_mtd.h"
-#endif
 #include <asm/byteorder.h>
 #include <net/ip.h>
 
@@ -118,84 +114,15 @@
 		(NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM | NETIF_F_HW_CSUM)
 #endif
 
-#ifdef NETIF_F_RXHASH
-	#define EFX_HAVE_RXHASH_SUPPORT yes
-#else
-	/* This reduces the need for #ifdefs */
-	#define NETIF_F_RXHASH 0
-	#define ETH_FLAG_RXHASH 0
-#endif
-
-/* Older kernel versions assume that a device with the NETIF_F_NTUPLE
- * feature implements ethtool_ops::set_rx_ntuple, which is not the
- * case in this driver.  If we enable this feature on those kernel
- * versions, 'ethtool -U' will crash.  Therefore we prevent the
- * feature from being set even if it is defined, unless this is a safe
- * version: Linux 3.0+ or RHEL 6 with backported RX NFC and ARFS
- * support.
- */
-#if !defined(NETIF_F_NTUPLE) || (LINUX_VERSION_CODE < KERNEL_VERSION(3,0,0) && !(defined(RHEL_MAJOR) && RHEL_MAJOR == 6))
-	#undef NETIF_F_NTUPLE
-	#define NETIF_F_NTUPLE 0
-	#undef ETH_FLAG_NTUPLE
-	#define ETH_FLAG_NTUPLE 0
-#endif
-
-#ifndef NETIF_F_RXCSUM
-	/* This reduces the need for #ifdefs */
-	#define NETIF_F_RXCSUM 0
-#endif
-
 /* This reduces the need for #ifdefs */
-#ifndef NETIF_F_ALL_TSO
-	#define NETIF_F_ALL_TSO (NETIF_F_TSO | NETIF_F_TSO6 | NETIF_F_TSO_ECN)
-#endif
-
-#ifndef NETIF_F_GSO_GRE
-	#define NETIF_F_GSO_GRE 0
-#endif
 #ifndef NETIF_F_GSO_GRE_CSUM
 	#define NETIF_F_GSO_GRE_CSUM 0
-#endif
-#ifndef NETIF_F_GSO_UDP_TUNNEL
-	#define NETIF_F_GSO_UDP_TUNNEL 0
 #endif
 #ifndef NETIF_F_GSO_UDP_TUNNEL_CSUM
 	#define NETIF_F_GSO_UDP_TUNNEL_CSUM 0
 #endif
-#ifndef EFX_HAVE_GSO_UDP_TUNNEL
-	#define SKB_GSO_UDP_TUNNEL	0
-#endif
 #ifndef EFX_HAVE_GSO_UDP_TUNNEL_CSUM
 	#define SKB_GSO_UDP_TUNNEL_CSUM	0
-#endif
-
-#ifndef NETIF_F_RXFCS
-	#define NETIF_F_RXFCS 0
-#endif
-#ifndef NETIF_F_RXALL
-	#define NETIF_F_RXALL 0
-#endif
-
-#ifndef PCI_EXP_LNKCAP_SLS_5_0GB
-	#define  PCI_EXP_LNKCAP_SLS_5_0GB 0x00000002 /* LNKCAP2 SLS bit 1 */
-#endif
-#ifndef PCI_EXP_LNKCAP2
-	#define PCI_EXP_LNKCAP2         44      /* Link Capabilities 2 */
-#endif
-#ifndef PCI_EXP_LNKCAP2_SLS_8_0GB
-	#define  PCI_EXP_LNKCAP2_SLS_8_0GB  0x00000008 /* Supported 8.0GT/s */
-#endif
-
-#ifndef PCI_VENDOR_ID_SOLARFLARE
-	#define PCI_VENDOR_ID_SOLARFLARE	0x1924
-	#define PCI_DEVICE_ID_SOLARFLARE_SFC4000A_0	0x0703
-	#define PCI_DEVICE_ID_SOLARFLARE_SFC4000A_1	0x6703
-	#define PCI_DEVICE_ID_SOLARFLARE_SFC4000B	0x0710
-#endif
-
-#ifndef PCI_EXT_CAP_ID_VNDR
-	#define PCI_EXT_CAP_ID_VNDR 0x0B
 #endif
 
 #if defined(__GNUC__) && !defined(inline)
@@ -222,19 +149,8 @@
 					   _name##_store)
 #endif
 
-#ifndef sysfs_attr_init
-	#define sysfs_attr_init(attr) do {} while (0)
-#endif
-
 #if defined(CONFIG_X86) && !defined(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS)
 	#define CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS
-#endif
-
-#ifndef VLAN_PRIO_MASK
-	#define VLAN_PRIO_MASK          0xe000
-#endif
-#ifndef VLAN_PRIO_SHIFT
-	#define VLAN_PRIO_SHIFT         13
 #endif
 
 #ifndef SIOCGHWTSTAMP
@@ -299,49 +215,6 @@
 
 /**************************************************************************/
 
-#ifndef ETH_RESET_SHARED_SHIFT
-	enum ethtool_reset_flags {
-		/* These flags represent components dedicated to the interface
-		 * the command is addressed to.  Shift any flag left by
-		 * ETH_RESET_SHARED_SHIFT to reset a shared component of the
-		 * same type.
-		 */
-		ETH_RESET_MGMT		= 1 << 0,	/* Management processor */
-		ETH_RESET_IRQ		= 1 << 1,	/* Interrupt requester */
-		ETH_RESET_DMA		= 1 << 2,	/* DMA engine */
-		ETH_RESET_FILTER	= 1 << 3,	/* Filtering/flow direction */
-		ETH_RESET_OFFLOAD	= 1 << 4,	/* Protocol offload */
-		ETH_RESET_MAC		= 1 << 5,	/* Media access controller */
-		ETH_RESET_PHY		= 1 << 6,	/* Transceiver/PHY */
-		ETH_RESET_RAM		= 1 << 7,	/* RAM shared between
-							 * multiple components */
-
-		ETH_RESET_DEDICATED	= 0x0000ffff,	/* All components dedicated to
-							 * this interface */
-		ETH_RESET_ALL		= 0xffffffff,	/* All components used by this
-							 * interface, even if shared */
-	};
-	#define ETH_RESET_SHARED_SHIFT	16
-	#define ETHTOOL_RESET		0x00000034
-#endif
-
-#ifndef AH_V4_FLOW
-	#define	AH_V4_FLOW	0x09
-	#define	ESP_V4_FLOW	0x0a
-	#define	AH_V6_FLOW	0x0b
-	#define	ESP_V6_FLOW	0x0c
-	#define	IP_USER_FLOW	0x0d
-#endif
-#ifndef IPV4_FLOW
-	#define	IPV4_FLOW	0x10
-	#define	IPV6_FLOW	0x11
-#endif
-#ifndef ETHER_FLOW
-	#define ETHER_FLOW	0x12
-#endif
-#ifndef FLOW_EXT
-	#define	FLOW_EXT	0x80000000
-#endif
 #ifndef FLOW_RSS
 	#define	FLOW_RSS	0x20000000
 #endif
@@ -486,11 +359,6 @@ struct ethtool_rxfh_param {
 
 #ifndef PORT_DA
 	#define PORT_DA			0x05
-#endif
-
-#ifndef SUPPORTED_40000baseKR4_Full
-	#define SUPPORTED_40000baseKR4_Full	(1 << 23)
-	#define SUPPORTED_40000baseCR4_Full	(1 << 24)
 #endif
 
 #ifndef NETIF_F_GSO
@@ -778,7 +646,6 @@ static inline bool __netdev_tx_sent_queue(struct netdev_queue *dev_queue,
 #define NAPI_POLL_WEIGHT	64
 #endif
 
-#ifdef EFX_HAVE_RXHASH_SUPPORT
 #ifdef EFX_NEED_SKB_SET_HASH
 enum pkt_hash_types {
 	PKT_HASH_TYPE_NONE,
@@ -795,7 +662,6 @@ static inline void skb_set_hash(struct sk_buff *skb, __u32 hash,
 #endif
 	skb->rxhash = hash;
 }
-#endif
 #endif
 
 #ifndef EFX_HAVE_BUSY_POLL
@@ -814,27 +680,6 @@ static inline void page_ref_add(struct page *page, int nr)
 	atomic_add(nr, &page->_count);
 }
 #endif
-
-#ifdef EFX_HAVE_SKB_ENCAPSULATION
-#define EFX_CAN_SUPPORT_ENCAP_TSO
-#ifndef EFX_HAVE_INNER_IP_HDR
-static inline struct iphdr *inner_ip_hdr(const struct sk_buff *skb)
-{
-	return (struct iphdr *)skb_inner_network_header(skb);
-}
-#endif
-
-#ifndef EFX_HAVE_INNER_TCP_HDR
-static inline struct tcphdr *inner_tcp_hdr(const struct sk_buff *skb)
-{
-	return (struct tcphdr *)skb_inner_transport_header(skb);
-}
-#endif
-
-#ifndef NETIF_F_GSO_GRE
-#undef EFX_CAN_SUPPORT_ENCAP_TSO
-#endif /* !NETIF_F_GSO_GRE */
-#endif /* EFX_HAVE_SKB_ENCAPSULATION */
 
 #ifndef EFX_HAVE_INDIRECT_CALL_WRAPPERS
 #ifdef CONFIG_RETPOLINE
@@ -1291,14 +1136,6 @@ static inline long scaled_ppm_to_ppb(long ppm)
 }
 #endif
 
-#ifdef EFX_NEED_RCU_ACCESS_POINTER
-#define rcu_access_pointer rcu_dereference
-#endif
-
-#ifndef EFX_HAVE_PCI_VFS_ASSIGNED
-int pci_vfs_assigned(struct pci_dev *dev);
-#endif
-
 #ifdef EFX_NEED_PCI_ENABLE_MSIX_RANGE
 /**
  * pci_enable_msix_range - configure device's MSI-X capability structure
@@ -1345,10 +1182,6 @@ static inline int pci_enable_msix_range(struct pci_dev *dev,
 int pci_msix_vec_count(struct pci_dev *dev);
 #endif
 
-#ifdef EFX_NEED_KMALLOC_ARRAY
-#define kmalloc_array(n,s,f) kcalloc(n,s,f)
-#endif
-
 /* 3.19 renamed netdev_phys_port_id to netdev_phys_item_id */
 #ifndef MAX_PHYS_ITEM_ID_LEN
 #define MAX_PHYS_ITEM_ID_LEN MAX_PHYS_PORT_ID_LEN
@@ -1360,18 +1193,6 @@ int pci_msix_vec_count(struct pci_dev *dev);
 #else
 #define ETH_RSS_HASH_NO_CHANGE 0
 #define ETH_RSS_HASH_TOP       1
-#endif
-
-/* Some functions appear in either net_device_ops or in net_device_ops_ext. The
- * latter is used in RHEL for backported features. To simplify conditionals
- * elsewhere, we merge them here.
- */
-#if defined(EFX_HAVE_NDO_GET_PHYS_PORT_ID) || defined(EFX_HAVE_NET_DEVICE_OPS_EXT_GET_PHYS_PORT_ID)
-#define EFX_NEED_GET_PHYS_PORT_ID
-#endif
-
-#ifdef EFX_NEED_SKB_GSO_TCPV6
-#define SKB_GSO_TCPV6 0
 #endif
 
 #ifdef EFX_NEED_SKB_IS_GSO_TCP
@@ -1400,13 +1221,6 @@ static inline void netif_set_tso_max_segs(struct net_device *dev,
 }
 #endif
 
-#ifdef EFX_NEED_IS_ERR_OR_NULL
-static inline bool __must_check IS_ERR_OR_NULL(__force const void *ptr)
-{
-	return !ptr || IS_ERR_VALUE((unsigned long)ptr);
-}
-#endif
-
 #ifdef EFX_NEED_NETDEV_RSS_KEY_FILL
 #define netdev_rss_key_fill get_random_bytes
 #endif
@@ -1429,17 +1243,11 @@ static inline bool __must_check IS_ERR_OR_NULL(__force const void *ptr)
 #define cpu_to_mem(cpu) cpu_to_node(cpu)
 #endif
 
-#ifndef EFX_HAVE_NETIF_XMIT_STOPPED
-#define netif_xmit_stopped netif_tx_queue_stopped
-#endif
-
-#ifdef EFX_HAVE_HW_ENC_FEATURES
 #ifdef EFX_NEED_SKB_INNER_TRANSPORT_OFFSET
 static inline int skb_inner_transport_offset(const struct sk_buff *skb)
 {
 	return skb_inner_transport_header(skb) - skb->data;
 }
-#endif
 #endif
 
 #ifndef QSTR_INIT
@@ -1531,13 +1339,6 @@ static inline void efx_netif_napi_del(struct napi_struct *napi)
 #define TCPHDR_URG 0x20
 #define TCPHDR_ECE 0x40
 #define TCPHDR_CWR 0x80
-#endif
-
-#if defined(EFX_HAVE_NDO_BUSY_POLL) || defined(EFX_HAVE_NDO_EXT_BUSY_POLL)
-/* Combined define for driver-based busy poll. Later kernels (4.11+) implement
- * busy polling in the core.
- */
-#define EFX_WANT_DRIVER_BUSY_POLL
 #endif
 
 #if defined(EFX_NEED_BOOL_NAPI_COMPLETE_DONE)
@@ -2090,10 +1891,6 @@ static inline void skb_mark_not_on_list(struct sk_buff *skb)
 #define skb_list_walk_safe(first, skb, next_skb)                               \
 	for ((skb) = (first), (next_skb) = (skb) ? (skb)->next : NULL; (skb);  \
 	     (skb) = (next_skb), (next_skb) = (skb) ? (skb)->next : NULL)
-#endif
-
-#if !defined(EFX_HAVE_PCI_FIND_NEXT_EXT_CAPABILITY)
-int pci_find_next_ext_capability(struct pci_dev *dev, int pos, int cap);
 #endif
 
 /* XDP_SOCK check on latest kernels */
