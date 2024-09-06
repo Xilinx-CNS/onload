@@ -93,11 +93,7 @@ TRACE_EVENT(sfc_receive,
 		__entry->rxhash = skb->hash;
 		__entry->l4_rxhash = skb->l4_hash;
 #else
-	#ifdef EFX_HAVE_RXHASH_SUPPORT
 		__entry->rxhash = skb->rxhash;
-	#else
-		__entry->rxhash = 0;
-	#endif
 	#ifdef EFX_HAVE_L4_RXHASH
 		__entry->l4_rxhash = skb->l4_rxhash;
 	#else

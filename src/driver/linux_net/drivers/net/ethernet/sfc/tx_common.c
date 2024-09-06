@@ -495,18 +495,10 @@ int efx_tx_tso_header_length(struct sk_buff *skb)
 {
 	size_t header_len;
 
-#ifdef EFX_NOT_UPSTREAM
-	if (efx_skb_encapsulation(skb))
-#else
 	if (skb->encapsulation)
-#endif
-#ifdef EFX_CAN_SUPPORT_ENCAP_TSO
 		header_len = skb_inner_transport_header(skb) -
 				skb->data +
 				(inner_tcp_hdr(skb)->doff << 2u);
-#else
-		return -EINVAL;
-#endif
 	else
 		header_len = skb_transport_header(skb) - skb->data +
 				(tcp_hdr(skb)->doff << 2u);

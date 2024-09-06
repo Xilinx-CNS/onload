@@ -694,10 +694,6 @@ static void efx_geneve_del_port(struct net_device *dev, sa_family_t sa_family,
 
 extern const struct net_device_ops efx_netdev_ops;
 
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NET_DEVICE_OPS_EXT)
-extern const struct net_device_ops_ext efx_net_device_ops_ext;
-#endif
-
 static void efx_update_name(struct efx_nic *efx)
 {
 	strcpy(efx->name, efx->net_dev->name);
@@ -806,7 +802,7 @@ static void efx_init_features(struct efx_nic *efx)
 				   NETIF_F_HIGHDMA | NETIF_F_ALL_TSO |
 				   NETIF_F_RXCSUM);
 
-	efx_add_hw_features(efx, net_dev->features & ~efx->fixed_features);
+	net_dev->hw_features |= net_dev->features & ~efx->fixed_features;
 
 	/* Disable receiving frames with bad FCS, by default. */
 	net_dev->features &= ~NETIF_F_RXALL;
@@ -843,16 +839,6 @@ static int efx_register_netdev(struct efx_nic *efx)
 	net_dev->extended->max_mtu = EFX_MAX_MTU;
 #endif
 
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_EXT_BUSY_POLL)
-#ifdef CONFIG_NET_RX_BUSY_POLL
-	netdev_extended(net_dev)->ndo_busy_poll = efx_busy_poll;
-#endif
-#endif
-
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NET_DEVICE_OPS_EXT)
-	set_netdev_ops_ext(net_dev, &efx_net_device_ops_ext);
-#endif
-
 	rtnl_lock();
 
 	/* If there was a scheduled reset during probe, the NIC is
@@ -887,7 +873,7 @@ static int efx_register_netdev(struct efx_nic *efx)
 	rtnl_unlock();
 
 	efx_init_mcdi_logging(efx);
-	efx_probe_devlink(efx);
+	efx_probe_devlink_port(efx);
 
 	return 0;
 
@@ -904,7 +890,7 @@ static void efx_unregister_netdev(struct efx_nic *efx)
 
 	if (efx_dev_registered(efx)) {
 		strscpy(efx->name, pci_name(efx->pci_dev), sizeof(efx->name));
-		efx_fini_devlink(efx);
+		efx_fini_devlink_port(efx);
 		efx_fini_mcdi_logging(efx);
 		rtnl_lock();
 		unregister_netdevice(efx->net_dev);
@@ -1077,11 +1063,6 @@ int efx_pci_probe_post_io(struct efx_nic *efx,
 	rc = efx_probe_common(efx);
 	if (rc)
 		return rc;
-#ifdef EFX_NOT_UPSTREAM
-	if (efx->mcdi->fn_flags &
-	    (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_NO_ACTIVE_PORT))
-		return 0;
-#endif
 
 	pci_dbg(efx->pci_dev, "creating NIC\n");
 
@@ -1096,6 +1077,12 @@ int efx_pci_probe_post_io(struct efx_nic *efx,
 	rc = nic_probe(efx);
 	if (rc)
 		return rc;
+
+#ifdef EFX_NOT_UPSTREAM
+	if (efx->mcdi->fn_flags &
+	    (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_NO_ACTIVE_PORT))
+		return 0;
+#endif
 
 	efx->txq_min_entries =
 		roundup_pow_of_two(2 * efx->type->tx_max_skb_descs(efx));
@@ -1700,21 +1687,6 @@ const struct net_device_ops efx_netdev_ops = {
 #endif
 };
 
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NET_DEVICE_OPS_EXT)
-const struct net_device_ops_ext efx_net_device_ops_ext = {
-#ifdef EFX_HAVE_NET_DEVICE_OPS_EXT_GET_PHYS_PORT_ID
-	.ndo_get_phys_port_id	= efx_get_phys_port_id,
-#endif
-#ifdef CONFIG_SFC_SRIOV
-#ifdef EFX_HAVE_NET_DEVICE_OPS_EXT_SET_VF_SPOOFCHK
-	.ndo_set_vf_spoofchk	= efx_sriov_set_vf_spoofchk,
-#endif
-#ifdef EFX_HAVE_NET_DEVICE_OPS_EXT_SET_VF_LINK_STATE
-	.ndo_set_vf_link_state	= efx_sriov_set_vf_link_state,
-#endif
-#endif /* CONFIG_SFC_SRIOV */
-};
-#endif
 /**************************************************************************
  *
  * Kernel module interface

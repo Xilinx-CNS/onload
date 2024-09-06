@@ -17,6 +17,8 @@ int efx_auxbus_send_events(struct efx_probe_data *pd,
 			   struct efx_auxdev_event *event);
 int efx_auxbus_send_poll_event(struct efx_probe_data *pd, int channel,
 			       efx_qword_t *event, int budget);
+void efx_onload_detach(struct efx_client_type_data *client_type);
+void efx_onload_attach(struct efx_client_type_data *client_type);
 #else
 static inline int efx_auxbus_add_dev(struct efx_client_type_data *client_type)
 {
@@ -38,6 +40,14 @@ static inline int efx_auxbus_send_poll_event(struct efx_probe_data *pd,
 					     int budget)
 {
 	return -ENODEV;
+}
+
+static inline void efx_onload_detach(struct efx_client_type_data *client_type)
+{
+}
+
+static inline void efx_onload_attach(struct efx_client_type_data *client_type)
+{
 }
 #endif
 

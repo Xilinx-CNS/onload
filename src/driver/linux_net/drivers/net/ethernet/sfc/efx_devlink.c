@@ -432,9 +432,9 @@ static int efx_devlink_flash_update(struct devlink *devlink,
 
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_DEVLINK_FLASH_UPDATE_PARAMS)
 	if (component) {
-		netif_err(efx, drv, efx->net_dev,
-			  "Updates to NVRAM component %s are not supported\n",
-			  component);
+		pci_err(efx->pci_dev,
+			"Updates to NVRAM component %s are not supported\n",
+			component);
 		return -EINVAL;
 	}
 #endif
@@ -468,25 +468,35 @@ static const struct devlink_ops sfc_devlink_ops = {
 void efx_fini_devlink(struct efx_nic *efx)
 {
 	if (efx->devlink) {
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_SET_NETDEV_DEVLINK_PORT)
-		efx->net_dev->devlink_port->type = DEVLINK_PORT_TYPE_NOTSET;
-#endif
-		devlink_port_unregister(efx->devlink_port);
-		kfree(efx->devlink_port);
-		efx->devlink_port = NULL;
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_SET_NETDEV_DEVLINK_PORT)
-		efx->net_dev->devlink_port = NULL;
-#endif
 		devlink_unregister(efx->devlink);
 		devlink_free(efx->devlink);
 	}
 	efx->devlink = NULL;
 }
 
+void efx_fini_devlink_port(struct efx_nic *efx)
+{
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_SET_NETDEV_DEVLINK_PORT)
+	if (efx->net_dev && efx->net_dev->devlink_port)
+		efx->net_dev->devlink_port->type = DEVLINK_PORT_TYPE_NOTSET;
+#endif
+	if (efx->devlink && efx->devlink_port) {
+		devlink_port_unregister(efx->devlink_port);
+		kfree(efx->devlink_port);
+		efx->devlink_port = NULL;
+	}
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_SET_NETDEV_DEVLINK_PORT)
+	if (efx->net_dev)
+		efx->net_dev->devlink_port = NULL;
+#endif
+}
+
 int efx_probe_devlink(struct efx_nic *efx)
 {
 	struct efx_devlink *devlink_private;
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VOID_DEVLINK_REGISTER)
 	int rc;
+#endif
 
 	efx->devlink = devlink_alloc(&sfc_devlink_ops,
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_ALLOC_DEV)
@@ -511,10 +521,26 @@ int efx_probe_devlink(struct efx_nic *efx)
 	if (rc)
 		goto out_free;
 #endif
+	return 0;
+
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VOID_DEVLINK_REGISTER)
+out_free:
+	devlink_free(efx->devlink);
+	efx->devlink = NULL;
+	return rc;
+#endif
+}
+
+int efx_probe_devlink_port(struct efx_nic *efx)
+{
+	int rc;
+
+	if (!efx->devlink)
+		return -ENODEV;
 
 	efx->devlink_port = kzalloc(sizeof(*efx->devlink_port), GFP_KERNEL);
 	if (!efx->devlink_port)
-		goto out_unreg;
+		return -ENOMEM;
 
 	rc = devlink_port_register(efx->devlink, efx->devlink_port,
 				   efx->port_num);
@@ -535,13 +561,6 @@ out_free_port:
 	kfree(efx->devlink_port);
 	efx->devlink_port = NULL;
 
-out_unreg:
-	devlink_unregister(efx->devlink);
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VOID_DEVLINK_REGISTER)
-out_free:
-#endif
-	devlink_free(efx->devlink);
-	efx->devlink = NULL;
 	return rc;
 }
 #else
@@ -567,9 +586,16 @@ int efx_probe_devlink(struct efx_nic *efx)
 	return device_create_file(&efx->pci_dev->dev, &dev_attr_versions);
 }
 
+int efx_probe_devlink_port(struct efx_nic *efx)
+{
+	return 0;
+}
+
 void efx_fini_devlink(struct efx_nic *efx)
 {
 	device_remove_file(&efx->pci_dev->dev, &dev_attr_versions);
 }
+
+void efx_fini_devlink_port(struct efx_nic *efx) {}
 
 #endif	/* EFX_USE_DEVLINK */

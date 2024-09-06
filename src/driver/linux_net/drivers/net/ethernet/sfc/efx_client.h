@@ -71,6 +71,15 @@ struct efx_client {
 	struct efx_client_type_data *client_type;
 #ifdef CONFIG_AUXILIARY_BUS
 	struct efx_auxdev_client auxiliary_info;
+#ifdef EFX_NOT_UPSTREAM
+	/** @published: Tracks if this client called dl_publish. */
+	bool published;
+	/**
+	 * @publish_over_reset: Temporary storage of @published when a reset
+	 * is in progress.
+	 */
+	bool publish_over_reset;
+#endif
 #endif
 };
 

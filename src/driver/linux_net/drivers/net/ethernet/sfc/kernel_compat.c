@@ -25,9 +25,7 @@
 #endif
 #include <linux/cpumask.h>
 #include <asm/uaccess.h>
-#ifdef EFX_HAVE_LINUX_EXPORT_H
 #include <linux/export.h>
-#endif
 #if defined(EFX_NEED_HWMON_DEVICE_REGISTER_WITH_INFO)
 #include <linux/hwmon.h>
 #endif
@@ -114,49 +112,6 @@ int efx_param_get_bool(char *buffer, struct kernel_param *kp)
 
 #endif /* EFX_HAVE_PARAM_BOOL_INT */
 
-#ifndef EFX_HAVE_PCI_VFS_ASSIGNED
-int pci_vfs_assigned(struct pci_dev *dev)
-{
-#if defined(CONFIG_PCI_ATS) && defined(EFX_HAVE_PCI_DEV_FLAGS_ASSIGNED)
-	struct pci_dev *vfdev;
-	int pos;
-	unsigned int vfs_assigned = 0;
-	unsigned short dev_id;
-
-	/* only search if we are a PF */
-	if (!dev->is_physfn)
-		return 0;
-
-	pos = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_SRIOV);
-	if (!pos)
-		return 0;
-
-	/*
-	 * determine the device ID for the VFs, the vendor ID will be the
-	 * same as the PF so there is no need to check for that one
-	 */
-	pci_read_config_word(dev, pos + PCI_SRIOV_VF_DID, &dev_id);
-
-	/* loop through all the VFs to see if we own any that are assigned */
-	vfdev = pci_get_device(dev->vendor, dev_id, NULL);
-	while (vfdev) {
-		/*
-		 * It is considered assigned if it is a virtual function with
-		 * our dev as the physical function and the assigned bit is set
-		 */
-		if (vfdev->is_virtfn && (vfdev->physfn == dev) &&
-		    (vfdev->dev_flags & PCI_DEV_FLAGS_ASSIGNED))
-			vfs_assigned++;
-
-		vfdev = pci_get_device(dev->vendor, dev_id, vfdev);
-	}
-
-	return vfs_assigned;
-#else
-	return 0;
-#endif
-}
-#endif
 #ifdef EFX_HAVE_MSIX_CAP
 #ifdef EFX_NEED_PCI_MSIX_VEC_COUNT
 #ifndef msix_table_size
@@ -217,18 +172,6 @@ unsigned int cpumask_local_spread(unsigned int i, int node)
 	BUG();
 	/* silence compiler warning */
 	return -EIO;
-}
-#endif
-
-#ifdef EFX_NEED_D_HASH_AND_LOOKUP
-struct dentry *d_hash_and_lookup(struct dentry *dir, struct qstr *name)
-{
-	/* The real in-kernel function checks for an FS specific hash.
-	 * We only use this in debugfs handling, where there is no such
-	 * hash.
-	 */
-	name->hash = full_name_hash(name->name, name->len);
-	return d_lookup(dir, name);
 }
 #endif
 
@@ -520,53 +463,6 @@ struct flow_rule *efx_compat_flow_rule_build(struct tc_cls_flower_offload *tc)
 }
 #endif /* EFX_HAVE_TC_FLOW_OFFLOAD */
 #endif /* EFX_TC_OFFLOAD */
-
-#if !defined(EFX_HAVE_PCI_FIND_NEXT_EXT_CAPABILITY)
-
-#define PCI_CFG_SPACE_SIZE    256
-#define PCI_CFG_SPACE_EXP_SIZE        4096
-
-int pci_find_next_ext_capability(struct pci_dev *dev, int start, int cap)
-{
-	u32 header;
-	int ttl;
-	int pos = PCI_CFG_SPACE_SIZE;
-
-	/* minimum 8 bytes per capability */
-	ttl = (PCI_CFG_SPACE_EXP_SIZE - PCI_CFG_SPACE_SIZE) / 8;
-
-	if (dev->cfg_size <= PCI_CFG_SPACE_SIZE)
-		return 0;
-
-	if (start)
-		pos = start;
-
-	if (pci_read_config_dword(dev, pos, &header) != PCIBIOS_SUCCESSFUL)
-		return 0;
-
-	/*
-	 * If we have no capabilities, this is indicated by cap ID,
-	 * cap version and next pointer all being 0.
-	 */
-	if (header == 0)
-		return 0;
-
-	while (ttl-- > 0) {
-		if (PCI_EXT_CAP_ID(header) == cap && pos != start)
-			return pos;
-
-		pos = PCI_EXT_CAP_NEXT(header);
-		if (pos < PCI_CFG_SPACE_SIZE)
-			break;
-
-		if (pci_read_config_dword(dev, pos, &header) != PCIBIOS_SUCCESSFUL)
-			break;
-	}
-
-	return 0;
-}
-
-#endif
 
 #ifdef EFX_USE_DEVLINK
 

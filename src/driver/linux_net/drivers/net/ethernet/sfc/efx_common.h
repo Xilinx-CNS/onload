@@ -114,11 +114,7 @@ bool efx_dl_supported(struct efx_nic *efx);
 #endif
 #endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_CONST_PCI_ERR_HANDLER)
 extern const struct pci_error_handlers efx_err_handlers;
-#else
-extern struct pci_error_handlers efx_err_handlers;
-#endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_FEATURES_CHECK)
 netdev_features_t efx_features_check(struct sk_buff *skb,
@@ -126,7 +122,7 @@ netdev_features_t efx_features_check(struct sk_buff *skb,
 				     netdev_features_t features);
 #endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_NEED_GET_PHYS_PORT_ID)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_ID)
 int efx_get_phys_port_id(struct net_device *net_dev,
 			 struct netdev_phys_item_id *ppid);
 #endif

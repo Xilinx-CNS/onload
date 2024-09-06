@@ -197,16 +197,32 @@ void efx_client_detach(struct efx_probe_data *pd)
 	ev.type = EFX_AUXDEV_EVENT_IN_RESET;
 	ev.value = EFX_IN_RESET;
 	efx_auxbus_send_events(pd, &ev);
+
+#ifdef EFX_NOT_UPSTREAM
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK) || defined(CONFIG_AUXILIARY_BUS)
+	/* Only do the extra detach if the netdev is STATE_NET_UP and
+	 * Onload is also attached. Do not detach when only onload is
+	 * attached (and the netdev is STATE_NET_ALLOCATED).
+	 * The calling code determines what to do with the last
+	 * open device.
+	 */
+	if (pd->efx.open_count > 1)
+		efx_onload_detach(pd->client_type[EFX_CLIENT_ONLOAD]);
+#endif
+#endif
 }
 
 void efx_client_attach(struct efx_probe_data *pd, bool ok)
 {
 	struct efx_auxdev_event ev = {};
 
+#ifdef EFX_NOT_UPSTREAM
 #if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	efx_dl_reset_resume(&pd->efx.dl_nic, ok);
 #endif
-
+	if (ok && efx_net_allocated(pd->efx.state))
+		efx_onload_attach(pd->client_type[EFX_CLIENT_ONLOAD]);
+#endif
 	ev.type = EFX_AUXDEV_EVENT_IN_RESET;
 	ev.value = ok ? EFX_NOT_IN_RESET : EFX_HARDWARE_DISABLED;
 	efx_auxbus_send_events(pd, &ev);

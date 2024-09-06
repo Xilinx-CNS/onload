@@ -38,10 +38,7 @@
 #include <linux/module.h>
 #include "debugfs.h"
 #include "efx_auxbus_internal.h"
-
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_HW_ENC_FEATURES)
-#undef EFX_USE_OVERLAY_TX_CSUM
-#endif
+#include "efx_devlink.h"
 
 static unsigned int tx_push_max_fill = 0xffffffff;
 module_param(tx_push_max_fill, uint, 0444);
@@ -1390,8 +1387,7 @@ static int efx_ef10_init_nic(struct efx_nic *efx)
 {
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 	u32 old_datapath_caps = nic_data->datapath_caps;
-#if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_HW_ENC_FEATURES) && \
-				  defined(EFX_HAVE_NDO_FEATURES_CHECK))
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_FEATURES_CHECK)
 #ifdef EFX_USE_OVERLAY_TX_CSUM
 	netdev_features_t hw_enc_features;
 #endif
@@ -1457,8 +1453,7 @@ static int efx_ef10_init_nic(struct efx_nic *efx)
 		nic_data->must_restore_piobufs = false;
 	}
 
-#if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_HW_ENC_FEATURES) && \
-				  defined(EFX_HAVE_NDO_FEATURES_CHECK))
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_FEATURES_CHECK)
 #ifdef EFX_USE_OVERLAY_TX_CSUM
 	hw_enc_features = 0;
 
@@ -1466,7 +1461,7 @@ static int efx_ef10_init_nic(struct efx_nic *efx)
 	if (efx_ef10_has_cap(nic_data->datapath_caps, VXLAN_NVGRE) &&
 	    !efx_ef10_is_vf(efx))
 		hw_enc_features |= NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM;
-#ifdef EFX_CAN_SUPPORT_ENCAP_TSO
+
 	/* add encapsulated TSO features */
 	if (efx_ef10_has_cap(nic_data->datapath_caps2, TX_TSO_V2_ENCAP)) {
 		netdev_features_t encap_tso_features;
@@ -1477,7 +1472,6 @@ static int efx_ef10_init_nic(struct efx_nic *efx)
 		hw_enc_features |= encap_tso_features | NETIF_F_TSO;
 		efx->net_dev->features |= encap_tso_features;
 	}
-#endif
 
 	efx->net_dev->hw_enc_features = hw_enc_features;
 #endif
@@ -2555,12 +2549,7 @@ static int efx_ef10_tx_tso_desc(struct efx_tx_queue *tx_queue,
 		return -EINVAL;
 	}
 
-#ifdef EFX_NOT_UPSTREAM
-	if (efx_skb_encapsulation(skb)) {
-#else
 	if (skb->encapsulation) {
-#endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_CAN_SUPPORT_ENCAP_TSO)
 		if (!tx_queue->tso_encap)
 			return -EINVAL;
 		ip = ip_hdr(skb);
@@ -2569,10 +2558,6 @@ static int efx_ef10_tx_tso_desc(struct efx_tx_queue *tx_queue,
 
 		ip = inner_ip_hdr(skb);
 		tcp = inner_tcp_hdr(skb);
-#else
-		/* Insufficient information in the SKB to support this */
-		return -EINVAL;
-#endif
 	} else {
 		ip = ip_hdr(skb);
 		tcp = tcp_hdr(skb);
@@ -3318,11 +3303,7 @@ efx_ef10_handle_rx_event_errors(struct efx_rx_queue *rx_queue,
 	bool handled = false;
 
 	if (EFX_QWORD_FIELD(*event, ESF_DZ_RX_ECRC_ERR)) {
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_FCS)
-		if (!efx->forward_fcs) {
-#else
 		if (!(efx->net_dev->features & NETIF_F_RXALL)) {
-#endif
 			if (!efx->loopback_selftest)
 				rx_queue->n_rx_eth_crc_err += n_packets;
 			return EFX_RX_PKT_DISCARD;
@@ -4629,7 +4610,7 @@ static int efx_ef10_ptp_set_ts_config(struct efx_nic *efx,
 }
 #endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_NEED_GET_PHYS_PORT_ID)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_ID)
 static int efx_ef10_get_phys_port_id(struct efx_nic *efx,
 				     struct netdev_phys_item_id *ppid)
 {
@@ -5275,16 +5256,12 @@ static ssize_t forward_fcs_show(struct device *dev,
 {
 	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
 
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_FCS)
-	return scnprintf(buf, PAGE_SIZE, "%d\n", efx->forward_fcs);
-#else
 	if (!(efx->net_dev->features & NETIF_F_RXFCS) !=
 	    !(efx->net_dev->features & NETIF_F_RXALL))
 		return scnprintf(buf, PAGE_SIZE, "mixed\n");
 
 	return scnprintf(buf, PAGE_SIZE, "%d\n",
 			 !!(efx->net_dev->features & NETIF_F_RXFCS));
-#endif
 }
 
 static ssize_t forward_fcs_store(struct device *dev,
@@ -5292,38 +5269,19 @@ static ssize_t forward_fcs_store(struct device *dev,
 				 const char *buf, size_t count)
 {
 	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_FCS)
-	bool old_forward_fcs = efx->forward_fcs;
-#endif
 
 	if (sysfs_streq(buf, "1"))
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_FCS)
-		efx->forward_fcs = true;
-#else
 		efx->net_dev->wanted_features |= NETIF_F_RXFCS | NETIF_F_RXALL;
-#endif
 	else if (sysfs_streq(buf, "0"))
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_FCS)
-		efx->forward_fcs = false;
-#else
 		efx->net_dev->wanted_features &= ~(NETIF_F_RXFCS |
 						   NETIF_F_RXALL);
-#endif
 	else
 		return -EINVAL;
 
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_FCS)
-	if (efx->forward_fcs != old_forward_fcs) {
-		mutex_lock(&efx->mac_lock);
-		(void)efx_mac_reconfigure(efx, false);
-		mutex_unlock(&efx->mac_lock);
-	}
-#else
 	/* will call our ndo_set_features to actually make the change */
 	rtnl_lock();
 	netdev_update_features(efx->net_dev);
 	rtnl_unlock();
-#endif
 
 	return count;
 }
@@ -5429,6 +5387,12 @@ static int efx_ef10_probe_post_io(struct efx_nic *efx)
 	if (rc < 0)
 		return rc;
 
+#ifdef EFX_NOT_UPSTREAM
+	if (efx->mcdi->fn_flags &
+	    (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_NO_ACTIVE_PORT))
+		return 0;
+#endif
+
 	efx->tx_queues_per_channel = 1;
 	efx->select_tx_queue = efx_ef10_select_tx_queue;
 #ifdef EFX_USE_OVERLAY_TX_CSUM
@@ -5475,7 +5439,7 @@ static int efx_ef10_probe_post_io(struct efx_nic *efx)
 		ES_DZ_RX_PREFIX_PKTLEN_OFST - ES_DZ_RX_PREFIX_SIZE;
 
 	if (efx_ef10_has_cap(nic_data->datapath_caps, RX_INCLUDE_FCS))
-		efx_add_hw_features(efx, NETIF_F_RXFCS);
+		efx->net_dev->hw_features |= NETIF_F_RXFCS;
 
 	rc = efx_mcdi_port_get_number(efx);
 	if (rc < 0)
@@ -5498,7 +5462,7 @@ static int efx_ef10_probe_post_io(struct efx_nic *efx)
 	efx_sriov_init_max_vfs(efx, nic_data->pf_index);
 #endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_NEED_GET_PHYS_PORT_ID)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_ID)
 #ifdef CONFIG_SFC_SRIOV
 	if (efx->pci_dev->physfn && !efx->pci_dev->is_physfn) {
 		struct pci_dev *pci_dev_pf = efx->pci_dev->physfn;
@@ -5594,6 +5558,8 @@ static int efx_ef10_probe(struct efx_nic *efx)
 	nic_data->udp_tunnels_busy = false;
 	INIT_WORK(&nic_data->udp_tunnel_work, efx_ef10__udp_tnl_push_ports);
 #endif
+
+	(void)efx_probe_devlink(efx);
 
 	/* retry probe 3 times on EF10 due to UDP tunnel ports
 	 * sometimes causing a reset during probe.
@@ -5711,6 +5677,8 @@ static void efx_ef10_remove(struct efx_nic *efx)
 	device_remove_file(&efx->pci_dev->dev, &dev_attr_primary_flag);
 
 	efx_pci_remove_post_io(efx, efx_ef10_remove_post_io);
+
+	efx_fini_devlink(efx);
 
 	efx_nic_free_buffer(efx, &nic_data->mcdi_buf);
 
@@ -5951,10 +5919,8 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 #endif
 #ifdef EFX_NOT_UPSTREAM
 	.filter_redirect = efx_mcdi_filter_redirect,
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	.filter_block_kernel = efx_mcdi_filter_block_kernel,
 	.filter_unblock_kernel = efx_mcdi_filter_unblock_kernel,
-#endif
 #endif
 #ifdef CONFIG_SFC_MTD
 	.mtd_probe = efx_port_dummy_op_int,
@@ -5970,7 +5936,7 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 	.vswitching_remove = efx_ef10_vswitching_remove_vf,
 	.get_mac_address = efx_ef10_get_mac_address_vf,
 	.set_mac_address = efx_ef10_set_mac_address,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_NEED_GET_PHYS_PORT_ID)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_ID)
 	.get_phys_port_id = efx_ef10_get_phys_port_id,
 #endif
 	.revision = EFX_REV_HUNT_A0,
@@ -6103,10 +6069,8 @@ const struct efx_nic_type efx_x4_vf_nic_type = {
 #endif
 #ifdef EFX_NOT_UPSTREAM
 	.filter_redirect = efx_mcdi_filter_redirect,
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	.filter_block_kernel = efx_mcdi_filter_block_kernel,
 	.filter_unblock_kernel = efx_mcdi_filter_unblock_kernel,
-#endif
 #endif
 #ifdef CONFIG_SFC_MTD
 	.mtd_probe = efx_port_dummy_op_int,
@@ -6266,10 +6230,8 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 #endif
 #ifdef EFX_NOT_UPSTREAM
 	.filter_redirect = efx_mcdi_filter_redirect,
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	.filter_block_kernel = efx_mcdi_filter_block_kernel,
 	.filter_unblock_kernel = efx_mcdi_filter_unblock_kernel,
-#endif
 #endif
 #ifdef CONFIG_SFC_MTD
 	.mtd_probe = efx_ef10_mtd_probe,
@@ -6317,7 +6279,7 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.vswitching_remove = efx_ef10_vswitching_remove_pf,
 	.get_mac_address = efx_ef10_get_mac_address_pf,
 	.set_mac_address = efx_ef10_set_mac_address,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_NEED_GET_PHYS_PORT_ID)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_ID)
 	.get_phys_port_id = efx_ef10_get_phys_port_id,
 #endif
 	.revision = EFX_REV_HUNT_A0,
@@ -6460,10 +6422,8 @@ const struct efx_nic_type efx_x4_nic_type = {
 #endif
 #ifdef EFX_NOT_UPSTREAM
 	.filter_redirect = efx_mcdi_filter_redirect,
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	.filter_block_kernel = efx_mcdi_filter_block_kernel,
 	.filter_unblock_kernel = efx_mcdi_filter_unblock_kernel,
-#endif
 #endif
 #ifdef CONFIG_SFC_MTD
 	.mtd_probe = efx_ef10_mtd_probe,

@@ -197,33 +197,6 @@ struct efx_mcdi_request2 {
 struct efx_reset_flags {
 	__u32 flags;
 };
-#ifndef ETH_RESET_SHARED_SHIFT
-	enum ethtool_reset_flags {
-		/* These flags represent components dedicated to the interface
-		 * the command is addressed to.  Shift any flag left by
-		 * ETH_RESET_SHARED_SHIFT to reset a shared component of the
-		 * same type.
-		 */
-		ETH_RESET_MGMT		= 1 << 0,	/* Management processor */
-		ETH_RESET_IRQ		= 1 << 1,	/* Interrupt requester */
-		ETH_RESET_DMA		= 1 << 2,	/* DMA engine */
-		ETH_RESET_FILTER	= 1 << 3,	/* Filtering/flow direction */
-		ETH_RESET_OFFLOAD	= 1 << 4,	/* Protocol offload */
-		ETH_RESET_MAC		= 1 << 5,	/* Media access controller */
-		ETH_RESET_PHY		= 1 << 6,	/* Transceiver/PHY */
-		ETH_RESET_RAM		= 1 << 7,	/* RAM shared between
-							 * multiple components */
-
-		ETH_RESET_DEDICATED	= 0x0000ffff,	/* All components dedicated to
-							 * this interface */
-		ETH_RESET_ALL		= 0xffffffff,	/* All components used by this
-							 * interface, even if shared */
-	};
-	#define ETH_RESET_SHARED_SHIFT	16
-#endif
-#ifndef ETHTOOL_RESET
-	#define ETHTOOL_RESET           0x00000034
-#endif
 
 /* Get RX flow hashing capabilities, like ETHTOOL_GRX{RINGS,FH} *************/
 #define EFX_RXNFC 0xef0e

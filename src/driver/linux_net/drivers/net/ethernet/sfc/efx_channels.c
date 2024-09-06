@@ -458,7 +458,7 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 	for (extra_channel_type = 0;
 	     extra_channel_type < EFX_MAX_EXTRA_CHANNELS;
 	     extra_channel_type++)
-		if (n_channels > 1 && n_channels < max_channels &&
+		if (n_channels < max_channels &&
 		    efx->n_extra_channels + 1 < efx->max_tx_channels &&
 		    efx->extra_channel_type[extra_channel_type])
 			efx->n_extra_channels++;
@@ -689,7 +689,6 @@ void efx_remove_interrupts(struct efx_nic *efx)
 }
 
 #ifdef CONFIG_SMP
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NETIF_SET_XPS_QUEUE)
 #if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_XPS)
 static bool auto_config_xps = true;
 module_param(auto_config_xps, bool, 0644);
@@ -711,12 +710,6 @@ static void efx_set_xps_queue(struct efx_channel *channel,
        netif_set_xps_queue(channel->efx->net_dev, mask,
 			   channel->channel - channel->efx->tx_channel_offset);
 }
-#else
-static void efx_set_xps_queue(struct efx_channel *channel,
-			     const cpumask_t *mask)
-{
-}
-#endif
 
 #if !defined(EFX_NOT_UPSTREAM)
 void efx_set_interrupt_affinity(struct efx_nic *efx)
@@ -1095,7 +1088,7 @@ void efx_start_eventq(struct efx_channel *channel)
 	channel->enabled = true;
 	smp_wmb();
 
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
 	efx_channel_enable(channel);
 #endif
 	napi_enable(&channel->napi_str);
@@ -1118,7 +1111,7 @@ void efx_stop_eventq(struct efx_channel *channel)
 		  "chan %d stop event queue\n", channel->channel);
 
 	napi_disable(&channel->napi_str);
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
 	while (!efx_channel_disable(channel))
 		usleep_range(1000, 20000);
 
@@ -2106,7 +2099,7 @@ static int efx_poll(struct napi_struct *napi, int budget)
 #endif
 #endif
 
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
 	/* Worst case scenario is this poll waiting for as many packets to be
 	 * processed as if it would process itself without busy poll. If no
 	 * further packets to process, this poll will be quick. If further
@@ -2163,7 +2156,7 @@ static int efx_poll(struct napi_struct *napi, int budget)
 		}
 	}
 
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
 	spin_unlock(&channel->poll_lock);
 #endif
 
@@ -2185,7 +2178,7 @@ static int efx_init_napi_channel(struct efx_channel *channel)
 	channel->napi_dev = efx->net_dev;
 	netif_napi_add_weight(channel->napi_dev, &channel->napi_str,
 			      efx_poll, napi_weight);
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
 	efx_channel_busy_poll_init(channel);
 #endif
 
@@ -2247,7 +2240,7 @@ void efx_pause_napi(struct efx_nic *efx)
 
 	efx_for_each_channel(channel, efx) {
 		napi_disable(&channel->napi_str);
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
 		while (!efx_channel_disable(channel))
 			usleep_range(1000, 20000);
 
@@ -2266,7 +2259,7 @@ int efx_resume_napi(struct efx_nic *efx)
 	netif_dbg(efx, drv, efx->net_dev, "Resuming NAPI\n");
 
 	efx_for_each_channel(channel, efx) {
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
 		efx_channel_enable(channel);
 #endif
 		napi_enable(&channel->napi_str);
@@ -2300,7 +2293,7 @@ void efx_netpoll(struct net_device *net_dev)
 #endif
 #endif
 
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
 #ifdef CONFIG_NET_RX_BUSY_POLL
 int efx_busy_poll(struct napi_struct *napi)
 {

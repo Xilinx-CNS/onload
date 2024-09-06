@@ -103,7 +103,8 @@ struct efx_auxdev_client *efx_auxbus_open(struct auxiliary_device *auxdev,
 	return cdev;
 }
 
-static void efx_auxbus_dl_unpublish(struct efx_auxdev_client *handle)
+static void _efx_auxbus_dl_unpublish(struct efx_auxdev_client *handle,
+				     bool have_rtnl)
 {
 	struct efx_probe_data *pd;
 	struct efx_client *client;
@@ -119,11 +120,21 @@ static void efx_auxbus_dl_unpublish(struct efx_auxdev_client *handle)
 	if (!client->client_type->vis_allocated)
 		return;
 
-	/* efx_net_dealloc requires the rtnl lock. */
-	rtnl_lock();
+	/* efx_net_dealloc requires the rtnl lock. When this is called from
+	 * ethtool that is already taken.
+	 */
+	if (!have_rtnl)
+		rtnl_lock();
 	efx_net_dealloc(&pd->efx);
-	rtnl_unlock();
+	if (!have_rtnl)
+		rtnl_unlock();
 	client->client_type->vis_allocated = false;
+	client->published = false;
+}
+
+static void efx_auxbus_dl_unpublish(struct efx_auxdev_client *handle)
+{
+	_efx_auxbus_dl_unpublish(handle, false);
 }
 
 static void efx_auxbus_close(struct efx_auxdev_client *cdev)
@@ -558,7 +569,7 @@ static int efx_auxbus_set_param(struct efx_auxdev_client *handle,
 }
 
 static struct efx_auxdev_dl_vi_resources *
-efx_auxbus_dl_publish(struct efx_auxdev_client *handle)
+_efx_auxbus_dl_publish(struct efx_auxdev_client *handle, bool have_rtnl)
 {
 	struct efx_auxdev_dl_vi_resources *result;
 	struct efx_probe_data *pd;
@@ -578,19 +589,30 @@ efx_auxbus_dl_publish(struct efx_auxdev_client *handle)
 	if (client->client_type->vis_allocated)
 		return ERR_PTR(-EALREADY);
 
-	/* Both efx_net_alloc and efx_net_dealloc require the RTNL lock. */
-	rtnl_lock();
+	/* Both efx_net_alloc and efx_net_dealloc require the RTNL lock.
+	 * When this is called from ethtool that is already taken.
+	 */
+	if (!have_rtnl)
+		rtnl_lock();
 	rc = efx_net_alloc(&pd->efx);
 	if (rc) {
 		efx_net_dealloc(&pd->efx);
 		result = ERR_PTR(rc);
 	} else {
 		client->client_type->vis_allocated = true;
+		client->published = true;
 		result = &pd->efx.vi_resources;
 	}
-	rtnl_unlock();
+	if (!have_rtnl)
+		rtnl_unlock();
 
 	return result;
+}
+
+static struct efx_auxdev_dl_vi_resources *
+efx_auxbus_dl_publish(struct efx_auxdev_client *handle)
+{
+	return _efx_auxbus_dl_publish(handle, false);
 }
 
 static
@@ -882,4 +904,52 @@ fail:
 out_free:
 	kfree(sdev);
 	return rc;
+}
+
+void efx_onload_detach(struct efx_client_type_data *client_type)
+{
+	struct efx_client *client;
+	unsigned long idx;
+
+	ASSERT_RTNL();
+	if (!client_type || !client_type->vis_allocated)
+		return;
+
+	xa_for_each(&client_type->open, idx, client) {
+		if (!client || !client->published)
+			continue;
+
+		/* Do not allow removal of clients */
+		refcount_inc(&client_type->in_callback);
+		client->publish_over_reset = true;
+		_efx_auxbus_dl_unpublish(&client->auxiliary_info, true);
+		return;
+	}
+}
+
+void efx_onload_attach(struct efx_client_type_data *client_type)
+{
+	struct efx_auxdev_dl_vi_resources *result;
+	struct efx_client *client;
+	unsigned long idx;
+
+	ASSERT_RTNL();
+	if (!client_type || client_type->vis_allocated)
+		return;
+
+	xa_for_each(&client_type->open, idx, client) {
+		if (!client || !client->publish_over_reset)
+			continue;
+
+		result = _efx_auxbus_dl_publish(&client->auxiliary_info, true);
+		if (IS_ERR_OR_NULL(result)) {
+			dev_err(&client_type->auxiliary_info.auxdev->auxdev.dev,
+				"Failed to publish Onload resources (%ld)\n",
+				PTR_ERR(result));
+		}
+		client->publish_over_reset = false;
+		/* Allow removal of clients */
+		refcount_dec(&client_type->in_callback);
+		return;
+	}
 }

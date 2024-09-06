@@ -78,7 +78,7 @@ void efx_stop_eventq(struct efx_channel *channel);
 void efx_netpoll(struct net_device *net_dev);
 #endif
 #endif
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
 #ifdef CONFIG_NET_RX_BUSY_POLL
 int efx_busy_poll(struct napi_struct *napi);
 #endif

@@ -888,12 +888,10 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 	/* enable all supported features except rx-fcs and rx-all */
 	net_dev->features |= efx->type->offload_features &
 			     ~(NETIF_F_RXFCS | NETIF_F_RXALL);
-	efx_add_hw_features(efx, efx->type->offload_features);
+	net_dev->hw_features |= efx->type->offload_features;
 	net_dev->vlan_features |= (NETIF_F_HW_CSUM | NETIF_F_SG |
 				   NETIF_F_HIGHDMA | NETIF_F_ALL_TSO);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_HW_ENC_FEATURES)
 	net_dev->hw_enc_features |= efx->type->offload_features;
-#endif
 	if (!READ_ONCE(net_dev->gso_max_segs))
 		netif_set_tso_max_segs(net_dev,
 				       ESE_EF100_DP_GZ_TSO_MAX_HDR_NUM_SEGS_DEFAULT);

@@ -49,9 +49,7 @@
  */
 #ifdef CONFIG_X86_64
 /* PIO is a win only if write-combining is possible */
-#ifdef ARCH_HAS_IOREMAP_WC
 #define EFX_USE_PIO 1
-#endif
 #endif
 
 static inline void __iomem *efx_mem(struct efx_nic *efx, unsigned int addr)

@@ -45,12 +45,10 @@ static void efx_ef10_sriov_free_vf_vports(struct efx_nic *efx)
 	for (i = 0; i < nic_data->vf_count; i++) {
 		struct ef10_vf *vf = nic_data->vf + i;
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_DEV_FLAGS_ASSIGNED)
 		/* If VF is assigned, do not free the vport  */
 		if (vf->pci_dev &&
 		    vf->pci_dev->dev_flags & PCI_DEV_FLAGS_ASSIGNED)
 			continue;
-#endif
 
 		if (vf->vport_assigned) {
 			efx_ef10_evb_port_assign(efx, EVB_PORT_ID_NULL, i);
@@ -327,10 +325,8 @@ void efx_ef10_vswitching_remove_pf(struct efx_nic *efx)
 	efx_ef10_vport_free(efx, efx->vport.vport_id);
 	efx->vport.vport_id = EVB_PORT_ID_ASSIGNED;
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_DEV_FLAGS_ASSIGNED)
 	/* Only free the vswitch if no VFs are assigned */
 	if (!pci_vfs_assigned(efx->pci_dev))
-#endif
 		efx_ef10_vswitch_free(efx, efx->vport.vport_id);
 #endif
 }
@@ -374,7 +370,6 @@ static int efx_ef10_pci_sriov_disable(struct efx_nic *efx, bool force)
 	unsigned int vfs_assigned = 0;
 	int i;
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_DEV_FLAGS_ASSIGNED)
 	vfs_assigned = pci_vfs_assigned(dev);
 
 	if (vfs_assigned && !force) {
@@ -382,7 +377,6 @@ static int efx_ef10_pci_sriov_disable(struct efx_nic *efx, bool force)
 			   "please detach them before disabling SR-IOV\n");
 		return -EBUSY;
 	}
-#endif
 
 	if (!vfs_assigned) {
 		for (i = 0; i < nic_data->vf_count; i++)
@@ -462,9 +456,7 @@ void efx_ef10_sriov_fini(struct efx_nic *efx)
 
 	if (!nic_data->vf) {
 		/* Remove any un-assigned orphaned VFs */
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_DEV_FLAGS_ASSIGNED)
 		if (pci_num_vf(efx->pci_dev) && !pci_vfs_assigned(efx->pci_dev))
-#endif
 			pci_disable_sriov(efx->pci_dev);
 		return;
 	}
@@ -610,8 +602,7 @@ static int efx_ef10_sriov_close(struct efx_nic *efx)
 {
 	efx_device_detach_sync(efx);
 #ifdef EFX_NOT_UPSTREAM
-	if (efx->state == STATE_NET_UP)
-		efx_client_detach(efx_nic_to_probe_data(efx));
+	efx_client_detach(efx_nic_to_probe_data(efx));
 #endif
 	efx_net_stop(efx->net_dev);
 

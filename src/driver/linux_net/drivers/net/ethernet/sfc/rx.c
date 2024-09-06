@@ -198,15 +198,9 @@ static struct sk_buff *efx_rx_mk_skb(struct efx_rx_queue *rx_queue,
 		rx_buf->len -= hdr_len;
 
 		for (;;) {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB_FRAG_TRUESIZE)
 			skb_add_rx_frag(skb, skb_shinfo(skb)->nr_frags,
 					rx_buf->page, rx_buf->page_offset,
 					rx_buf->len, efx->rx_buffer_truesize);
-#else
-			skb_add_rx_frag(skb, skb_shinfo(skb)->nr_frags,
-					rx_buf->page, rx_buf->page_offset,
-					rx_buf->len);
-#endif
 			rx_buf->page = NULL;
 			if (skb_shinfo(skb)->nr_frags == n_frags)
 				break;
@@ -380,12 +374,10 @@ static void efx_rx_deliver(struct efx_rx_queue *rx_queue, u8 *eh,
 	efx_rx_skb_attach_timestamp(channel, skb,
 				    eh - efx->type->rx_prefix_size);
 
-#if   !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RXHASH_SUPPORT)
 	if (efx->net_dev->features & NETIF_F_RXHASH)
 		skb_set_hash(skb, efx_rx_buf_hash(efx, eh),
 			     (rx_buf_flags & EFX_RX_PKT_TCP? PKT_HASH_TYPE_L4:
 			      PKT_HASH_TYPE_L3));
-#endif
 
 #if IS_ENABLED(CONFIG_VLAN_8021Q)
 	if (rx_buf_flags & EFX_RX_BUF_VLAN_XTAG)
@@ -417,7 +409,7 @@ static void efx_rx_deliver(struct efx_rx_queue *rx_queue, u8 *eh,
 /* Handle a received packet.  Second half: Touches packet payload. */
 void __efx_rx_packet(struct efx_rx_queue *rx_queue)
 {
-#if (defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL) || !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK))
+#if (defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL) || !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK))
 	struct efx_channel *channel = efx_get_rx_queue_channel(rx_queue);
 #endif
 	struct efx_rx_buffer *rx_buf = efx_rx_buf_pipe(rx_queue);
@@ -523,7 +515,7 @@ void __efx_rx_packet(struct efx_rx_queue *rx_queue)
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_GRO)
 	if ((rx_buf->flags & EFX_RX_PKT_TCP) &&
 	    !rx_queue->receive_skb
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
 	    && !efx_channel_busy_polling(channel)
 #endif
 	   ) {
@@ -932,10 +924,8 @@ efx_ssr_merge_page(struct efx_ssr_state *st, struct efx_ssr_conn *c,
 		efx_rx_skb_attach_timestamp(efx_get_rx_queue_channel(rx_queue),
 					    c->skb, eh - rx_prefix_size);
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RXHASH_SUPPORT)
 		if (st->efx->net_dev->features & NETIF_F_RXHASH)
 			skb_set_hash(c->skb, c->conn_hash, PKT_HASH_TYPE_L4);
-#endif
 
 		if (EFX_SSR_CONN_IS_TCPIPV4(c)) {
 			struct iphdr *iph =
@@ -1103,11 +1093,7 @@ void efx_ssr(struct efx_rx_queue *rx_queue, struct efx_rx_buffer *rx_buf,
 	unsigned int bucket;
 
 	/* Get the hardware hash if available */
-#ifdef EFX_HAVE_RXHASH_SUPPORT
 	if (efx->net_dev->features & NETIF_F_RXHASH)
-#else
-	if (efx->rx_prefix_size)
-#endif
 		conn_hash = efx_rx_buf_hash(efx, rx_data);
 	else
 		conn_hash = 0;

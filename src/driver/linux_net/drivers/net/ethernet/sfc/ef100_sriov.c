@@ -67,7 +67,6 @@ int efx_ef100_pci_sriov_disable(struct efx_nic *efx, bool force)
 	struct pci_dev *dev = efx->pci_dev;
 	unsigned int vfs_assigned = 0;
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_DEV_FLAGS_ASSIGNED)
 	vfs_assigned = pci_vfs_assigned(dev);
 
 	if (vfs_assigned && !force) {
@@ -75,7 +74,6 @@ int efx_ef100_pci_sriov_disable(struct efx_nic *efx, bool force)
 			   "please detach them before disabling SR-IOV\n");
 		return -EBUSY;
 	}
-#endif
 
 	efx_ef100_fini_vfreps(efx);
 	if (!vfs_assigned)

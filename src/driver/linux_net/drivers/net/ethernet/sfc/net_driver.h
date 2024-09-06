@@ -37,14 +37,7 @@
 #endif
 #include <linux/rwsem.h>
 #include <linux/vmalloc.h>
-#ifndef EFX_USE_KCOMPAT
 #include <linux/mtd/mtd.h>
-#else
-#include "linux_mtd_mtd.h"
-#endif
-#ifndef EFX_USE_KCOMPAT
-#include <net/busy_poll.h>
-#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_DEVLINK)
 #include <net/devlink.h>
 #endif
@@ -67,7 +60,7 @@
 #include "kernel_compat.h"
 #endif
 
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_BUSY_POLL)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_BUSY_POLL)
 #include <net/busy_poll.h>
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP)
@@ -99,7 +92,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.0.0.1007"
+#define EFX_DRIVER_VERSION	"6.0.0.1009"
 #endif
 
 #ifdef DEBUG
@@ -861,7 +854,7 @@ struct efx_channel {
 	unsigned int irq_moderation_us;
 	struct net_device *napi_dev;
 	struct napi_struct napi_str;
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
 #ifdef CONFIG_NET_RX_BUSY_POLL
 	/** @busy_poll_state: busy poll state */
 	unsigned long busy_poll_state;
@@ -939,7 +932,7 @@ struct efx_channel {
 #endif
 };
 
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
 #ifdef CONFIG_NET_RX_BUSY_POLL
 enum efx_channel_busy_poll_state {
 	EFX_CHANNEL_STATE_IDLE = 0,
@@ -1025,7 +1018,7 @@ static inline bool efx_channel_disable(struct efx_channel *channel)
 	return true;
 }
 #endif /* CONFIG_NET_RX_BUSY_POLL */
-#endif /* EFX_WANT_DRIVER_BUSY_POLL */
+#endif /* EFX_HAVE_NDO_BUSY_POLL */
 
 /**
  * struct efx_msi_context - Context for each MSI
@@ -1755,10 +1748,6 @@ struct efx_nic {
 	bool vlan_filter_available;
 
 	netdev_features_t fixed_features;
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NETDEV_HW_FEATURES) && !defined(EFX_HAVE_NETDEV_EXTENDED_HW_FEATURES)
-	/** @hw_features: Features which may be enabled/disabled */
-	netdev_features_t hw_features;
-#endif
 
 	bool stats_enabled;
 	bool stats_initialised;
@@ -1880,13 +1869,6 @@ struct efx_nic {
 	int last_irq_cpu;
 	spinlock_t stats_lock;
 	atomic_t n_rx_noskb_drops;
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_FCS)
-	/**
-	 * @forward_fcs: Flag to enable appending of 4-byte Frame Checksum
-	 *	to Rx packet
-	 */
-	bool forward_fcs;
-#endif
 
 #ifdef CONFIG_DEBUG_FS
 	/**
@@ -2402,7 +2384,7 @@ struct efx_nic_type {
 #endif
 	int (*vlan_rx_add_vid)(struct efx_nic *efx, __be16 proto, u16 vid);
 	int (*vlan_rx_kill_vid)(struct efx_nic *efx, __be16 proto, u16 vid);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_NEED_GET_PHYS_PORT_ID)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_ID)
 	int (*get_phys_port_id)(struct efx_nic *efx,
 				struct netdev_phys_item_id *ppid);
 #endif
@@ -2717,17 +2699,6 @@ static inline void efx_xmit_hwtstamp_pending(struct sk_buff *skb)
 	skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
 }
 
-#ifdef EFX_NOT_UPSTREAM
-static inline int efx_skb_encapsulation(const struct sk_buff *skb)
-{
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB_ENCAPSULATION)
-	return skb->encapsulation;
-#else
-	return 0;
-#endif
-}
-#endif
-
 /* Get the max fill level of the TX queues on this channel */
 static inline unsigned int
 efx_channel_tx_fill_level(struct efx_channel *channel)
@@ -2765,28 +2736,7 @@ static inline netdev_features_t efx_supported_features(const struct efx_nic *efx
 {
 	const struct net_device *net_dev = efx->net_dev;
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NETDEV_HW_FEATURES)
 	return net_dev->features | net_dev->hw_features;
-#elif defined(EFX_HAVE_NETDEV_EXTENDED_HW_FEATURES)
-	return net_dev->features | netdev_extended(net_dev)->hw_features;
-#else
-	return net_dev->features | efx->hw_features;
-#endif
-}
-
-/* Add one or more hardware offload features */
-static inline void efx_add_hw_features(struct efx_nic *efx,
-				       netdev_features_t features)
-{
-	struct net_device *net_dev = efx->net_dev;
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NETDEV_HW_FEATURES)
-	net_dev->hw_features |= features;
-#elif defined(EFX_HAVE_NETDEV_EXTENDED_HW_FEATURES)
-	netdev_extended(net_dev)->hw_features |= features;
-#else
-	efx->hw_features |= features;
-#endif
 }
 
 /* Get the current TX queue insert index. */
