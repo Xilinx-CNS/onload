@@ -697,8 +697,7 @@ int ef10_mcdi_cmd_event_queue_enable(struct efhw_nic *nic,
      * by requesting all three we get what we want: Event cut
      * through and tx event merging.
      */
-    EFHW_MCDI_POPULATE_DWORD_4(in, INIT_EVQ_IN_FLAGS,
-    INIT_EVQ_IN_FLAG_INTERRUPTING, params->interrupting ? 1 : 0,
+    EFHW_MCDI_POPULATE_DWORD_3(in, INIT_EVQ_IN_FLAGS,
     INIT_EVQ_IN_FLAG_CUT_THRU, enable_cut_through ? 1 : 0,
     INIT_EVQ_IN_FLAG_RX_MERGE, 1,
     INIT_EVQ_IN_FLAG_TX_MERGE, 1);
@@ -710,8 +709,7 @@ int ef10_mcdi_cmd_event_queue_enable(struct efhw_nic *nic,
      * On Medford we must explicitly request a timer if we are
      * not interrupting (we'll get one anyway if we are).
      */
-    EFHW_MCDI_POPULATE_DWORD_5(in, INIT_EVQ_IN_FLAGS,
-    INIT_EVQ_IN_FLAG_INTERRUPTING, params->interrupting ? 1 : 0,
+    EFHW_MCDI_POPULATE_DWORD_4(in, INIT_EVQ_IN_FLAGS,
     INIT_EVQ_IN_FLAG_USE_TIMER, enable_timer ? 1 : 0,
     INIT_EVQ_IN_FLAG_CUT_THRU, enable_cut_through ? 1 : 0,
     INIT_EVQ_IN_FLAG_RX_MERGE, enable_rx_merging ? 1 : 0,
@@ -724,7 +722,7 @@ int ef10_mcdi_cmd_event_queue_enable(struct efhw_nic *nic,
   /* EF10 TODO We may want to direct the wakeups to another EVQ,
    * but by default do old-style spreading
    */
-  EFHW_MCDI_SET_DWORD(in, INIT_EVQ_IN_TARGET_EVQ, params->wakeup_evq);
+  EFHW_MCDI_SET_DWORD(in, INIT_EVQ_IN_TARGET_EVQ, params->wakeup_channel);
 
   EFHW_MCDI_SET_DWORD(in, INIT_EVQ_IN_COUNT_MODE,
                       MC_CMD_INIT_EVQ_IN_COUNT_MODE_DIS);

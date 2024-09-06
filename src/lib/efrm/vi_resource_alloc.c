@@ -885,12 +885,11 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 					EFHW_NIC_PAGES_IN_OS_PAGE;
 		evq_params.flags = flags;
 
-		evq_params.interrupting = nic->flags & NIC_FLAG_EVQ_IRQ;
-		evq_params.wakeup_evq = efrm_vi_get_channel(virs);
+		evq_params.wakeup_channel = efrm_vi_get_channel(virs);
 		/* TODO EF10CT test driver doesn't support interrupts */
 		if( (nic->devtype.arch != EFHW_ARCH_EF10CT) ||
 		    (nic->devtype.variant != 'L') ) {
-			EFRM_ASSERT(evq_params.interrupting == (virs->vec != NULL));
+			EFRM_ASSERT(!!(nic->flags & NIC_FLAG_EVQ_IRQ) == !!(virs->vec != NULL));
 		}
 
 		rc = efhw_nic_event_queue_enable(nic, &evq_params);

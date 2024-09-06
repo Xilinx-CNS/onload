@@ -82,6 +82,8 @@ static inline uint8_t efhw_vi_nic_flags(const struct efhw_nic* nic)
 		 EFHW_VI_NIC_RX_SHARED : 0;
 	flags |= (nic->flags & NIC_FLAG_RX_MCAST_REPLICATION) ?
 		 EFHW_VI_NIC_RX_MCAST_REPLICATION : 0;
+	flags |= (nic->flags & NIC_FLAG_EVQ_IRQ) ?
+		 EFHW_VI_NIC_IRQ : 0;
 	return flags;
 }
 

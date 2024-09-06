@@ -124,6 +124,7 @@ typedef union {
 #define EFHW_VI_NIC_CTPIO_ONLY          0x02  /*! TX only using CTPIO */
 #define EFHW_VI_NIC_RX_SHARED           0x04  /*! RX filters are lower bound */
 #define EFHW_VI_NIC_RX_MCAST_REPLICATION 0x08 /*! RX mcast replication */
+#define EFHW_VI_NIC_IRQ                 0x10  /*! onload IRQ */
 
 /* Types of hardware filter */
 /* Each of these values implicitly selects scatter filters on B0 - or in

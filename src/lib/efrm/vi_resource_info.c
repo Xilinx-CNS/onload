@@ -104,10 +104,10 @@ EXPORT_SYMBOL(efrm_vi_get_dev);
 int efrm_vi_get_channel(struct efrm_vi *virs)
 {
 	struct efrm_nic *nic = efrm_nic(virs->rs.rs_client->nic);
-	/* EF100-style: interrupt is managed by us. */
+	/* interrupt is managed by us. */
 	if (virs->vec != NULL)
-		return virs->vec->channel;
-	/* EF10-style: interrupt is managed by net driver. */
+		return virs->vec->irq;
+	/* interrupt is managed by net driver. */
 	return virs->net_drv_wakeup_channel >= 0 ?
 		virs->net_drv_wakeup_channel :
 		nic->rss_channel_count == 0 ? 0 :

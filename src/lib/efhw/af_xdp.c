@@ -1048,7 +1048,7 @@ af_xdp_nic_event_queue_enable(struct efhw_nic *nic,
 
   init_waitqueue_func_entry(&vi->waiter.wait, wait_callback);
   vi->waiter.nic = nic;
-  vi->waiter.evq = params->wakeup_evq;
+  vi->waiter.evq = params->wakeup_channel;
   /* The budget currently has little relevance as Onload doesn't try to
    * poll AF_XDP from an interrupt context. The value may need some thought
    * if that changes in future. */

@@ -124,8 +124,7 @@ struct efhw_evq_params {
 	 */
 	dma_addr_t* dma_addrs;
 	uint n_pages; /* number of entries in dma_addrs */
-	bool interrupting; /* whether this queue uses its own irq */
-	int wakeup_evq; /* queue to deliver wakeups for this queue */
+	int wakeup_channel; /* irq or queue to deliver wakeups for this queue */
 	int flags;
 	int flags_out;
 };
