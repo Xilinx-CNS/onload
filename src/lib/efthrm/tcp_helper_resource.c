@@ -5810,15 +5810,23 @@ efab_tcp_driver_ctor()
 
   CI_ZERO(&efab_tcp_driver);
 
-
-  /* Create work queue */
-  /* This work queue is used for deferred stack destruction (and it is
-   * natural to run such a work item on the same cpu it was queued),
-   * for oof and cplane delayed destructors (to escape from atomic
-   * context).
-   * So, we use bound work queue without any additional flags.
-   */
-  CI_GLOBAL_WORKQUEUE = alloc_workqueue("onload-wqueue", WQ_SYSFS, 0);
+  /* This workqueue has 2 functions that are enqueued.
+   * 1) tcp helper destruction
+   * 2) oof_do_deferred_work_fn
+   * 
+   * It can be dangerous for 2) to happen after 1). 
+   * This is because 1) can potentially cause the destruction of
+   * oo_filter_ns.
+   * 
+   * To avoid this possibility, this queue and the ordering necessary for
+   * safe destruction are preserved using the refcount for oo_filter_ns.
+   *  
+   * 
+   * We set the flag WQ_SYSFS so that customers can
+   * calibrate which core this workqueue performs on
+   * via the exposed cpumask and affinity attributes.
+   * */
+  CI_GLOBAL_WORKQUEUE = alloc_workqueue("onload-wqueue", WQ_UNBOUND | WQ_SYSFS, 0);
   if (CI_GLOBAL_WORKQUEUE == NULL) {
     rc = -ENOMEM;
     goto fail_wq;
