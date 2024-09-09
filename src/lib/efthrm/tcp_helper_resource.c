@@ -1809,7 +1809,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     nsn->vi_variant = (ci_uint8) nic->devtype.variant;
     nsn->vi_revision = (ci_uint8) nic->devtype.revision;
     nsn->vi_nic_flags = efhw_vi_nic_flags(nic);
-    nsn->vi_channel = (ci_uint8)efrm_vi_get_channel(vi_rs);
+    nsn->vi_channel = (ci_uint16)efrm_vi_get_channel(vi_rs);
     nsn->vi_flags = alloc_info.ef_vi_flags;
     nsn->vi_out_flags = vi_out_flags;
     nsn->vi_evq_bytes = efrm_vi_rm_evq_bytes(vi_rs, -1);

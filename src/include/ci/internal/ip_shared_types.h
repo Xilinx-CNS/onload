@@ -984,11 +984,11 @@ typedef struct {
   CI_ULCONST ci_uint16  vi_instance;
   CI_ULCONST ci_uint16  vi_rxq_size;
   CI_ULCONST ci_uint16  vi_txq_size;
+  CI_ULCONST ci_uint16  vi_channel;
   CI_ULCONST ci_uint8   vi_arch;
   CI_ULCONST ci_uint8   vi_variant;
   CI_ULCONST ci_uint8   vi_revision;
   CI_ULCONST ci_uint8   vi_nic_flags;
-  CI_ULCONST ci_uint8   vi_channel;
   CI_ULCONST char       dev_name[20];
   /* Transmit overflow queue.  Packets here are ready to send. */
   oo_pktq               dmaq;
