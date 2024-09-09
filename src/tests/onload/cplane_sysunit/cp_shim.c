@@ -99,6 +99,30 @@ static int shim_cp_set_hwport(int fd, ci_ifid_t ifindex, ci_hwport_id_t hwport)
 
 static int this_is_server_process = 0;
 
+struct hwport_info {
+  unsigned num_hwports;
+  ci_hwport_id_t hwports[2]; /* At most 2 hwports per intf*/
+};
+#define IFINDEX_HWPORT_TABLE_ENTRIES 64
+#define IFINDEX_HWPORT_TABLE_SIZE \
+                       IFINDEX_HWPORT_TABLE_ENTRIES * sizeof(struct hwport_info)
+#define IFINDEX_HWPORT_TABLE_OFFSET \
+                    CP_SHIM_MIB_BYTES + CP_SHIM_FWD_BYTES + CP_SHIM_FWD_RW_BYTES
+
+struct hwport_info* map_shim_table(int fd)
+{
+  void *table;
+  table = mmap(NULL, IFINDEX_HWPORT_TABLE_SIZE, PROT_READ | PROT_WRITE,
+               MAP_SHARED, fd, IFINDEX_HWPORT_TABLE_OFFSET);
+  ci_assert_nequal(table, MAP_FAILED);
+  return table;
+}
+
+void unmap_shim_table(struct hwport_info *table)
+{
+  munmap(table, IFINDEX_HWPORT_TABLE_SIZE);
+}
+
 int cp_unit_cplane_ioctl(int fd, long unsigned int op, ...)
 {
   void* v;
@@ -110,8 +134,17 @@ int cp_unit_cplane_ioctl(int fd, long unsigned int op, ...)
   switch(op) {
   case OO_IOC_CP_DUMP_HWPORTS:
   {
-    /* All the hwports will be discovered later; now we just send
-     * the "done" message. */
+    ci_ifid_t ifindex = *(ci_ifid_t*)v;
+    if( ifindex != CI_IFID_BAD ) {
+      struct hwport_info *table, *info;
+      ci_assert(ifindex < IFINDEX_HWPORT_TABLE_ENTRIES);
+      table = map_shim_table(fd);
+      info = &table[ifindex];
+      assert(info->num_hwports <= 2);
+      for( unsigned i = 0; i < info->num_hwports; i++ )
+        shim_cp_set_hwport(fd, ifindex, info->hwports[i]);
+      unmap_shim_table(table);
+    }
     int rc = shim_cp_set_hwport(fd, CI_IFID_BAD, CI_HWPORT_ID_BAD);
     if( rc < 0 )
       return rc;
@@ -210,9 +243,17 @@ int cp_unit_cplane_ioctl(int fd, long unsigned int op, ...)
   case OO_IOC_CP_SYSUNIT_MAKE_NIC:
   {
     cp_set_hwport_t* arg = v;
+    struct hwport_info *table, *info;
     int rc = shim_cp_set_hwport(fd, arg->ifindex, arg->hwport);
     if( rc < 0 )
       return rc;
+    ci_assert(arg->ifindex < IFINDEX_HWPORT_TABLE_ENTRIES);
+    table = map_shim_table(fd);
+    info = &table[arg->ifindex];
+    ci_assert(info->num_hwports < 2);
+    info->hwports[info->num_hwports] = arg->hwport;
+    info->num_hwports++;
+    unmap_shim_table(table);
     break;
   }
 
