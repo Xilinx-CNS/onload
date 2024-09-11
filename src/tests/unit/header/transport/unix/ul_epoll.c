@@ -98,15 +98,17 @@ static void test_oo_epoll_frc_to_ms(void)
 /* Accept a 0.001% error in frc_to_ns calculation. Even this is a bit harsh. */
 #define FRC_TO_NS_ERROR_RECIPROCAL 100000
 
-static void test_frc_to_ns(uint64_t val)
+static void test_frc_to_ns(int64_t val)
 {
   uint64_t nanos = oo_epoll_frc_to_ns(val);
   ci_uint128 expected_ns = ((ci_uint128)val * 1000000) / oo_timesync_cpu_khz;
   uint64_t expected_ns64 = (expected_ns > OO_EPOLL_MAX_TIMEOUT_NS) ?
                             OO_EPOLL_MAX_TIMEOUT_NS : (uint64_t)expected_ns;
+  uint64_t delta = CI_MAX(expected_ns64 / FRC_TO_NS_ERROR_RECIPROCAL, 1);
 
-  CHECK(nanos, >=, expected_ns64 - expected_ns64 / FRC_TO_NS_ERROR_RECIPROCAL);
-  CHECK(nanos, <=, expected_ns64 + expected_ns64 / FRC_TO_NS_ERROR_RECIPROCAL);
+  /* Account for overflow when adding/subtracting delta */
+  CHECK((int64_t)(nanos - (expected_ns64 - delta)), >=, 0);
+  CHECK((int64_t)((expected_ns64 + delta) - nanos), >=, 0);
 }
 
 static void test_oo_epoll_frc_to_ns(void)
@@ -119,6 +121,7 @@ static void test_oo_epoll_frc_to_ns(void)
   for(i = 0; i < 5; i++) {
     test_frc_to_ns(rand());
   }
+  test_frc_to_ns(0);
 }
 
 static void run_tests(unsigned cpu_khz)
@@ -137,13 +140,9 @@ static void run_tests(unsigned cpu_khz)
   TEST_RUN(test_oo_epoll_frc_to_ns);
 }
 
-int main(void)
-{
-  unsigned seed = time(NULL);
+static void run_tests_with_seed(unsigned seed) {
   int i;
-  fprintf(stderr, "Running unit test ul_epoll.c with random seed: %u\n", seed);
   srand(seed);
-
   for(i = 0; i < sizeof(cpu_khz_vals) / sizeof(cpu_khz_vals[0]); i++) {
     run_tests(cpu_khz_vals[i]);
   }
@@ -151,6 +150,21 @@ int main(void)
   /* Test arbitrary frequencies > 2HZ */
   for(i = 0; i < 5; i++) {
     run_tests(rand() % 10000000 + 2);
+  }
+}
+
+static unsigned regression_seeds[] = {1726061048};
+
+int main(void)
+{
+  unsigned seed = time(NULL);
+  int i;
+  fprintf(stderr, "Running unit test ul_epoll.c with random seed: %u\n", seed);
+  run_tests_with_seed(seed);
+  for(i = 0; i < sizeof(regression_seeds)/sizeof(*regression_seeds); i++) {
+    fprintf(stderr, "Testing for regressions with previously failing seed:%u\n",
+            regression_seeds[i]);
+    run_tests_with_seed(regression_seeds[i]);
   }
   TEST_END();
 }
