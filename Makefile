@@ -60,7 +60,23 @@ ifeq ($(KPATH),)
   ifeq ($(KARCH),)
   KARCH := $(shell uname -m)
   endif
-  KPATH := /lib/modules/$(KVER)/build
+  # RHEL
+  KPATH := /usr/src/kernels/$(KVER)
+  ifeq ($(wildcard $(KPATH)),)
+    # SUSE
+    KPATH := /usr/src/linux-$(KVER)
+  endif
+  ifeq ($(wildcard $(KPATH)),)
+    # Debian
+    KPATH := /usr/src/linux-headers-$(KVER)
+  endif
+  ifeq ($(wildcard $(KPATH)),)
+    # Symlink from binaries
+    KPATH := /lib/modules/$(KVER)/build
+  endif
+  ifeq ($(wildcard $(KPATH)),)
+    $(error KPATH "$(KPATH)" not found)
+  endif
 else ifneq (,$(wildcard $(dir) $(KPATH)/include/generated/compile.h))
   KVERARCH := $(subst $\",,$(shell echo 'UTS_RELEASE UTS_MACHINE'|gcc -E -P -include $(KPATH)/include/generated/utsrelease.h -include $(KPATH)/include/generated/compile.h -))
   ifeq ($(KVERARCH),)

@@ -69,14 +69,7 @@
 
 %{!?kernel:  %{expand: %%define kernel %%(uname -r)}}
 %{!?target_cpu:  %{expand: %%define target_cpu %{_host_cpu}}}
-%{!?kpath: %{expand: %%define kpath /lib/modules/%%{kernel}/build}}
 %{!?debuginfo: %{expand: %%define debuginfo false}}
-
-%define knownvariants '@(BOOT|PAE|@(big|huge)mem|debug|enterprise|kdump|?(big|large)smp|uml|xen[0U]?(-PAE)|xen|rt?(-trace|-vanilla)|default|big|pae|vanilla|trace|timing)'
-%define knownvariants2 '%{knownvariants}'?(_'%{knownvariants}')
-
-# Assume that all non-suse distributions can be treated as redhat
-%define redhat       %( [ "%{_vendor}" = "suse"   ] ; echo $?)
 
 # Determine distro to use for package conflicts with SFC.  This is not
 # accurate in various cases, and should be updated to use the sfc-disttag
@@ -87,31 +80,9 @@
 %define maindist %{?for_rhel:%{for_rhel}}%{!?for_rhel:%{thisdist}}
 %endif
 
-%define kernel_installed %( [ -e "/lib/modules/%{kernel}" ] && rpm -q --whatprovides /lib/modules/%{kernel} > /dev/null && echo "1" || echo "0")
-
-%if %kernel_installed
-
-# kmodtool doesn't count 'rt' as a variant so manipulate name. (rpmbuild
-# BuildRequires doesn't recognise that kernel-rt provides 'kernel = blah-rt'.)
-# also some kernels have 2 parts in the variant
-%define kvariantsuffix %(shopt -s extglob; KNOWNVARS='%{knownvariants2}'; KVER=%{kernel}; VAR=${KVER##${KVER%%%${KNOWNVARS}}}; [[ -n "$VAR" ]] && echo $VAR)
-%define kvariantsuffix_dash %( KVAR='%{kvariantsuffix}'; [[ -n "${KVAR}" ]] && echo -"${KVAR}" || echo "")
-%define kernel_cut   %(shopt -s extglob; KNOWNVARS='%{knownvariants2}'; KVER=%{kernel}; echo ${KVER%%%${KNOWNVARS}} | sed "s/-$//; s/_$//")
-# some distros like to add architecture to the kernel name (Fedora)
-%define kverrel        %(shopt -s extglob; KVER=%{kernel_cut}; echo ${KVER%%@(.i386|.i586|.i686|.x86_64|.ppc64)})
-
-%else
-
-# kernel for which you're trying to build is not installed on this particular host.
-# We will assume that you provided us with a sensible name.
-
-%define kvariantsuffix %(shopt -s extglob; KNOWNVARS='%{knownvariants2}'; KVER=%{kernel}; VAR=${KVER##${KVER%%%${KNOWNVARS}}}; [[ -n "$VAR" ]] && echo $VAR)
-%define kvariantsuffix_dash %( KVAR='%{kvariantsuffix}'; [[ -n "${KVAR}" ]] && echo -"${KVAR}" || echo "")
-%define kverrel %( echo %{kernel})
-
-%endif  # kernel_installed
-
-%define kpkgver %(echo '%{kverrel}' | sed 's/-/_/g')
+%global kernel_uname_r_wo_arch %(echo '%{kernel}' | sed -e 's/\.%{_arch}//')
+%{!?kverrel: %global kverrel %(echo '%{kernel_uname_r_wo_arch}' | tr + _)}
+%global kpkgver %(echo '%{kverrel}' | tr - _)
 
 %{echo: %{target_cpu}}
 
@@ -142,10 +113,10 @@ AutoReqProv	: no
 ExclusiveArch	: i386 i586 i686 x86_64 ppc64
 BuildRequires	: gawk gcc sed make bash libpcap libpcap-devel automake libtool autoconf libcap-devel
 # The glibc, python-devel, and libcap packages we need depend on distro and platform
-%if %{redhat}
-BuildRequires	: glibc-common python3-devel libcap
-%else
+%if 0%{?suse_version}
 BuildRequires	: glibc-devel glibc python3-devel libcap2
+%else
+BuildRequires	: glibc-common python3-devel libcap
 %endif
 
 %description
@@ -269,26 +240,22 @@ This package comprises development headers for the components of OpenOnload.
 %setup -n %{name}-%{pkgversion}
 
 %build
-
 %if %{with kmod}
-# There are a huge variety of package names and formats for the various
-# kernel and debug packages.  Trying to maintain correct BuildRequires has
-# proven to be fragile, leading to repeated bugs as a new name format
-# emerges.  Given that, we've given up, and just fail before build with a
-# (hopefully) helfpul message if we can't find the headers that we need
-# in the same way as the net driver spec file does.
-[ -d "%{kpath}" ] || {
+KPATH=%{_usrsrc}/kernels/%{kernel} # RHEL
+[ -d "$KPATH" ] || KPATH=%{_usrsrc}/linux-%{kernel} # SUSE
+[ -d "$KPATH" ] || KPATH=/lib/modules/%{kernel}/build # Fallback generic symlink from binaries dir
+[ -d "$KPATH" ] || {
   set +x
   echo >&2 "ERROR: Kernel headers not found.  They should be at:"
-  echo >&2 "ERROR:   %{kpath}"
-%if %{redhat}
-  echo >&2 "Hint: Install the $(echo '%{kernel}' | sed -r 's/(.*)(smp|hugemem|largesmp|PAE|xen)$/kernel-\2-devel-\1/; t; s/^/kernel-devel-/') package"
+  echo >&2 "ERROR:   $KPATH"
+%if 0%{?suse_version}
+  echo >&2 "Hint: Install the kernel-source-$(echo '%{kernel}'} | sed -r 's/-[^-]*$//') package"
 %else
-  echo >&2 "Hint: Install the kernel-source-$(echo '%kernel}' | sed -r 's/-[^-]*$//') package"
+  echo >&2 "Hint: Install the $(rpm -q --whatprovides $KPATH 2>/dev/null || echo kernel-core-%{kernel} | sed 's/-core/-devel/') package"
 %endif
   exit 1
 }
-export KPATH=%{kpath}
+export KPATH
 %endif
 
 %if %{with user}%{with kmod}
