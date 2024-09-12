@@ -5,7 +5,7 @@
 # the transport_config_opt_extra.h (or substitute as defined by the
 # TRANSPORT_CONFIG_OPT environment variable).
 # Call it as (for example):
-#    ifeq ($(call GetTransportConfigOpt,CI_CFG_BPF),1)
+#    ifeq ($(call GetTransportConfigOpt,CI_CFG_UL_INTERRUPT_HELPER),1)
 #      ...do stuff...
 #    endif
 

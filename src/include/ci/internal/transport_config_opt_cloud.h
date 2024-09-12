@@ -11,12 +11,4 @@
 #undef CI_CFG_IPV6
 #define CI_CFG_IPV6 1
 
-/* Enable Berkeley Packet Filter program functionality. */
-#undef CI_CFG_BPF
-#define CI_CFG_BPF 1
-
-/* Enable the SmartNIC TX CRC-offload plugin */
-#undef CI_CFG_TX_CRC_OFFLOAD
-#define CI_CFG_TX_CRC_OFFLOAD 1
-
 #endif /* __CI_INTERNAL_TRANSPORT_CONFIG_OPT_CLOUD_H__ */
