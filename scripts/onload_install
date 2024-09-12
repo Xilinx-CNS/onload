@@ -716,7 +716,6 @@ while [ $# -gt 0 ]; do
   --includedir=*) includedir=${1#--includedir=};;
   --usrlocaldir=*) usrlocaldir=${1#--usrlocaldir=};;
   --usrdir=*) usrdir=${1#--usrdir=};;
-  --lib32dir=*) lib32dir=${1#--lib32dir=};;
   --lib64dir=*) lib64dir=${1#--lib64dir=};;
   --kernelmodulesdir=*) kernelmodulesdir=${1#--kernelmodulesdir=};;
   --moddir=*) install_mod_dir="${1#--moddir=}";;
