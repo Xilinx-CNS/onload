@@ -130,6 +130,7 @@ int cp_unit_cplane_ioctl(int fd, long unsigned int op, ...)
   va_start(va, op);
   v = (void*)va_arg(va, long);
   va_end(va);
+  unsigned i;
 
   switch(op) {
   case OO_IOC_CP_DUMP_HWPORTS:
@@ -141,7 +142,7 @@ int cp_unit_cplane_ioctl(int fd, long unsigned int op, ...)
       table = map_shim_table(fd);
       info = &table[ifindex];
       assert(info->num_hwports <= 2);
-      for( unsigned i = 0; i < info->num_hwports; i++ )
+      for( i = 0; i < info->num_hwports; i++ )
         shim_cp_set_hwport(fd, ifindex, info->hwports[i]);
       unmap_shim_table(table);
     }
