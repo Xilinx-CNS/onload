@@ -76,7 +76,7 @@ configure-stamp:
 	touch configure-stamp
 
 build-arch: configure-stamp  build-arch-stamp
-build-arch-stamp: 
+build-arch-stamp:
 	dh_testdir
 
 	# Add here command to compile/build the package.
@@ -112,7 +112,7 @@ binary-modules:
 	dh_prep
 
 build-indep:  configure-stamp build-indep-stamp
-build-indep-stamp: 
+build-indep-stamp:
 	dh_testdir
 
 	# Add here command to compile/build the arch indep package.
@@ -124,7 +124,7 @@ build-indep-stamp:
 
 build: build-arch build-indep
 
-clean: 
+clean:
 	dh_testdir
 	rm -f build-arch-stamp build-indep-stamp configure-stamp
 
@@ -244,7 +244,6 @@ binary-arch: build install
 
 	i_prefix=$(CURDIR)/debian/$(userpackage) scripts/onload_install --verbose \
 		--packaged --userfiles --modprobe --modulesloadd --python-layout=deb
-	cp -r scripts/onload_install --verbose debian/$(userpackage)/lib/onload/
 	dh_builddeb -a
 
 binary: binary-indep binary-arch
