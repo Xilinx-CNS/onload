@@ -331,8 +331,14 @@ static struct efx_rep *efx_ef100_rep_create_netdev(struct efx_nic *efx,
 	net_dev->extended->min_mtu = EFX_MIN_MTU;
 	net_dev->extended->max_mtu = EFX_100_MAX_MTU;
 #endif
-	net_dev->features |= NETIF_F_HW_TC | NETIF_F_LLTX;
-	net_dev->hw_features |= NETIF_F_HW_TC | NETIF_F_LLTX;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NETDEV_LLTX)
+	net_dev->lltx = true;
+#else
+	net_dev->features |= NETIF_F_LLTX;
+	net_dev->hw_features |= NETIF_F_LLTX;
+#endif
+	net_dev->features |= NETIF_F_HW_TC;
+	net_dev->hw_features |= NETIF_F_HW_TC;
 	return efv;
 fail1:
 	free_netdev(net_dev);
