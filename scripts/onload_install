@@ -88,6 +88,16 @@ manifest_combine() {
   return 1
 }
 
+# Conditional file existence wrapper around install_* commands
+noreplace() {
+  if [ -e "$3" ] && ! diff "$2" "$3" >/dev/null 2>/dev/null; then
+      err "WARNING: Not overwriting existing file $3. Try: diff -u $3 $3.new"
+      "$1" "$2" "$3.new"
+  else
+    "$1" "$2" "$3"
+  fi
+}
+
 # Install a file (non executable).
 install_f() {
   try $do install -D -m 644 "$1" "$2" &&
@@ -259,7 +269,7 @@ install_userland() {
   install_x onload_tool "$i_sbin/onload_tool"
   install_x onload "$i_usrbin/onload"
   install_x sfcirqaffinity "$i_usrsbin/sfcirqaffinity"
-    install_f onload_misc/onload_sysconfig "$i_etc/sysconfig/openonload"
+  noreplace install_f onload_misc/onload_sysconfig "$i_etc/sysconfig/openonload"
   install_x onload_tcpdump "$i_usrbin/onload_tcpdump"
   install_x onload_iptables "$i_usrbin/onload_iptables"
   $affinity && {
@@ -324,23 +334,14 @@ install_ldconfig() {
 }
 
 
+# Backwards compatibility only -- RPM/DEB call onload_tool directly
 install_adduser() {
-  ONLOAD_CPLANE_USER=onload_cplane
-  # Note that omission of the username in this config file is documented to
-  # mean 'run as root'. We still create the user here (even though it might
-  # never be used) so that you can flip between both modes without needing a
-  # reinstall
-  [ -f /etc/sysconfig/openonload ] && . /etc/sysconfig/openonload
-  if ! getent passwd $ONLOAD_CPLANE_USER >/dev/null; then
-    # We do not require this home directory to exist
-    if command -v adduser; then
-      try $do adduser --system --no-create-home --home /run/openonload \
-                      --shell /usr/sbin/nologin $ONLOAD_CPLANE_USER >/dev/null
-    else
-      try $do useradd --system --home /run/openonload \
-                      --shell /usr/sbin/nologin $ONLOAD_CPLANE_USER >/dev/null
-    fi
+  if [ ! -f "$i_sbin/onload_tool" ]; then
+    fail "Cannot perform --adduser without onload_tool installed. Use --userfiles"
   fi
+
+  export SHELLOPTS # pass `set -x`
+  try $do "$i_sbin/onload_tool" add_cplane_user
 }
 
 

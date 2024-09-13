@@ -251,7 +251,6 @@ mkdir -p "$i_prefix/etc/depmod.d"
 docdir="$i_prefix%{_defaultdocdir}/%{name}-%{pkgversion}"
 mkdir -p "$docdir"
 install -m 644 LICENSE* README* ChangeLog* ReleaseNotes* "$docdir"
-install -D scripts/onload_install "%{buildroot}/lib/onload/onload_install"
 # Removing these files is fine since they would only ever be generated on a build machine.
 rm -f "$i_prefix/etc/sysconfig/modules/onload.modules"
 rm -f "$i_prefix/usr/local/lib/modules-load.d/onload.conf"
@@ -270,7 +269,7 @@ else
   cp /usr/share/onload/sysconfig_onload_modules /etc/sysconfig/modules/onload.modules
 fi
 
-/lib/onload/onload_install --packaged --adduser
+/sbin/onload_tool add_cplane_user
 ldconfig -n /usr/lib /usr/lib64
 
 %preun
@@ -336,7 +335,6 @@ rm -fR $RPM_BUILD_ROOT
 /usr/libexec/onload/profiles
 %{_bindir}/*
 %{_sbindir}/*
-/lib/onload
 /sbin/*
 /usr/include/onload*
 /usr/include/etherfabric/*.h
@@ -344,7 +342,7 @@ rm -fR $RPM_BUILD_ROOT
 %attr(644, -, -) %{_defaultdocdir}/%{name}-%{pkgversion}/*
 %attr(644, -, -) %{_sysconfdir}/modprobe.d/onload.conf
 %attr(644, -, -) %{_sysconfdir}/depmod.d/onload.conf
-%config %attr(644, -, -) %{_sysconfdir}/sysconfig/openonload
+%config(noreplace) %attr(644, -, -) %{_sysconfdir}/sysconfig/openonload
 
 /usr/share/onload/onload_modules-load.d.conf
 /usr/share/onload/sysconfig_onload_modules

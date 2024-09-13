@@ -35,7 +35,13 @@ SFC_CHAR_MODE=666
 # The following setting controls the user which will run the Onload control
 # plane server process. The user must exist, and does not need any privileges.
 #
-# If the setting is not defined, the server will run as root.
+# As part of the install process, the command `onload_tool add_cplane_user`
+# will have typically been run to create the user specified below, which
+# is initially 'onload_cplane'. After updating this setting, running this
+# command is one way to create the user.
+#
+# If this setting is not defined, or the user does not exist when the server
+# starts, the server will run as root.
 
 ONLOAD_CPLANE_USER=onload_cplane
 
