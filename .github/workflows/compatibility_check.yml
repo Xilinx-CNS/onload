@@ -16,12 +16,17 @@ jobs:
         with:
           path: onload_internal
 
+      - name: Extract simple_sockets_apps branch name
+        id: ssa_ref
+        run: echo "branch=$(yq -r '.products.simple_sockets_apps.version' < $GITHUB_WORKSPACE/onload_internal/versions.yaml)" >> "$GITHUB_OUTPUT"
+
       - name: ssa checkout
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/simple_sockets_apps
           ssh-key: ${{ secrets.SIMPLE_SOCKET_APPS_READ_PRIVATE_KEY }}
           path: ssa
+          ref: ${{ steps.ssa_ref.outputs.branch }}
 
       - name: ssa build
         run: |
