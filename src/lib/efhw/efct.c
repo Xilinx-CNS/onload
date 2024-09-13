@@ -358,6 +358,7 @@ efct_nic_event_queue_enable(struct efhw_nic *nic,
     .q_size = efhw_params->evq_size * sizeof(efhw_event_t),
     .subscribe_time_sync = efhw_params->flags & EFHW_VI_TX_TIMESTAMPS,
     .unsol_credit = efhw_params->flags & EFHW_VI_TX_TIMESTAMPS ? CI_CFG_TIME_SYNC_EVENT_EVQ_CAPACITY  - 1 : 0,
+    .irq = efhw_params->wakeup_channel,
   };
   struct efhw_nic_efct *efct = nic->arch_extra;
   struct efhw_nic_efct_evq *efct_evq;
