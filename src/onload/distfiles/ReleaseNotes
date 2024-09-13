@@ -50,6 +50,16 @@ Packaging changes
         yum install -y onload-user onload-akmod
         /usr/sbin/akmods # Optionally, build immediately
 
+ - New combined script `./scripts/onload_mkpackage`
+
+   This script provides backwards-compatible support for `onload_mkdkms` and
+   `onload-make-official-srpm` as part of its more complete feature set for
+   package delivery. It can build source and/or binary RPM and DEB packages
+   from working tree or release tarball. It can filter any combination of DKMS,
+   Akmod, kmod, devel, and userland packages, and variants such as debug. It can
+   then install and load on local host for end-to-end testing and deployment or
+   build within Red Hat Mock for deployment elsewhere.
+
 [^1]: To ingest directly in 2.2 < DKMS < 3.0.11, work around DKMS bug SC2157
       by replacing `dkms ldarchive ...` with `tar xf onload-*.tgz -C /usr/src`.
 

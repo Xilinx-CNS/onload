@@ -1,5 +1,1 @@
-#!/bin/sh
-echo "This script has been integrated into onload_mkdist and openonload.spec."
-echo "To build RPMs for DKMS and userland, simply build a Onload mkdist tarball:"
-echo "  rpmbuild -tb onload-*.tgz"
-exit 1
+onload_mkpackage
