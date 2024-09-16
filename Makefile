@@ -282,7 +282,26 @@ clean_kernel:
 # Can't figure out a way to get modpost to look in the src directory. At least
 # the number of makefiles is much smaller than the number of source files
 $(OUTMAKEFILES): $(KBUILDTOP)/%: %
-	$(Q)mkdir -p $(@D)
 	$(Q)ln -sf `realpath '--relative-to=$(@D)' '$<'` $@
+
+# Linux 6.10 build fix: place symlinks to source files into the build directory.
+# See github issue #236.
+DRIVER_BUILD_SUBDIRS_ALL := $(foreach D,$(DRIVER_SUBDIRS),$(KBUILDTOP)/$(D))
+DRIVER_BUILD_SUBDIRS_ALL += $(KBUILDTOP)/src/lib/efthrm
+DRIVER_BUILD_SUBDIRS_ALL += $(KBUILDTOP)/src/lib/efhw
+DRIVER_BUILD_SUBDIRS_ALL += $(KBUILDTOP)/src/lib/efrm
+DRIVER_BUILD_SUBDIRS_ALL += $(KBUILDTOP)/src/lib/kernel_utils
+ifeq ($(HAVE_SFC),1)
+DRIVER_BUILD_SUBDIRS_ALL += $(KBUILDTOP)/src/lib/efhw/ef10
+endif
+ifeq ($(HAVE_EF10CT),1)
+DRIVER_BUILD_SUBDIRS_ALL += $(KBUILDTOP)/src/lib/efhw/ef10ct
+endif
+
+$(OUTMAKEFILES): $(DRIVER_BUILD_SUBDIRS_ALL)
+
+$(DRIVER_BUILD_SUBDIRS_ALL): $(KBUILDTOP)/%: %
+	$(Q)mkdir -p $@
+	$(Q)ln -rsf $(wildcard $</*.[ch]) $@
 
 endif  # ifeq ($(KERNELRELEASE),)
