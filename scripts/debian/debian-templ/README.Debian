@@ -7,6 +7,7 @@ The Debian #TYPE# source package provides two packages,
 
  1) #TYPE#-user, which the provides the 32 bit and 64 bit userspace library
  2) #TYPE#-source, which provides the source for the kernel modules
+ 3) #TYPE#-dev, which provides header files for development with onload
 
 The #TYPE#-source package can be used in several ways,
 

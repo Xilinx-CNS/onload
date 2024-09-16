@@ -9,7 +9,7 @@ Homepage: http://www.openonload.org
 Package: #TYPE#-user
 Architecture: any
 Depends: adduser, psmisc, ${shlibs:Depends}, ${misc:Depends}, python3
-Suggests: #TYPE#-modules-${source:Version}
+Suggests: #TYPE#-modules-${source:Version}, #TYPE#-dev
 Provides: onload-user
 Description: Onload TCP/IP stack - library
 
@@ -27,3 +27,9 @@ Architecture: all
 Depends: dkms, #TYPE#-user (>= ${source:Version}), #TYPE#-user (<< ${source:Version}.1~), ${misc:Depends}
 Description: Onload debian package with DKMS
 Conflicts: #TYPE#-modules
+
+Package: #TYPE#-dev
+Architecture: all
+Description: Onload development headers
+Enhances: #TYPE#-user
+Provides: onload-dev
