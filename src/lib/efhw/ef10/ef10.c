@@ -96,7 +96,7 @@ static int ef10_mcdi_rpc(struct efhw_nic *nic, unsigned int cmd, size_t inlen,
 
   *outlen_actual = 0;
   AUX_PRE(dev, auxdev, cli, nic, rc);
-  rc = auxdev->ops->fw_rpc(cli, &rpc);
+  rc = auxdev->onload_ops->base_ops.fw_rpc(cli, &rpc);
   AUX_POST(dev, auxdev, cli, nic, rc);
   *outlen_actual = rpc.outlen_actual;
 
@@ -158,7 +158,7 @@ ef10_mcdi_vport_id(struct efhw_nic *nic, u32 aux_vport_in, u32* mcdi_vport_out)
   struct efx_auxdev_client *cli;
 
   AUX_PRE(dev, auxdev, cli, nic, rc);
-  rc = auxdev->ops->vport_id_get(cli, aux_vport_in);
+  rc = auxdev->onload_ops->vport_id_get(cli, aux_vport_in);
   AUX_POST(dev, auxdev, cli, nic, rc);
 
   if( rc < 0 )
@@ -1169,8 +1169,8 @@ _ef10_set_multicast_loopback_suppression(struct efhw_nic *nic,
   struct efx_auxdev *auxdev;
   struct efx_auxdev_client *cli;
   AUX_PRE(dev, auxdev, cli, nic, rc);
-  rc = auxdev->ops->set_multicast_loopback_suppression(cli, suppress_self,
-                                                       port_id, stack_id);
+  rc = auxdev->onload_ops->set_multicast_loopback_suppression(cli,
+      suppress_self, port_id, stack_id);
   AUX_POST(dev, auxdev, cli, nic, rc);
   return rc;
 }
@@ -2075,7 +2075,8 @@ ef10_rss_flags(struct efhw_nic *nic, u32 *flags_out)
   union efx_auxiliary_param_value val;
 
   AUX_PRE(dev, auxdev, cli, nic, rc);
-  rc = auxdev->ops->get_param(cli, EFX_RXFH_DEFAULT_FLAGS, &val);
+  rc = auxdev->onload_ops->base_ops.get_param(cli, EFX_RXFH_DEFAULT_FLAGS,
+                                              &val);
   AUX_POST(dev, auxdev, cli, nic, rc);
 
   if( rc == 0 )
@@ -2157,7 +2158,7 @@ ef10_set_rss_mode(struct efhw_nic *nic, u32 context, u32 mode)
     return rc;
 
   AUX_PRE(dev, auxdev, cli, nic, rc);
-  rc = auxdev->ops->set_rxfh_flags(cli, context, nic_rss_flags);
+  rc = auxdev->onload_ops->set_rxfh_flags(cli, context, nic_rss_flags);
   AUX_POST(dev, auxdev, cli, nic, rc);
 
   return rc;
@@ -2175,7 +2176,7 @@ ef10_rss_alloc(struct efhw_nic *nic, const u32 *indir, const u8 *key,
   struct ethtool_rxfh_param params = { 0 };
 
   AUX_PRE(dev, auxdev, cli, nic, rc);
-  rc = auxdev->ops->create_rxfh_context(cli, &params, num_qs);
+  rc = auxdev->onload_ops->create_rxfh_context(cli, &params, num_qs);
   AUX_POST(dev, auxdev, cli, nic, rc);
   if( rc < 0 ) {
     fail_rc = rc;
@@ -2188,7 +2189,7 @@ ef10_rss_alloc(struct efhw_nic *nic, const u32 *indir, const u8 *key,
   params.indir_size = nic->rss_indir_size;
 
   AUX_PRE(dev, auxdev, cli, nic, rc);
-  rc = auxdev->ops->modify_rxfh_context(cli, &params);
+  rc = auxdev->onload_ops->modify_rxfh_context(cli, &params);
   AUX_POST(dev, auxdev, cli, nic, rc);
   if( rc < 0 ) {
     fail_rc = rc;
@@ -2206,7 +2207,7 @@ ef10_rss_alloc(struct efhw_nic *nic, const u32 *indir, const u8 *key,
 
  fail_free_context:
   AUX_PRE(dev, auxdev, cli, nic, rc);
-  rc = auxdev->ops->remove_rxfh_context(cli, &params);
+  rc = auxdev->onload_ops->remove_rxfh_context(cli, &params);
   AUX_POST(dev, auxdev, cli, nic, rc);
  fail:
 
@@ -2224,7 +2225,7 @@ ef10_rss_free(struct efhw_nic *nic, u32 rss_context)
   struct ethtool_rxfh_param params = { .rss_context = rss_context };
 
   AUX_PRE(dev, auxdev, cli, nic, rc);
-  rc = auxdev->ops->remove_rxfh_context(cli, &params);
+  rc = auxdev->onload_ops->remove_rxfh_context(cli, &params);
   AUX_POST(dev, auxdev, cli, nic, rc);
 
   return rc;
@@ -2242,7 +2243,7 @@ ef10_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
   struct efx_auxdev_client *cli;
 
   AUX_PRE(dev, auxdev, cli, nic, rc);
-  rc = auxdev->ops->filter_insert(cli, spec,
+  rc = auxdev->onload_ops->filter_insert(cli, spec,
                                   (flags & EFHW_FILTER_F_REPLACE) != 0);
   AUX_POST(dev, auxdev, cli, nic, rc);
 
@@ -2262,7 +2263,7 @@ ef10_filter_remove(struct efhw_nic *nic, int filter_id)
    * additional logic to handle removing a filter during a reset which we rely
    * on. */
   if( auxdev != NULL ) {
-    rc = auxdev->ops->filter_remove(cli, filter_id);
+    rc = auxdev->onload_ops->filter_remove(cli, filter_id);
 
     efhw_nic_release_auxdev(nic, cli);
   }
@@ -2287,7 +2288,7 @@ ef10_filter_redirect(struct efhw_nic *nic, int filter_id,
 
 
   AUX_PRE(dev, auxdev, cli, nic, rc);
-  rc = auxdev->ops->filter_redirect(cli, filter_id, spec->dmaq_id,
+  rc = auxdev->onload_ops->filter_redirect(cli, filter_id, spec->dmaq_id,
                                     rss_context, stack_id);
   AUX_POST(dev, auxdev, cli, nic, rc);
 
@@ -2310,7 +2311,8 @@ static int ef10_multicast_block(struct efhw_nic *nic, bool block)
   union efx_auxiliary_param_value val = { .b = block };
 
   AUX_PRE(dev, auxdev, cli, nic, rc);
-  rc = auxdev->ops->set_param(cli, EFX_PARAM_FILTER_BLOCK_KERNEL_MCAST, &val);
+  rc = auxdev->onload_ops->base_ops.set_param(cli,
+      EFX_PARAM_FILTER_BLOCK_KERNEL_MCAST, &val);
   AUX_POST(dev, auxdev, cli, nic, rc);
   return rc;
 }
@@ -2324,7 +2326,8 @@ static int ef10_unicast_block(struct efhw_nic *nic, bool block)
   union efx_auxiliary_param_value val = { .b = block };
 
   AUX_PRE(dev, auxdev, cli, nic, rc);
-  rc = auxdev->ops->set_param(cli, EFX_PARAM_FILTER_BLOCK_KERNEL_UCAST, &val);
+  rc = auxdev->onload_ops->base_ops.set_param(cli,
+      EFX_PARAM_FILTER_BLOCK_KERNEL_UCAST, &val);
   AUX_POST(dev, auxdev, cli, nic, rc);
   return rc;
 }
@@ -2343,7 +2346,7 @@ static int ef10_vport_alloc(struct efhw_nic *nic, u16 vlan_id,
   struct efx_auxdev_client *cli;
 
   AUX_PRE(dev, auxdev, cli, nic, rc);
-  rc = auxdev->ops->vport_new(cli, vlan_id, 0);
+  rc = auxdev->onload_ops->vport_new(cli, vlan_id, 0);
   AUX_POST(dev, auxdev, cli, nic, rc);
 
   if( rc >= 0 ) {
@@ -2362,7 +2365,7 @@ static int ef10_vport_free(struct efhw_nic *nic, u16 vport_handle)
   struct efx_auxdev_client *cli;
 
   AUX_PRE(dev, auxdev, cli, nic, rc);
-  rc = auxdev->ops->vport_free(cli, vport_handle);
+  rc = auxdev->onload_ops->vport_free(cli, vport_handle);
   AUX_POST(dev, auxdev, cli, nic, rc);
 
   return rc;
