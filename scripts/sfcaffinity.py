@@ -171,7 +171,7 @@ def irq_get_pid(irq):
     pid = try_get_pid('^IRQ-%d$' % int(irq))
     if pid > 0:
         return pid
-    pid = try_get_pid('^\[IRQ-%d\]$' % int(irq))
+    pid = try_get_pid(r'^\[IRQ-%d\]$' % int(irq))
     if pid > 0:
         return pid
     pid = try_get_pid('^irq/%d-' % int(irq))
