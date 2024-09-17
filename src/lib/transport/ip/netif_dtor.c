@@ -49,14 +49,12 @@ static int is_expecting_events(ci_netif* ni)
 
 #ifdef __KERNEL__
 #include <onload/tcp_helper_fns.h>
-#define KHZ(ni) oo_timesync_cpu_khz
-#else
-#define KHZ(ni) IPTIMER_STATE(ni)->khz
 #endif
 
 void oo_netif_dtor_pkts(ci_netif* ni)
 {
   ci_uint64 start = ci_frc64_get();
+  ci_uint64 end = start + oo_usec_to_cycles64(ni, 100000);
   ci_uint64 ev_count= 0;
 
   if( ni->error_flags )
@@ -67,8 +65,10 @@ void oo_netif_dtor_pkts(ci_netif* ni)
   /* If we have some events or wait for TX complete events,
    * we should handle them all. */
   while( is_expecting_events(ni) ) {
-    ev_count += ci_netif_poll(ni);
-    if( ci_frc64_get() - start > KHZ(ni) ) {
+    /* No point limiting the number of events here, so just grab as much as
+     * we can. */
+    ev_count += ci_netif_poll_n(ni, 0x7fffffff);
+    if( ci_frc64_get() > end ) {
       /* It is not only TX complete events we are waiting for and
        * this warning has been seen from running udpswallow. Keep
        * the message to track this bug. */
