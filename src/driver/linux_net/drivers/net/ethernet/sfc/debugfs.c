@@ -75,6 +75,53 @@ static struct file_operations efx_debugfs_file_ops = {
 	.release = single_release
 };
 
+/**
+ * efx_fini_debugfs_child - remove a named child of a debugfs directory
+ * @dir:		Directory
+ * @name:		Name of child
+ *
+ * This removes the named child from the directory, if it exists.
+ */
+void efx_fini_debugfs_child(struct dentry *dir, const char *name)
+{
+	struct qstr child_name = QSTR_INIT(name, strlen(name));
+	struct dentry *child;
+
+	child = d_hash_and_lookup(dir, &child_name);
+	if (!IS_ERR_OR_NULL(child)) {
+		/* If it's a "regular" file, free its parameter binding */
+		if (S_ISREG(child->d_inode->i_mode))
+			kfree(child->d_inode->i_private);
+		debugfs_remove(child);
+		dput(child);
+	}
+}
+
+/*
+ * Remove a debugfs directory.
+ *
+ * This removes the named parameter-files and sym-links from the
+ * directory, and the directory itself.  It does not do any recursion
+ * to subdirectories.
+ */
+static void efx_fini_debugfs_dir(struct dentry *dir,
+				 const struct efx_debugfs_parameter *params,
+				 const char *const *symlink_names)
+{
+	if (!dir)
+		return;
+
+	while (params->name) {
+		efx_fini_debugfs_child(dir, params->name);
+		params++;
+	}
+	while (symlink_names && *symlink_names) {
+		efx_fini_debugfs_child(dir, *symlink_names);
+		symlink_names++;
+	}
+	debugfs_remove(dir);
+}
+
 /* Functions for printing various types of parameter. */
 
 int efx_debugfs_read_ushort(struct seq_file *file, void *data)
@@ -248,7 +295,7 @@ err:
 		if ((1ULL << pos) & ignore)
 			continue;
 
-		debugfs_lookup_and_remove(params[pos].name, parent);
+		efx_fini_debugfs_child(parent, params[pos].name);
 	}
 	return -ENOMEM;
 }
@@ -401,7 +448,7 @@ void efx_trim_debugfs_port(struct efx_nic *efx,
 	if (dir) {
 		const struct efx_debugfs_parameter *field;
 		for (field = params; field->name; field++)
-			debugfs_lookup_and_remove(field->name, dir);
+			efx_fini_debugfs_child(dir, field->name);
 	}
 }
 
@@ -488,7 +535,8 @@ err_mem:
  */
 void efx_fini_debugfs_vdpa(struct ef100_vdpa_nic *vdpa)
 {
-	debugfs_remove_recursive(vdpa->debug_dir);
+	efx_fini_debugfs_dir(vdpa->debug_dir,
+			     efx_debugfs_vdpa_parameters, NULL);
 	vdpa->debug_dir = NULL;
 }
 
@@ -563,7 +611,9 @@ err_mem:
  */
 void efx_fini_debugfs_vdpa_vring(struct ef100_vdpa_vring_info *vdpa_vring)
 {
-	debugfs_remove_recursive(vdpa_vring->debug_dir);
+	if (vdpa_vring->debug_dir)
+		efx_fini_debugfs_dir(vdpa_vring->debug_dir,
+				     efx_debugfs_vdpa_vring_parameters, NULL);
 	vdpa_vring->debug_dir = NULL;
 }
 #endif
@@ -666,7 +716,12 @@ static int efx_init_debugfs_tx_queue(struct efx_tx_queue *tx_queue)
  */
 static void efx_fini_debugfs_tx_queue(struct efx_tx_queue *tx_queue)
 {
-	debugfs_remove_recursive(tx_queue->debug_dir);
+	static const char *const symlink_names[] = {
+		"channel", "port", NULL
+	};
+
+	efx_fini_debugfs_dir(tx_queue->debug_dir,
+			     efx_debugfs_tx_queue_parameters, symlink_names);
 	tx_queue->debug_dir = NULL;
 }
 
@@ -783,7 +838,12 @@ static int efx_init_debugfs_rx_queue(struct efx_rx_queue *rx_queue)
  */
 static void efx_fini_debugfs_rx_queue(struct efx_rx_queue *rx_queue)
 {
-	debugfs_remove_recursive(rx_queue->debug_dir);
+	const char *const symlink_names[] = {
+		"channel", NULL
+	};
+
+	efx_fini_debugfs_dir(rx_queue->debug_dir,
+			     efx_debugfs_rx_queue_parameters, symlink_names);
 	rx_queue->debug_dir = NULL;
 }
 
@@ -860,7 +920,8 @@ static int efx_init_debugfs_channel(struct efx_channel *channel)
  */
 static void efx_fini_debugfs_channel(struct efx_channel *channel)
 {
-	debugfs_remove_recursive(channel->debug_dir);
+	efx_fini_debugfs_dir(channel->debug_dir,
+			     efx_debugfs_channel_parameters, NULL);
 	channel->debug_dir = NULL;
 }
 
@@ -1030,11 +1091,13 @@ int efx_init_debugfs_nic(struct efx_nic *efx)
  */
 void efx_fini_debugfs_nic(struct efx_nic *efx)
 {
-	debugfs_remove_recursive(efx->debug_port_dir);
+	efx_fini_debugfs_dir(efx->debug_port_dir,
+			     efx_debugfs_port_parameters, NULL);
 	efx->debug_port_dir = NULL;
-	debugfs_remove_recursive(efx->errors.debug_dir);
+	efx_fini_debugfs_dir(efx->errors.debug_dir,
+			     efx_debugfs_nic_error_parameters, NULL);
 	efx->errors.debug_dir = NULL;
-	debugfs_remove_recursive(efx->debug_dir);
+	efx_fini_debugfs_dir(efx->debug_dir, efx_debugfs_nic_parameters, NULL);
 	efx->debug_dir = NULL;
 }
 
@@ -1092,8 +1155,9 @@ int efx_init_debugfs(void)
  */
 void efx_fini_debugfs(void)
 {
-	debugfs_remove_recursive(efx_debug_root);
+	debugfs_remove(efx_debug_cards);
 	efx_debug_cards = NULL;
+	debugfs_remove(efx_debug_root);
 	efx_debug_root = NULL;
 }
 

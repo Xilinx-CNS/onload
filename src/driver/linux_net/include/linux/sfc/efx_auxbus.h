@@ -291,7 +291,8 @@ union efx_auxiliary_param_value {
 #endif
 
 /**
- * struct efx_auxdev_ops - Device operations.
+ * struct efx_auxdev_ops - Base device operations, common across multiple
+ *	device types.
  *
  * @open: Clients need to open a device before using it. This allocates a
  *	client ID used for further operations, and can register a callback
@@ -303,9 +304,6 @@ union efx_auxiliary_param_value {
  * @fw_rpc: Remote procedure call to the firmware. Returns a negative error
  *	code or 0 on success.
  *
- * @create_rxfh_context: Allocate an RSS context.
- * @modify_rxfh_context: Modify an RSS context.
- * @remove_rxfh_context: Free an RSS context.
  */
 struct efx_auxdev_ops {
 	struct efx_auxdev_client *(*open)(struct auxiliary_device *auxdev,
@@ -315,6 +313,29 @@ struct efx_auxdev_ops {
 
 	int (*fw_rpc)(struct efx_auxdev_client *handle,
 		      struct efx_auxdev_rpc *rpc);
+#ifdef EFX_NOT_UPSTREAM
+	/** @get_param: Obtain the setting for an @efx_auxiliary_param. */
+	int (*get_param)(struct efx_auxdev_client *handle,
+			 enum efx_auxiliary_param p,
+			 union efx_auxiliary_param_value *arg);
+	/** @set_param: Set an @efx_auxiliary_param. */
+	int (*set_param)(struct efx_auxdev_client *handle,
+			 enum efx_auxiliary_param p,
+			 union efx_auxiliary_param_value *arg);
+#endif
+};
+
+/**
+ * struct efx_auxdev_onload_ops - Device operations on the full-featured
+ *	device type.
+ *
+ * @base_ops: Common device operations.
+ * @create_rxfh_context: Allocate an RSS context.
+ * @modify_rxfh_context: Modify an RSS context.
+ * @remove_rxfh_context: Free an RSS context.
+ */
+struct efx_auxdev_onload_ops {
+	struct efx_auxdev_ops base_ops;
 
 	int (*create_rxfh_context)(struct efx_auxdev_client *handle,
 				   struct ethtool_rxfh_param *ctx,
@@ -336,14 +357,6 @@ struct efx_auxdev_ops {
 	int (*filter_redirect)(struct efx_auxdev_client *handle,
 			       int filter_id, int rxq_i, u32 *rss_context,
 			       int stack_id);
-	/** @get_param: Obtain the setting for an @efx_auxiliary_param. */
-	int (*get_param)(struct efx_auxdev_client *handle,
-			 enum efx_auxiliary_param p,
-			 union efx_auxiliary_param_value *arg);
-	/** @set_param: Set an @efx_auxiliary_param. */
-	int (*set_param)(struct efx_auxdev_client *handle,
-			 enum efx_auxiliary_param p,
-			 union efx_auxiliary_param_value *arg);
 	/**
 	 * @dl_publish: Do driverlink-compatible VI allocation. Also brings up
 	 *	the netdev interface. Each call to this function must be paired
@@ -384,14 +397,68 @@ struct efx_auxdev_ops {
 };
 
 /**
+ * struct efx_auxdev_irq - A struct that describes an interrupt vector
+ *	in OS and NIC vector tables.
+ *
+ * @os_vector: An MSI-X interrupt number.
+ * @nic_nr: An IRQ number to put into MCDI command to initialise an EVQ.
+ */
+struct efx_auxdev_irq {
+	int os_vector;
+	int nic_nr;
+};
+/**
+ * struct efx_auxdev_llct_ops - Device operations on the low-latency device
+ *	type.
+ *
+ *	This API is meant to be flexible to allow various Q configurations
+ *	with optional interrupt handling and sharing. It assumes that one
+ *	client can allocate resources for independent use, i.e. serving
+ *	different applications.
+ *
+ * @base_ops: Common device operations.
+ *
+ * @channel_alloc: Create a new channel. Returns an error (< 0) or the channel
+ *	number. A channel is a software construct, but it encapsulates one EVQ.
+ * @channel_free: Release a channel.
+ *
+ * @irq_alloc: Allocate an interrupt vector. Return an error pointer on fail.
+ * @irq_free: Release an interrupt vector.
+ *
+ * @txq_alloc: Allocate a TXQ. Return an error (< 0) or TXQ number.
+ * @txq_free: Release a TXQ.
+ *
+ * @rxq_alloc: Allocate an RXQ. Return an error (< 0) or RXQ number.
+ * @rxq_free: Release an RXQ.
+ */
+struct efx_auxdev_llct_ops {
+	struct efx_auxdev_ops base_ops;
+
+	int (*channel_alloc)(struct efx_auxdev_client *handle);
+	void (*channel_free)(struct efx_auxdev_client *handle, int channel_nr);
+
+	struct efx_auxdev_irq *(*irq_alloc)(struct efx_auxdev_client *handle);
+	void (*irq_free)(struct efx_auxdev_client *handle,
+			 struct efx_auxdev_irq *);
+
+	int (*txq_alloc)(struct efx_auxdev_client *handle);
+	void (*txq_free)(struct efx_auxdev_client *handle, int txq_nr);
+
+	int (*rxq_alloc)(struct efx_auxdev_client *handle);
+	void (*rxq_free)(struct efx_auxdev_client *handle, int rxq_nr);
+};
+
+/**
  * struct efx_auxdev - Auxiliary device interface.
  *
  * @auxdev: The parent auxiliary bus device.
- * @ops: Device API.
+ * @onload_ops: Device API.
+ * @llct_ops: LLCT device API.
  */
 struct efx_auxdev {
 	struct auxiliary_device auxdev;
-	const struct efx_auxdev_ops *ops;
+	const struct efx_auxdev_onload_ops *onload_ops;
+	const struct efx_auxdev_llct_ops *llct_ops;
 };
 
 static inline struct efx_auxdev *to_efx_auxdev(struct auxiliary_device *adev)

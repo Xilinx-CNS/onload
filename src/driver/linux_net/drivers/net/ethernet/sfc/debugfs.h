@@ -23,6 +23,7 @@ struct efx_debugfs_parameter {
 };
 
 #ifdef CONFIG_DEBUG_FS
+void efx_fini_debugfs_child(struct dentry *dir, const char *name);
 int efx_init_debugfs_netdev(struct net_device *net_dev);
 void efx_fini_debugfs_netdev(struct net_device *net_dev);
 void efx_update_debugfs_netdev(struct efx_nic *efx);

@@ -731,14 +731,20 @@ static const struct efx_auxdev_ops aux_devops = {
 	.open = efx_auxbus_open,
 	.close = efx_auxbus_close,
 	.fw_rpc = efx_auxbus_fw_rpc,
+#ifdef EFX_NOT_UPSTREAM
+	.get_param = efx_auxbus_get_param,
+	.set_param = efx_auxbus_set_param,
+#endif
+};
+
+static const struct efx_auxdev_onload_ops aux_onload_devops = {
+	.base_ops = aux_devops,
 	.create_rxfh_context = efx_auxbus_create_rxfh_context,
 	.modify_rxfh_context = efx_auxbus_modify_rxfh_context,
 	.remove_rxfh_context = efx_auxbus_remove_rxfh_context,
 	.filter_insert = efx_auxbus_filter_insert,
 	.filter_remove = efx_auxbus_filter_remove,
 	.filter_redirect = efx_auxbus_filter_redirect,
-	.get_param = efx_auxbus_get_param,
-	.set_param = efx_auxbus_set_param,
 	.dl_publish = efx_auxbus_dl_publish,
 	.dl_unpublish = efx_auxbus_dl_unpublish,
 	.set_multicast_loopback_suppression =
@@ -747,6 +753,57 @@ static const struct efx_auxdev_ops aux_devops = {
 	.vport_new = efx_auxbus_vport_new,
 	.vport_free = efx_auxbus_vport_free,
 	.vport_id_get = efx_auxbus_vport_id_get,
+};
+
+static int efx_auxbus_channel_alloc(struct efx_auxdev_client *handle)
+{
+	return -EOPNOTSUPP;
+}
+
+static
+void efx_auxbus_channel_free(struct efx_auxdev_client *handle, int channel_nr)
+{
+}
+
+static
+struct efx_auxdev_irq *efx_auxbus_irq_alloc(struct efx_auxdev_client *handle)
+{
+	return ERR_PTR(-EOPNOTSUPP);
+}
+
+static void efx_auxbus_irq_free(struct efx_auxdev_client *handle,
+				struct efx_auxdev_irq *irq)
+{
+}
+
+static int efx_auxbus_txq_alloc(struct efx_auxdev_client *handle)
+{
+	return -EOPNOTSUPP;
+}
+
+static void efx_auxbus_txq_free(struct efx_auxdev_client *handle, int txq_nr)
+{
+}
+
+static int efx_auxbus_rxq_alloc(struct efx_auxdev_client *handle)
+{
+	return -EOPNOTSUPP;
+}
+
+static void efx_auxbus_rxq_free(struct efx_auxdev_client *handle, int rxq_nr)
+{
+}
+
+static const struct efx_auxdev_llct_ops aux_llct_devops = {
+	.base_ops = aux_devops,
+	.channel_alloc = efx_auxbus_channel_alloc,
+	.channel_free = efx_auxbus_channel_free,
+	.irq_alloc = efx_auxbus_irq_alloc,
+	.irq_free = efx_auxbus_irq_free,
+	.txq_alloc = efx_auxbus_txq_alloc,
+	.txq_free = efx_auxbus_txq_free,
+	.rxq_alloc = efx_auxbus_rxq_alloc,
+	.rxq_free = efx_auxbus_rxq_free,
 };
 
 int efx_auxbus_send_events(struct efx_probe_data *pd,
@@ -884,7 +941,10 @@ int efx_auxbus_add_dev(struct efx_client_type_data *client_type)
 	auxdev->name = auxbus_name;
 	auxdev->dev.release = efx_auxbus_release;
 	auxdev->dev.parent = &client_type->pd->pci_dev->dev;
-	sdev->auxdev.ops = &aux_devops;
+	if (client_type->type == EFX_CLIENT_LLCT)
+		sdev->auxdev.llct_ops = &aux_llct_devops;
+	else
+		sdev->auxdev.onload_ops = &aux_onload_devops;
 	sdev->client_type = client_type;
 
 	rc = auxiliary_device_init(auxdev);

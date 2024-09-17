@@ -19,7 +19,6 @@
 #include <linux/spinlock.h>
 #include <linux/rtnetlink.h>
 #include <linux/slab.h>
-#include <linux/debugfs.h>
 #ifdef EFX_HAVE_STRUCT_SIZE
 #include <linux/overflow.h>
 #endif
@@ -530,20 +529,3 @@ int devlink_info_version_running_put(struct devlink_info_req *req,
 }
 
 #endif	/* !EFX_USE_DEVLINK */
-
-#ifdef CONFIG_DEBUG_FS
-void debugfs_lookup_and_remove(const char *name, struct dentry *dir)
-{
-	struct qstr child_name = QSTR_INIT(name, strlen(name));
-	struct dentry *child;
-
-	child = d_hash_and_lookup(dir, &child_name);
-	if (!IS_ERR_OR_NULL(child)) {
-		/* If it's a "regular" file, free its parameter binding */
-		if (S_ISREG(child->d_inode->i_mode))
-			kfree(child->d_inode->i_private);
-		debugfs_remove(child);
-		dput(child);
-	}
-}
-#endif	/* CONFIG_DEBUGFS */

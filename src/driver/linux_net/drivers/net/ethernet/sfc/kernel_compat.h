@@ -841,16 +841,6 @@ static inline void netdev_put(struct net_device *dev,
 #endif
 #endif
 
-#ifdef EFX_NEED_DEBUGFS_LOOKUP_AND_REMOVE
-#ifdef CONFIG_DEBUG_FS
-void debugfs_lookup_and_remove(const char *name, struct dentry *parent);
-#else
-static inline void debugfs_lookup_and_remove(const char *name,
-					     struct dentry *parent)
-{ }
-#endif
-#endif
-
 /**************************************************************************
  *
  * Missing functions provided by kernel_compat.c
