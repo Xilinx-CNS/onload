@@ -645,7 +645,6 @@ while [ $# -gt 0 ]; do
   --noaffinity) affinity=false; buildargs="$buildargs $1";;
   --affinity)   affinity=true;  buildargs="$buildargs $1";;
   --debug)	buildargs="$buildargs $1"; debug_dir=debug;;
-  --no-debug-info)buildargs="$buildargs $1";;
   --strict)	buildargs="$buildargs $1";;
   --require-optional-targets) buildargs="$buildargs $1";;
   --ppc-at)     is_ppc || usage; ppc_at="$2"; shift;;
