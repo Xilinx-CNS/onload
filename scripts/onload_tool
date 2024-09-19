@@ -21,6 +21,7 @@ usage() {
   err "  $me mod_params <driver-name>     - return module parameters"
   err "  $me configure_container <name>   - configure devices in container"
   err "  $me add_cplane_user              - add configured user for Onload Control Plane"
+  err "  $me -v                           - verbose mode for above commands"
   err
   exit 1
 }
