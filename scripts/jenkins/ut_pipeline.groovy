@@ -93,7 +93,7 @@ void doDeveloperBuild(String build_profile=null) {
 }
 
 void doTests() {
-  node("unit-test-parallel") {
+  node("unit-test-master") {
     def workspace = "workspace/${new URLDecoder().decode(env.JOB_NAME)}/exec-${env.EXECUTOR_NUMBER}-unit_tests"
     ws(workspace) {
       def path = "PATH=\"\$PATH:\$PWD/scripts\""
