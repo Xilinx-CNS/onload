@@ -53,12 +53,6 @@ done
 [ $# = 1 ] || usage
 tarball="$1"
 
-if ! $force; then
-  # We build Onload source rpm on RHEL6 as the earliest supported distro
-  try egrep -q "Red Hat Enterprise Linux.*release 6|CentOS (Linux )*release 6" \
-    /etc/redhat-release
-fi
-
 tmpd=
 trap cleanup EXIT
 tmpd=$(mktemp -d /tmp/$me.XXXXXXXX)
