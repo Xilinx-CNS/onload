@@ -140,6 +140,14 @@ Support has been added for ef_vi to use the hardware support for IP Proto and
 multicast-mismatch filters where supported by the NIC.
 
 
+Specifying which EF_VI applications can use MAC, IP Proto and Ethertype filters
+-------------------------------------------------------------------------------
+
+Onload-9 adds a new sfc_char module option `mac_filters_gid`. This can be used to
+control which applications are allowed to use these three filter types. Please see
+`modinfo sfc_char` or the latest EF_VI User Guide for details.
+
+
 Support for unaccelerated RX sockets with accelerated TX
 --------------------------------------------------------
 
