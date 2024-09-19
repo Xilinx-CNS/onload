@@ -141,4 +141,15 @@ having to set up custom include paths.
 
 Headers can also be installed via new '--headers' option in 'onload_install'.
 
+
+Improved handling of filter operations during NIC reset
+-------------------------------------------------------
+
+Previously, if a filter insertion operation coincided with a NIC reset there was
+the possibility of an orphaned filter being installed on a NIC that wasn't
+resetting. Now, if a filter insertion operation fails for one NIC onload will
+remove any of these orphaned filters. Additionally, if EF_NO_FAIL is set to 0
+there will be more consistent errno value if filters were not installed. The
+errno value will now be 105 (ENOBUFS) if this type of failure occurs.
+
 (c) Copyright 2024 Advanced Micro Devices, Inc.
