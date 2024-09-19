@@ -131,4 +131,14 @@ traffic. This means that you can now call connect() on a UDP socket without
 installing a filter. Accelerated tx is only supported on UDP sockets, TCP
 sockets are not accelerated.
 
+
+New onload-devel package
+------------------------
+
+This package contains all of the header files used by onload, and allows users
+to build applications that depend on these headers (such as TCPDirect) without
+having to set up custom include paths.
+
+Headers can also be installed via new '--headers' option in 'onload_install'.
+
 (c) Copyright 2024 Advanced Micro Devices, Inc.
