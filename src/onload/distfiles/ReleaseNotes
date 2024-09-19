@@ -121,4 +121,14 @@ Additional hardware filter support on X3522
 Support has been added for ef_vi to use the hardware support for IP Proto and
 multicast-mismatch filters where supported by the NIC.
 
+
+Support for unaccelerated RX sockets with accelerated TX
+--------------------------------------------------------
+
+A new function has been added to extensions library: onload_socket_rx_nonaccel.
+This function allows users to create a socket which will only accelerate tx
+traffic. This means that you can now call connect() on a UDP socket without
+installing a filter. Accelerated tx is only supported on UDP sockets, TCP
+sockets are not accelerated.
+
 (c) Copyright 2024 Advanced Micro Devices, Inc.
