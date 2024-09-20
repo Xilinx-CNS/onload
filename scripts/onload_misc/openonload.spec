@@ -129,7 +129,9 @@ License   	: Various
 URL             : http://www.openonload.org/
 Vendor		: Xilinx, Inc.
 Provides	: openonload = %{version}-%{release}
+%if 0%{?rhel} >= 8
 Recommends	: openonload-devel = %{version}-%{release}
+%endif
 Source0		: openonload-%{pkgversion}.tgz
 BuildRoot   	: %{_builddir}/%{name}-root
 AutoReqProv	: no
@@ -241,7 +243,9 @@ fi
 %if %{with devel}
 %package devel
 Summary 	: OpenOnload development header files
+%if 0%{?rhel} >= 8
 Supplements	: openonload = %{version}-%{release}
+%endif
 BuildArch	: noarch
 
 %description devel
