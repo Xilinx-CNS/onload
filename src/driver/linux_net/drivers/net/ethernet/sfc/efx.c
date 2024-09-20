@@ -1300,17 +1300,15 @@ static int efx_pci_probe(struct pci_dev *pci_dev,
 	if (rc)
 		goto fail;
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	efx->tx_queues_per_channel++;
+#endif
 #ifdef EFX_NOT_UPSTREAM
 	rc = efx_client_init(probe_data);
 	if (rc)
 		pci_warn(efx->pci_dev,
 			 "Unable to enable client support (%d)\n", rc);
 
-#endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-	efx->tx_queues_per_channel++;
-#endif
-#ifdef EFX_NOT_UPSTREAM
 	if (efx->mcdi->fn_flags &
 	    (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_NO_ACTIVE_PORT)) {
 		netif_dbg(efx, probe, efx->net_dev,
