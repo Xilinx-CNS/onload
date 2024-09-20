@@ -59,9 +59,6 @@
  *
  **************************************************************************/
 
-#ifndef EFX_HAVE_GRO
-	#undef EFX_USE_GRO
-#endif
 
 /**************************************************************************
  *
@@ -127,18 +124,6 @@
 
 #if defined(__GNUC__) && !defined(inline)
 	#define inline inline __attribute__ ((always_inline))
-#endif
-
-#if !defined(round_up) && !defined(round_down) && !defined(__round_mask)
-/*
- * This looks more complex than it should be. But we need to
- * get the type for the ~ right in round_down (it needs to be
- * as wide as the result!), and we want to evaluate the macro
- * arguments just once each.
- */
-#define __round_mask(x, y) ((__typeof__(x))((y)-1))
-#define round_up(x, y) ((((x)-1) | __round_mask(x, y))+1)
-#define round_down(x, y) ((x) & ~__round_mask(x, y))
 #endif
 
 #ifndef DEVICE_ATTR_RO
@@ -357,10 +342,6 @@ struct ethtool_rxfh_param {
 };
 #endif
 
-#ifndef PORT_DA
-	#define PORT_DA			0x05
-#endif
-
 #ifndef NETIF_F_GSO
 	#define efx_gso_size tso_size
 	#undef gso_size
@@ -372,21 +353,6 @@ struct ethtool_rxfh_param {
 
 #ifndef GSO_LEGACY_MAX_SIZE
 	#define GSO_LEGACY_MAX_SIZE	65536u
-#endif
-
-#ifndef netdev_for_each_uc_addr
-	#define netdev_for_each_uc_addr(uclist, dev)		\
-		list_for_each_entry(uclist, &(dev)->uc.list, list)
-	#define netdev_uc_count(dev) (dev)->uc.count
-#endif
-
-#ifndef netdev_for_each_mc_addr
-	#define netdev_for_each_mc_addr(mclist, dev) \
-		for (mclist = (dev)->mc_list; mclist; mclist = mclist->next)
-#endif
-
-#ifndef netdev_mc_count
-	#define netdev_mc_count(dev) (dev)->mc_count
 #endif
 
 #ifdef EFX_NEED_DMA_SET_MASK_AND_COHERENT
@@ -405,78 +371,6 @@ struct ethtool_rxfh_param {
 			dma_set_coherent_mask(dev, mask);
 		return rc;
 	}
-#endif
-
-#ifndef netif_printk
-
-	static inline const char *netdev_name(const struct net_device *dev)
-	{
-		if (dev->reg_state != NETREG_REGISTERED)
-			return "(unregistered net_device)";
-		return dev->name;
-	}
-
-	#define netdev_printk(level, netdev, format, args...)		\
-		dev_printk(level, (netdev)->dev.parent,			\
-			   "%s: " format,				\
-			   netdev_name(netdev), ##args)
-
-	#define netif_printk(priv, type, level, dev, fmt, args...)	\
-	do {								\
-		if (netif_msg_##type(priv))				\
-			netdev_printk(level, (dev), fmt, ##args);	\
-	} while (0)
-
-	#define netif_emerg(priv, type, dev, fmt, args...)		\
-		netif_printk(priv, type, KERN_EMERG, dev, fmt, ##args)
-	#define netif_alert(priv, type, dev, fmt, args...)		\
-		netif_printk(priv, type, KERN_ALERT, dev, fmt, ##args)
-	#define netif_crit(priv, type, dev, fmt, args...)		\
-		netif_printk(priv, type, KERN_CRIT, dev, fmt, ##args)
-	#define netif_err(priv, type, dev, fmt, args...)		\
-		netif_printk(priv, type, KERN_ERR, dev, fmt, ##args)
-	#define netif_warn(priv, type, dev, fmt, args...)		\
-		netif_printk(priv, type, KERN_WARNING, dev, fmt, ##args)
-	#define netif_notice(priv, type, dev, fmt, args...)		\
-		netif_printk(priv, type, KERN_NOTICE, dev, fmt, ##args)
-	#define netif_info(priv, type, dev, fmt, args...)		\
-		netif_printk(priv, type, KERN_INFO, (dev), fmt, ##args)
-
-	#if defined(DEBUG)
-	#define netif_dbg(priv, type, dev, format, args...)		\
-		netif_printk(priv, type, KERN_DEBUG, dev, format, ##args)
-	#elif defined(CONFIG_DYNAMIC_DEBUG)
-	#define netif_dbg(priv, type, netdev, format, args...)		\
-	do {								\
-		if (netif_msg_##type(priv))				\
-			dynamic_dev_dbg((netdev)->dev.parent,		\
-					"%s: " format,			\
-					netdev_name(netdev), ##args);	\
-	} while (0)
-	#else
-	#define netif_dbg(priv, type, dev, format, args...)		\
-	({								\
-		if (0)							\
-			netif_printk(priv, type, KERN_DEBUG, dev,	\
-				     format, ##args);			\
-		0;							\
-	})
-	#endif
-
-#endif
-
-/* netif_vdbg may be defined wrongly */
-#undef netif_vdbg
-#if defined(VERBOSE_DEBUG)
-#define netif_vdbg	netif_dbg
-#else
-#define netif_vdbg(priv, type, dev, format, args...)		\
-({								\
-	if (0)							\
-		netif_printk(priv, type, KERN_DEBUG, dev,	\
-			     format, ##args);			\
-	0;							\
-})
 #endif
 
 /* netdev_WARN may be defined wrongly (with a trailing semi-colon) */
@@ -601,25 +495,6 @@ static inline bool __netdev_tx_sent_queue(struct netdev_queue *dev_queue,
 	#define __read_mostly
 #endif
 
-#ifndef NETIF_F_HW_VLAN_CTAG_TX
-	#define NETIF_F_HW_VLAN_CTAG_TX NETIF_F_HW_VLAN_TX
-#endif
-
-#ifndef NETIF_F_HW_VLAN_CTAG_RX
-       #define NETIF_F_HW_VLAN_CTAG_RX NETIF_F_HW_VLAN_RX
-#endif
-
-#ifndef NETIF_F_HW_VLAN_CTAG_FILTER
-	#define NETIF_F_HW_VLAN_CTAG_FILTER NETIF_F_HW_VLAN_FILTER
-#endif
-
-#ifndef for_each_set_bit
-	#define for_each_set_bit(bit, addr, size)			\
-		for ((bit) = find_first_bit((addr), (size));		\
-		     (bit) < (size);					\
-		     (bit) = find_next_bit((addr), (size), (bit) + 1))
-#endif
-
 #ifdef EFX_NEED_BITMAP_ZALLOC
 #define bitmap_zalloc(count, gfp)	kzalloc(BITS_TO_LONGS(count), gfp)
 #define bitmap_free(ptr)		kfree(ptr)
@@ -640,10 +515,6 @@ static inline bool __netdev_tx_sent_queue(struct netdev_queue *dev_queue,
 	#define efx_ioremap(phys,size)	ioremap_nocache(phys,size)
 #else
 	#define efx_ioremap(phys,size)	ioremap(phys,size)
-#endif
-
-#ifndef NAPI_POLL_WEIGHT
-#define NAPI_POLL_WEIGHT	64
 #endif
 
 #ifdef EFX_NEED_SKB_SET_HASH
@@ -869,31 +740,6 @@ unsigned int cpumask_local_spread(unsigned int i, int node);
  **************************************************************************
  *
  */
-
-#ifndef WQ_MEM_RECLAIM
-	#define WQ_MEM_RECLAIM	0
-#endif
-
-#if defined(EFX_USE_GRO) && defined(EFX_HAVE_NAPI_GRO_RECEIVE_GR)
-	/* Redhat backports of functions returning gro_result_t */
-	#define napi_gro_frags napi_gro_frags_gr
-	#define napi_gro_receive napi_gro_receive_gr
-
-	/* vlan_gro_{frags,receive} won't return gro_result_t in
-	 * either of the above cases.
-	 */
-	#define vlan_gro_frags(_napi, _group, _tag)		\
-		({ vlan_gro_frags(_napi, _group, _tag);		\
-		   GRO_MERGED; })
-	#define vlan_gro_receive(_napi, _group, _tag, _skb)	\
-		({ vlan_gro_receive(_napi, _group, _tag, _skb);	\
-		   GRO_MERGED; })
-#endif
-
-#ifndef list_first_entry_or_null
-	#define list_first_entry_or_null(ptr, type, member) \
-		(!list_empty(ptr) ? list_first_entry(ptr, type, member) : NULL)
-#endif
 
 #ifdef EFX_NEED_NS_TO_TIMESPEC
 	struct timespec ns_to_timespec(const s64 nsec);
@@ -1225,10 +1071,6 @@ static inline void netif_set_tso_max_segs(struct net_device *dev,
 #endif
 #endif
 
-#ifndef NUMA_NO_NODE
-#define NUMA_NO_NODE (-1)
-#endif
-
 #if !defined(CONFIG_HAVE_MEMORYLESS_NODES) && !defined(cpu_to_mem)
 #define cpu_to_mem(cpu) cpu_to_node(cpu)
 #endif
@@ -1238,10 +1080,6 @@ static inline int skb_inner_transport_offset(const struct sk_buff *skb)
 {
 	return skb_inner_transport_header(skb) - skb->data;
 }
-#endif
-
-#ifndef QSTR_INIT
-#define QSTR_INIT(n,l) { .len = l, .name = n }
 #endif
 
 #ifdef EFX_HAVE_NETDEV_REGISTER_RH
@@ -1314,21 +1152,6 @@ static inline void efx_netif_napi_del(struct napi_struct *napi)
 	netif_napi_del(napi);
 }
 #define netif_napi_del efx_netif_napi_del
-#endif
-
-#ifndef tcp_flag_byte
-#define tcp_flag_byte(th) (((u_int8_t *)th)[13])
-#endif
-
-#ifndef TCPHDR_FIN
-#define TCPHDR_FIN 0x01
-#define TCPHDR_SYN 0x02
-#define TCPHDR_RST 0x04
-#define TCPHDR_PSH 0x08
-#define TCPHDR_ACK 0x10
-#define TCPHDR_URG 0x20
-#define TCPHDR_ECE 0x40
-#define TCPHDR_CWR 0x80
 #endif
 
 #if defined(EFX_NEED_BOOL_NAPI_COMPLETE_DONE)

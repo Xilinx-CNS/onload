@@ -42,6 +42,7 @@ endif # NOWERROR
 # Debugging-enabled builds
 ifndef NDEBUG
 EXTRA_CFLAGS += -DDEBUG -g
+UBSAN_SANITIZE := y
 endif
 
 endif # !EFX_UPSTREAM

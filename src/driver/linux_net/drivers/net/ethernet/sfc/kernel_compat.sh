@@ -19,8 +19,6 @@ me=$(basename "$0")
 function generate_kompat_symbols() {
     echo "
 EFX_WANT_NDO_POLL_CONTROLLER		kver	<	4.19
-EFX_HAVE_GRO				custom
-EFX_HAVE_NAPI_GRO_RECEIVE_GR		symbol	napi_gro_receive_gr	include/linux/netdevice.h
 EFX_HAVE_NET_GRO_H			file				include/net/gro.h
 EFX_HAVE_CSUM_LEVEL			symbol	csum_level		include/linux/skbuff.h
 EFX_HAVE_SKB_SYSTSTAMP			member	struct_skb_shared_hwtstamps	syststamp	include/linux/skbuff.h
@@ -40,7 +38,6 @@ EFX_HAVE_ETHTOOL_GMODULEEEPROM		symbol	get_module_eeprom	include/linux/ethtool.h
 EFX_NEED_DMA_SET_MASK_AND_COHERENT		nsymbol	dma_set_mask_and_coherent	include/linux/dma-mapping.h
 EFX_NEED_BITMAP_ZALLOC			nsymbol	bitmap_zalloc		include/linux/bitmap.h
 EFX_HAVE_ASM_SYSTEM_H			file				asm/system.h
-EFX_HAVE_XEN_START_INFO			custom
 EFX_HAVE_EXPORTED_CPU_SIBLING_MAP	export	(per_cpu__)?cpu_sibling_map	include/asm/smp.h	arch/$SRCARCH/include/asm/smp.h	arch/$SRCARCH/kernel/smpboot.c	drivers/xen/core/smpboot.c
 EFX_HAVE_NDO_SIZE			member	struct_net_device_ops	ndo_size		include/linux/netdevice.h
 EFX_HAVE_NDO_SIZE_RH			member	struct_net_device_ops	ndo_size_rh		include/linux/netdevice.h
@@ -290,39 +287,6 @@ EFX_HAVE_IP_TUNNEL_FLAGS_TO_BE16	symbol	ip_tunnel_flags_to_be16	include/net/ip_t
 
 ######################################################################
 # Implementation for more tricky types
-
-function do_EFX_HAVE_XEN_START_INFO()
-{
-    case $SRCARCH in
-	i386 | x86)
-	    test_export xen_start_info arch/$SRCARCH/xen/enlighten.c || return
-	    ;;
-	ia64)
-	    test_export xen_start_info arch/ia64/xen/hypervisor.c || return
-	    ;;
-	*)
-	    return 1
-	    ;;
-    esac
-
-    test_symbol xen_start_info \
-	include/asm/xen/hypervisor.h \
-	arch/$SRCARCH/include/asm/xen/hypervisor.h
-}
-
-function do_EFX_HAVE_GRO()
-{
-    # We check symbol types here because in Linux 2.6.29 and 2.6.30
-    # napi_gro_frags() took an extra parameter.  We don't bother to
-    # support GRO on those versions; no major distribution used them.
-    if test_symbol napi_gro_receive_gr include/linux/netdevice.h; then
-	true
-    elif test_symbol gro_result_t include/linux/netdevice.h; then
-	defer_test_symtype pos napi_gro_frags include/linux/netdevice.h "gro_result_t(struct napi_struct *)"
-    else
-	defer_test_symtype pos napi_gro_frags include/linux/netdevice.h "int(struct napi_struct *)"
-    fi
-}
 
 function do_EFX_NEED_SET_NORMALIZED_TIMESPEC
 {

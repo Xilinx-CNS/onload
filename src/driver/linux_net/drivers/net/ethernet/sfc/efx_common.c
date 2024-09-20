@@ -436,13 +436,15 @@ void efx_start_monitor(struct efx_nic *efx)
  */
 static int efx_start_datapath(struct efx_nic *efx)
 {
-	bool old_rx_scatter = efx->rx_scatter;
-	size_t rx_page_buf_step;
-	int rc = 0;
 	netdev_features_t old_features = efx->net_dev->features;
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
 	bool old_lro_available = efx->lro_available;
+#endif
+	bool old_rx_scatter = efx->rx_scatter;
+	size_t rx_page_buf_step;
+	int rc = 0;
 
+#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
 	efx->lro_available = true;
 #endif
 
