@@ -90,6 +90,20 @@ types are:
   SOF_TIMESTAMPING_TX_HARDWARE | SOF_TIMESTAMPING_RAW_HARDWARE
 
 
+ef_vi Control Plane API
+-----------------------
+
+The ef_vi API has been extended to allow users to perform lookups of the Linux
+routing tables efficiently and with support for many of the advanced features
+of the Linux networking stack. The implementation of this feature uses the same
+infrastructure which supprts Onload and TCPDirect, but presents an API which is
+optimised for usage outside of those products.
+
+The documentation for this API can be found in `src/include/cplane/api.h',
+and an example of how one might use this api can be found in the
+`src/tests/ef_vi/efsend_cplane.c' example application.
+
+
 DKMS packaging for Debian
 -------------------------
 
