@@ -344,7 +344,8 @@ static int __ci_udp_recvmsg_try_os(ci_netif *ni, ci_udp_state *us,
 #else  /* __KERNEL__ */
 
 static int __ci_udp_recvmsg_try_os(ci_netif *ni, ci_udp_state *us,
-                                   ci_msghdr* msg, int flags, int* prc)
+                                   ci_msghdr* msg, int flags, int* prc,
+                                   ci_addr_spc_t addr_spc)
 {
   int rc, total_bytes, i;
   tcp_helper_endpoint_t *ep = ci_netif_ep_get(ni, us->s.b.bufid);
@@ -366,14 +367,20 @@ static int __ci_udp_recvmsg_try_os(ci_netif *ni, ci_udp_state *us,
   sock = SOCKET_I(os_sock->f_path.dentry->d_inode);
   ci_assert(sock);
 
-  oo_msg_iov_init(&kmsg, READ, msg->msg_iov, msg->msg_iovlen, total_bytes);
   /* We are in read/readv syscall, because recvfrom/recvmsg return
    * -ENOTSOCK immediately.  So, we are not interested in address or
    * control data. */
   kmsg.msg_namelen = 0;
   kmsg.msg_name = NULL;
   kmsg.msg_controllen = 0;
-  rc = sock_recvmsg(sock, &kmsg, flags | MSG_DONTWAIT);
+  if( addr_spc == CI_ADDR_SPC_KERNEL ) {
+    rc = kernel_recvmsg(sock, &kmsg, (struct kvec*) msg->msg_iov,
+                        msg->msg_iovlen, total_bytes, flags | MSG_DONTWAIT);
+  }
+  else {
+    oo_msg_iov_init(&kmsg, READ, msg->msg_iov, msg->msg_iovlen, total_bytes);
+    rc = sock_recvmsg(sock, &kmsg, flags | MSG_DONTWAIT);
+  }
   /* Clear OS RX flag if we've got everything  */
   oo_os_sock_status_bit_clear_handled(ep, os_sock, OO_OS_STATUS_RX);
   oo_os_sock_put(os_sock);
@@ -400,14 +407,16 @@ static int __ci_udp_recvmsg_try_os(ci_netif *ni, ci_udp_state *us,
 
 #endif  /* __KERNEL__ */
 
-static int ci_udp_recvmsg_try_os(ci_udp_recv_info *rinf, int* prc)
+static int ci_udp_recvmsg_try_os(ci_udp_recv_info *rinf, int* prc
+                                 CI_KERNEL_ARG(ci_addr_spc_t addr_spc))
 {
   ci_udp_state *us = rinf->a->us;
   int rc;
 
   if( !(us->s.os_sock_status & OO_OS_STATUS_RX) )
     return 0;
-  rc = __ci_udp_recvmsg_try_os(rinf->a->ni, us, rinf->msg, rinf->flags, prc);
+  rc = __ci_udp_recvmsg_try_os(rinf->a->ni, us, rinf->msg, rinf->flags, prc
+                               CI_KERNEL_ARG(addr_spc));
 #if HAVE_MSG_FLAGS
   /* In case of non-negative rc, we copy msg_flags from rinf->msg_flags.
    * Here we should copy the flags back to ensure we end up with the
@@ -745,7 +754,7 @@ ci_udp_recvmsg_common(ci_udp_recv_info *rinf
   }
 
   /* Nothing doing at userlevel.  Need to check the O/S socket. */
-  if( ci_udp_recvmsg_try_os(rinf, &rc) )
+  if( ci_udp_recvmsg_try_os(rinf, &rc CI_KERNEL_ARG(addr_spc)) )
     goto out;
 
   if( ((rinf->flags | us->s.b.sb_aflags) & MSG_DONTWAIT)) {
@@ -826,7 +835,7 @@ ci_udp_recvmsg_common(ci_udp_recv_info *rinf
     goto out;
 
  peek_from_os:
-  if( ci_udp_recvmsg_try_os(rinf, &rc) )
+  if( ci_udp_recvmsg_try_os(rinf, &rc CI_KERNEL_ARG(addr_spc)) )
     goto out;
   
   goto check_ul_recv_q;
