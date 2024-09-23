@@ -26,6 +26,7 @@
 #include <net/if.h>
 #include <netdb.h>
 #include <limits.h>
+#include <time.h>
 
 
 /* Forward declarations. */
@@ -45,6 +46,7 @@ static int              cfg_payload_step = 1;
 static int              cfg_ctpio_no_poison;
 static unsigned         cfg_ctpio_thresh = 64;
 static const char*      cfg_save_file = NULL;
+static const char*      cfg_yaml_file = NULL;
 enum mode {
   MODE_DMA = 1,
   MODE_PIO = 2,
@@ -90,7 +92,7 @@ static ef_pio            pio;
 static int               tx_frame_len;
 static uint64_t*         timings;
 static double            last_mean_latency_usec;
-
+static FILE*             yaml_fp;
 
 /* The IP addresses can be chosen arbitrarily. */
 const uint32_t laddr_he = 0xac108564;  /* 172.16.133.100 */
@@ -150,7 +152,7 @@ static int cmp_u64(const void* ap, const void* bp)
 static void output_results(struct timeval start, struct timeval end)
 {
   unsigned freq = 0;
-  double div;
+  double div, min, p50, p95, p99, max, run_mean;
   int usec = (end.tv_sec - start.tv_sec) * 1000000;
   usec += end.tv_usec - start.tv_usec;
 
@@ -181,15 +183,33 @@ static void output_results(struct timeval start, struct timeval end)
   }
 
   qsort(timings, cfg_iter, sizeof(timings[0]), cmp_u64);
+  min = timings[0] / div;
+  p50 = timings[cfg_iter / 2] / div;
+  p95 = timings[cfg_iter - cfg_iter / 20] / div;
+  p99 = timings[cfg_iter - cfg_iter / 100] / div;
+  max = timings[cfg_iter - 1] / div;
+  run_mean = (double) usec / cfg_iter;
   printf("%d\t%0.3lf\t%0.3lf\t%0.3lf\t%0.3lf\t%0.3lf\t%0.3lf\n",
          cfg_payload_len,
-         (double) usec / cfg_iter,
-         timings[0] / div,
-         timings[cfg_iter / 2] / div,
-         timings[cfg_iter - cfg_iter / 20] / div,
-         timings[cfg_iter - cfg_iter / 100] / div,
-         timings[cfg_iter - 1] / div);
-  last_mean_latency_usec = (double) usec / cfg_iter;
+         run_mean, min, p50, p95, p99, max);
+  last_mean_latency_usec = run_mean;
+
+  if( yaml_fp ) {
+    int i;
+    uint64_t sum = 0;
+    double mean;
+    for( i = 0; i < cfg_iter; ++i )
+      sum += timings[i];
+    mean = sum / div / cfg_iter;
+    fprintf(yaml_fp,
+            "  - { payload_len: %d, frame_len: %d, "
+            "mean: %.0lf, min: %.0lf, median: %.0lf, "
+            "95%%: %.0lf, 99%%: %.0lf, max: %.0lf, "
+            "runtime_mean: %.0lf }\n",
+            cfg_payload_len, tx_frame_len,
+            mean * 1e3, min * 1e3, p50 * 1e3, p95 * 1e3, p99 * 1e3, max * 1e3,
+            run_mean * 1e3);
+  }
 }
 
 /**********************************************************************/
@@ -699,6 +719,7 @@ static CI_NORETURN usage(const char* fmt, ...)
   fprintf(stderr, "                        [p]io, [a]lternatives, [d]ma\n");
   fprintf(stderr, "  -t <modes>          - set TX_PUSH: [a]lways, [d]isable\n");
   fprintf(stderr, "  -o <filename>       - save raw timings to file\n");
+  fprintf(stderr, "  -y <filename>       - save result data to file (YAML)\n");
   fprintf(stderr, "\n");
   exit(1);
 }
@@ -736,7 +757,7 @@ int main(int argc, char* argv[])
     p = (unsigned int)__v;                                   \
   } while( 0 );
 
-  while( (c = getopt (argc, argv, "n:s:w:c:pm:t:o:")) != -1 )
+  while( (c = getopt (argc, argv, "n:s:w:c:pm:t:o:y:")) != -1 )
     switch( c ) {
     case 'n':
       OPT_INT(optarg, cfg_iter);
@@ -766,6 +787,9 @@ int main(int argc, char* argv[])
       break;
     case 'o':
       cfg_save_file = optarg;
+      break;
+    case 'y':
+      cfg_yaml_file = optarg;
       break;
     case 'm':
       cfg_mode = 0;
@@ -882,6 +906,34 @@ int main(int argc, char* argv[])
                    MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
   }
 
+  if( cfg_yaml_file ) {
+      yaml_fp = fopen(cfg_yaml_file, "wt");
+      if( yaml_fp ) {
+        time_t testtime = time(NULL);
+        fprintf(yaml_fp, "# eflatency test\n");
+        fprintf(yaml_fp, "---\n");
+        fprintf(yaml_fp, "datetime: %s", ctime(&testtime));
+        fprintf(yaml_fp, "ef_vi_version_str: %s\n", ef_vi_version_str());
+        fprintf(yaml_fp, "nics: [ %d, %d ]\n", rx_ifindex, tx_ifindex);
+        fprintf(yaml_fp, "udp_payload_len: { start: %d, end: %d, step: %d }\n",
+                    cfg_payload_len, cfg_payload_end, cfg_payload_step);
+        fprintf(yaml_fp, "frame_len: { start: %d, end: %d, step: %d }\n",
+                    tx_frame_len,
+                    tx_frame_len + (cfg_payload_end - cfg_payload_len),
+                    cfg_payload_step);
+        fprintf(yaml_fp, "iterations: %d\n", cfg_iter);
+        fprintf(yaml_fp, "warmups: %d\n", cfg_warmups);
+        fprintf(yaml_fp, "test: %s\n", t->name);
+        fprintf(yaml_fp, "vi_flags: 0x%x\n", (unsigned)cfg_vi_flags);
+        fprintf(yaml_fp, "ping_or_pong: %s\n", ping ? "ping" : "pong");
+        if( ping )
+          fprintf(yaml_fp, "results:\n");
+      }
+  }
+  else {
+    yaml_fp = NULL;
+  }
+
   printf("# NIC(s) %d %d\n", rx_ifindex, tx_ifindex);
   printf("# udp payload len: %d:%d:%d\n", cfg_payload_len, cfg_payload_end,
          cfg_payload_step);
@@ -912,6 +964,8 @@ int main(int argc, char* argv[])
   if( ping && iters_run == 1 )
     printf("mean round-trip time: %.3lf usec\n", last_mean_latency_usec);
 
+  if( yaml_fp )
+    fclose(yaml_fp);
   return 0;
 }
 
