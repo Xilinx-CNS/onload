@@ -201,8 +201,44 @@ www.openonload.org for more information.
 
 This package comprises the kernel module components of OpenOnload.
 
+%post kmod-%{kverrel}
+# If the weak-modules script is present this will handle running depmod and
+# dracut for required kernels.
+if [ -x "/sbin/weak-modules" ]; then
+  for m in sfc sfc_resource sfc_char onload; do
+    echo "/lib/modules/%{kernel}/extra/$m.ko"
+  done | /sbin/weak-modules --verbose --add-modules
+else
+  depmod -a "%{kernel}"
+  if [ -f  "/boot/initramfs-%{kernel}.img" ]; then
+    if which dracut >/dev/null 2>&1; then
+      kver=$(dracut --help |grep kver)
+      if [ -n "$kver" ]; then
+        dracut -f --kver "%{kernel}"
+      else
+        dracut -f "/boot/initramfs-%{kernel}.img" "%{kernel}"
+      fi
+    fi
+  fi
+fi
+
+%postun kmod-%{kverrel}
+if [ "$1" = 0 ]; then  # Erase, not upgrade
+  if [ -x "/sbin/weak-modules" ]; then
+    for m in sfc sfc_resource sfc_char onload; do
+      echo "/lib/modules/%{kernel}/extra/$m.ko"
+    done | /sbin/weak-modules --verbose --remove-modules
+  else
+    depmod -a "%{kernel}"
+  fi
+fi
+
+%files kmod-%{kverrel}
+%defattr(744,root,root)
+/lib/modules/%{kernel}/*/*
+
 ###############################################################################
-%if 0%{with devel}
+%if %{with devel}
 %package devel
 Summary 	: OpenOnload development header files
 Supplements	: openonload = %{version}-%{release}
@@ -312,38 +348,6 @@ fi
 
 ldconfig -n /usr/lib /usr/lib64
 
-%post kmod-%{kverrel}
-# If the weak-modules script is present this will handle running depmod and
-# dracut for required kernels.
-if [ -x "/sbin/weak-modules" ]; then
-  for m in sfc sfc_resource sfc_char onload; do
-    echo "/lib/modules/%{kernel}/extra/$m.ko"
-  done | /sbin/weak-modules --verbose --add-modules
-else
-  depmod -a "%{kernel}"
-  if [ -f  "/boot/initramfs-%{kernel}.img" ]; then
-    if which dracut >/dev/null 2>&1; then
-      kver=$(dracut --help |grep kver)
-      if [ -n "$kver" ]; then
-        dracut -f --kver "%{kernel}"
-      else
-        dracut -f "/boot/initramfs-%{kernel}.img" "%{kernel}"
-      fi
-    fi
-  fi
-fi
-
-%postun kmod-%{kverrel}
-if [ "$1" = 0 ]; then  # Erase, not upgrade
-  if [ -x "/sbin/weak-modules" ]; then
-    for m in sfc sfc_resource sfc_char onload; do
-      echo "/lib/modules/%{kernel}/extra/$m.ko"
-    done | /sbin/weak-modules --verbose --remove-modules
-  else
-    depmod -a "%{kernel}"
-  fi
-fi
-
 
 %clean
 rm -fR $RPM_BUILD_ROOT
@@ -378,10 +382,6 @@ rm -fR $RPM_BUILD_ROOT
 %{python3_sitelib}/__pycache__/sfc*.pyc
 %{python3_sitelib}/*Onload*.egg-info
 %{python_sitearch}/solar_clusterd/
-
-%files kmod-%{kverrel}
-%defattr(744,root,root)
-/lib/modules/%{kernel}/*/*
 
 %changelog
 * Mon Jul 1 2019 Solarflare
