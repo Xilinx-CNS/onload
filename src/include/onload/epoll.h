@@ -45,6 +45,14 @@ static inline void oo_epoll_frc_to_ts(ci_int64 hr, struct __kernel_timespec *ts)
 #include <sys/epoll.h>
 #endif /* defined(__KERNEL__) || defined(UNIT_TEST_EPOLL) */
 
+/* Convert a timeout in cycles to one in ms. */
+static inline int oo_epoll_frc_to_ms(ci_int64 hr, ci_uint32 khz)
+{
+  ci_int64 ret;
+  ret = (hr + khz - 1) / khz;
+  return CI_MIN(0x7fffffffLL, ret);
+}
+
 /* Array of such structures is used to pass postponed epoll_ctl operations */
 struct oo_epoll_item {
   ci_fixed_descriptor_t op CI_ALIGN(8);

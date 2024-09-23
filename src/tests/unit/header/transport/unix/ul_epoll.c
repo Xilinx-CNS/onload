@@ -85,14 +85,14 @@ static void test_oo_epoll_frc_to_ts(void)
 
 static void test_oo_epoll_frc_to_ms(void)
 {
-  CHECK(oo_epoll_frc_to_ms(0), ==, 0);
+  CHECK(oo_epoll_frc_to_ms(0, citp.cpu_khz), ==, 0);
   /* Timout should always round up due to the coarseness of millis */
-  CHECK(oo_epoll_frc_to_ms(1), ==, 1);
-  CHECK(oo_epoll_frc_to_ms(oo_timesync_cpu_khz - 1), ==, 1);
-  CHECK(oo_epoll_frc_to_ms(INT64_MAX), ==, 0x7fffffff);
+  CHECK(oo_epoll_frc_to_ms(1, citp.cpu_khz), ==, 1);
+  CHECK(oo_epoll_frc_to_ms(oo_timesync_cpu_khz - 1, citp.cpu_khz), ==, 1);
+  CHECK(oo_epoll_frc_to_ms(INT64_MAX, citp.cpu_khz), ==, 0x7fffffff);
   /* Testing rounding up - Does not work at 1KHz */
   CHECK(oo_epoll_frc_to_ms(oo_timesync_cpu_khz * 0xBEEFULL +
-        (oo_timesync_cpu_khz >> 1)), ==, 0xBEF0);
+        (oo_timesync_cpu_khz >> 1), citp.cpu_khz), ==, 0xBEF0);
 }
 
 /* Accept a 0.001% error in frc_to_ns calculation. Even this is a bit harsh. */
