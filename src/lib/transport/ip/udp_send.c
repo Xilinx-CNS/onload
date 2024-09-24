@@ -1860,7 +1860,11 @@ int ci_udp_sendmsg(ci_udp_iomsg_args *a,
  send_via_os:
   if( sinf.stack_locked )
     ci_netif_unlock(ni);
+#ifdef __KERNEL__
+  rc = ci_udp_sendmsg_os(ni, us, msg, flags, addr_spc != CI_ADDR_SPC_KERNEL, 0);
+#else
   rc = ci_udp_sendmsg_os(ni, us, msg, flags, 1, 0);
+#endif
   if( rc >= 0 )
     return rc;
   else
