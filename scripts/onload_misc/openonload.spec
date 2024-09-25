@@ -243,6 +243,7 @@ fi
 %if %{with devel}
 %package devel
 Summary 	: OpenOnload development header files
+Provides	: openonload-devel = %{version}-%{release}
 %if 0%{?rhel} >= 8
 Supplements	: openonload = %{version}-%{release}
 %endif
