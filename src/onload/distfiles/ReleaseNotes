@@ -1,15 +1,12 @@
 Onload-9.0.0
 ============
 
- These release notes are a work in progress and have no validity prior to
- forming part of an Onload release.
-
- This is a feature release of Onload with modernised internal interfaces
+ This is a feature release of Onload with refreshed internal interfaces
  between software components (control plane, TCPDirect and sfc net driver),
  adding new features and support for new operating systems and kernels since
  the earlier OpenOnload-8.1.x releases.
 
- An updated version 6.0.0.1000 of the sfc net driver is included for
+ An updated version 6.0.0.1011 of the sfc net driver is included for
  X2-based network cards.
 
 
@@ -112,6 +109,13 @@ onload using DKMS. This is provided as an alternative to using the
 existing source installation via module-assistant.
 
 
+Unsupported SFN7000 series not accelerated
+------------------------------------------
+
+The SFN7000-series NICs have been unsupported in Onload since v8.0.0 and
+will not be accelerated in this version of Onload.
+
+
 Unsupported SN1000 functionality removed
 ----------------------------------------
 
@@ -175,5 +179,6 @@ This is controlled by the EF_TCP_RST_COOLDOWN environment variable, which is
 the minimum number of microseconds in between two consecutive sends of a TCP
 RST packet to the same destination (ip, port). Setting this variable to 0 will
 result in the default TCP behaviour (no rate limiting).
+
 
 (c) Copyright 2024 Advanced Micro Devices, Inc.
