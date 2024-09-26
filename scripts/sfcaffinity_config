@@ -665,18 +665,30 @@ def interface_auto_core_ids(ethx, topology, interrupt_topology):
     return (core_ids, strategy)
 
 
-def localise_core_ids(ethx, core_ids):
-    # List the cores on which are NUMA-local with the NIC first
-    # This helps performance for kernel traffic. When the default sfc module
-    # option rss_numa_local=Y, the sfc driver will configure RSS to share
-    # traffic over the first X irqs, assuming these are mapped to NUMA-local
-    # cores.
-
-    local_cores = affinity.get_local_cores(ethx)
-    local_ids = [c for c in core_ids if c in local_cores]
-    remote_ids = [c for c in core_ids if c not in local_cores]
-    core_ids = local_ids + remote_ids
-
+def numa_core_ids(ethx, core_ids):
+    numa_cores = []
+    file_numa_node = "/sys/class/net/%s/device/numa_node"
+    file_numa_distance = "/sys/devices/system/node/node%d/distance"
+    file_node_cpulist = "/sys/devices/system/node/node%d/cpumap"
+    affinity.file_check(file_numa_node % ethx)
+    current_node = int(affinity.file_get_strip(file_numa_node % ethx))
+    # If there is only one numa node present. It shows as -1 for current node value. 
+    if current_node == -1:
+        current_node = 0
+    # Get numa node distance between nodes.
+    affinity.file_check(file_numa_distance % current_node)
+    numa_distance = affinity.file_get_strip(file_numa_distance % current_node).split(' ')
+    # Sort the nearest numa nodes in order with descending order of distances.
+    sort_numa_distance = sorted(range(len(numa_distance)), key=lambda  i: numa_distance[i])
+    
+    # Just get all the numa local cores in-order. dont worry about the extra cores we can deal with it later. 
+    for i in sort_numa_distance:
+        affinity.file_check(file_node_cpulist % i)
+        all_cores_per_node = affinity.file_get_strip(file_node_cpulist % i)
+        cpumask = mask.comma_sep_hex_to_int(all_cores_per_node)
+        cpulist = mask.to_int_list(cpumask)
+        numa_cores += cpulist
+    core_ids = core_ids if (global_options.cores or global_options.packages) else numa_cores
     return core_ids
 
 
@@ -684,7 +696,7 @@ def interface_mappings(ethx, topology, interrupt_topology, core_ids, strategy):
     ret = Bucket()
 
     n_irqs = interface_n_rxqs(str(ethx))
-    core_ids = localise_core_ids(ethx, core_ids)
+    core_ids = numa_core_ids(ethx, core_ids)
 
     q_to_core_id = [core_ids[i % len(core_ids)] for i in range(n_irqs)]
     for core in [topology.id2core[id] for id in q_to_core_id]:

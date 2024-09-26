@@ -57,6 +57,9 @@ def file_get_int(fname):
     f = open(fname)
     return int(f.read())
 
+def file_check(fname):
+    if not os.path.isfile(fname): raise FileNotFoundError(fname)
+    
 ######################################################################
 
 def task_set_affinity(pid, cpumask):
