@@ -29,7 +29,6 @@
 #include "OnloadZeroCopy.h"
 #include "OnloadTemplateSend.h"
 #include "OnloadWireOrderDelivery.h"
-#include "OnloadWireOrderDelivery_FdEvent.h"
 #include "OnloadWireOrderDelivery_FdSet.h"
 
 struct native_zc_userdata {
@@ -1213,6 +1212,12 @@ Java_OnloadWireOrderDelivery_GetFd__Ljava_net_Socket_2
 }
 JNIEXPORT jint JNICALL
 Java_OnloadWireOrderDelivery_GetFd__Ljava_nio_channels_spi_AbstractSelectableChannel_2
+  (JNIEnv* env, jclass cls, jobject obj)
+{
+  return GetFdFromUnknown(env, obj);
+}
+JNIEXPORT jint JNICALL
+Java_OnloadWireOrderDelivery_GetFd__Ljava_io_FileDescriptor_2
   (JNIEnv* env, jclass cls, jobject obj)
 {
   return GetFdFromUnknown(env, obj);

@@ -296,16 +296,6 @@ static inline ci_int64 oo_epoll_ts_to_frc(const struct timespec *ts)
          ((ts->tv_nsec * citp.cpu_khz) / 1000000);
 }
 
-/* Convert a in cycles to one in ms. */
-static inline int oo_epoll_frc_to_ms(ci_int64 hr)
-{
-  ci_int64 ret;
-  if( hr < 0 )
-    return -1;
-  ret = (hr + citp.cpu_khz - 1) / citp.cpu_khz;
-  return CI_MIN(0x7fffffff, ret);
-}
-
 /* Maximum timeout in ns we could have if running on a 10GHz processor */
 #define OO_EPOLL_MAX_TIMEOUT_NS INT64_MAX
 

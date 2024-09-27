@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
-# X-SPDX-Copyright-Text: (c) Copyright 2009-2020 Xilinx, Inc.
-######################################################################
+# X-SPDX-Copyright-Text: (c) Copyright 2009-2024 Advanced Micro Devices, Inc.
+##############################################################################
 # RPM spec file for OpenOnload
 #
 # Authors: See Changelog at bottom.
@@ -19,13 +19,16 @@
 # uname, use:
 #   --define "kernel <full-kernel-name>"
 #
-# If you want to ensure that 32-bit lib will be built on 64-bit add:
-#   --define "build32 true"
+# If you don't want to build the kernel module package, use:
+#   --without kmod
+#
+# If you don't want to build the userland package, use:
+#   --without user
 #
 # If you don't want to build the devel pacakage, use:
 #   --without devel
 #
-# If you want debug binary packages add:
+# If you want debug binaries add:
 #   --define "debug true"
 #
 # If you want to generate debuginfo rpm package when generating release binary packages add:
@@ -56,6 +59,8 @@
 # is unavailable at build time:
 #    --define "have_efct 1"
 
+%bcond_without user # add option to skip userland builds
+%bcond_without kmod # add option to skip kmod builds
 %bcond_without devel # add option to skip devel builds
 
 %define pkgversion 20100910
@@ -65,7 +70,6 @@
 %{!?kernel:  %{expand: %%define kernel %%(uname -r)}}
 %{!?target_cpu:  %{expand: %%define target_cpu %{_host_cpu}}}
 %{!?kpath: %{expand: %%define kpath /lib/modules/%%{kernel}/build}}
-%{!?build32: %{expand: %%define build32 false}}
 %{!?debuginfo: %{expand: %%define debuginfo false}}
 
 %define knownvariants '@(BOOT|PAE|@(big|huge)mem|debug|enterprise|kdump|?(big|large)smp|uml|xen[0U]?(-PAE)|xen|rt?(-trace|-vanilla)|default|big|pae|vanilla|trace|timing)'
@@ -142,11 +146,6 @@ BuildRequires	: gawk gcc sed make bash libpcap libpcap-devel automake libtool au
 BuildRequires	: glibc-common python3-devel libcap
 %else
 BuildRequires	: glibc-devel glibc python3-devel libcap2
-%ifarch x86_64
-%if %{build32}
-BuildRequires   : glibc-devel-32bit
-%endif
-%endif
 %endif
 
 %description
@@ -157,6 +156,7 @@ This package comprises the user space components of OpenOnload.
 
 ###############################################################################
 # Kernel version expands into NAME of RPM
+%if %{with kmod}
 %package kmod-%{kverrel}
 Summary     	: OpenOnload kernel modules
 Group       	: System Environment/Kernel
@@ -238,6 +238,7 @@ fi
 %files kmod-%{kverrel}
 %defattr(744,root,root)
 /lib/modules/%{kernel}/*/*
+%endif
 
 ###############################################################################
 %if %{with devel}
@@ -269,6 +270,7 @@ This package comprises development headers for the components of OpenOnload.
 
 %build
 
+%if %{with kmod}
 # There are a huge variety of package names and formats for the various
 # kernel and debug packages.  Trying to maintain correct BuildRequires has
 # proven to be fragile, leading to repeated bugs as a new name format
@@ -286,21 +288,21 @@ This package comprises development headers for the components of OpenOnload.
 %endif
   exit 1
 }
-
 export KPATH=%{kpath}
+%endif
+
+%if %{with user}%{with kmod}
 export HAVE_EFCT=%{?have_efct:%have_efct}
-%ifarch x86_64
-./scripts/onload_build %{?build_profile:--build-profile %build_profile} \
-  --kernelver "%{kernel}" %{?debug:--debug}
+./scripts/onload_build \
+  %{?ppc_at:--ppc-at %ppc_at} \
+  %{?build_profile:--build-profile %build_profile} \
+  %{?debug:--debug} \
+  %{?with_user: --user64} \
+  %{?with_kmod: --kernel --kernelver "%{kernel}"}
 %else
-%ifarch ppc64
-# Don't try to build 32-bit userland on PPC
-./scripts/onload_build %{?build_profile:--build-profile %build_profile} \
-  --kernelver "%{kernel}" --kernel --user64 %{?debug:--debug} %{?ppc_at:--ppc-at %ppc_at}
-%else
-# Don't try to build 64-bit userland in case of 32-bit userland
-./scripts/onload_build %{?build_profile:--build-profile %build_profile} \
-  --kernelver "%{kernel}" --kernel --user32 %{?debug:--debug} %{?ppc_at:--ppc-at %ppc_at}
+%if %{with devel}
+# Satisfy onload_install sanity check
+mkdir build
 %endif
 %endif
 
@@ -311,19 +313,17 @@ mkdir -p "$i_prefix/etc/depmod.d"
 ./scripts/onload_install --packaged \
   %{?build_profile:--build-profile %build_profile} \
   %{?debug:--debug} %{?setuid:--setuid} \
-  --userfiles --modprobe --modulesloadd \
-  --kernelfiles --kernelver "%{kernel}" \
+  %{?with_user: --userfiles --modprobe --modulesloadd --udev} \
+  %{?with_kmod: --kernelfiles --kernelver "%{kernel}"} \
   %{?with_devel: --headers}
-docdir="$i_prefix%{_defaultdocdir}/%{name}-%{pkgversion}"
-mkdir -p "$docdir"
-install -m 644 LICENSE* README* ChangeLog* ReleaseNotes* "$docdir"
+%if %{with user}
 # Removing these files is fine since they would only ever be generated on a build machine.
 rm -f "$i_prefix/etc/sysconfig/modules/onload.modules"
 rm -f "$i_prefix/usr/local/lib/modules-load.d/onload.conf"
 mkdir -p "$i_prefix/usr/share/onload"
 cp ./scripts/onload_misc/onload_modules-load.d.conf $i_prefix/usr/share/onload/onload_modules-load.d.conf
 cp ./scripts/onload_misc/sysconfig_onload_modules $i_prefix/usr/share/onload/sysconfig_onload_modules
-
+%endif
 %post
 
 if [ `cat /proc/1/comm` == systemd ]
@@ -357,6 +357,7 @@ ldconfig -n /usr/lib /usr/lib64
 %clean
 rm -fR $RPM_BUILD_ROOT
 
+%if %{with user}
 %files
 %defattr(-,root,root)
 /usr/lib*/lib*.so*
@@ -374,11 +375,19 @@ rm -fR $RPM_BUILD_ROOT
 %{_includedir}/onload/extensions*.h
 %dir %{_includedir}/etherfabric
 %{_includedir}/etherfabric/*.h
-%docdir %{_defaultdocdir}/%{name}-%{pkgversion}
-%attr(644, -, -) %{_defaultdocdir}/%{name}-%{pkgversion}/*
+
+# RPM 4.11+ (EL7+)
+%if 0%{?license:1}
+%license LICENSE*
+%else
+%doc LICENSE*
+%endif
+%doc README* ChangeLog* ReleaseNotes*
+
 %attr(644, -, -) %{_sysconfdir}/modprobe.d/onload.conf
 %attr(644, -, -) %{_sysconfdir}/depmod.d/onload.conf
 %config(noreplace) %attr(644, -, -) %{_sysconfdir}/sysconfig/openonload
+/usr/lib/udev/rules.d/*
 
 /usr/share/onload/onload_modules-load.d.conf
 /usr/share/onload/sysconfig_onload_modules
@@ -387,6 +396,7 @@ rm -fR $RPM_BUILD_ROOT
 %{python3_sitelib}/__pycache__/sfc*.pyc
 %{python3_sitelib}/*Onload*.egg-info
 %{python_sitearch}/solar_clusterd/
+%endif
 
 %changelog
 * Mon Jul 1 2019 Solarflare

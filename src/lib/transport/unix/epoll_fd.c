@@ -1853,7 +1853,7 @@ int citp_epoll_wait(citp_fdinfo* fdi, struct epoll_event*__restrict__ events,
     else
 #endif /* CI_LIBC_HAS_epoll_pwait2 */
     {
-      int timeout_ms = oo_epoll_frc_to_ms(timeout_hr);
+      int timeout_ms = oo_epoll_frc_to_ms(timeout_hr, citp.cpu_khz);
       if( timeout_ms )
         ep->blocking = 1;
       rc = ci_sys_epoll_pwait(fdi->fd, events, maxevents, timeout_ms, sigmask);

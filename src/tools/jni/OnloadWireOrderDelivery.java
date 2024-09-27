@@ -20,7 +20,6 @@ import java.util.*;
  * It will only return useful results if all sockets are within
  * a single stack.
  * Usage of this class requires you to manage file descriptors.
- * sun.misc.SharedSecrets.getJavaIOFileDescriptorAccess() can be used
  */
 public class OnloadWireOrderDelivery {
   public static class FdEvent {
@@ -149,11 +148,7 @@ public class OnloadWireOrderDelivery {
   public static native int GetFd(java.net.ServerSocket socket);
   public static native int GetFd(java.net.Socket socket);
   public static native int GetFd(java.nio.channels.spi.AbstractSelectableChannel channel);
-  public static int GetFd(java.io.FileDescriptor fd) throws java.io.IOException
-  {
-    /* Note: This method is deprecated */
-    return sun.misc.SharedSecrets.getJavaIOFileDescriptorAccess().get(fd);
-  }
+  public static native int GetFd(java.io.FileDescriptor fd);
 
   public static void main(String[] args) throws java.net.SocketException,
                                                 java.io.IOException

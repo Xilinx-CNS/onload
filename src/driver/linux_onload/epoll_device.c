@@ -461,9 +461,9 @@ static void oo_epoll2_wait(struct oo_epoll_private *priv,
   else
 #endif /* EFRM_HAVE_EPOLL_PWAIT2 */
   {
+    int timeout = oo_epoll_frc_to_ms(timeout_hr, oo_timesync_cpu_khz);
     op->rc = efab_linux_sys_epoll_wait(op->kepfd, CI_USER_PTR_GET(op->events),
-                                       op->maxevents,
-                                       timeout_hr / oo_timesync_cpu_khz);
+                                       op->maxevents, timeout);
   }
   return;
 
@@ -525,7 +525,7 @@ static int oo_epoll2_action(struct oo_epoll_private *priv,
       else
 #endif /* EFRM_HAVE_EPOLL_PWAIT2 */
       {
-        int timeout = op->timeout_hr / oo_timesync_cpu_khz;
+        int timeout = oo_epoll_frc_to_ms(op->timeout_hr, oo_timesync_cpu_khz);
         op->rc = efab_linux_sys_epoll_wait(op->kepfd,
                                            CI_USER_PTR_GET(op->events),
                                            op->maxevents,
