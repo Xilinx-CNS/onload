@@ -24,3 +24,4 @@ Package: #TYPE#-dkms
 Architecture: all
 Depends: dkms, #TYPE#-user (>= ${source:Version}), #TYPE#-user (<< ${source:Version}.1~), ${misc:Depends}
 Description: Onload debian package with DKMS
+Conflicts: #TYPE#-modules
