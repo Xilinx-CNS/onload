@@ -181,4 +181,14 @@ RST packet to the same destination (ip, port). Setting this variable to 0 will
 result in the default TCP behaviour (no rate limiting).
 
 
+Notice of potential future changes
+----------------------------------
+
+ - In future releases, the DKMS RPM may not include the Onload userspace but
+   only that which is necessary to build the onload kernel modules, requiring
+   the Onload userspace to be installed via the usual onload userspace RPM
+   as is done when the kmod RPMs are used. This would follow the pattern
+   used by the new Debian DKMS packaging.
+
+
 (c) Copyright 2024 Advanced Micro Devices, Inc.
