@@ -96,8 +96,8 @@
 
 Summary:          OpenOnload user-space
 Name:             openonload
-Version:          %(echo '%{pkgversion}' | sed 's/-/_/g')
-Release:          1%{?dist}%{?setuid:SETUID}%{?debug:DEBUG}
+Version:          %(echo '%{pkgversion}' | sed 's/-/_/g')%{?setuid:~SETUID}%{?debug:~DEBUG}
+Release:          1%{?dist}
 Group:            System Environment/Kernel
 License:          Various
 URL:              https://www.openonload.org/
