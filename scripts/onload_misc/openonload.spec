@@ -84,7 +84,6 @@
 %{!?kverrel: %global kverrel %(echo '%{kernel_uname_r_wo_arch}' | tr + _)}
 %global kpkgver %(echo '%{kverrel}' | tr - _)
 
-%{echo: %{target_cpu}}
 
 # Control debuginfo package when generating release package
 %if "%{debuginfo}" != "true"
@@ -95,28 +94,28 @@
 
 ###############################################################################
 
-Summary     	: OpenOnload user-space
-Name        	: openonload
-Version     	: %(echo '%{pkgversion}' | sed 's/-/_/g')
-Release     	: 1%{?dist}%{?setuid:SETUID}%{?debug:DEBUG}
-Group       	: System Environment/Kernel
-License   	: Various
-URL             : http://www.openonload.org/
-Vendor		: Xilinx, Inc.
-Provides	: openonload = %{version}-%{release}
+Summary:          OpenOnload user-space
+Name:             openonload
+Version:          %(echo '%{pkgversion}' | sed 's/-/_/g')
+Release:          1%{?dist}%{?setuid:SETUID}%{?debug:DEBUG}
+Group:            System Environment/Kernel
+License:          Various
+URL:              https://www.openonload.org/
+Vendor:           Advanced Micro Devices, Inc.
+Provides:         openonload = %{version}-%{release}
 %if 0%{?rhel} >= 8
-Recommends	: openonload-devel = %{version}-%{release}
+Recommends:       openonload-devel = %{version}-%{release}
 %endif
-Source0		: openonload-%{pkgversion}.tgz
-BuildRoot   	: %{_builddir}/%{name}-root
-AutoReqProv	: no
-ExclusiveArch	: i386 i586 i686 x86_64 ppc64
-BuildRequires	: gawk gcc sed make bash libpcap libpcap-devel automake libtool autoconf libcap-devel
+Source0:          %{name}-%{pkgversion}.tgz
+BuildRoot:        %{_builddir}/%{name}-root
+AutoReqProv:      no
+ExclusiveArch:    x86_64 ppc64
+BuildRequires:    gawk gcc sed make bash libpcap libpcap-devel automake libtool autoconf libcap-devel
 # The glibc, python-devel, and libcap packages we need depend on distro and platform
 %if 0%{?suse_version}
-BuildRequires	: glibc-devel glibc python3-devel libcap2
+BuildRequires:    glibc-devel glibc python3-devel libcap2
 %else
-BuildRequires	: glibc-common python3-devel libcap
+BuildRequires:    glibc-common python3-devel libcap
 %endif
 
 %description
@@ -129,13 +128,13 @@ This package comprises the user space components of OpenOnload.
 # Kernel version expands into NAME of RPM
 %if %{with kmod}
 %package kmod-%{kverrel}
-Summary     	: OpenOnload kernel modules
-Group       	: System Environment/Kernel
-Requires	: openonload = %{version}-%{release}
-Conflicts	: kernel-module-sfc-RHEL%{maindist}-%{kverrel}
-Provides	: openonload-kmod = %{kpkgver}_%{version}-%{release}
-Provides	: sfc-kmod-symvers = %{kernel}
-AutoReqProv	: no
+Summary:          OpenOnload kernel modules
+Group:            System Environment/Kernel
+Requires:         openonload = %{version}-%{release}
+Conflicts:        kernel-module-sfc-RHEL%{maindist}-%{kverrel}
+Provides:         openonload-kmod = %{kpkgver}_%{version}-%{release}
+Provides:         sfc-kmod-symvers = %{kernel}
+AutoReqProv:      no
 
 %if 0%{?have_efct:%have_efct}
 %{!?efct_disttag: %global efct_disttag %(
@@ -160,11 +159,11 @@ efct_disttag() {
 echo -n $(efct_disttag)
 )}
 
-BuildRequires	: kernel-module-xilinx-efct-%{efct_disttag}-%{kernel} >= 1.5.3.0
+BuildRequires:    kernel-module-xilinx-efct-%{efct_disttag}-%{kernel} >= 1.5.3.0
 
 %if "%{dist}" == ".el7"
-BuildRequires	: kernel-module-auxiliary-%{efct_disttag}-%{kernel} >= 1.0.4.0
-Requires	: kernel-module-auxiliary-%{efct_disttag}-%{kernel} >= 1.0.4.0
+BuildRequires:    kernel-module-auxiliary-%{efct_disttag}-%{kernel} >= 1.0.4.0
+Requires:         kernel-module-auxiliary-%{efct_disttag}-%{kernel} >= 1.0.4.0
 %endif
 %endif
 
@@ -214,12 +213,12 @@ fi
 ###############################################################################
 %if %{with devel}
 %package devel
-Summary 	: OpenOnload development header files
-Provides	: openonload-devel = %{version}-%{release}
+Summary:          OpenOnload development header files
+Provides:         openonload-devel = %{version}-%{release}
 %if 0%{?rhel} >= 8
-Supplements	: openonload = %{version}-%{release}
+Supplements:      openonload = %{version}-%{release}
 %endif
-BuildArch	: noarch
+BuildArch:        noarch
 
 %description devel
 OpenOnload is a high performance user-level network stack.  Please see
@@ -237,7 +236,7 @@ This package comprises development headers for the components of OpenOnload.
 ###############################################################################
 %prep
 [ "$RPM_BUILD_ROOT" != / ] && rm -rf "$RPM_BUILD_ROOT"
-%setup -n %{name}-%{pkgversion}
+%setup -q -n %{name}-%{pkgversion}
 
 %build
 %if %{with kmod}
@@ -303,7 +302,7 @@ else
 fi
 
 /sbin/onload_tool add_cplane_user
-ldconfig -n /usr/lib /usr/lib64
+ldconfig -n %{_libdir}
 
 %preun
 
@@ -318,7 +317,7 @@ if [ $1 == 0 ]; then
   fi
 fi
 
-ldconfig -n /usr/lib /usr/lib64
+ldconfig -n %{_libdir}
 
 
 %clean
