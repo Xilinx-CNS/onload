@@ -313,10 +313,9 @@ mkdir -p "$i_prefix/etc/depmod.d"
 ./scripts/onload_install --packaged \
   %{?build_profile:--build-profile %build_profile} \
   %{?debug:--debug} %{?setuid:--setuid} \
-  %{?with_user: --userfiles --modprobe --modulesloadd} \
+  %{?with_user: --userfiles --modprobe --modulesloadd --udev} \
   %{?with_kmod: --kernelfiles --kernelver "%{kernel}"} \
   %{?with_devel: --headers}
-
 %if %{with user}
 # Removing these files is fine since they would only ever be generated on a build machine.
 rm -f "$i_prefix/etc/sysconfig/modules/onload.modules"
@@ -388,6 +387,7 @@ rm -fR $RPM_BUILD_ROOT
 %attr(644, -, -) %{_sysconfdir}/modprobe.d/onload.conf
 %attr(644, -, -) %{_sysconfdir}/depmod.d/onload.conf
 %config(noreplace) %attr(644, -, -) %{_sysconfdir}/sysconfig/openonload
+/usr/lib/udev/rules.d/*
 
 /usr/share/onload/onload_modules-load.d.conf
 /usr/share/onload/sysconfig_onload_modules

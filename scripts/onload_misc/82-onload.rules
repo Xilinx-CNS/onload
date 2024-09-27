@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Copyright 2023 Advanced Micro Devices, Inc.
+
+ACTION=="add", SUBSYSTEM=="onload", IMPORT{file}="/etc/sysconfig/openonload" OWNER:="%E{ONLOAD_USER}" GROUP:="%E{ONLOAD_GROUP}" MODE:="%E{ONLOAD_MODE}"
+ACTION=="add", SUBSYSTEM=="onload_epoll", IMPORT{file}="/etc/sysconfig/openonload" OWNER:="%E{ONLOAD_USER}" GROUP:="%E{ONLOAD_GROUP}" MODE:="%E{ONLOAD_MODE}"
+ACTION=="add", SUBSYSTEM=="sfc_char", IMPORT{file}="/etc/sysconfig/openonload" OWNER:="%E{SFC_CHAR_USER}" GROUP:="%E{SFC_CHAR_GROUP}" MODE:="%E{SFC_CHAR_MODE}"
