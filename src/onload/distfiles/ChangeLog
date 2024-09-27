@@ -23,7 +23,7 @@ ON-15163: add ef_vi transmit warming interface and example
 ON-15289: replace driverlink with Linux aux bus for net driver coordination
 ON-15368: block in move_fd instead of returning EBUSY randomly
 ON-15451: onload_extension: pass fractional nanosecond timestamps from hardware
-ON-15489/#145/156/196: fix various DKMS issues
+ON-15489/#145/156/196/218: fix various DKMS issues
 ON-15556: add unified (X2+X3) timestamping API to ef_vi with sub-nanosecond ts
 ON-15691: append not replace thread ID to existing stack name if present
 ON-15712: fix overflow with large EF_MAX_PACKETS causing startup failure
