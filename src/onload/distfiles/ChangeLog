@@ -1,7 +1,16 @@
 onload-9.0.0
 ------------
 
-Update sfc net driver to v6.0.0.1011
+Update sfc net driver to v6.0.0.1012
+
+Remove support for:
+ - Red Hat Enterprise Linux 7
+ - Red Hat Enterprise Linux 8.4 - 8.5
+ - Red Hat Enterprise Linux 9.0 - 9.1
+ - Canonical Ubuntu Server LTS 20.04
+ - SuSE Linux Enterprise Server
+ - Debian 11 "Bullseye"
+ - kernel.org Linux kernels up to 5.10
 
 Changes:
 
