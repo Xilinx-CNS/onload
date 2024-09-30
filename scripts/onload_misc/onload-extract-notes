@@ -18,7 +18,6 @@ dir=${tgz%.tgz}
 try tar xf "$tgz"
 try [ -d "$dir" ]
 try mv "$dir/ChangeLog" "$dir-ChangeLog.txt"
-try mv "$dir/ReleaseNotes" "$dir-ReleaseNotes.txt"
 try mv "$dir/README" "$dir-README.txt"
 try mv "$dir/LICENSES-ALL" "$dir-LICENSES-ALL.txt"
 try rm -r "$dir"

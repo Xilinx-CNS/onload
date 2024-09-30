@@ -251,7 +251,7 @@ mkdir -p "$i_prefix/etc/depmod.d"
   --udev
 docdir="$i_prefix%{_defaultdocdir}/%{name}-%{pkgversion}"
 mkdir -p "$docdir"
-install -m 644 LICENSE* README* ChangeLog* ReleaseNotes* "$docdir"
+install -m 644 LICENSE* README* ChangeLog* "$docdir"
 # Removing these files is fine since they would only ever be generated on a build machine.
 rm -f "$i_prefix/etc/sysconfig/modules/onload.modules"
 rm -f "$i_prefix/usr/local/lib/modules-load.d/onload.conf"
