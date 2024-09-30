@@ -894,7 +894,7 @@ static void ci_udp_sendmsg_send(ci_netif* ni, ci_udp_state* us,
     if( nsn->tx_dmaq_insert_seq - nsn->tx_dmaq_insert_seq_last_poll >
         NI_OPTS(ni).send_poll_thresh ) {
       nsn->tx_dmaq_insert_seq_last_poll = nsn->tx_dmaq_insert_seq;
-      ci_netif_poll(ni);
+      ci_netif_poll_n(ni, NI_OPTS(ni).send_poll_max_events);
     }
   }
 

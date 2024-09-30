@@ -79,10 +79,10 @@ try tar czf "$tarball" --owner=root --group=root "$distd"
 
 # Build source rpm.
 try mkdir -p rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
-try rpmbuild --nodeps --define "_topdir $PWD/rpmbuild" -ts "$tarball"
+try rpmbuild --undefine dist --nodeps --define "_topdir $PWD/rpmbuild" -ts "$tarball"
 srpm=$(/bin/ls rpmbuild/SRPMS/*.rpm)
 srpmbase=$(basename "$srpm")
-destfile="$original_wd/$(echo "$srpmbase" | sed -e 's/\.el6//')"
+destfile="$original_wd/$srpmbase"
 [ -f "$destfile" ] && ! $force &&
   fail "ERROR: '$destfile' already exists.  I will not overwrite."
 try cp "$srpm" "$destfile"

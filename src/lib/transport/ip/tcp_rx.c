@@ -943,6 +943,7 @@ int /*bool*/ ci_tcp_maybe_enter_fast_recovery(ci_netif* ni, ci_tcp_state* ts)
   /* Fast recovery => no TLP timer, force RTO */
   ci_tcp_rto_restart(ni, ts);
 
+  CI_TCP_EXT_STATS_INC_TCP_FAST_RETRANS( ni );
   CI_IP_SOCK_STATS_INC_DUPACKFREC( ts );
   if( ts->tcpflags & CI_TCPT_FLAG_SACK )
     CI_TCP_EXT_STATS_INC_TCP_SACK_RECOVERY( ni );
