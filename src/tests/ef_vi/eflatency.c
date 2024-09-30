@@ -37,6 +37,9 @@ static inline void rx_wait_with_ts(struct eflatency_vi*);
 #define DEFAULT_PAYLOAD_SIZE  0
 
 
+static int              cfg_verbose = 0;
+static int              cfg_validate = 0;
+static int              cfg_vlan = 0;
 static int              cfg_iter = 100000;
 static int              cfg_warmups = 10000;
 static int              cfg_payload_len = DEFAULT_PAYLOAD_SIZE;
@@ -63,18 +66,20 @@ static enum ef_vi_flags cfg_vi_flags = 0;
 #define BUF_SIZE        2048
 #define MAX_UDP_PAYLEN	(1500 - sizeof(ci_ip4_hdr) - sizeof(ci_udp_hdr))
 /* Protocol header length: Ethernet + IP + UDP. */
-#define HEADER_SIZE     (14 + 20 + 8)
+#define ETH_HEADER_SIZE (cfg_vlan ? sizeof(ci_ethhdr_vlan_t) : sizeof(ci_ethhdr_t))
+#define HEADER_SIZE     (ETH_HEADER_SIZE + sizeof(ci_ip4_hdr) + sizeof(ci_udp_hdr))
 
 
 struct pkt_buf {
   struct pkt_buf* next;
   ef_addr         dma_buf_addr;
   int             id;
-  unsigned        dma_buf[1] EF_VI_ALIGN(EF_VI_DMA_ALIGN);
+  uint8_t         dma_buf[] EF_VI_ALIGN(EF_VI_DMA_ALIGN);
 };
 
 struct eflatency_vi {
   ef_vi     vi;
+  const uint8_t * rx_pkt; // last packet received
   int       n_ev;
   int       i;
   ef_event  evs[EF_VI_EVENT_POLL_MIN_EVS];
@@ -98,34 +103,48 @@ const uint32_t raddr_he = 0xac010203;  /* 172.1.2.3 */
 const uint16_t port_he = 8080;
 
 
+static void checksum_udp_pkt(void * pkt_buf)
+{
+  ci_ip4_hdr * const ip4 = (void*) ((uint8_t*) pkt_buf + ETH_HEADER_SIZE);
+  ci_udp_hdr * const udp = (void*) (ip4 + 1);
+  struct iovec iov = {
+    .iov_base = udp + 1,
+    .iov_len = CI_BSWAP_BE16(udp->udp_len_be16) - sizeof(*udp),
+  };
+
+  ip4->ip_check_be16 = ef_ip_checksum((const struct iphdr*) ip4);
+  udp->udp_check_be16 = ef_udp_checksum((const struct iphdr*) ip4,
+                                        (const struct udphdr*) udp, &iov, 1);
+}
+
 static void init_udp_pkt(void* pkt_buf, int paylen)
 {
-  int ip_len = sizeof(ci_ip4_hdr) + sizeof(ci_udp_hdr) + paylen;
-  ci_ether_hdr* eth;
-  ci_ip4_hdr* ip4;
-  ci_udp_hdr* udp;
-  struct iovec iov;
+  ci_ethhdr_t * const eth = pkt_buf;
+  ci_ethhdr_vlan_t * const eth_vlan = pkt_buf;
+  ci_ip4_hdr * const ip4 = (void*) ((uint8_t*) pkt_buf + ETH_HEADER_SIZE);
+  ci_udp_hdr * const udp = (void*) (ip4 + 1);
+  const size_t ip_len = sizeof(*ip4) + sizeof(*udp) + paylen;
 
   /* Use a broadcast destination MAC to ensure that the packet is not dropped
    * by 5000- and 6000-series NICs. */
   const uint8_t remote_mac[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 
-  eth = (ci_ether_hdr*) pkt_buf;
-  ip4 = (void*) ((char*) eth + 14);
-  udp = (void*) (ip4 + 1);
-
   memcpy(eth->ether_dhost, remote_mac, sizeof(remote_mac));
   ef_vi_get_mac(&rx_vi.vi, driver_handle, eth->ether_shost);
-  eth->ether_type = htons(0x0800);
+
+  if( !cfg_vlan ) {
+    eth->ether_type = CI_ETHERTYPE_IP;
+  } else {
+    eth_vlan->ether_type = CI_ETHERTYPE_IP;
+    eth_vlan->ether_vtype = CI_ETHERTYPE_8021Q;
+    eth_vlan->ether_vtag = htons(cfg_vlan);
+  }
+
   ci_ip4_hdr_init(ip4, CI_NO_OPTS, ip_len, 0, IPPROTO_UDP, htonl(laddr_he),
                   htonl(raddr_he), 0);
   ci_udp_hdr_init(udp, ip4, htons(port_he), htons(port_he), udp + 1, paylen, 0);
 
-  iov.iov_base = udp + 1;
-  iov.iov_len = paylen;
-  ip4->ip_check_be16 = ef_ip_checksum((const struct iphdr*) ip4);
-  udp->udp_check_be16 = ef_udp_checksum((const struct iphdr*) ip4,
-                                        (const struct udphdr*) udp, &iov, 1);
+  checksum_udp_pkt(pkt_buf);
 }
 
 
@@ -213,24 +232,39 @@ generic_ping(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi,
 {
   struct timeval start, end;
   int i;
-  int do_rx_post = ( rx_vi->vi.nic_type.arch != EF_VI_ARCH_EFCT );
+  const int do_rx_post = ( rx_vi->vi.nic_type.arch != EF_VI_ARCH_EFCT );
+  uint8_t * const tx_pkt = pkt_bufs[FIRST_TX_BUF]->dma_buf;
+  uint8_t pattern = 0;
 
-  for( i = 0; i < cfg_warmups; ++i ) {
+  for( i = 0; i < cfg_warmups; ++i, pattern++ ) {
+    memset(&tx_pkt[HEADER_SIZE], pattern, cfg_payload_len);
+    checksum_udp_pkt(tx_pkt);
+
     tx_send(tx_vi);
     if( do_rx_post )
       rx_post(&rx_vi->vi);
     rx_wait(rx_vi);
-   generic_desc_check(tx_vi, 0);
+    generic_desc_check(tx_vi, 0);
   }
 
   gettimeofday(&start, NULL);
 
-  for( i = 0; i < cfg_iter; ++i ) {
+  for( i = 0; i < cfg_iter; ++i, pattern++ ) {
+    memset(&tx_pkt[HEADER_SIZE], pattern, cfg_payload_len);
+    checksum_udp_pkt(tx_pkt);
+
     uint64_t start = ci_frc64_get();
     tx_send(tx_vi);
     if( do_rx_post )
       rx_post(&rx_vi->vi);
     rx_wait(rx_vi);
+
+    if( cfg_validate && cfg_payload_len > 0 ) {
+      const uint8_t rx_pattern = rx_vi->rx_pkt[HEADER_SIZE];
+      if( pattern != rx_pattern )
+        fprintf(stderr, "expected pong %02x got %02x\n", pattern, rx_pattern);
+    }
+
     uint64_t stop = ci_frc64_get();
     timings[i] = stop - start;
     generic_desc_check(tx_vi, 0);
@@ -249,9 +283,20 @@ generic_pong(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi,
 {
   int i;
   int do_rx_post = ( rx_vi->vi.nic_type.arch != EF_VI_ARCH_EFCT );
+  uint8_t pattern = 0;
+  uint8_t * const tx_pkt = pkt_bufs[FIRST_TX_BUF]->dma_buf;
 
-  for( i = 0; i < cfg_warmups + cfg_iter; ++i ) {
+  for( i = 0; i < cfg_warmups + cfg_iter; ++i, pattern++ ) {
     rx_wait(rx_vi);
+    if( cfg_validate && cfg_payload_len > 0 ) {
+        const uint8_t * const rx_pkt = rx_vi->rx_pkt;
+        const uint8_t rx_pattern = rx_pkt[HEADER_SIZE];
+        if( pattern != rx_pattern )
+           fprintf(stderr, "expected ping %02x received %02x\n", pattern, rx_pattern);
+        memcpy(&tx_pkt[HEADER_SIZE], &rx_pkt[HEADER_SIZE], cfg_payload_len);
+        checksum_udp_pkt(tx_pkt);
+    }
+
     tx_send(tx_vi);
     if( do_rx_post )
       rx_post(&rx_vi->vi);
@@ -461,54 +506,58 @@ static void
 generic_desc_check(struct eflatency_vi* vi, int wait)
 {
   /* We might exit with events read but unprocessed. */
-  int i = vi->i;
-  int n_ev = vi->n_ev;
-  ef_event* evs = vi->evs;
-  int n_rx;
   ef_request_id   tx_ids[EF_VI_TRANSMIT_BATCH];
   ef_request_id   rx_ids[EF_VI_RECEIVE_BATCH];
+  int n_rx;
 
   while( 1 ) {
-    for( ; i < n_ev; vi->i = ++i )
-      switch( EF_EVENT_TYPE(evs[i]) ) {
+    while( vi->i < vi->n_ev ) {
+      const ef_event * const ev = &vi->evs[vi->i++];
+      if( cfg_verbose >= 2 )
+        fprintf(stderr, "event "EF_EVENT_FMT"\n", EF_EVENT_PRI_ARG(*ev));
+
+      switch( EF_EVENT_TYPE(*ev) ) {
       case EF_EVENT_TYPE_RX:
-        vi->i = ++i;
+        // sfc driver
+        vi->rx_pkt = pkt_bufs[EF_EVENT_RX_RQ_ID(*ev)]->dma_buf;
         return;
       case EF_EVENT_TYPE_RX_REF:
-        handle_rx_ref(&vi->vi, evs[i].rx_ref.pkt_id, evs[i].rx_ref.len);
-        vi->i = ++i;
+        // efct driver
+        vi->rx_pkt = efct_vi_rxpkt_get(&vi->vi, ev->rx_ref.pkt_id);
+        handle_rx_ref(&vi->vi, ev->rx_ref.pkt_id, ev->rx_ref.len);
         return;
       case EF_EVENT_TYPE_TX:
-        ef_vi_transmit_unbundle(&vi->vi, &(evs[i]), tx_ids);
+        ef_vi_transmit_unbundle(&vi->vi, ev, tx_ids);
         break;
       case EF_EVENT_TYPE_TX_ALT:
         ++(tx_alt.complete_id);
         break;
       case EF_EVENT_TYPE_RX_MULTI:
       case EF_EVENT_TYPE_RX_MULTI_DISCARD:
-        n_rx = ef_vi_receive_unbundle(&vi->vi, &(evs[i]), rx_ids);
+        n_rx = ef_vi_receive_unbundle(&vi->vi, ev, rx_ids);
         TEST(n_rx == 1);
-        vi->i = ++i;
         return;
       case EF_EVENT_TYPE_RX_MULTI_PKTS:
-        n_rx = evs[i].rx_multi_pkts.n_pkts;
+        n_rx = ev->rx_multi_pkts.n_pkts;
         TEST(n_rx == 1);
         ef_vi_rxq_next_desc_id(&vi->vi);
-        vi->i = ++i;
         return;
       case EF_EVENT_TYPE_RX_REF_DISCARD:
-        handle_rx_ref(&vi->vi, evs[i].rx_ref_discard.pkt_id,
-                      evs[i].rx_ref_discard.len);
-        if( evs[i].rx_ref_discard.flags & EF_VI_DISCARD_RX_ETH_FCS_ERR &&
+        handle_rx_ref(&vi->vi, ev->rx_ref_discard.pkt_id,
+                      ev->rx_ref_discard.len);
+        if( ev->rx_ref_discard.flags & EF_VI_DISCARD_RX_ETH_FCS_ERR &&
             cfg_ctpio_thresh < tx_frame_len ) {
           break;
         }
         fprintf(stderr, "ERROR: unexpected ref discard flags=%x\n",
-                evs[i].rx_ref_discard.flags);
+                ev->rx_ref_discard.flags);
         TEST(0);
         break;
       case EF_EVENT_TYPE_RX_DISCARD:
-        if( EF_EVENT_RX_DISCARD_TYPE(evs[i]) == EF_EVENT_RX_DISCARD_CRC_BAD &&
+        if( cfg_verbose )
+            fprintf(stderr, "RX discard%s\n",
+              EF_EVENT_RX_DISCARD_TYPE(*ev) == EF_EVENT_RX_DISCARD_CRC_BAD ? " bad CRC" : "");
+        if( EF_EVENT_RX_DISCARD_TYPE(*ev) == EF_EVENT_RX_DISCARD_CRC_BAD &&
             (ef_vi_flags(&vi->vi) & EF_VI_TX_CTPIO) && ! cfg_ctpio_no_poison ) {
           /* Likely a poisoned frame caused by underrun.  A good copy will
            * follow.
@@ -519,14 +568,15 @@ generic_desc_check(struct eflatency_vi* vi, int wait)
         ci_fallthrough;
       default:
         fprintf(stderr, "ERROR: unexpected event "EF_EVENT_FMT"\n",
-                EF_EVENT_PRI_ARG(evs[i]));
+                EF_EVENT_PRI_ARG(*ev));
         TEST(0);
         break;
       }
-    vi->n_ev = n_ev = ef_eventq_poll(&vi->vi, evs,
-                                     sizeof(vi->evs) / sizeof(vi->evs[0]));
-    vi->i = i = 0;
-    if( ! n_ev && ! wait )
+    }
+    vi->i = 0;
+    vi->n_ev = ef_eventq_poll(&vi->vi, vi->evs,
+                              sizeof(vi->evs) / sizeof(vi->evs[0]));
+    if( ! vi->n_ev && ! wait )
       break;
   }
 }
@@ -693,12 +743,15 @@ static CI_NORETURN usage(const char* fmt, ...)
   fprintf(stderr, "  -n <iterations>     - set number of iterations\n");
   fprintf(stderr, "  -s <message-size>   - set udp payload size. Accepts Python slices\n");
   fprintf(stderr, "  -w <iterations>     - set number of warmup iterations\n");
+  fprintf(stderr, "  -V <vlan-tag>       - add vlan tag to ethernet header\n");
   fprintf(stderr, "  -c <cut-through>    - CTPIO cut-through threshold\n");
   fprintf(stderr, "  -p                  - CTPIO no-poison mode\n");
   fprintf(stderr, "  -m <modes>          - allow mode of the set: [c]tpio, \n");
   fprintf(stderr, "                        [p]io, [a]lternatives, [d]ma\n");
   fprintf(stderr, "  -t <modes>          - set TX_PUSH: [a]lways, [d]isable\n");
   fprintf(stderr, "  -o <filename>       - save raw timings to file\n");
+  fprintf(stderr, "  -v                  - increase verbosity level\n");
+  fprintf(stderr, "  -r                  - validate ping/pong message contents\n");
   fprintf(stderr, "\n");
   exit(1);
 }
@@ -736,7 +789,7 @@ int main(int argc, char* argv[])
     p = (unsigned int)__v;                                   \
   } while( 0 );
 
-  while( (c = getopt (argc, argv, "n:s:w:c:pm:t:o:")) != -1 )
+  while( (c = getopt (argc, argv, "n:s:w:c:pm:t:o:V:vr")) != -1 )
     switch( c ) {
     case 'n':
       OPT_INT(optarg, cfg_iter);
@@ -760,6 +813,9 @@ int main(int argc, char* argv[])
       break;
     case 'c':
       OPT_UINT(optarg, cfg_ctpio_thresh);
+      break;
+    case 'V':
+      OPT_INT(optarg, cfg_vlan);
       break;
     case 'p':
       cfg_ctpio_no_poison = 1;
@@ -789,6 +845,12 @@ int main(int argc, char* argv[])
           usage("Unknown mode '%c'", optarg[i]);
         }
       }
+      break;
+    case 'v':
+      cfg_verbose++;
+      break;
+    case 'r':
+      cfg_validate = 1;
       break;
     case '?':
       usage(NULL);
@@ -889,6 +951,11 @@ int main(int argc, char* argv[])
   printf("# warmups: %d\n", cfg_warmups);
   printf("# frame len: %d\n", tx_frame_len);
   printf("# mode: %s\n", t->name);
+  printf("# vlan: %d\n", cfg_vlan);
+  printf("# validating: %s\n", cfg_validate ? "yes" : "no");
+  if( cfg_verbose )
+    printf("# verbose: %d\n", cfg_verbose);
+
   if( ping )
     printf("paylen\tmean\tmin\t50%%\t95%%\t99%%\tmax\n");
 
