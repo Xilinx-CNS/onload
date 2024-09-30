@@ -1,7 +1,7 @@
 onload-9.0.0
 ------------
 
-Update sfc net driver to v6.0.0.1012
+Update sfc net driver to v6.0.1.1000
 
 Remove support for:
  - Red Hat Enterprise Linux 7
@@ -40,7 +40,7 @@ ON-15716/#174: accelerate epoll_pwait2()
 ON-15827: avoid allocation failures when memory needs reclaim
 ON-15837/#225: Fix lock setting handler for same signal in different threads
 ON-15844: onload_iptables: handle distros where iptables protocol is numeric
-ON-15907: base filter support on reported HW caps, adding IPProto filters
+ON-15907: report X3 filter support based on HW caps, adding IPProto filters
 ON-15947: add onload-devel rpm sub-package
 ON-16009: fix incorrect recv flag value in JNI
 #181: add EF_RX_TIMESTAMPING_TRAILER_FORMAT to select additional formats

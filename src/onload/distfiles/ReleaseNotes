@@ -6,7 +6,7 @@ Onload-9.0.0
  adding new features and support for new operating systems and kernels since
  the earlier OpenOnload-8.1.x releases.
 
- An updated version 6.0.0.1012 of the sfc net driver is included for
+ An updated version 6.0.1.1000 of the sfc net driver is included for
  X2-based network cards.
 
 
