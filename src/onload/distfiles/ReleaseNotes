@@ -27,28 +27,31 @@ ef_vi Control Plane API
 The ef_vi API has been extended to allow users to perform lookups of the Linux
 routing tables efficiently and with support for many of the advanced features
 of the Linux networking stack. The implementation of this feature uses the same
-infrastructure which supprts Onload and TCPDirect, but presents an API which is
-optimised for usage outside of those products.
+infrastructure which supports Onload and TCPDirect, but presents an API which
+is optimised for usage outside of those products.
 
-The documentation for this API can be found in `src/include/cplane/api.h',
+The documentation for this API can be found in 'src/include/cplane/api.h',
 and an example of how one might use this api can be found in the
-`src/tests/ef_vi/efsend_cplane.c' example application.
+'src/tests/ef_vi/efsend_cplane.c' example application.
 
 
-Additional hardware filter support on X3522
--------------------------------------------
+X3522 updates
+-------------
 
-Support has been added for ef_vi to use the hardware support for IP Proto and
-multicast-mismatch filters where supported by the NIC.
+ - Minimum compatible X3522 driver version is v1.6.6.0
 
+ - Additional hardware filter types
 
-Filter feature reporting for X3522 through ef_vi capabilities API
------------------------------------------------------------------
+   Support has been added for ef_vi to use the hardware support for IP Proto
+   and multicast-mismatch filters where supported by the NIC.
 
-Previous versions of onload were inconsistent in how filter support was
-reported in the case of X3522 where some filters are provided through hardware
-support and some are emulated in software. The behaviour has now changed such
-that a filter is only reported as supported if it can be provided in hardware.
+ - Filter features reported through ef_vi capabilities API
+
+   Previous versions of onload were inconsistent in how filter support was
+   reported in the case of X3522 where some filters are provided through
+   hardware support and some are emulated in software. The behaviour has now
+   changed such that a filter is only reported as supported if it can be
+   provided in hardware.
 
 
 New controls to permit non-root ef_vi applications to manipulate raw filters
