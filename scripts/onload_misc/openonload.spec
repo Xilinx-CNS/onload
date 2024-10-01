@@ -337,10 +337,6 @@ rm -fR $RPM_BUILD_ROOT
 %{_bindir}/*
 %{_sbindir}/*
 /sbin/*
-%dir %{_includedir}/onload
-%{_includedir}/onload/extensions*.h
-%dir %{_includedir}/etherfabric
-%{_includedir}/etherfabric/*.h
 
 # RPM 4.11+ (EL7+)
 %if 0%{?license:1}
