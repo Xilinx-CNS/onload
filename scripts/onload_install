@@ -445,11 +445,6 @@ install_udev_rules() {
   install_f onload_misc/82-onload.rules "$i_usr/lib/udev/rules.d/82-onload.rules"
 }
 
-install_udev_rules() {
-  try $docd "$TOP/scripts"
-  install_f onload_misc/82-onload.rules "$i_usr/lib/udev/rules.d/82-onload.rules"
-}
-
 install_all_headers() {
   try "$docd" "$TOP/src/include"
 
