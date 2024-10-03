@@ -44,7 +44,7 @@ Packaging changes
    to use the new Onload Control Plane API or the Onload Extensions API,
    have been moved to a new sub-package, either:
 
-    - onload-devel (for RPM), or
+    - openonload-devel (for RPM), or
     - onload-dev (for DEB)
 
    This allows such applications to be built without setting up custom paths
