@@ -16,6 +16,8 @@ copy_distfiles() {
 
   try cp -a "$distfiles_d"/{README,*LICENSE*,ChangeLog} .
   try cp -a "$distfiles_d"/README.ef_vi .
+  [ -f "$distfiles_d"/ReleaseNotes ] &&
+    try cp -a "$distfiles_d"/ReleaseNotes .
   [ -f "$distfiles_d"/ReleaseNotes-sfc ] &&
     try cp -a "$distfiles_d"/ReleaseNotes-sfc .
 }

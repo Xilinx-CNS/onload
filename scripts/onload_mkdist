@@ -237,6 +237,9 @@ verstub=$(echo "$version" | sed -e 's/-test.*//' -e 's/-rc.*//')
 if [ -f ChangeLog ] && ! grep -q "$verstub" ChangeLog; then
   bad "Nothing in the ChangeLog for this version"
 fi
+if [ -f ReleaseNotes ] && ! grep -q "$verstub" ReleaseNotes; then
+  bad "Nothing in the ReleaseNotes for this version"
+fi
 
 # Get rid of junk!
 find . -type f -name '.#*'    -exec rm "{}" \;
