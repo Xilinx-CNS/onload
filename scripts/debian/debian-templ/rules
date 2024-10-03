@@ -241,7 +241,7 @@ binary-indep: build install
 
 	dh_installdirs -p$(develpackage) usr/include/
 	i_prefix=$(CURDIR)/debian/$(develpackage) scripts/onload_install \
-		--verbose --packaged --headers
+		--verbose --packaged --headers --nobaseheaders
 	dh_builddeb -i
 
 # Build architecture-dependent files here.
