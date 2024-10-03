@@ -318,6 +318,19 @@ install_userland() {
   rm -fr $PYTMPDIR
 
   manifest_combine $python_manifest
+
+  try $docd "$TOP/src/include"
+
+  # Install header files for Onload extensions library
+  install_f onload/extensions.h "$i_include/onload/extensions.h"
+  install_f onload/extensions_timestamping.h "$i_include/onload/extensions_timestamping.h"
+  install_f onload/extensions_zc.h "$i_include/onload/extensions_zc.h"
+
+  # Install header files for ef_vi app development
+  /bin/ls etherfabric/*.h |
+    while read -r f; do
+      install_f "$f" "$i_include/$f"
+    done;
 }
 
 
