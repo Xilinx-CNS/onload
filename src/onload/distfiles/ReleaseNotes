@@ -35,6 +35,30 @@ and an example of how one might use this api can be found in the
 'src/tests/ef_vi/efsend_cplane.c' example application.
 
 
+Packaging changes
+-----------------
+
+ - Development headers moved to sub-package
+
+   The headers needed to build ef_vi applications, including TCPDirect and
+   to use the new Onload Control Plane API or the Onload Extensions API,
+   have been moved to a new sub-package, either:
+
+    - onload-devel (for RPM), or
+    - onload-dev (for DEB)
+
+   This allows such applications to be built without setting up custom paths
+   or having the Onload runtime and kernel modules installed.
+
+   Headers can also be installed with 'onload_install --headers'.
+
+ - DKMS sub-package for Debian
+
+   Debian users now have the option of using DKMS to build kernel modules
+   on the fly as an alternative to using the existing source installation
+   and explicit kernel module package building via module-assistant.
+
+
 X3522 updates
 -------------
 
@@ -157,24 +181,6 @@ types are:
   SOF_TIMESTAMPING_RX_HARDWARE | SOF_TIMESTAMPING_OOEXT_TRAILER
   SOF_TIMESTAMPING_TX_HARDWARE | SOF_TIMESTAMPING_SYS_HARDWARE
   SOF_TIMESTAMPING_TX_HARDWARE | SOF_TIMESTAMPING_RAW_HARDWARE
-
-
-DKMS packaging for Debian
--------------------------
-
-Added the option for Debian users to install the kernel modules for
-onload using DKMS. This is provided as an alternative to using the
-existing source installation via module-assistant.
-
-
-New onload-devel package
-------------------------
-
-This package contains all of the header files used by onload, and allows users
-to build applications that depend on these headers (such as TCPDirect) without
-having to set up custom include paths and without installing kernel modules.
-
-Headers can also be installed via new '--headers' option in 'onload_install'.
 
 
 udev rule to set ownership and permission of device nodes
