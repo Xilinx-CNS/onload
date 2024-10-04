@@ -25,7 +25,7 @@ ON-14346: EF_VI non-root applications can be permitted to use MAC filters
 ON-14517: improve filter handling during NIC reset
 ON-14692: X3: support extended design parameter set
 ON-14725: onload_extension: add onload_socket_tx_only function
-ON-14825: poll interfaces cyclically
+ON-14825: poll interfaces cyclically for fairer handling of received data
 ON-14833: add EF_TCP_RST_COOLDOWN to rate-limit TCP RSTs selectively
 ON-15106: X3: set filter support based on reported hardware capabilities
 ON-15163: add ef_vi transmit warming interface and example
@@ -48,6 +48,7 @@ ON-16009: fix incorrect recv flag value in JNI
 #220: support splice() from Onload socket to unaccelerated pipe
 #227: honour sys.net.core.[rw]mem_max
 #232: fix {SND,RCV}BUFFORCE socket options handling
+#244: fix SyntaxWarning in sfcaffinity_config
 
 
 onload-8.1.3.40

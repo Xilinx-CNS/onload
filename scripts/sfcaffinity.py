@@ -63,7 +63,7 @@ def task_set_affinity(pid, cpumask):
     csl = mask.to_comma_sep_list(cpumask)
     cmd = "taskset -c -p %s %d >/dev/null" % (csl, int(pid))
     if do_system(cmd) != 0:
-        raise something#??
+        raise OSError("Unable to run taskset")
 
 
 def process_set_affinity(pid, cpumask):
@@ -184,7 +184,7 @@ def irq_set_affinity(irq, cpumask):
     cshm = mask.to_comma_sep_hex(cpumask)
     cmd = "echo %s >/proc/irq/%d/smp_affinity" % (cshm, int(irq))
     if do_system(cmd) != 0:
-        raise something#??
+        raise OSError("Unable to set smp_affinity")
     irq_pid = irq_get_pid(irq)
     if irq_pid > 0:
         task_set_affinity(irq_pid, cpumask)
