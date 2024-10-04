@@ -25,7 +25,7 @@ ON-14346: EF_VI non-root applications can be permitted to use MAC filters
 ON-14517: improve filter handling during NIC reset
 ON-14692: X3: support extended design parameter set
 ON-14725: onload_extension: add onload_socket_tx_only function
-ON-14825: poll interfaces cyclically
+ON-14825: poll interfaces cyclically for fairer handling of received data
 ON-14833: add EF_TCP_RST_COOLDOWN to rate-limit TCP RSTs selectively
 ON-15106: X3: set filter support based on reported hardware capabilities
 ON-15163: add ef_vi transmit warming interface and example
