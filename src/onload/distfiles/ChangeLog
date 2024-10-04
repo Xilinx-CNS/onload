@@ -48,6 +48,7 @@ ON-16009: fix incorrect recv flag value in JNI
 #220: support splice() from Onload socket to unaccelerated pipe
 #227: honour sys.net.core.[rw]mem_max
 #232: fix {SND,RCV}BUFFORCE socket options handling
+#244: fix SyntaxWarning in sfcaffinity_config
 
 
 onload-8.1.3.40
