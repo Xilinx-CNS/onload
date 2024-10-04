@@ -43,6 +43,7 @@ userpackage:=#TYPE#-user
 
 pdkms:=#TYPE#-dkms
 
+develpackage:=#TYPE#-dev
 get_build_config = $(patsubst pkg.$(sname).%,%,\
                      $(filter pkg.$(sname).$(1),$(DEB_BUILD_PROFILES)))
 
@@ -237,6 +238,10 @@ binary-indep: build install
 	dh_shlibdeps -i
 	dh_gencontrol -i
 	dh_md5sums -i
+
+	dh_installdirs -p$(develpackage) usr/include/
+	i_prefix=$(CURDIR)/debian/$(develpackage) scripts/onload_install \
+		--verbose --packaged --headers --nobaseheaders
 	dh_builddeb -i
 
 # Build architecture-dependent files here.

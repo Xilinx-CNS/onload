@@ -8,6 +8,7 @@ Standards-Version: 3.9.3
 Package: #TYPE#-modules-_KVERS_
 Architecture: any
 Provides: #TYPE#-modules
+Conflicts: #TYPE#-dkms
 #conflicts SFC
 Description: #TYPE# modules for Linux (kernel _KVERS_).
  This package contains the #TYPE# loadable kernel modules for the

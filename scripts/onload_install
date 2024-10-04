@@ -40,7 +40,8 @@ usage() {
   err "  --adduser      / --noadduser      - Only call 'onload_tool add_cplane_user'"
   err "  --modulesloadd / --nomodulesloadd - Only install config to modules-load.d"
   err "  --uninstall    / --nouninstall    - Only install onload_uninstall tool"
-  err "  --headers                         - Only install development headers"
+  err "  --baseheaders  / --nobaseheaders  - Only install ef_vi and extensions headers"
+  err "  --headers                         - Only install all development headers"
   err "  --allow-unsupported-cpu           - Force install even when CPU is too old"
   err "  --force                           - Force install if already installed"
   err "  --noinstallcheck                  - Do not check presence of installation"
@@ -319,18 +320,21 @@ install_userland() {
 
   manifest_combine $python_manifest
 
-  try $docd "$TOP/src/include"
+  if $base_headers; then
+    try "$docd" "$TOP/src/include"
 
-  # Install header files for Onload extensions library
-  install_f onload/extensions.h "$i_include/onload/extensions.h"
-  install_f onload/extensions_timestamping.h "$i_include/onload/extensions_timestamping.h"
-  install_f onload/extensions_zc.h "$i_include/onload/extensions_zc.h"
+    # Install header files for Onload extensions library
+    install_f onload/extensions.h "$i_include/onload/extensions.h"
+    install_f onload/extensions_timestamping.h \
+              "$i_include/onload/extensions_timestamping.h"
+    install_f onload/extensions_zc.h "$i_include/onload/extensions_zc.h"
 
-  # Install header files for ef_vi app development
-  /bin/ls etherfabric/*.h |
-    while read -r f; do
-      install_f "$f" "$i_include/$f"
-    done;
+    # Install header files for ef_vi app development
+    /bin/ls etherfabric/*.h |
+      while read -r f; do
+        install_f "$f" "$i_include/$f"
+      done;
+  fi
 }
 
 
@@ -445,19 +449,32 @@ install_udev_rules() {
   install_f onload_misc/82-onload.rules "$i_usr/lib/udev/rules.d/82-onload.rules"
 }
 
-install_udev_rules() {
-  try $docd "$TOP/scripts"
-  install_f onload_misc/82-onload.rules "$i_usr/lib/udev/rules.d/82-onload.rules"
-}
-
 install_all_headers() {
   try "$docd" "$TOP/src/include"
 
-  for dir in ci cplane etherfabric onload; do
+  # If $base_headers is false we don't want to install any of the header files
+  # that would be installed when installing userland files. This is to preserve
+  # backwards compatibility with existing scripts that rely on these files, and
+  # to accommodate debian packages which don't accept multiple packages having
+  # the same files.
+
+  ef_dir="etherfabric"
+  if ! $base_headers; then
+    ef_dir="etherfabric/internal"
+  fi
+
+  for dir in ci cplane ${ef_dir} onload; do
     install_dir "$i_include/$dir"
     find $dir -name "*.h" |
       while read -r f; do
-        install_f "$f" "$i_include/$f";
+        case $f in
+          *extensions*.h)
+            if $base_headers; then
+              install_f "$f" "$i_include/$f"
+            fi;;
+          *)
+            install_f "$f" "$i_include/$f";;
+        esac
       done;
   done;
 
@@ -639,6 +656,7 @@ modprobe=
 modulesloadd=
 udev=
 headers=false
+base_headers=true
 uninstall=true
 test=false
 do=
@@ -735,6 +753,8 @@ while [ $# -gt 0 ]; do
   --moddir=*) install_mod_dir="${1#--moddir=}";;
   --no-sfc) nosfc=true;;
   --headers) all=false; headers=true;;
+  --baseheaders) all=false; base_headers=true;;
+  --nobaseheaders) base_headers=false;;
   -*)           usage;;
   *)            break;;
   esac

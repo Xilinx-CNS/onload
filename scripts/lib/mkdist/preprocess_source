@@ -61,9 +61,8 @@ update_product_strings() {
     scripts/onload_misc/openonload.spec
   if [ "$Product" != OpenOnload ]; then
     try sed -i \
-      -e "/^Summary[[:space:]]*:/ s/OpenOnload/$Product/" \
-      -e "/^Name[[:space:]]*:/ s/openonload/$product/" \
-      -e "/^Source0[[:space:]]*:/ s/openonload/$product/" \
+      -e "/^Summary: */ s/OpenOnload/$Product/" \
+      -e "/^Name: */ s/openonload/$product/" \
       scripts/onload_misc/openonload.spec
   fi
 }

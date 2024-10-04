@@ -272,9 +272,10 @@ fi
   kernel=$(echo "$kernel" | tr '[A-Z]' '[a-z]')
   [ -z "$KVER" ] && KVER=$(uname -r)
   [ -d "$KPATH" ] || {
-    modules="/lib/modules/$KVER"
-    [ -d "${modules}" ] || fail "No kernel modules at '$modules'"
-    KPATH="${modules}/build"
+    KPATH=/usr/src/kernels/$KVER # RHEL
+    [ -d "$KPATH" ] || KPATH=/usr/src/linux-$KVER # SUSE
+    [ -d "$KPATH" ] || KPATH=/usr/src/linux-headers-$KVER # Debian
+    [ -d "$KPATH" ] || KPATH=/lib/modules/$KVER/build # Symlink from binaries
     [ -d "$KPATH" ] || fail "No kernel build at '$KPATH'"
   }
 }

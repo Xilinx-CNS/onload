@@ -162,7 +162,7 @@ EFRM_NEED_DEBUGFS_LOOKUP_AND_REMOVE nsymbol debugfs_lookup_and_remove include/li
 
 EFRM_HAVE_WARN_FLUSHING_SYSTEMWIDE_WQ symbol __warn_flushing_systemwide_wq include/linux/workqueue.h
 
-EFRM_NEED_STRSCPY	nsymbol	strscpy	include/linux/fortify-string.h
+EFRM_NEED_STRSCPY	nsymbol	strscpy	include/linux/fortify-string.h	include/linux/string.h
 EFRM_HAVE_SET_RXFH_CONTEXT memtype struct_ethtool_ops set_rxfh_context include/linux/ethtool.h int (*)(struct net_device*, const u32*, const u8*, const u8, u32*, bool)
 
 EFRM_HAVE_EPOLL_PWAIT2 symbol sys_epoll_pwait2 include/linux/syscalls.h

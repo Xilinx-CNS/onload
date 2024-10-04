@@ -267,7 +267,7 @@ EFX_HAVE_RHASHTABLE			file	include/linux/rhashtable.h
 EFX_HAVE_RHASHTABLE_LOOKUP_FAST		symbol	rhashtable_lookup_fast	include/linux/rhashtable.h
 EFX_NEED_RHASHTABLE_WALK_ENTER		nsymbol	rhashtable_walk_enter	include/linux/rhashtable.h
 EFX_HAVE_RHASHTABLE_WALK_INIT_GFP	symtype	rhashtable_walk_init	include/linux/rhashtable.h	int(struct rhashtable *, struct rhashtable_iter *, gfp_t)
-EFX_NEED_STRSCPY			nsymbol	strscpy			include/linux/fortify-string.h
+EFX_NEED_STRSCPY			nsymbol	strscpy			include/linux/fortify-string.h include/linux/string.h
 EFX_HAVE_NDO_SIOCDEVPRIVATE		member	struct_net_device_ops	ndo_siocdevprivate	include/linux/netdevice.h
 EFX_HAVE_NDO_ETH_IOCTL			member	struct_net_device_ops	ndo_eth_ioctl		include/linux/netdevice.h
 EFX_NEED_NETDEV_HOLD			nsymbol	netdev_hold		include/linux/netdevice.h

@@ -220,8 +220,10 @@ void efx_client_attach(struct efx_probe_data *pd, bool ok)
 #if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	efx_dl_reset_resume(&pd->efx.dl_nic, ok);
 #endif
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK) || defined(CONFIG_AUXILIARY_BUS)
 	if (ok && efx_net_allocated(pd->efx.state))
 		efx_onload_attach(pd->client_type[EFX_CLIENT_ONLOAD]);
+#endif
 #endif
 	ev.type = EFX_AUXDEV_EVENT_IN_RESET;
 	ev.value = ok ? EFX_NOT_IN_RESET : EFX_HARDWARE_DISABLED;

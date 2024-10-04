@@ -9,12 +9,14 @@ Homepage: http://www.openonload.org
 Package: #TYPE#-user
 Architecture: any
 Depends: adduser, psmisc, ${shlibs:Depends}, ${misc:Depends}, python3
-Suggests: #TYPE#-modules-${source:Version}
+Suggests: #TYPE#-modules-${source:Version}, #TYPE#-dev
+Provides: onload-user
 Description: Onload TCP/IP stack - library
 
 Package: #TYPE#-source
 Architecture: all
 Depends: module-assistant, debhelper (>= 7), make, bzip2, #TYPE#-user (>= ${source:Version}), #TYPE#-user (<< ${source:Version}.1~), ${misc:Depends}
+Provides: onload-source
 Description: source for the #TYPE# driver.
  This package provides the source code for the #TYPE# kernel modules.
  The #TYPE# package is also required in order to make use of these
@@ -24,3 +26,10 @@ Package: #TYPE#-dkms
 Architecture: all
 Depends: dkms, #TYPE#-user (>= ${source:Version}), #TYPE#-user (<< ${source:Version}.1~), ${misc:Depends}
 Description: Onload debian package with DKMS
+Conflicts: #TYPE#-modules
+
+Package: #TYPE#-dev
+Architecture: all
+Description: Onload development headers
+Enhances: #TYPE#-user
+Provides: onload-dev

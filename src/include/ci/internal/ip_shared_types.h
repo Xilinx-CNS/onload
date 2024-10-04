@@ -1200,7 +1200,7 @@ struct ci_netif_state_s {
   CI_ULCONST ci_uint32  buf_ofs;         /**< offset of packet metadata */
   CI_ULCONST ci_uint32  dma_ofs;         /**< offset of dma_addrs */
 
-#define CI_TCP_RST_COOLDOWN_DEFAULT     (3000) /* 3ms */
+#define CI_TCP_RST_COOLDOWN_DEFAULT     (0) /* Default to disabled */
 #define CI_TCP_RST_COOLDOWN_MAP_SIZE    (4)
 #define CI_TCP_RST_COOLDOWN_BUFFER_SIZE (CI_TCP_RST_COOLDOWN_MAP_SIZE)
   struct {
