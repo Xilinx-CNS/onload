@@ -312,7 +312,7 @@ proc_interrupts_rxq_fmts = ['%s-rx-', '%s-']
 
 def __interface_n_rxqs(ethname, fmt):
     match = fmt % ethname
-    f = do_popen("grep '\<%s[0-9]' /proc/interrupts | wc -l" % match)
+    f = do_popen("grep '\\<%s[0-9]' /proc/interrupts | wc -l" % match)
     return int(f.read().strip())
 
 
@@ -353,7 +353,7 @@ def num_cpus():
 
 
 def module_loaded(modname):
-    f = do_popen("/sbin/lsmod | grep '^%s\>'" % modname)
+    f = do_popen("/sbin/lsmod | grep '^%s\\>'" % modname)
     return bool(f.read())
 
 
@@ -379,7 +379,7 @@ def sfc_resource_cpu2rxq_path(ethx):
     cpu2rxq_path = None
     path = '/sys/class/net/%s/device/' % ethx
     for filename in os.listdir(path):
-        if re.match("sfc.onload.\d+", filename):
+        if re.match(r"sfc.onload.\d+", filename):
             assert cpu2rxq_path is None  # Allow no more than one match.
             cpu2rxq_path = os.path.join(path, filename, "sfc_resource", "cpu2rxq")
     return cpu2rxq_path
@@ -460,7 +460,7 @@ def irq_get_cpumask(irq):
 def rxq_get_irq(ethx, rxq):
     (n_rxqs, fmt) = __interface_n_rxqs_fmt(ethx)
     assert n_rxqs > 0
-    match = '\<' + (fmt % ethx) + str(rxq) + '\>'
+    match = '\\<' + (fmt % ethx) + str(rxq) + '\\>'
     f = do_popen("grep '%s' /proc/interrupts | awk -F: '{print $1}'" % match)
     return int(f.read().strip())
 
