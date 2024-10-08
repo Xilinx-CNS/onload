@@ -415,6 +415,14 @@ static bool find_syscall(void)
         result = (unsigned long)p1 + 5;
         result += p1[1] | (p1[2] << 8) | (p1[3] << 16) | (p1[4] << 24);
 
+        /* Check that the result address is sane. Do not allow next steps to
+         * read from the address if it does not point to a valid page within
+         * kernel memory area. Otherwise kernel can crash. */
+        if( !virt_addr_valid(result) ) {
+          ++p1;
+          continue;
+        }
+
         ret = find_syscall_from_do_syscall_64((void*)result);
         if( ret )
           return true;
