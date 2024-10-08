@@ -1720,6 +1720,40 @@ extern ef_request_id ef_vi_rxq_next_desc_id(ef_vi* vi);
 #define ef_vi_receive_get_discards(vi)          \
   (vi)->ops.receive_get_discards((vi))
 
+/*! \brief Convert EF_EVENT_TYPE_RX_REF_DISCARD event flags into the
+**  corresponding EF_EVENT_TYPE_RX_DISCARD event subtype
+**
+** \param flags mask of enum ef_vi_rx_discard_err_flags
+**
+** \return corresponding EF_EVENT_RX_DISCARD_* error
+**
+** Convert EF_EVENT_TYPE_RX_REF_DISCARD event flags into the
+** corresponding EF_EVENT_TYPE_RX_DISCARD event subtype.
+*/
+ef_vi_inline unsigned
+ef_vi_get_rx_discard_subtype_from_flags(unsigned flags)
+{
+  if( flags & EF_VI_DISCARD_RX_ETH_FCS_ERR )
+    return EF_EVENT_RX_DISCARD_CRC_BAD;
+  if( flags & EF_VI_DISCARD_RX_ETH_LEN_ERR )
+    return EF_EVENT_RX_DISCARD_TRUNC;
+  if( flags & EF_VI_DISCARD_RX_L4_CSUM_ERR )
+    return EF_EVENT_RX_DISCARD_CSUM_BAD;
+  if( flags & EF_VI_DISCARD_RX_L3_CSUM_ERR )
+    return EF_EVENT_RX_DISCARD_CSUM_BAD;
+  if( flags & EF_VI_DISCARD_RX_INNER_L4_CSUM_ERR )
+    return EF_EVENT_RX_DISCARD_INNER_CSUM_BAD;
+  if( flags & EF_VI_DISCARD_RX_INNER_L3_CSUM_ERR )
+    return EF_EVENT_RX_DISCARD_INNER_CSUM_BAD;
+  if( flags & EF_VI_DISCARD_RX_L2_CLASS_OTHER )
+    return EF_EVENT_RX_DISCARD_OTHER;
+  if( flags & EF_VI_DISCARD_RX_L3_CLASS_OTHER )
+    return EF_EVENT_RX_DISCARD_OTHER;
+  if( flags & EF_VI_DISCARD_RX_L4_CLASS_OTHER )
+    return EF_EVENT_RX_DISCARD_OTHER;
+  return 0;
+}
+
 /**********************************************************************
  * Transmit interface *************************************************
  **********************************************************************/

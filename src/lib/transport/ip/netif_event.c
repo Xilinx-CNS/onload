@@ -520,29 +520,6 @@ static void copy_efct_to_pkt(ci_netif* netif, ef_vi* vi,
 
 #ifdef __KERNEL__
 
-static unsigned convert_discard_flags_efct_ef10(unsigned flags)
-{
-  if( flags & EF_VI_DISCARD_RX_ETH_FCS_ERR )
-    return EF_EVENT_RX_DISCARD_CRC_BAD;
-  if( flags & EF_VI_DISCARD_RX_ETH_LEN_ERR )
-    return EF_EVENT_RX_DISCARD_TRUNC;
-  if( flags & EF_VI_DISCARD_RX_L4_CSUM_ERR )
-    return EF_EVENT_RX_DISCARD_CSUM_BAD;
-  if( flags & EF_VI_DISCARD_RX_L3_CSUM_ERR )
-    return EF_EVENT_RX_DISCARD_CSUM_BAD;
-  if( flags & EF_VI_DISCARD_RX_INNER_L4_CSUM_ERR )
-    return EF_EVENT_RX_DISCARD_INNER_CSUM_BAD;
-  if( flags & EF_VI_DISCARD_RX_INNER_L3_CSUM_ERR )
-    return EF_EVENT_RX_DISCARD_INNER_CSUM_BAD;
-  if( flags & EF_VI_DISCARD_RX_L2_CLASS_OTHER )
-    return EF_EVENT_RX_DISCARD_OTHER;
-  if( flags & EF_VI_DISCARD_RX_L3_CLASS_OTHER )
-    return EF_EVENT_RX_DISCARD_OTHER;
-  if( flags & EF_VI_DISCARD_RX_L4_CLASS_OTHER )
-    return EF_EVENT_RX_DISCARD_OTHER;
-  return 0;
-}
-
 static int convert_efct_to_pkts(ci_netif* ni, int intf_i, ef_event* evs,
                                 int n_evs)
 {
@@ -559,7 +536,7 @@ static int convert_efct_to_pkts(ci_netif* ni, int intf_i, ef_event* evs,
     else if( EF_EVENT_TYPE(evs[i]) == EF_EVENT_TYPE_RX_REF_DISCARD ) {
       new_ev.rx_discard.type = EF_EVENT_TYPE_RX_DISCARD;
       new_ev.rx_discard.subtype =
-                  convert_discard_flags_efct_ef10(evs[i].rx_ref_discard.flags);
+        ef_vi_get_rx_discard_subtype_from_flags(evs[i].rx_ref_discard.flags);
     }
     else {
       continue;
