@@ -16,6 +16,72 @@
 #include <stdlib.h>
 #include <emmintrin.h>
 
+struct efcompat_ts {
+  uint32_t tv_sec : 32;
+  uint32_t tv_nsec : 30;
+  uint32_t tv_nsec_frac : 2;
+  uint16_t tv_valid : 1;
+  uint16_t tv_flags : 15;
+};
+
+#define EFCOMPAT_TS_INVALID ((struct efcompat_ts) {0})
+
+static void
+convert_efcompat_ts_to_ef_precisetime(const struct efcompat_ts *ts_compat,
+                                      ef_precisetime *ts_precise)
+{
+  EF_VI_BUG_ON(ts_precise == NULL);
+  EF_VI_BUG_ON(ts_compat == NULL);
+
+  ts_precise->tv_sec       = ts_compat->tv_sec;
+  ts_precise->tv_nsec      = ts_compat->tv_nsec;
+  ts_precise->tv_nsec_frac = ts_compat->tv_nsec_frac << 14;
+  ts_precise->tv_flags     = ts_compat->tv_flags;
+}
+
+static void
+convert_ef_precisetime_to_efcompat_ts(const ef_precisetime *ts_precise,
+                                      struct efcompat_ts *ts_compat)
+{
+  EF_VI_BUG_ON(ts_precise == NULL);
+  EF_VI_BUG_ON(ts_compat == NULL);
+
+  /* These assertions ensure all values fit entirely inside our compact
+   * representation, and are taken from efct_vi_rxpkt_get_precise_timestamp. */
+
+  /* Assumption: 32-bits are required to represent ts_precise->tv_sec, so the
+   * top 32 bits should never be set. */
+  EF_VI_ASSERT(!(ts_precise->tv_sec & ((~(uint64_t)0) << 32)));
+  /* Assumption: 30-bits are required to represent ts_precise->tv_nsec, so the
+   * top 2 bits should never be set. */
+  EF_VI_ASSERT(!(ts_precise->tv_nsec & ((~(uint32_t)0) << 30)));
+  /* Assumption: 2-bits are required to represent ts_precise->tv_nsec_frac and
+   * these are stored in the top bits, so the bottom 14 bits are not set. */
+  EF_VI_ASSERT(!(ts_precise->tv_nsec_frac & ((~(uint16_t)0) >> 2)));
+  /* Assumption: the top bit is not used as a flag, as we steal this for our
+   * own "valid" flag. In reality, only two flags currently exist, so this
+   * could assert that the top 14 bits are unset. */
+  EF_VI_ASSERT(!(ts_precise->tv_flags & ((~(uint16_t)0) << 15)));
+
+  ts_compat->tv_sec       = ts_precise->tv_sec;
+  ts_compat->tv_nsec      = ts_precise->tv_nsec;
+  ts_compat->tv_nsec_frac = ts_precise->tv_nsec_frac >> 14;
+  ts_compat->tv_flags     = ts_precise->tv_flags;
+  ts_compat->tv_valid     = 1;
+
+#ifndef NDEBUG
+  {
+    ef_precisetime temp;
+    convert_efcompat_ts_to_ef_precisetime(ts_compat, &temp);
+
+    EF_VI_ASSERT(temp.tv_sec       == ts_precise->tv_sec &&
+                 temp.tv_nsec      == ts_precise->tv_nsec &&
+                 temp.tv_nsec_frac == ts_precise->tv_nsec_frac &&
+                 temp.tv_flags     == ts_precise->tv_flags);
+  }
+#endif
+}
+
 static int ef10compat_ef_vi_receive_init(ef_vi* vi, ef_addr addr,
                                          ef_request_id dma_id)
 {
@@ -57,12 +123,32 @@ static int convert_rx_ref_to_rx_ev(ef_vi *vi, ef_event *rx_ref, ef_event *rx)
   ef10_pkt =
     (void*)(uintptr_t)vi->compat_data->arch.ef10.rx_descriptors[desc_i];
 
-  /* Copy the efct packet to the expected ef10 location */
-  memcpy(ef10_pkt, efct_pkt, rx_ref->rx_ref.len);
+  /* Because the sizeof(ef_precisetime) exceeds the space available in the
+   * packet prefix (16 > 14), we squish the timestamp into an efcompat_ts by
+   * making some assumptions about how much data the efct architecture really
+   * has about timestamps. We could expand the prefix, but bad apps might have
+   * hard-coded the 14 value. */
+  EF_VI_BUILD_ASSERT(sizeof(struct efcompat_ts) <= ES_DZ_RX_PREFIX_SIZE);
+  if( (vi->vi_flags & EF_VI_RX_TIMESTAMPS) != 0 ) {
+    struct efcompat_ts *ts_compat = (struct efcompat_ts*)ef10_pkt;
+    ef_precisetime ts_precise;
+    int rc =
+      vi->compat_data->underlying_ops.receive_get_timestamp(vi, efct_pkt,
+                                                            &ts_precise);
+    if( rc == 0 )
+      convert_ef_precisetime_to_efcompat_ts(&ts_precise, ts_compat);
+    else
+      *ts_compat = EFCOMPAT_TS_INVALID;
+  }
+
+  /* After (maybe) copying the timestamp in place, put the rest of the packet
+   * where the user expects it */
+  memcpy((void*)((uint8_t*)ef10_pkt + vi->rx_prefix_len),
+         efct_pkt, rx_ref->rx_ref.len);
 
   efct_vi_rxpkt_release(vi, rx_ref->rx_ref.pkt_id);
 
-  rx->rx.len = rx_ref->rx_ref.len;
+  rx->rx.len = rx_ref->rx_ref.len + vi->rx_prefix_len;
   rx->rx.q_id = rx_ref->rx_ref.q_id;
   rx->rx.rq_id = q->ids[desc_i];
 
@@ -81,7 +167,14 @@ static int ef10compat_ef_vi_receive_get_timestamp(struct ef_vi* vi,
                                                   const void* pkt,
                                                   ef_precisetime* ts_out)
 {
-  return -ENODATA;
+  struct efcompat_ts *ts_compat = (struct efcompat_ts*)pkt;
+
+  if( (vi->vi_flags & EF_VI_RX_TIMESTAMPS) == 0 || ! ts_compat->tv_valid )
+    return -ENODATA;
+
+  convert_efcompat_ts_to_ef_precisetime(ts_compat, ts_out);
+
+  return 0;
 }
 
 static int ef10compat_ef_eventq_poll(ef_vi *vi, ef_event *evs, int evs_len)
@@ -169,6 +262,9 @@ int ef_vi_compat_init_ef10(ef_vi* vi)
 
   for( i = 0; i <= vi->vi_rxq.mask; ++i )
     vi->compat_data->arch.ef10.rx_descriptors[i] = EF_INVALID_ADDR;
+
+  if( (vi->vi_flags & EF_VI_RX_TIMESTAMPS) != 0 )
+    vi->rx_prefix_len = ES_DZ_RX_PREFIX_SIZE;
 
   vi->nic_type.arch = EF_VI_ARCH_EF10;
 

@@ -2815,6 +2815,8 @@ enum ef_vi_layout_type {
   EF_VI_LAYOUT_MINOR_TICKS,
   /** Packet length - 16 bits */
   EF_VI_LAYOUT_PACKET_LENGTH,
+  /** Compat timestamp (80 bits) */
+  EF_VI_LAYOUT_COMPAT_TS,
 };
 
 

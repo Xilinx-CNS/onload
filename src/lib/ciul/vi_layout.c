@@ -23,6 +23,9 @@
 #define PKTLEN_DESCRIPTION			\
   "Packet length"
 
+#define COMPAT_TS_DESCRIPTION			\
+  "Hardware timestamp (compat)"
+
 
 static const ef_vi_layout_entry layout_no_prefix = {
   .evle_type = EF_VI_LAYOUT_FRAME,
@@ -52,18 +55,40 @@ ef10_query_layout(ef_vi* vi, const ef_vi_layout_entry**const ef_vi_layout_out,
       .evle_description = TICKS_DESCRIPTION,
     },
   };
+  static const ef_vi_layout_entry compat_layout_prefix[] = {
+    {
+      .evle_type = EF_VI_LAYOUT_FRAME,
+      .evle_offset = ES_DZ_RX_PREFIX_SIZE,
+      .evle_description = FRAME_DESCRIPTION,
+    },
+    {
+      .evle_type = EF_VI_LAYOUT_COMPAT_TS,
+      .evle_offset = 0,
+      .evle_description = COMPAT_TS_DESCRIPTION,
+    },
+  };
 
-  if( vi->rx_prefix_len ) {
-    *ef_vi_layout_out = layout_prefix;
-    if( (vi->vi_flags & EF_VI_RX_TIMESTAMPS) != 0 )
-      *len_out = 3;
-    else
+  /* We are in the ef10 compat layer */
+  if( vi->compat_data != NULL ) {
+    if( vi->rx_prefix_len ) {
+      *ef_vi_layout_out = compat_layout_prefix;
       *len_out = 2;
+    }
   }
   else {
-    *ef_vi_layout_out = &layout_no_prefix;
-    *len_out = 1;
+    if( vi->rx_prefix_len ) {
+      *ef_vi_layout_out = layout_prefix;
+      if( (vi->vi_flags & EF_VI_RX_TIMESTAMPS) != 0 )
+        *len_out = 3;
+      else
+        *len_out = 2;
+    }
+    else {
+      *ef_vi_layout_out = &layout_no_prefix;
+      *len_out = 1;
+    }
   }
+
   return 0;
 }
 
