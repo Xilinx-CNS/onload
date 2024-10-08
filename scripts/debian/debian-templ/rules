@@ -102,6 +102,7 @@ configure-stamp:
 
 	touch configure-stamp
 
+override_dh_auto_build: build-arch-stamp
 build-arch: configure-stamp  build-arch-stamp
 build-arch-stamp:
 	dh_testdir
