@@ -183,7 +183,7 @@ static int ef_vi_calc_rxq_descriptors_bytes(enum ef_vi_arch arch, int qsize)
 
 static int tx_desc_bytes(struct ef_vi* vi)
 {
-  switch( vi->nic_type.arch ) {
+  switch( ef_vi_get_real_arch(vi) ) {
   case EF_VI_ARCH_EF10:
     return 8;
   case EF_VI_ARCH_EF100:
@@ -199,8 +199,8 @@ static int tx_desc_bytes(struct ef_vi* vi)
 int ef_vi_rx_ring_bytes(struct ef_vi* vi)
 {
   EF_VI_ASSERT(vi->inited & EF_VI_INITED_RXQ);
-  return ef_vi_calc_rxq_descriptors_bytes(vi->nic_type.arch,
-                                         vi->vi_rxq.mask + 1);
+  return ef_vi_calc_rxq_descriptors_bytes(ef_vi_get_real_arch(vi),
+                                          vi->vi_rxq.mask + 1);
 }
 
 

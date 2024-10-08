@@ -99,6 +99,7 @@ struct ef_vi;
 struct ef_filter_spec;
 struct ef_filter_cookie;
 struct efab_nic_design_parameters;
+struct ef_vi_compat_data;
 
 /**********************************************************************
  * Dimensions *********************************************************
@@ -1117,6 +1118,9 @@ typedef struct ef_vi {
   /** mask to apply to unsol_credit_seq */
   uint32_t                      unsol_credit_seq_mask;
 
+  /** Location of any data required to run ef_vi in compatibility mode */
+  struct ef_vi_compat_data*     compat_data;
+
   /*! \brief Driver-dependent operations. */
   /* Doxygen comment above is the detailed description of ef_vi::ops */
   struct ops {
@@ -1216,6 +1220,26 @@ typedef struct ef_vi {
                            bool shared_mode);
   } internal_ops;
 } ef_vi;
+
+
+/*! \brief Data required to run ef_vi in compatibility mode
+**
+** This struct holds information about the architecture in use underneath the
+** compatbility layer, alongside any additional data required to pretend to
+** be a given architecture.
+**
+** Users should not access this structure.
+*/
+struct ef_vi_compat_data {
+  /** The underlying architecture used by this VI */
+  enum ef_vi_arch underlying_arch;
+  /** The underlying architecture-specific operations */
+  struct ops underlying_ops;
+  /** Storage for data required to pretend to be a given arch, only data which
+   * corresponds to the emulated architecture should be used */
+  union {
+  } arch;
+};
 
 
 /*! \brief Return the resource ID of the virtual interface

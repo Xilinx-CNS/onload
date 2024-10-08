@@ -249,6 +249,22 @@ int ef10ct_vi_post_superbuf(struct ef_vi *vi, ef_addr addr, int sentinel,
                             int rollover);
 
 
+/* Check whether the provided `vi` is running with a compatibility layer, and
+ * is specifically trying to pretend to be `compat_arch`. */
+ef_vi_inline bool ef_vi_is_compat_vi(ef_vi* vi, enum ef_vi_arch compat_arch)
+{
+  return vi->compat_data != NULL && vi->nic_type.arch == compat_arch;
+}
+
+/* Get the architecture used by the hardware for a given `vi`. Notably, this
+ * will see through the architecture exposed by the compatibility layer. */
+ef_vi_inline enum ef_vi_arch ef_vi_get_real_arch(ef_vi* vi)
+{
+  return vi->compat_data ? vi->compat_data->underlying_arch
+                         : vi->nic_type.arch;
+}
+
+
 /* Internal interfaces, so exclude from doxygen documentation */
 /*! \endcond internal */
 

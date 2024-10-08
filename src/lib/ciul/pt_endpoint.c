@@ -570,6 +570,10 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   ef_vi_init_qs(vi, (void*)mem_mmap_ptr, ids, evq_capacity, rxq_capacity,
                 ra.u.vi_out.rx_prefix_len, txq_capacity);
 
+  rc = ef_vi_compat_init(vi);
+  if( rc < 0 )
+    goto fail5;
+
   rc = init_design_parameters(vi);
   if( rc < 0 )
     goto fail5;
@@ -640,6 +644,7 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   if( vi->efct_rxqs.ops )
     vi->efct_rxqs.ops->cleanup(vi);
  fail5:
+  ef_vi_compat_free(vi);
   if( ctpio_mmap_ptr != NULL )
     ci_resource_munmap(vi_dh, ctpio_mmap_ptr, CTPIO_MMAP_LEN);
  fail4:
@@ -707,6 +712,8 @@ int ef_vi_alloc_from_set(ef_vi* vi, ef_driver_handle vi_dh,
 int ef_vi_free(ef_vi* ep, ef_driver_handle fd)
 {
   int rc;
+
+  ef_vi_compat_free(ep);
 
   if( ep->efct_rxqs.ops )
     ep->efct_rxqs.ops->cleanup(ep);
