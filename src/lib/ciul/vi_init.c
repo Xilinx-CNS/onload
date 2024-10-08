@@ -415,8 +415,9 @@ void ef_vi_reset_rxq(struct ef_vi* vi)
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
   qs->posted = 0;
   /* shared rxqs have their buffer posting managed elsewhere, not by the app,
-   * so let's make it look like the queue is constantly full */
-  if( vi->efct_rxqs.active_qs )
+   * so let's make it look like the queue is constantly full. If we are using
+   * the ef10 compat layer, then we still need users to post descriptors */
+  if( vi->efct_rxqs.active_qs && ! ef_vi_is_compat_vi(vi, EF_VI_ARCH_EF10) )
     qs->added = vi->vi_rxq.mask + 1;
   else
     qs->added = 0;

@@ -570,6 +570,8 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   ef_vi_init_qs(vi, (void*)mem_mmap_ptr, ids, evq_capacity, rxq_capacity,
                 ra.u.vi_out.rx_prefix_len, txq_capacity);
 
+  /* We must initialise any compat after queues as some allocations depend on
+   * that being done already */
   rc = ef_vi_compat_init(vi);
   if( rc < 0 )
     goto fail5;

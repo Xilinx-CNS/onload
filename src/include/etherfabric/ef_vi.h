@@ -1238,6 +1238,11 @@ struct ef_vi_compat_data {
   /** Storage for data required to pretend to be a given arch, only data which
    * corresponds to the emulated architecture should be used */
   union {
+    /** Data required to pretend this VI is an EF10 VI */
+    struct {
+      /** Queue of addresses in which we will store RX packets */
+      ef_addr *rx_descriptors;
+    } ef10;
   } arch;
 };
 
