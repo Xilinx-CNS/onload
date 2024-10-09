@@ -22,6 +22,9 @@
 # If you don't want to build the kernel module package, use:
 #   --without kmod
 #
+# If you want to build the kernel module Akmods package, use:
+#   --with akmod
+#
 # If you don't want to build the userland package, use:
 #   --without user
 #
@@ -36,6 +39,9 @@
 #
 # If you want to install the Onload libraries with setuid add:
 #   --define "setuid true"
+#
+# If you want to install the kernel modules in a different directory add:
+#   --define "moddir extra"
 #
 # If your distribution does not provide a dist macro (e.g. CentOS) which is used
 # to differentiate the filename, you may overrise it:
@@ -62,11 +68,13 @@
 %bcond_without user # add option to skip userland builds
 %bcond_without kmod # add option to skip kmod builds
 %bcond_without devel # add option to skip devel builds
+%bcond_with akmod # add option to include Akmods package
 
 %define pkgversion 20100910
 
 %undefine __brp_mangle_shebangs
 
+%{?kernels: %global kernel %kernels} # Hard-coded into `akmodsbuild`
 %{!?kernel:  %{expand: %%define kernel %%(uname -r)}}
 %{!?target_cpu:  %{expand: %%define target_cpu %{_host_cpu}}}
 %{!?debuginfo: %{expand: %%define debuginfo false}}
@@ -110,13 +118,14 @@ Source0:          %{name}-%{pkgversion}.tgz
 BuildRoot:        %{_builddir}/%{name}-root
 AutoReqProv:      no
 ExclusiveArch:    x86_64 ppc64
-BuildRequires:    gawk gcc sed make bash libpcap libpcap-devel automake libtool autoconf libcap-devel
-# The glibc, python-devel, and libcap packages we need depend on distro and platform
+
+%global base_build_requires gawk gcc sed make bash libpcap libpcap-devel automake libtool autoconf libcap-devel
 %if 0%{?suse_version}
-BuildRequires:    glibc-devel glibc python3-devel libcap2
+%global dist_build_requires glibc-devel glibc python3-devel libcap2
 %else
-BuildRequires:    glibc-common python3-devel libcap
+%global dist_build_requires glibc-common python3-devel libcap
 %endif
+BuildRequires:    %{base_build_requires} %{dist_build_requires}
 
 %description
 OpenOnload is a high performance user-level network stack.  Please see
@@ -158,13 +167,12 @@ efct_disttag() {
 }
 echo -n $(efct_disttag)
 )}
-
-BuildRequires:    kernel-module-xilinx-efct-%{efct_disttag}-%{kernel} >= 1.5.3.0
-
+%global efct_build_requires kernel-module-xilinx-efct-%{efct_disttag}-%{kernel} >= 1.5.3.0
 %if "%{dist}" == ".el7"
-BuildRequires:    kernel-module-auxiliary-%{efct_disttag}-%{kernel} >= 1.0.4.0
+%global efct_build_requires %{efct_build_requires} kernel-module-auxiliary-%{efct_disttag}-%{kernel} >= 1.0.4.0
 Requires:         kernel-module-auxiliary-%{efct_disttag}-%{kernel} >= 1.0.4.0
 %endif
+BuildRequires:    %{efct_build_requires}
 %endif
 
 %description kmod-%{kverrel}
@@ -208,6 +216,33 @@ fi
 %files kmod-%{kverrel}
 %defattr(744,root,root)
 /lib/modules/%{kernel}/*/*
+%endif
+
+###############################################################################
+# Akmod
+%if %{with akmod}
+%package akmod
+Summary:          OpenOnload kernel modules as Akmod source
+Requires:         akmods %{base_build_requires} %{dist_build_requires} %{?efct_build_requires:%efct_build_requires}
+Conflicts:        kernel-module-sfc-RHEL%{maindist}
+Provides:         openonload-kmod = %{version}-%{release}
+Provides:         sfc-kmod-symvers = %{version}-%{release}
+
+%description akmod
+OpenOnload is a high performance user-level network stack.  Please see
+www.openonload.org for more information.
+
+This package comprises the kernel module components of OpenOnload as source.
+
+%posttrans akmod
+nohup /usr/sbin/akmods --from-akmod-posttrans --akmod %{name} &> /dev/null &
+
+%post akmod
+[ -x /usr/sbin/akmods-ostree-post ] && /usr/sbin/akmods-ostree-post %{name} %{_usrsrc}/akmods/%{name}-kmod-%{version}-%{release}.src.rpm
+
+%files akmod
+%defattr(-,root,root,-)
+%{_usrsrc}/akmods/*
 %endif
 
 ###############################################################################
@@ -273,15 +308,17 @@ mkdir build
 %endif
 
 %install
+%if %{with user}%{with kmod}%{with devel}
 export i_prefix=%{buildroot}
 mkdir -p "$i_prefix/etc/modprobe.d"
 mkdir -p "$i_prefix/etc/depmod.d"
 ./scripts/onload_install --packaged \
   %{?build_profile:--build-profile %build_profile} \
-  %{?debug:--debug} %{?setuid:--setuid} \
+  %{?debug:--debug} %{?setuid:--setuid} %{?moddir:--moddir=%moddir} \
   %{?with_user: --userfiles --modprobe --modulesloadd --udev} \
   %{?with_kmod: --kernelfiles --kernelver "%{kernel}"} \
   %{?with_devel: --headers}
+%endif
 %if %{with user}
 # Removing these files is fine since they would only ever be generated on a build machine.
 rm -f "$i_prefix/etc/sysconfig/modules/onload.modules"
@@ -290,6 +327,28 @@ mkdir -p "$i_prefix/usr/share/onload"
 cp ./scripts/onload_misc/onload_modules-load.d.conf $i_prefix/usr/share/onload/onload_modules-load.d.conf
 cp ./scripts/onload_misc/sysconfig_onload_modules $i_prefix/usr/share/onload/sysconfig_onload_modules
 %endif
+%if %{with akmod}
+# Akmod RPM must contain an SRPM which only builds the kmod subpackage.
+# Akmods requires directory /lib/modules/%%{kernel}/extra/%%{name}.
+sed \
+  -e "/bcond_without user/ {s/without/with/; s/skip/include/}" \
+  -e "/bcond_without devel/ {s/without/with/; s/skip/include/}" \
+  -e "/bcond_without akmod/ {s/without/with/; s/skip/include/}" \
+  -e "/bcond_with kernel_package_deps/ {s/with/without/; s/include/skip/}" \
+  -e '/define "moddir extra"/ s/.*/%%global moddir extra\/onload/' \
+  %{?debug:-e '/define "debug true"/ s/.*/%%global debug true/'} \
+  %{?setuid:-e '/define "setuid true"/ s/.*/%%global setuid true/'} \
+  "%{_specdir}/openonload.spec" > %{_specdir}/%{name}-akmod.spec
+# Based on output of `kmodtool --akmod`
+mkdir -p %{buildroot}/%{_usrsrc}/akmods/
+rpmbuild \
+    --define "_sourcedir %{_sourcedir}" \
+    --define "_srcrpmdir %{buildroot}/%{_usrsrc}/akmods/" \
+    %{?dist:--define 'dist %{dist}'} \
+    -bs --nodeps %{_specdir}/%{name}-akmod.spec
+ln -s $(ls %{buildroot}/%{_usrsrc}/akmods/) %{buildroot}/%{_usrsrc}/akmods/%{name}-kmod.latest
+%endif
+
 %post
 
 if [ `cat /proc/1/comm` == systemd ]
