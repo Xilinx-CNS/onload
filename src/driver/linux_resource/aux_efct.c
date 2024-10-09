@@ -296,7 +296,8 @@ static int efct_resource_init(struct xlnx_efct_device *edev,
   if( ! efct->rxq )
     return -ENOMEM;
 
-  efct->exclusive_rxq_mapping = vzalloc(sizeof(*efct->exclusive_rxq_mapping) * efct->rxq_n);
+  efct->exclusive_rxq_mapping = kzalloc(sizeof(*efct->exclusive_rxq_mapping) *
+                                               efct->rxq_n, GFP_KERNEL);
   if( ! efct->exclusive_rxq_mapping )
     return -ENOMEM;
 
@@ -308,7 +309,7 @@ static int efct_resource_init(struct xlnx_efct_device *edev,
     return rc;
 
   efct->evq_n = val.nic_res.evq_lim;
-  efct->evq = vzalloc(sizeof(*efct->evq) * efct->evq_n);
+  efct->evq = kzalloc(sizeof(*efct->evq) * efct->evq_n, GFP_KERNEL);
   if( ! efct->evq )
     return -ENOMEM;
 
@@ -434,9 +435,9 @@ int efct_probe(struct auxiliary_device *auxdev,
   if( efct->rxq )
     vfree(efct->rxq);
   if( efct->evq )
-    vfree(efct->evq);
+    kfree(efct->evq);
   if( efct->exclusive_rxq_mapping )
-    vfree(efct->exclusive_rxq_mapping);
+    kfree(efct->exclusive_rxq_mapping);
   vfree(efct);
   EFRM_ERR("%s rc %d", __func__, rc);
   return rc;
@@ -507,8 +508,8 @@ void efct_remove(struct auxiliary_device *auxdev)
   edev->ops->close(client);
   vfree(efct->hw_filters);
   vfree(efct->rxq);
-  vfree(efct->evq);
-  vfree(efct->exclusive_rxq_mapping);
+  kfree(efct->evq);
+  kfree(efct->exclusive_rxq_mapping);
   vfree(efct);
 }
 
