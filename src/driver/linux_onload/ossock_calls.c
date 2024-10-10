@@ -97,8 +97,7 @@ oo_fd_replace_file(struct file* old_filp, struct file* new_filp,
 
     task_unlock(current);
     rcu_read_lock(); /* for files_fdtable() */
-    flags = close_on_exec(old_fd, files_fdtable(current->files)) ?
-            O_CLOEXEC : 0;
+    flags = efrm_close_on_exec(old_fd, current->files) ? O_CLOEXEC : 0;
     rcu_read_unlock();
     new_fd = get_unused_fd_flags(flags);
     if( new_fd < 0 ) {
