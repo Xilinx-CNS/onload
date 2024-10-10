@@ -115,5 +115,15 @@ static inline int efrm_unregister_netdevice_notifier(struct notifier_block *b)
 #define unregister_netdevice_notifier efrm_unregister_netdevice_notifier
 #endif
 
+static inline struct fown_struct* efrm_file_f_owner(struct file *file)
+{
+#ifdef EFRM_F_OWNER_IS_VAL
+	return &file->f_owner;
+#else
+	/* linux 6.12+ */
+	return file->f_owner;
+#endif
+}
+
 
 #endif /* __ONLOAD_KERNEL_COMPAT_H__ */

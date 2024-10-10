@@ -15,6 +15,7 @@
 #include <onload/tcp_helper_fns.h>
 #include <onload/version.h>
 #include <onload/oof_interface.h>
+#include "onload_kernel_compat.h"
 
 #if CI_CFG_ENDPOINT_MOVE
 
@@ -430,11 +431,12 @@ int efab_file_move_to_alien_stack(ci_private_t *priv, ci_netif *alien_ni,
   /* Copy F_SETOWN_EX, F_SETSIG to the new file */
 #ifdef F_SETOWN_EX
   rcu_read_lock();
-  __f_setown(old_ep->alien_ref->_filp, priv->_filp->f_owner.pid,
-             priv->_filp->f_owner.pid_type, 1);
+  __f_setown(old_ep->alien_ref->_filp, efrm_file_f_owner(priv->_filp)->pid,
+             efrm_file_f_owner(priv->_filp)->pid_type, 1);
   rcu_read_unlock();
 #endif
-  old_ep->alien_ref->_filp->f_owner.signum = priv->_filp->f_owner.signum;
+  efrm_file_f_owner(old_ep->alien_ref->_filp)->signum =
+                                      efrm_file_f_owner(priv->_filp)->signum;
   old_ep->alien_ref->_filp->f_flags |= priv->_filp->f_flags & O_NONBLOCK;
 
   /********* Point of no return  **********/
