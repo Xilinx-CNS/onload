@@ -526,8 +526,9 @@ static int xdp_create_ring(struct socket* sock,
     rc = -EFAULT;
   }
   else {
-    if( rings_are_physically_continuous )
-      rc = follow_pfn(vma, addr, &pfn);
+    if( rings_are_physically_continuous ) {
+      rc = efrm_follow_pfn(vma, addr, &pfn);
+    }
     pages = (vma->vm_end - vma->vm_start) >> PAGE_SHIFT;
   }
   mmap_write_unlock(current->mm);
