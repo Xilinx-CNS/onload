@@ -125,5 +125,16 @@ static inline struct fown_struct* efrm_file_f_owner(struct file *file)
 #endif
 }
 
+#ifdef EFRM_CLOEXEC_FILES_STRUCT
+/* linux 6.12+ */
+#define efrm_close_on_exec close_on_exec
+#else
+static inline bool efrm_close_on_exec(unsigned int fd,
+				      const struct files_struct *files)
+{
+	return close_on_exec(fd, files_fdtable(files));
+}
+#endif
+
 
 #endif /* __ONLOAD_KERNEL_COMPAT_H__ */
