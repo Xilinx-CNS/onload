@@ -162,6 +162,8 @@ EFRM_HAVE_WARN_FLUSHING_SYSTEMWIDE_WQ symbol __warn_flushing_systemwide_wq inclu
 
 EFRM_NEED_STRSCPY	nsymbol	strscpy	include/linux/fortify-string.h	include/linux/string.h
 
+EFRM_HAVE_FOLLOW_PFNMAP_START symbol follow_pfnmap_start include/linux/mm.h
+
 # TODO move onload-related stuff from net kernel_compat
 " | grep -E -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }

@@ -482,4 +482,40 @@ static inline int kstrtobool(const char *s, bool *res)
 #define ci_class_create(__name) class_create(THIS_MODULE, __name)
 #endif
 
+#ifdef EFRM_HAVE_FOLLOW_PFNMAP_START
+/* linux >= 6.12 */
+static inline int efrm_follow_pfn(struct vm_area_struct *vma,
+                                  unsigned long addr, unsigned long *pfn)
+{
+	struct follow_pfnmap_args args;
+	int rc;
+
+	args.vma = vma;
+	args.address = addr;
+	rc = follow_pfnmap_start(&args);
+	if( rc == 0 ) {
+		*pfn = args.pfn;
+		follow_pfnmap_end(&args);
+	}
+
+	return rc;
+}
+#else
+static inline int efrm_follow_pfn(struct vm_area_struct *vma,
+                                  unsigned long addr, unsigned long *pfn)
+{
+	int rc;
+	pte_t *ptep;
+	spinlock_t *ptl;
+
+	rc = follow_pte(vma->vm_mm, addr, &ptep, &ptl);
+	if( rc == 0 ) {
+		*pfn = pte_pfn(ptep_get(ptep));
+		pte_unmap_unlock(ptep, ptl);
+	}
+
+	return rc;
+}
+#endif
+
 #endif /* DRIVER_LINUX_RESOURCE_KERNEL_COMPAT_H */
