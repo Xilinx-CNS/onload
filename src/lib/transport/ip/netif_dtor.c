@@ -73,7 +73,8 @@ void oo_netif_dtor_pkts(ci_netif* ni)
        * this warning has been seen from running udpswallow. Keep
        * the message to track this bug. */
       ci_log("%s: WARNING: [%d] Failed to get TX complete events "
-             "for some packets", __func__, NI_ID(ni));
+             "for some packets (tx_error_events %d)", __func__, NI_ID(ni),
+             CITP_STATS_NETIF((ni)->state->stats.tx_error_events));
       return;
     }
   }

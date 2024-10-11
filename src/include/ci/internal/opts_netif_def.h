@@ -948,8 +948,13 @@ CI_CFG_OPT("EF_SHARED_RXQ_NUM", shared_rxq_num, ci_int32,
 "replication, IPv6, etc.) Onload may be required to choose a different "
 "receive queue to that preferred by this option. "
 "If this option is not used, the default is to spread out stacks amongst "
-"available queues.",
-           , , -1, -1, 7, count)
+"available queues.\n"
+"If the queue specified cannot be used then operations that result in filter "
+"insertion, such as bind() and connect(), can fail, resulting in the socket "
+"being handed over to the kernel, with an error output to the kernel log. "
+"To fail the socket operation in this condition and prevent handover the "
+"option EF_NO_FAIL=0 can be set. ",
+           , , -1, -1, 15, count)
 
 CI_CFG_OPT("EF_EVS_PER_POLL", evs_per_poll, ci_uint32,
 "Sets the number of hardware network events to handle before performing other "

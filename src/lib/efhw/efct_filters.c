@@ -53,8 +53,8 @@ int efct_filter_state_init(struct efct_filter_state *state,
   if( ! state->hw_filters )
     return -ENOMEM;
 
-  state->exclusive_rxq_mapping = vzalloc(sizeof(*state->exclusive_rxq_mapping) *
-                                         dp->rx_queues);
+  state->exclusive_rxq_mapping = kzalloc(sizeof(*state->exclusive_rxq_mapping)
+                                         * dp->rx_queues, GFP_KERNEL);
   if( ! state->exclusive_rxq_mapping )
     return -ENOMEM;
 
@@ -76,7 +76,7 @@ void efct_filter_state_free(struct efct_filter_state *state)
   if( state->hw_filters )
     vfree(state->hw_filters);
   if( state->exclusive_rxq_mapping )
-    vfree(state->exclusive_rxq_mapping);
+    kfree(state->exclusive_rxq_mapping);
 }
 
 
