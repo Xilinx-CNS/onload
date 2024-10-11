@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-2-Clause
-# X-SPDX-Copyright-Text: (c) Copyright 2017-2023 Xilinx, Inc.
+# X-SPDX-Copyright-Text: (c) Copyright 2017-2024 Advanced Micro Devices, Inc.
 
 # This file is included by scripts that need to prepare Onload source files
 # for distribution to customers.
@@ -65,6 +65,11 @@ update_product_strings() {
       -e "/^Name: */ s/openonload/$product/" \
       scripts/onload_misc/openonload.spec
   fi
+  try sed -i \
+    -e "/^PACKAGE_NAME=/ s/.*/PACKAGE_NAME=$product/" \
+    -e "/^PACKAGE_VERSION=/ s/.*/PACKAGE_VERSION=$version/" \
+    scripts/onload_misc/dkms.conf
+  mv scripts/onload_misc/dkms.conf dkms.conf
 }
 
 # This is a wrapper around the various preprocessing stages for environments

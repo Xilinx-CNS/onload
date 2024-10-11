@@ -1,6 +1,4 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # SPDX-FileCopyrightText: (c) Copyright 2023 Advanced Micro Devices, Inc.
 
-onload_tool unload
 dkms remove -m #TYPE# -v #VERSION#
-rm -rf /usr/src/modules/#TYPE#-#VERSION#

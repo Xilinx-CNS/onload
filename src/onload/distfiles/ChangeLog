@@ -9,6 +9,7 @@ Add support for:
 
 Changes:
 
+ON-15113: simplify DKMS using pure mkdist tarball
 
 
 onload-9.0.0.39
