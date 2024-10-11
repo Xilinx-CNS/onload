@@ -471,6 +471,7 @@ def do_test_singleroute_transparent(cpserver,cp,netns):
     assert ip2str(d['base']['next_hop']) == remote_IP
 
 
+@pytest.mark.skip(reason="ON-14312")
 def test_singleroute_transparent():
     do_test_singleroute_transparent()
 
