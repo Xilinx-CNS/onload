@@ -173,6 +173,8 @@ EFRM_CLOEXEC_FILES_STRUCT	symtype	close_on_exec	include/linux/fdtable.h	bool(uns
 
 EFRM_HAVE_FOLLOW_PFNMAP_START symbol follow_pfnmap_start include/linux/mm.h
 
+EFRM_HAVE_FOLLOW_PTE symbol follow_pte include/linux/mm.h
+
 # TODO move onload-related stuff from net kernel_compat
 " | grep -E -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
