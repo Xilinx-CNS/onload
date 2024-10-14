@@ -268,6 +268,11 @@ static void ci_netif_check_process_config(ci_netif* ni)
                                 "scalable filters mode as a single filter "
                                 "configuration can only be used by one stack.");
   }
+  if( NI_OPTS(ni).shared_rxq_num > 15) {
+    NI_LOG(ni, CONFIG_WARNINGS, "EF_SHARED_RXQ_NUM is outside expected range. "
+                                "Sockets may be handed over if EF_NO_FAIL=0 "
+                                "is not set.");
+  }
 }
 
 

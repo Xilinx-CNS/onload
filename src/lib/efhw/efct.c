@@ -1041,7 +1041,7 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
   /* rxq_n is based on design param caps, and is used to size various data
    * structs. There may turn out not to actually be the full range of queues
    * available, but we can safely handle queues in that range. */
-  if( *rxq >= efct->rxq_n )
+  if( *rxq >= (int)efct->rxq_n )
     return -EINVAL;
 
   /* Get the straight translation to ethtool spec of the requested filter.
