@@ -272,7 +272,11 @@ class Topology(object):
     def get_top_level_shared_caches(self):
         if not self.shared_caches:
             return []
-        return self.shared_caches[min(self.get_cache_levels())]
+        min_key = max(self.shared_caches.keys())
+        for key in self.get_cache_levels():
+            count = sum(len(c.core_ids) for c in self.shared_caches[key])
+            if count == len(self.core_ids): min_key = min(min_key, key)
+        return self.shared_caches[min_key]
 
 
 def __get_core_info():
