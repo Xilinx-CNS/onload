@@ -97,8 +97,7 @@ oo_fd_replace_file(struct file* old_filp, struct file* new_filp,
 
     task_unlock(current);
     rcu_read_lock(); /* for files_fdtable() */
-    flags = close_on_exec(old_fd, files_fdtable(current->files)) ?
-            O_CLOEXEC : 0;
+    flags = efrm_close_on_exec(old_fd, current->files) ? O_CLOEXEC : 0;
     rcu_read_unlock();
     new_fd = get_unused_fd_flags(flags);
     if( new_fd < 0 ) {
@@ -657,14 +656,15 @@ int efab_tcp_helper_create_os_sock(ci_private_t *priv)
 
   /* Copy F_SETOWN_EX, F_SETSIG to the new file */
 #ifdef F_SETOWN_EX
-  if(priv->_filp->f_owner.pid != 0) {
+  if(efrm_file_f_owner(priv->_filp)->pid != 0) {
     rcu_read_lock();
-    __f_setown(sock->file, priv->_filp->f_owner.pid,
-               priv->_filp->f_owner.pid_type, 1);
+    __f_setown(sock->file, efrm_file_f_owner(priv->_filp)->pid,
+               efrm_file_f_owner(priv->_filp)->pid_type, 1);
     rcu_read_unlock();
   }
 #endif
-  sock->file->f_owner.signum = priv->_filp->f_owner.signum;
+  efrm_file_f_owner(sock->file)->signum =
+                               efrm_file_f_owner(priv->_filp)->signum;
 
   rc = ci_tcp_sync_sockopts_to_os_sock(ni, ep->id, sock);
   put_linux_socket(sock);

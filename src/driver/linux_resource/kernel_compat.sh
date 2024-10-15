@@ -167,6 +167,14 @@ EFRM_HAVE_SET_RXFH_CONTEXT memtype struct_ethtool_ops set_rxfh_context include/l
 
 EFRM_HAVE_EPOLL_PWAIT2 symbol sys_epoll_pwait2 include/linux/syscalls.h
 
+EFRM_F_OWNER_IS_VAL		memtype	struct_file	f_owner	include/linux/fs.h struct fown_struct
+
+EFRM_CLOEXEC_FILES_STRUCT	symtype	close_on_exec	include/linux/fdtable.h	bool(unsigned int, const struct files_struct *)
+
+EFRM_HAVE_FOLLOW_PFNMAP_START symbol follow_pfnmap_start include/linux/mm.h
+
+EFRM_HAVE_FOLLOW_PTE symbol follow_pte include/linux/mm.h
+
 # TODO move onload-related stuff from net kernel_compat
 " | grep -E -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
