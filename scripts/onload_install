@@ -232,12 +232,7 @@ install_uninstall() {
 install_userland() {
   # Install libraries and tools.
   try $docd "$TOP/build"
-  userarch="$(mmaketool --userarch)"
-  if ${devel}; then
-    u64="$(mmaketool --userbuild)"
-  else
-    u64="gnu_${userarch}"
-  fi
+  u64="$(mmaketool --userbuild)"
 
   if [ -d "$u64" ]; then
     # Tolerate lack of 32-bit transport library on 64-bit systems.
@@ -673,10 +668,6 @@ logprog=true
 sfccheck=true
 ppc_at=
 noinitramfs=false
-devel=false
-# $debug_dir is relevant for blob binaries only.  We package debug and ndebug
-# versions, and need to select between them.
-debug_dir=
 nosfc=false
 python_install_layout=
 
@@ -704,7 +695,7 @@ while [ $# -gt 0 ]; do
   --nosetuid)   setuid=false;;
   --noaffinity) affinity=false; buildargs="$buildargs $1";;
   --affinity)   affinity=true;  buildargs="$buildargs $1";;
-  --debug)	buildargs="$buildargs $1"; debug_dir=debug;;
+  --debug)	buildargs="$buildargs $1";;
   --strict)	buildargs="$buildargs $1";;
   --require-optional-targets) buildargs="$buildargs $1";;
   --no-efct) buildargs="$buildargs --no-efct";;
@@ -739,7 +730,6 @@ while [ $# -gt 0 ]; do
   --build-profile=*) buildargs="$buildargs $1"; build_profile="${1#--build-profile=}";;
   --python-layout=*) python_install_layout="--install-layout ${1#--python-layout=}";;
   --no-initramfs) noinitramfs=true;;
-  --devel) devel=true; build=false; noinitramfs=true;debug_dir=;;
   --sbindir=*) sbindir=${1#--sbindir=};;
   --usrsbindir=*) usrsbindir=${1#--usrsbindir=};;
   --bindir=*) bindir=${1#--bindir=};;

@@ -954,7 +954,7 @@ CI_CFG_OPT("EF_SHARED_RXQ_NUM", shared_rxq_num, ci_int32,
 "being handed over to the kernel, with an error output to the kernel log. "
 "To fail the socket operation in this condition and prevent handover the "
 "option EF_NO_FAIL=0 can be set. ",
-           , , -1, -1, 15, count)
+           , , -1, -1, SMAX, count)
 
 CI_CFG_OPT("EF_EVS_PER_POLL", evs_per_poll, ci_uint32,
 "Sets the number of hardware network events to handle before performing other "
