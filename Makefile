@@ -193,7 +193,7 @@ HAVE_CNS_EFCT := $(or $(and $(wildcard $(X3_NET_PATH)/include/linux/net/xilinx/x
 endif
 
 ifeq ($(or $(filter 1, $(HAVE_KERNEL_EFCT) $(HAVE_CNS_EFCT)),0),1)
-  ONLOAD_CFLAGS += -DCI_HAVE_EFCT_AUX=1
+  ONLOAD_CFLAGS += -DCI_HAVE_EFCT_AUX=1 -DCI_HAVE_EFCT_COMMON
   ifneq ($(HAVE_CNS_EFCT),0)
     ONLOAD_CFLAGS += -I$(X3_NET_PATH)/include
   endif
@@ -209,7 +209,7 @@ endif
 ifeq ($(HAVE_EF10CT),0)
   ONLOAD_CFLAGS += -DCI_HAVE_EF10CT=0
 else
-  ONLOAD_CFLAGS += -DCI_HAVE_EF10CT=1
+  ONLOAD_CFLAGS += -DCI_HAVE_EF10CT=1 -DCI_HAVE_EFCT_COMMON
 endif
 
 ifneq ($(MMAKE_LIBERAL),1)

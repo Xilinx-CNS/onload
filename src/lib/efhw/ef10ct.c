@@ -15,6 +15,7 @@
 #include <ci/tools/debug.h>
 
 #include <ci/efhw/efct.h>
+#include <ci/efhw/efct_filters.h>
 #include <ci/efhw/ef10ct.h>
 #include <ci/efhw/mc_driver_pcol.h>
 

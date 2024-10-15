@@ -245,9 +245,6 @@ int efct_get_hugepages(struct efhw_nic *nic, int hwqid,
                        struct xlnx_efct_hugepage *pages, size_t n_pages);
 int efct_request_wakeup(struct efhw_nic_efct *efct, struct efhw_efct_rxq *app,
                         unsigned sbseq, unsigned pktix, bool allow_recursion);
-int efct_filter_state_init(struct efct_filter_state *state,
-                           struct xlnx_efct_design_params *dp);
-void efct_filter_state_free(struct efct_filter_state *state);
 bool efct_packet_matches_filter(struct efct_filter_state *state,
                                 struct net_device *net_dev, int rxq,
                                 const unsigned char* pkt, size_t pkt_len);

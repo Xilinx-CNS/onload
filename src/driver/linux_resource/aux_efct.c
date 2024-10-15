@@ -4,6 +4,7 @@
 #include <ci/efrm/efrm_client.h>
 #include <ci/efhw/nic.h>
 #include <ci/efhw/efct.h>
+#include <ci/efhw/efct_filters.h>
 #include <ci/efhw/eventq.h>
 #include <ci/tools/sysdep.h>
 
@@ -307,7 +308,9 @@ static int efct_resource_init(struct xlnx_efct_device *edev,
   if( rc < 0 )
     return rc;
 
-  rc = efct_filter_state_init(&efct->filter_state, &val.design_params);
+  rc = efct_filter_state_init(&efct->filter_state,
+                              val.design_params.num_filter,
+                              val.design_params.rx_queues);
   if( rc < 0 )
     return rc;
 
