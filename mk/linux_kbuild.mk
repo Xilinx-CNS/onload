@@ -44,23 +44,7 @@ endif
 
 HAVE_EFCT ?=
 
-ifneq ($(wildcard $(dir $(KPATH))/*/include/linux/auxiliary_bus.h),)
-HAVE_KERNEL_AUX := 1
-HAVE_CNS_AUX := 0
-else
-AUX_BUS_PATH ?= $(TOPPATH)/../cns-auxiliary-bus
-HAVE_CNS_AUX := $(or $(and $(wildcard $(AUX_BUS_PATH)),1),0)
-endif
-
-CI_HAVE_AUX_BUS := $(or $(filter 1, $(HAVE_CNS_AUX) $(HAVE_KERNEL_AUX)),0)
-EXTRA_CFLAGS += -DCI_HAVE_AUX_BUS=$(CI_HAVE_AUX_BUS)
-
-ifneq ($(HAVE_CNS_AUX),0)
-EXTRA_CFLAGS += -I$(AUX_BUS_PATH)/include
-endif
-
 ifeq ($(HAVE_EFCT),0)
-else ifeq ($(CI_HAVE_AUX_BUS),0)
 else ifneq ($(wildcard $(dir $(KPATH))/*/include/linux/net/xilinx/xlnx_efct.h),)
 HAVE_KERNEL_EFCT := 1
 else
@@ -83,8 +67,6 @@ endif
 
 HAVE_EF10CT ?= 1
 ifeq ($(HAVE_EF10CT),0)
-  EXTRA_CFLAGS += -DCI_HAVE_EF10CT=0
-else ifeq ($(CI_HAVE_AUX_BUS),0)
   EXTRA_CFLAGS += -DCI_HAVE_EF10CT=0
 else
   EXTRA_CFLAGS += -DCI_HAVE_EF10CT=1

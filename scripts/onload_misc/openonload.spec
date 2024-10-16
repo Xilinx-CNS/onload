@@ -53,9 +53,9 @@
 # If you want to specify a build profile add:
 #    --define "build_profile <profile>"
 #
-# By default, the OpenOnload build system enables the auxiliary bus and EFCT
+# By default, the OpenOnload build system enables the EFCT
 # support if build prerequisites are available on a build machine or implicitly
-# disables them otherwise. The user can adjust this behaviour by setting or
+# disables it otherwise. The user can adjust this behaviour by setting or
 # resetting the have_efct macro.
 #
 # If you want to disable EFCT support explicitly:
@@ -168,10 +168,6 @@ efct_disttag() {
 echo -n $(efct_disttag)
 )}
 %global efct_build_requires kernel-module-xilinx-efct-%{efct_disttag}-%{kernel} >= 1.5.3.0
-%if "%{dist}" == ".el7"
-%global efct_build_requires %{efct_build_requires} kernel-module-auxiliary-%{efct_disttag}-%{kernel} >= 1.0.4.0
-Requires:         kernel-module-auxiliary-%{efct_disttag}-%{kernel} >= 1.0.4.0
-%endif
 BuildRequires:    %{efct_build_requires}
 %endif
 

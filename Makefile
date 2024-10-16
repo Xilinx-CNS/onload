@@ -100,29 +100,6 @@ endif
 export HAVE_EFCT ?=
 export HAVE_EF10CT ?= 1
 
-# There are three options here: native kernel aux bus support, support
-# through the out of tree cns aux bus repo for older kernels, or no aux
-# bus support at all, in that order of preference.
-#
-ifneq ($(wildcard $(dir $(KPATH))/*/include/linux/auxiliary_bus.h),)
-export HAVE_KERNEL_AUX := 1
-export HAVE_CNS_AUX := 0
-else
-export AUX_BUS_PATH ?= $(abspath ../cns-auxiliary-bus)
-export HAVE_CNS_AUX := $(or $(and $(wildcard $(AUX_BUS_PATH)),1),0)
-endif
-
-export CI_HAVE_AUX_BUS := $(or $(filter 1, $(HAVE_CNS_AUX) $(HAVE_KERNEL_AUX)),0)
-
-ifneq ($(HAVE_CNS_AUX),0)
-KBUILD_EXTRA_SYMBOLS := $(AUX_BUS_PATH)/drivers/base/Module.symvers
-export KBUILD_EXTRA_SYMBOLS := $(AUX_BUS_PATH)/drivers/base/Module.symvers
-else
-ifneq (,$(wildcard /lib/modules/$(KVER)/updates/auxiliary.symvers))
-export KBUILD_EXTRA_SYMBOLS := /lib/modules/$(KVER)/updates/auxiliary.symvers
-endif
-endif
-
 export HAVE_SFC ?= 1
 ifeq ($(HAVE_SFC),1)
 DRIVER_SUBDIRS += src/driver/linux_net/drivers/net/ethernet/sfc
@@ -200,19 +177,14 @@ gcc_maj_ver := $(shell ./scripts/mmaketool --gcc_major_version)
 # CFLAGS
 ONLOAD_CFLAGS += -I$$(obj) -I$$(obj)/src -I$$(src) -I$$(src)/src -I$$(src)/src/include \
                  -D__ci_driver__ "-DTRANSPORT_CONFIG_OPT_HDR=<$(TRANSPORT_CONFIG_OPT_HDR)>"
-ONLOAD_CFLAGS += -DCI_HAVE_AUX_BUS=$(CI_HAVE_AUX_BUS)
 
 ifneq ($(NDEBUG),)
 ONLOAD_CFLAGS += -DNDEBUG
 else
 ONLOAD_CFLAGS += -g
 endif
-ifneq ($(HAVE_CNS_AUX),0)
-ONLOAD_CFLAGS += -I$(AUX_BUS_PATH)/include
-endif
 
 ifeq ($(HAVE_EFCT),0)
-else ifeq ($(CI_HAVE_AUX_BUS),0)
 else ifneq ($(wildcard $(dir $(KPATH))/*/include/linux/net/xilinx/xlnx_efct.h),)
 HAVE_KERNEL_EFCT := 1
 else
@@ -235,8 +207,6 @@ endif
 
 
 ifeq ($(HAVE_EF10CT),0)
-  ONLOAD_CFLAGS += -DCI_HAVE_EF10CT=0
-else ifeq ($(CI_HAVE_AUX_BUS),0)
   ONLOAD_CFLAGS += -DCI_HAVE_EF10CT=0
 else
   ONLOAD_CFLAGS += -DCI_HAVE_EF10CT=1

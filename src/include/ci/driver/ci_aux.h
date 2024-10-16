@@ -4,9 +4,7 @@
 #ifndef CI_DRIVER_CI_AUX_H
 #define CI_DRIVER_CI_AUX_H
 
-#if CI_HAVE_AUX_BUS
 #include <linux/auxiliary_bus.h>
-#endif
 
 #endif /* CI_DRIVER_CI_AUX_H */
 
