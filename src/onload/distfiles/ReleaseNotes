@@ -1,10 +1,29 @@
 This is not a supported release version of Onload
 =================================================
 
-
-
-Onload-9.0.0
+Onload-9.0.1
 ============
+
+ This is an update release of Onload to fix various bugs in
+ OpenOnload-9.0.0.39, add a new version of the sfc net driver
+ and update the supported operating system list.
+
+ Please see the ChangeLog for a full list of changes.
+
+
+Linux distribution support
+--------------------------
+
+ This package can be installed on:
+ - Red Hat Enterprise Linux 8.6 - 8.10
+ - Red Hat Enterprise Linux 9.2 - 9.5
+ - Canonical Ubuntu Server LTS 22.04 and 24.04
+ - Debian 12 "Bookworm"
+ - Linux kernels 5.11 - 6.12
+
+
+Onload-9.0.0.39
+===============
 
  This is a feature release of Onload with refreshed internal interfaces
  between software components (control plane, TCPDirect and sfc net driver),
