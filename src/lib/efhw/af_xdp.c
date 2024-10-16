@@ -168,6 +168,7 @@ struct efhw_nic_af_xdp
   struct file* map;
   struct efhw_af_xdp_vi* vi;
   struct efhw_buddy_allocator vi_allocator;
+  spinlock_t alloc_lock;
 };
 
 /*----------------------------------------------------------------------------
@@ -924,6 +925,8 @@ __af_xdp_nic_init_hardware(struct efhw_nic *nic,
 	xdp->vi = (struct efhw_af_xdp_vi*) (xdp + 1);
 	nic->sw_bts = (struct efhw_sw_bt*) (xdp->vi + nic->vi_lim);
 
+	spin_lock_init(&xdp->alloc_lock);
+
 	rc = af_xdp_vi_allocator_ctor(xdp, nic->vi_min, nic->vi_lim);
 	if( rc < 0 )
 		goto fail_map;
@@ -1098,14 +1101,20 @@ static int af_xdp_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc
 			     unsigned n_vis) {
   unsigned order = fls(n_vis - 1);
   struct efhw_nic_af_xdp* xdp = nic->arch_extra;
-  return efhw_buddy_alloc_special(&xdp->vi_allocator, order,
-                                  af_xdp_accept_vi_constraints, evc);
+  int rc;
+  spin_lock_bh(&xdp->alloc_lock);
+  rc = efhw_buddy_alloc_special(&xdp->vi_allocator, order,
+                                af_xdp_accept_vi_constraints, evc);
+  spin_unlock_bh(&xdp->alloc_lock);
+  return rc;
 }
 
 static void af_xdp_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis) {
   unsigned order = fls(n_vis - 1);
   struct efhw_nic_af_xdp* xdp = nic->arch_extra;
+  spin_lock_bh(&xdp->alloc_lock);
   efhw_buddy_free(&xdp->vi_allocator, instance, order);
+  spin_unlock_bh(&xdp->alloc_lock);
 }
 
 /*----------------------------------------------------------------------------

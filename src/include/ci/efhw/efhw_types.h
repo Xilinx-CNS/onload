@@ -286,6 +286,7 @@ struct efhw_func_ops {
 
 	/*! Allocate at least n_vis contiguously. Note that n_vis>1 is only
 	 *  valid on nics that support RSS.
+	 *  Thread safe and must not be called in an atomic context.
 	 * 	Param n_vis: minimum number of vis to allocate
 	 *  Return: -EOPNOTSUPP if n_vis > 1 and nic does not support RSS.
 	 *  Otherwise return base vi index of allocation.
@@ -293,7 +294,9 @@ struct efhw_func_ops {
 	int (*vi_alloc) (struct efhw_nic *nic, struct efhw_vi_constraints *evc,
 			     unsigned n_vis);
 
-	/*! Free the vis allocated with vi_alloc */
+	/*! Free the vis allocated with vi_alloc
+	 *  Thread safe and must not be called in an atomic context.
+	 */
 	void (*vi_free) (struct efhw_nic *nic, int instance, unsigned n_vis);
 
   /*-------------- DMA support  ------------ */

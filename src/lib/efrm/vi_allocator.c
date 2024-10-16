@@ -62,9 +62,7 @@ int efrm_vi_allocator_alloc_set(struct efrm_nic *efrm_nic,
 		return -EINVAL;
 
 	set_out->n_vis = avc->min_vis_in_set;
-	spin_lock_bh(&efrm_nic->lock);
 	set_out->instance = efhw_nic_vi_alloc(avc->efhw_nic, &evc, set_out->n_vis);
-	spin_unlock_bh(&efrm_nic->lock);
 	return (set_out->instance >= 0) ? 0 : set_out->instance;
 }
 
@@ -74,7 +72,5 @@ void efrm_vi_allocator_free_set(struct efrm_nic *efrm_nic,
 {
 	EFRM_ASSERT(set->instance >= 0);
 
-	spin_lock_bh(&efrm_nic->lock);
 	efhw_nic_vi_free(&efrm_nic->efhw_nic, set->instance, set->n_vis);
-	spin_unlock_bh(&efrm_nic->lock);
 }
