@@ -1,7 +1,11 @@
 onload-9.0.1
 ------------
 
-Placeholder for hypothetical update release of Onload-9.0.0.
+Updated sfc net driver.
+
+Add support for:
+ - Red Hat Enterprise Linux 9.5
+ - kernel.org Linux kernels up to 6.12
 
 Changes:
 
