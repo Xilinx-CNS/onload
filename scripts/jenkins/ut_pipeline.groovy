@@ -72,12 +72,6 @@ void doDeveloperBuild(String build_profile=null) {
                     options['branch'] = 'dev'
                     x3net = scmmanager.cloneGit(options, 'ssh://git@github.com/Xilinx-CNS/x3-net-linux.git')
                   }
-                  dir("aux-bus"){
-                    echo("Checking out Aux")
-                    Map options = [:]
-                    options['branch'] = 'master'
-                    aux = scmmanager.cloneGit(options, 'ssh://git@github.com/Xilinx-CNS/cns-auxiliary-bus.git')
-                  }
               }
               scmmanager.cloneGit(scm)
               utils.rake(["build:${component}"], defines: defines)

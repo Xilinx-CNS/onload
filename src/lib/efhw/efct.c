@@ -8,6 +8,7 @@
 #include <ci/efhw/common.h>
 #include <ci/efhw/nic.h>
 #include <ci/efhw/efct.h>
+#include <ci/efhw/efct_filters.h>
 #include <ci/efhw/eventq.h>
 #include <ci/efhw/checks.h>
 #include <ci/efhw/mc_driver_pcol.h>
@@ -24,7 +25,6 @@
 #include <etherfabric/internal/internal.h>
 #include "efct.h"
 #include "efct_superbuf.h"
-#include "efct_filters.h"
 #include "mcdi_common.h"
 
 #if CI_HAVE_EFCT_AUX

@@ -5,6 +5,7 @@
 #include <ci/driver/ci_ef10ct.h>
 #include <ci/efhw/nic.h>
 #include <ci/efhw/ef10ct.h>
+#include <ci/efhw/efct_filters.h>
 
 #include "linux_resource_internal.h"
 #include "efrm_internal.h"

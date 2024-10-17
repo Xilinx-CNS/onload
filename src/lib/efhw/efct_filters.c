@@ -8,6 +8,7 @@
 #include <ci/efhw/common.h>
 #include <ci/efhw/nic.h>
 #include <ci/efhw/efct.h>
+#include <ci/efhw/efct_filters.h>
 #include <ci/efhw/eventq.h>
 #include <ci/efhw/checks.h>
 #include <ci/driver/ci_efct.h>
@@ -23,9 +24,8 @@
 #include <etherfabric/internal/internal.h>
 #include "efct.h"
 #include "efct_superbuf.h"
-#include "efct_filters.h"
 
-#if CI_HAVE_EFCT_AUX
+#if CI_HAVE_EFCT_COMMON
 
 
 /* NUM_FILTER_CLASSES: Number of different filter types (and hence hash
@@ -43,18 +43,18 @@ static u32 filter_hash_table_seed;
 static bool filter_hash_table_seed_inited = false;
 
 
-int efct_filter_state_init(struct efct_filter_state *state,
-                           struct xlnx_efct_design_params *dp)
+int efct_filter_state_init(struct efct_filter_state *state, int num_filter,
+                           int rx_queues)
 {
   mutex_init(&state->driver_filters_mtx);
 
-  state->hw_filters_n = dp->num_filter;
+  state->hw_filters_n = num_filter;
   state->hw_filters = vzalloc(sizeof(*state->hw_filters) * state->hw_filters_n);
   if( ! state->hw_filters )
     return -ENOMEM;
 
   state->exclusive_rxq_mapping = kzalloc(sizeof(*state->exclusive_rxq_mapping)
-                                         * dp->rx_queues, GFP_KERNEL);
+                                         * rx_queues, GFP_KERNEL);
   if( ! state->exclusive_rxq_mapping )
     return -ENOMEM;
 

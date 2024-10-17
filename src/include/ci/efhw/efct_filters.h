@@ -13,6 +13,7 @@ struct efct_filter_insert_out {
   int drv_id;
   u32 filter_handle;
 };
+struct efct_filter_state;
 
 typedef int (*drv_filter_insert)(const struct efct_filter_insert_in *in,
                                  struct efct_filter_insert_out *out);
@@ -34,6 +35,12 @@ efct_unicast_block(struct efct_filter_state *state, bool block);
 
 extern int
 sanitise_ethtool_flow(struct ethtool_rx_flow_spec *dst);
+
+extern int
+efct_filter_state_init(struct efct_filter_state *state, int num_filter,
+                       int rx_queues);
+extern void
+efct_filter_state_free(struct efct_filter_state *state);
 
 #endif
 
