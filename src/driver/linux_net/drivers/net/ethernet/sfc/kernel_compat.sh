@@ -86,7 +86,7 @@ EFX_HAVE_IRQ_NOTIFIERS			symbol  irq_affinity_notify	include/linux/interrupt.h
 EFX_NEED_SET_TSO_MAX_SIZE		nsymbol netif_set_tso_max_size	include/linux/netdevice.h
 EFX_NEED_SET_TSO_MAX_SEGS		nsymbol netif_set_tso_max_segs	include/linux/netdevice.h
 EFX_NEED___BQL				nsymbol __netdev_tx_sent_queue	include/linux/netdevice.h
-EFX_NEED_KERNEL_ETHTOOL_TS_INFO		nsymbol	struct_kernel_ethtool_ts_info	include/linux/ethtool.h
+EFX_NEED_KERNEL_ETHTOOL_TS_INFO		nsymbol	kernel_ethtool_ts_info	include/linux/ethtool.h
 EFX_HAVE_OLD___VLAN_PUT_TAG		symtype	__vlan_put_tag		include/linux/if_vlan.h	struct sk_buff *(struct sk_buff *, u16)
 EFX_HAVE_VLAN_INSERT_TAG_SET_PROTO	symbol vlan_insert_tag_set_proto	include/linux/if_vlan.h
 EFX_NEED_NETDEV_NOTIFIER_INFO_TO_DEV	nsymbol	netdev_notifier_info_to_dev	include/linux/netdevice.h
@@ -135,13 +135,14 @@ EFX_HAVE_NDO_UDP_TUNNEL_ADD	member	struct_net_device_ops	ndo_udp_tunnel_add	incl
 EFX_HAVE_UDP_TUNNEL_NIC_INFO	symbol	udp_tunnel_nic_info	include/net/udp_tunnel.h
 EFX_HAVE_NEW_FLOW_KEYS		member	struct_flow_keys	basic		include/net/flow_dissector.h
 EFX_HAVE_NDO_ADD_GENEVE_PORT	member	struct_net_device_ops	ndo_add_geneve_port	include/linux/netdevice.h
-EFX_HAVE_NETDEV_LLTX		member	struct_net_device	lltx	include/linux/netdevice.h
+EFX_HAVE_NETDEV_LLTX		nsymbol	NETIF_F_LLTX	include/linux/netdev_features.h
 EFX_HAVE_NETDEV_MTU_LIMITS	member	struct_net_device	max_mtu	include/linux/netdevice.h
 EFX_NEED_BOOL_NAPI_COMPLETE_DONE	nsymtype	napi_complete_done	include/linux/netdevice.h	bool (struct napi_struct *, int)
 EFX_HAVE_XDP	symbol	netdev_bpf	include/linux/netdevice.h
 EFX_HAVE_XDP_OLD	symbol	netdev_xdp	include/linux/netdevice.h
 EFX_HAVE_XDP_TRACE	file	include/trace/events/xdp.h
 EFX_HAVE_XDP_HEAD	member	struct_xdp_buff	data_hard_start	include/linux/filter.h
+EFX_HAVE_XDP_PACKET_HEADROOM	symbol	XDP_PACKET_HEADROOM	include/uapi/linux/bpf.h
 EFX_HAVE_XDP_TX		symbol	XDP_TX		include/uapi/linux/bpf.h
 EFX_HAVE_XDP_TX_FLAGS	memtype	struct_net_device_ops	ndo_xdp_xmit	include/linux/netdevice.h	int (*)(struct net_device *, int, struct xdp_frame **, u32)
 EFX_HAVE_XDP_REDIR	symbol	XDP_REDIRECT	include/uapi/linux/bpf.h
@@ -263,7 +264,7 @@ EFX_HAVE_RHASHTABLE			file	include/linux/rhashtable.h
 EFX_HAVE_RHASHTABLE_LOOKUP_FAST		symbol	rhashtable_lookup_fast	include/linux/rhashtable.h
 EFX_NEED_RHASHTABLE_WALK_ENTER		nsymbol	rhashtable_walk_enter	include/linux/rhashtable.h
 EFX_HAVE_RHASHTABLE_WALK_INIT_GFP	symtype	rhashtable_walk_init	include/linux/rhashtable.h	int(struct rhashtable *, struct rhashtable_iter *, gfp_t)
-EFX_NEED_STRSCPY			nsymbol	strscpy			include/linux/fortify-string.h
+EFX_NEED_STRSCPY			nsymbol	strscpy			include/linux/fortify-string.h include/linux/string.h
 EFX_HAVE_NDO_SIOCDEVPRIVATE		member	struct_net_device_ops	ndo_siocdevprivate	include/linux/netdevice.h
 EFX_HAVE_NDO_ETH_IOCTL			member	struct_net_device_ops	ndo_eth_ioctl		include/linux/netdevice.h
 EFX_NEED_NETDEV_HOLD			nsymbol	netdev_hold		include/linux/netdevice.h

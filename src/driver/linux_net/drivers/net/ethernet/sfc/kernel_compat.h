@@ -1725,7 +1725,9 @@ static inline void skb_mark_not_on_list(struct sk_buff *skb)
 #include <net/xdp_sock.h>
 #endif /* EFX_HAVE_XDP_SOCK_DRV */
 
-#if !defined(EFX_HAVE_XDP_HEAD) && !defined(XDP_PACKET_HEADROOM)
+#if defined(EFX_HAVE_XDP_PACKET_HEADROOM)
+#include <uapi/linux/bpf.h>
+#else
 #define XDP_PACKET_HEADROOM 0
 #endif
 
