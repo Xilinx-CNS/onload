@@ -190,6 +190,7 @@ while [ $# -gt 0 ]; do
     -b|--build-dir) if [ -z "$2" ]; then usage; fi; builddir="$2";  shift;;
     --driver) driver=1; newdriver=1;;
     --newdriver) driver=1; newdriver=1;;
+    --olddriver) driver=1;;
     --gnu|--user) gnu=1;;
     --cc) CC="$2"; shift;;
     --help | -*) usage;;
