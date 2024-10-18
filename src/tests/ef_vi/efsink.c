@@ -93,7 +93,7 @@ static int cfg_register_mcast;
 static int cfg_discard = -1;
 static bool cfg_exclusive = false;
 static bool cfg_x4_shared_mode = false;
-static int cfg_x4_qid = 0;
+static int cfg_qid = -1;
 
 
 /* Mutex to protect printing from different threads */
@@ -530,6 +530,8 @@ static __attribute__ ((__noreturn__)) void usage(void)
   fprintf(stderr, "  -D <num> set specific discard mask. For specifics of possible discard masks,"
                               "look at the enum defined for ef_vi_rx_discard_err_flags.\n");
   fprintf(stderr, "  -x       require an exclusive RX queue\n");
+  fprintf(stderr, "  -4       use shared shrub controller\n");
+  fprintf(stderr, "  -q       request specific qid\n");
   exit(1);
 }
 
@@ -543,7 +545,7 @@ int main(int argc, char* argv[])
   struct in_addr sa_mcast;
   int c, sock;
 
-  while( (c = getopt (argc, argv, "dtVL:vmbefF:n:jD:x4:")) != -1 )
+  while( (c = getopt (argc, argv, "dtVL:vmbefF:n:jD:x4q:")) != -1 )
     switch( c ) {
     case 'd':
       cfg_hexdump = 1;
@@ -589,7 +591,9 @@ int main(int argc, char* argv[])
       break;
     case '4':
       cfg_x4_shared_mode = true; //todo allow flexible unix socket path locations
-      cfg_x4_qid = atoi(optarg);
+      break;
+    case 'q':
+      cfg_qid = atoi(optarg);
       break;
     case '?':
       usage();
@@ -706,15 +710,16 @@ int main(int argc, char* argv[])
     int filter_flags = EF_FILTER_FLAG_NONE;
     if ( cfg_exclusive )
       filter_flags = EF_FILTER_FLAG_EXCLUSIVE_RXQ;
-    if ( cfg_x4_shared_mode ) {
+    if ( cfg_x4_shared_mode )
       filter_flags = EF_FILTER_FLAG_SHRUB_SHARED;
-      TRY(ef_filter_spec_set_dest(&filter_spec, cfg_x4_qid, 0));
-    }
 
     if( filter_parse(&filter_spec, argv[0], &sa_mcast, filter_flags) != 0 ) {
       LOGE("ERROR: Bad filter spec '%s'\n", argv[0]);
       exit(1);
     }
+    if( cfg_qid >= 0 )
+      TRY(ef_filter_spec_set_dest(&filter_spec, cfg_qid, 0));
+
     TRY(ef_vi_filter_add(&res->vi, res->dh, &filter_spec, NULL));
     ++argv; --argc;
   }
