@@ -143,6 +143,8 @@ void efhw_nic_update_pci_info(struct efhw_nic *nic)
 
 	nic->bus_number = pci_dev->bus->number;
 	nic->domain = pci_domain_nr(pci_dev->bus);
+	nic->pci_dev_devfn = pci_dev->devfn;
+	nic->pci_dev_device = pci_dev->device;
 
 	pci_dev_put(pci_dev);
 }
@@ -151,11 +153,13 @@ void efhw_nic_update_pci_info(struct efhw_nic *nic)
 ** to allow this to be called at a later time once we can access PCI
 ** config space to find out what hardware we have
 */
-void efhw_nic_ctor(struct efhw_nic *nic,
-		   const struct vi_resource_dimensions *nic_res,
-		   const struct efhw_device_type *dev_type,
-		   struct net_device *net_dev, struct device *dev)
+int efhw_nic_ctor(struct efhw_nic *nic,
+		  const struct vi_resource_dimensions *nic_res,
+		  const struct efhw_device_type *dev_type,
+		  struct net_device *net_dev, struct device *dev)
 {
+	int rc;
+
 	/* Most parameters are optional, but we better have some func ops */
 	EFHW_ASSERT(nic_res->efhw_ops);
 	nic->efhw_func = nic_res->efhw_ops;
@@ -175,15 +179,20 @@ void efhw_nic_ctor(struct efhw_nic *nic,
 	nic->pci_dev = nic_res->pci_dev;
 	spin_lock_init(&nic->pci_dev_lock);
 
-	efhw_nic_sw_ctor(nic, nic_res);
-
 	efhw_nic_update_pci_info(nic);
+
+	rc = efhw_nic_sw_ctor(nic, nic_res);
+	if( rc < 0 )
+		spin_lock_destroy(&nic->pci_dev_lock);
+
+	return rc;
 }
 
 void efhw_nic_dtor(struct efhw_nic *nic)
 {
 	EFHW_ASSERT(nic);
 
+	efhw_nic_sw_dtor(nic);
 	spin_lock_destroy(&nic->pci_dev_lock);
 
 	EFHW_TRACE("%s: DONE", __FUNCTION__);

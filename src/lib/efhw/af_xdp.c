@@ -978,7 +978,7 @@ fail_map:
 	return rc;
 }
 
-static void
+static int
 af_xdp_nic_sw_ctor(struct efhw_nic *nic,
 		   const struct vi_resource_dimensions *res)
 {
@@ -989,6 +989,7 @@ af_xdp_nic_sw_ctor(struct efhw_nic *nic,
 	nic->num_evqs = 1;
 	nic->num_dmaqs = 1;
 	nic->num_timers = 0;
+	return 0;
 }
 
 static int

@@ -56,7 +56,7 @@ int ef10ct_fw_rpc(struct efhw_nic *nic, struct efx_auxiliary_rpc *cmd)
  *---------------------------------------------------------------------------*/
 
 
-static void
+static int
 ef10ct_nic_sw_ctor(struct efhw_nic *nic,
                    const struct vi_resource_dimensions *res)
 {
@@ -70,6 +70,7 @@ ef10ct_nic_sw_ctor(struct efhw_nic *nic,
   nic->q_sizes[EFHW_RXQ] = 512 | 1024 | 2048 | 4096 | 8192 | 16384 | 32768 |
                            65536 | 131072;
   nic->efhw_func = &ef10ct_char_functional_units;
+  return 0;
 }
 
 

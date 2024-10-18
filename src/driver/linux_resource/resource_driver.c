@@ -208,7 +208,9 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct device *dev,
 		get_device(dev);
 	dev_hold(net_dev);
 
-	efhw_nic_ctor(nic, res_dim, dev_type, net_dev, dev);
+	rc = efhw_nic_ctor(nic, res_dim, dev_type, net_dev, dev);
+	if (rc < 0)
+		goto fail1;
 	irq_ranges_init(nic, res_dim);
 
 	init_rwsem(&lnic->drv_sem);
@@ -231,6 +233,7 @@ fail3:
 	efrm_affinity_interface_remove(lnic);
 fail2:
 	efhw_nic_dtor(nic);
+fail1:
 	if( dev )
 		put_device(dev);
 	dev_put(net_dev);

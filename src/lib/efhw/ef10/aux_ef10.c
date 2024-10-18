@@ -30,14 +30,8 @@ static inline int
 efrm_nic_matches_device(struct efhw_nic* nic, const struct pci_dev* dev,
                         const struct efhw_device_type* dev_type)
 {
-  int match;
-  struct pci_dev* nic_dev = efhw_nic_get_pci_dev(nic);
-  if (!nic_dev) {
-    /* Rediscovery of non-PCI NICs not currently supported */
-    return 0;
-  }
-  match = nic_dev->devfn == dev->devfn && nic_dev->device == dev->device;
-  pci_dev_put(nic_dev);
+  int match = nic->pci_dev_devfn == dev->devfn &&
+              nic->pci_dev_device == dev->device;
   if (!match)
     return 0;
 
@@ -295,54 +289,6 @@ static int ef10_handler(struct efx_auxdev_client *client,
   return rc;
 }
 
-static struct efhw_buddy_allocator *
-ef10_vi_allocator_ctor(struct vi_resource_dimensions *res_dim)
-{
-  int rc;
-  struct efhw_buddy_allocator *vi_allocator = vzalloc(sizeof(*vi_allocator));
-  if( !vi_allocator )
-    return NULL;
-
-  rc = efhw_buddy_range_ctor(vi_allocator, res_dim->vi_min, res_dim->vi_lim);
-  if ( rc < 0 ) {
-    EFHW_ERR("%s: efhw_buddy_range_ctor(%d, %d) failed (%d)",
-             __FUNCTION__, res_dim->vi_min, res_dim->vi_lim, rc);
-    vfree(vi_allocator);
-    return NULL;
-  }
-  return vi_allocator;
-}
-
-static struct ef10_aux_arch_extra *
-ef10_arch_extra_ctor(struct efx_auxdev_dl_vi_resources *dl_res,
-                     struct vi_resource_dimensions *res_dim)
-{
-  struct ef10_aux_arch_extra *arch_extra;
-
-  arch_extra = kmalloc(sizeof(struct ef10_aux_arch_extra), GFP_KERNEL);
-  if( !arch_extra )
-    return NULL;
-
-  arch_extra->dl_res = dl_res;
-  arch_extra->vi_allocator = ef10_vi_allocator_ctor(res_dim);
-  if( !arch_extra->vi_allocator ) {
-    kfree(arch_extra);
-    arch_extra = NULL;
-  }
-  return arch_extra;
-}
-
-static void ef10_arch_extra_dtor(struct ef10_aux_arch_extra *arch_extra)
-{
-  if( arch_extra ) {
-    if( arch_extra->vi_allocator ) {
-      efhw_buddy_dtor(arch_extra->vi_allocator);
-      vfree(arch_extra->vi_allocator);
-      arch_extra->vi_allocator = NULL;
-    }
-    kfree(arch_extra);
-  }
-}
 
 static int ef10_probe(struct auxiliary_device *auxdev,
                       const struct auxiliary_device_id *id)
@@ -356,7 +302,6 @@ static int ef10_probe(struct auxiliary_device *auxdev,
   unsigned timer_quantum_ns;
   struct linux_efhw_nic *lnic;
   struct efhw_nic *nic;
-  struct ef10_aux_arch_extra *arch_extra;
   struct net_device *net_dev;
   int rc;
 
@@ -391,18 +336,12 @@ static int ef10_probe(struct auxiliary_device *auxdev,
   if( rc < 0 )
     goto fail3;
 
-  arch_extra = ef10_arch_extra_ctor(dl_res, &res_dim);
-  if( !arch_extra ) {
-    rc = -ENOMEM;
-    goto fail3;
-  }
-
   rc = efhw_sfc_device_type_init(&dev_type, res_dim.pci_dev);
   if( rc < 0 ) {
     EFRM_ERR("%s: efhw_device_type_init failed %04x:%04x rc %d",
     __func__, (unsigned) res_dim.pci_dev->vendor,
     (unsigned) res_dim.pci_dev->device, rc);
-    goto fail4;
+    goto fail3;
   }
 
   EFRM_NOTICE("%s pci_dev=%04x:%04x(%d) type=%d:%c%d ifindex=%d",
@@ -420,7 +359,7 @@ static int ef10_probe(struct auxiliary_device *auxdev,
                     timer_quantum_ns);
   if( rc < 0 ) {
     rtnl_unlock();
-    goto fail4;
+    goto fail3;
   }
 
   efrm_nic_add_sysfs(net_dev, &auxdev->dev);
@@ -429,7 +368,7 @@ static int ef10_probe(struct auxiliary_device *auxdev,
   nic->mtu = net_dev->mtu + ETH_HLEN; /* ? + ETH_VLAN_HLEN */
   nic->rss_channel_count = res_dim.rss_channel_count;
   nic->pci_dev = res_dim.pci_dev;
-  nic->arch_extra = (void *)arch_extra;
+  ((struct ef10_aux_arch_extra*)nic->arch_extra)->dl_res = dl_res;
 
   val.driver_data = nic;
   rc = edev->onload_ops->base_ops.set_param(client, EFX_DRIVER_DATA, &val);
@@ -441,8 +380,6 @@ static int ef10_probe(struct auxiliary_device *auxdev,
   rtnl_unlock();
   return 0;
 
- fail4:
-  ef10_arch_extra_dtor(arch_extra);
  fail3:
   edev->onload_ops->dl_unpublish(client);
  fail2:
@@ -486,7 +423,7 @@ void ef10_remove(struct auxiliary_device *auxdev)
    * have already cleared [lnic->drv_device], no new calls can
    * start. */
   efhw_nic_flush_drv(nic);
-  efrm_nic_unplug(nic);
+  efrm_nic_unplug_hard(nic);
 
   /* Absent hardware is treated as a protracted reset. */
   efrm_nic_reset_suspend(nic);
@@ -495,8 +432,6 @@ void ef10_remove(struct auxiliary_device *auxdev)
 
   edev->onload_ops->dl_unpublish(client);
   edev->onload_ops->base_ops.close(client);
-  ef10_arch_extra_dtor(nic->arch_extra);
-  nic->arch_extra = NULL;
 }
 
 
