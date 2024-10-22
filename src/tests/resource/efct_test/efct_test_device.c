@@ -64,7 +64,7 @@ struct efct_test_device* efct_test_add_test_dev(struct device* parent,
   }
   set_memory_wc((unsigned long)tdev->evq_window, 1);
 
-  tdev->dev.ops = &test_devops;
+  tdev->dev.llct_ops = &test_devops;
   dev_hold(net_dev);
   tdev->net_dev = net_dev;
   adev = &tdev->dev.auxdev;

@@ -40,11 +40,11 @@
 #endif
 
 
-static struct efx_auxiliary_client*
-efct_test_open(struct auxiliary_device *adev, efx_event_handler func,
-               unsigned int events_requested, void *driver_data)
+static struct efx_auxdev_client*
+efct_test_open(struct auxiliary_device *adev, efx_auxdev_event_handler func,
+               unsigned int events_requested)
 {
-  struct efx_auxiliary_client *client;
+  struct efx_auxdev_client *client;
   struct efct_test_device *tdev;
 
   printk(KERN_INFO "%s\n", __func__);
@@ -60,7 +60,6 @@ efct_test_open(struct auxiliary_device *adev, efx_event_handler func,
     return ERR_PTR(-ENOMEM);
 
   client->event_handler = func;
-  client->drv_priv = driver_data;
   client->net_dev = tdev->net_dev;
   tdev->client = client;
   client->tdev = tdev;
@@ -69,22 +68,22 @@ efct_test_open(struct auxiliary_device *adev, efx_event_handler func,
 }
 
 
-static int efct_test_close(struct efx_auxiliary_client *handle)
+static void efct_test_close(struct efx_auxdev_client *handle)
 {
   struct efct_test_device *tdev = handle->tdev;
   printk(KERN_INFO "%s\n", __func__);
 
-  if( ! tdev )
-    return -EINVAL;
+  if( ! tdev ) {
+    printk(KERN_ERR "%s: ERROR: closing unopened device\n", __func__);
+    return;
+  }
 
   tdev->client = NULL;
   kfree(handle);
-
-  return 0;
 }
 
 
-static int efct_test_ctpio_addr(struct efx_auxiliary_client *handle,
+static int efct_test_ctpio_addr(struct efx_auxdev_client *handle,
                                 struct efx_auxiliary_io_addr *io)
 {
   struct efct_test_device *tdev = handle->tdev;
@@ -100,7 +99,7 @@ static int efct_test_ctpio_addr(struct efx_auxiliary_client *handle,
   return 0;
 }
 
-static int efct_test_buffer_post_addr(struct efx_auxiliary_client *handle,
+static int efct_test_buffer_post_addr(struct efx_auxdev_client *handle,
                                struct efx_auxiliary_io_addr *io)
 {
   /* Give onload the address of the RX_POST_BUFFER register for this queue,
@@ -122,8 +121,8 @@ static int efct_test_buffer_post_addr(struct efx_auxiliary_client *handle,
 }
 
 
-static void efct_test_design_param(struct efx_auxiliary_client *handle,
-                                   struct efx_auxiliary_design_params *dp)
+static void efct_test_design_param(struct efx_auxdev_client *handle,
+                                   struct efx_design_params *dp)
 {
   /* Caller is trusted and should be providing us with a valid pointer */
   EFRM_ASSERT(dp);
@@ -153,7 +152,7 @@ static void efct_test_design_param(struct efx_auxiliary_client *handle,
 }
 
 
-static int efct_test_get_param(struct efx_auxiliary_client *handle,
+static int efct_test_get_param(struct efx_auxdev_client *handle,
                                enum efx_auxiliary_param p,
                                union efx_auxiliary_param_value *arg)
 {
@@ -162,7 +161,7 @@ static int efct_test_get_param(struct efx_auxiliary_client *handle,
   printk(KERN_INFO "%s: param %d\n", __func__, p);
 
   switch(p) {
-   case EFX_AUXILIARY_NETDEV:
+   case EFX_NETDEV:
     arg->net_dev = handle->net_dev;
     rc = 0;
     break;
@@ -170,7 +169,7 @@ static int efct_test_get_param(struct efx_auxiliary_client *handle,
     arg->variant = 'T';
     rc = 0;
     break;
-   case EFX_AUXILIARY_REVISION:
+   case EFX_DEVICE_REVISION:
     arg->value = 1;
     rc = 0;
     break;
@@ -194,8 +193,8 @@ static int efct_test_get_param(struct efx_auxiliary_client *handle,
    case EFX_AUXILIARY_RXQ_POST:
     rc = efct_test_buffer_post_addr(handle, &arg->io_addr);
     break;
-   case EFX_AUXILIARY_DESIGN_PARAM:
-    efct_test_design_param(handle, &arg->design_params);
+   case EFX_DESIGN_PARAM:
+    efct_test_design_param(handle, arg->design_params);
     rc = 0;
     break;
    default:
@@ -206,7 +205,7 @@ static int efct_test_get_param(struct efx_auxiliary_client *handle,
 }
 
 
-static int efct_test_set_param(struct efx_auxiliary_client *handle,
+static int efct_test_set_param(struct efx_auxdev_client *handle,
                                enum efx_auxiliary_param p,
                                union efx_auxiliary_param_value *arg)
 {
@@ -218,7 +217,7 @@ static int efct_test_set_param(struct efx_auxiliary_client *handle,
 }
 
 
-static int efct_test_init_evq(struct efx_auxiliary_client *handle,
+static int efct_test_init_evq(struct efx_auxdev_client *handle,
                               struct efx_auxiliary_evq_params *params)
 {
   struct efct_test_evq *evq = &handle->tdev->evqs[params->qid];
@@ -239,7 +238,7 @@ static int efct_test_init_evq(struct efx_auxiliary_client *handle,
 }
 
 
-static void efct_test_free_evq(struct efx_auxiliary_client *handle, int evq)
+static void efct_test_free_evq(struct efx_auxdev_client *handle, int evq)
 {
   printk(KERN_INFO "%s: qid %d\n", __func__, evq);
   WARN(!handle->tdev->evqs[evq].inited,
@@ -253,7 +252,7 @@ static void efct_test_free_evq(struct efx_auxiliary_client *handle, int evq)
 }
 
 
-static int efct_test_init_txq(struct efx_auxiliary_client *handle,
+static int efct_test_init_txq(struct efx_auxdev_client *handle,
                               struct efx_auxiliary_txq_params *params)
 {
   struct efct_test_device *tdev = handle->tdev;
@@ -304,7 +303,7 @@ static int efct_test_init_txq(struct efx_auxiliary_client *handle,
 }
 
 
-static void efct_test_free_txq(struct efx_auxiliary_client *handle, int txq_idx)
+static void efct_test_free_txq(struct efx_auxdev_client *handle, int txq_idx)
 {
   struct efct_test_device *tdev = handle->tdev;
   int evq = tdev->txqs[txq_idx].evq;
@@ -327,7 +326,7 @@ static void efct_test_free_txq(struct efx_auxiliary_client *handle, int txq_idx)
 }
 
 
-static int efct_test_init_rxq(struct efx_auxiliary_client *handle,
+static int efct_test_init_rxq(struct efx_auxdev_client *handle,
                               struct efx_auxiliary_rxq_params *params)
 {
   struct efct_test_device *tdev = handle->tdev;
@@ -388,7 +387,7 @@ static int efct_test_init_rxq(struct efx_auxiliary_client *handle,
 }
 
 
-static void efct_test_free_rxq(struct efx_auxiliary_client *handle, int rxq_idx)
+static void efct_test_free_rxq(struct efx_auxdev_client *handle, int rxq_idx)
 {
   struct efct_test_device *tdev = handle->tdev;
   int evq = tdev->rxqs[rxq_idx].evq;
@@ -414,8 +413,8 @@ static void efct_test_free_rxq(struct efx_auxiliary_client *handle, int rxq_idx)
 }
 
 
-static int efct_test_filter_op(struct efx_auxiliary_client *handle,
-                               struct efx_auxiliary_rpc *rpc)
+static int efct_test_filter_op(struct efx_auxdev_client *handle,
+                               struct efx_auxdev_rpc *rpc)
 {
   struct efct_test_device *tdev = handle->tdev;
   uint32_t filter_handle = EFHW_MCDI_DWORD(rpc->inbuf, FILTER_OP_IN_HANDLE_LO);
@@ -462,8 +461,8 @@ static int efct_test_filter_op(struct efx_auxiliary_client *handle,
 }
 
 
-static int efct_test_fw_rpc(struct efx_auxiliary_client *handle,
-                            struct efx_auxiliary_rpc *rpc)
+static int efct_test_fw_rpc(struct efx_auxdev_client *handle,
+                            struct efx_auxdev_rpc *rpc)
 {
   int rc;
 
@@ -527,21 +526,20 @@ static int efct_test_fw_rpc(struct efx_auxiliary_client *handle,
 }
 
 
-int efct_test_queues_alloc(struct efx_auxiliary_client *handle,
+int efct_test_queues_alloc(struct efx_auxdev_client *handle,
 			   struct efx_auxiliary_queues_alloc_params *params)
 {
   return -ENOSYS;
 }
 
 
-int efct_test_queues_free(struct efx_auxiliary_client *handle,
+int efct_test_queues_free(struct efx_auxdev_client *handle,
 			  struct efx_auxiliary_queues_alloc_params *params)
 {
   return -ENOSYS;
 }
 
-
-const struct efx_auxiliary_devops test_devops = {
+const struct efx_auxdev_ops test_base_devops = {
   .open = efct_test_open,
   .close = efct_test_close,
   .get_param = efct_test_get_param,
@@ -549,5 +547,9 @@ const struct efx_auxiliary_devops test_devops = {
   .fw_rpc = efct_test_fw_rpc,
   .queues_alloc = efct_test_queues_alloc,
   .queues_free = efct_test_queues_free,
+};
+
+const struct efx_auxdev_llct_ops test_devops = {
+  .base_ops = test_base_devops,
 };
 

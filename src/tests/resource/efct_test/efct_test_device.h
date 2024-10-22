@@ -10,12 +10,11 @@
 #include <ci/driver/efab/hardware/efct.h>
 
 struct efct_test_device;
-struct efx_auxiliary_client {
+struct efx_auxdev_client {
   struct efct_test_device *tdev;
-  efx_event_handler func;
   void* drv_priv;
   u32 client_id;
-  efx_event_handler event_handler;
+  efx_auxdev_event_handler *event_handler;
   unsigned int events_requested;
   struct net_device *net_dev;
 };
@@ -92,12 +91,12 @@ struct efct_test_rxq {
 #define EFCT_TEST_RXQS_N  8
 
 struct net_device;
-struct efx_auxiliary_client;
+struct efx_auxdev_client;
 
 struct efct_test_device {
-  struct efx_auxiliary_device dev;
+  struct efx_auxdev dev;
   struct net_device* net_dev;
-  struct efx_auxiliary_client* client;
+  struct efx_auxdev_client* client;
   struct efct_test_evq evqs[EFCT_TEST_EVQS_N];
   struct efct_test_txq txqs[EFCT_TEST_TXQS_N];
   struct efct_test_rxq rxqs[EFCT_TEST_RXQS_N];
