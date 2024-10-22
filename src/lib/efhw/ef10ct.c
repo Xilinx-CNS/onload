@@ -37,16 +37,16 @@
  * MCDI helper
  *
  *---------------------------------------------------------------------------*/
-int ef10ct_fw_rpc(struct efhw_nic *nic, struct efx_auxiliary_rpc *cmd)
+int ef10ct_fw_rpc(struct efhw_nic *nic, struct efx_auxdev_rpc *cmd)
 {
   int rc;
   struct device *dev;
-  struct efx_auxiliary_device* edev;
-  struct efx_auxiliary_client* cli;
+  struct efx_auxdev* edev;
+  struct efx_auxdev_client* cli;
 
   /* FIXME need to handle reset stuff here */
   EFCT_PRE(dev, edev, cli, nic, rc);
-  rc = edev->ops->fw_rpc(cli, cmd);
+  rc = edev->llct_ops->base_ops.fw_rpc(cli, cmd);
   EFCT_POST(dev, edev, cli, nic, rc);
 
   return rc;
@@ -203,7 +203,7 @@ ef10ct_nic_event_queue_enable(struct efhw_nic *nic,
 #ifndef NDEBUG
   int i;
 #endif
-  struct efx_auxiliary_rpc dummy;
+  struct efx_auxdev_rpc dummy;
 
   /* This is a dummy EVQ, so nothing to do. */
   if( efhw_params->evq >= ef10ct->evq_n )
@@ -251,7 +251,7 @@ ef10ct_nic_event_queue_disable(struct efhw_nic *nic,
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct efhw_nic_ef10ct_evq *ef10ct_evq;
-  struct efx_auxiliary_rpc dummy;
+  struct efx_auxdev_rpc dummy;
 
   /* This is a dummy EVQ, so nothing to do. */
   if( evq >= ef10ct->evq_n )
@@ -293,7 +293,7 @@ static int ef10ct_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc
                          unsigned n_vis)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
-  struct efx_auxiliary_client* cli;
+  struct efx_auxdev_client* cli;
   int rc = 0;
 
   if( n_vis != 1 )
@@ -319,7 +319,7 @@ static int ef10ct_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc
 
 static void ef10ct_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis)
 {
-  struct efx_auxiliary_client* cli;
+  struct efx_auxdev_client* cli;
 
   EFHW_ASSERT(n_vis == 1);
   cli = efhw_nic_acquire_ef10ct_device(nic);
@@ -354,7 +354,7 @@ ef10ct_dmaq_tx_q_init(struct efhw_nic *nic,
     .label = txq_params->tag,
   };
   int rc;
-  struct efx_auxiliary_rpc dummy;
+  struct efx_auxdev_rpc dummy;
 
   EFHW_ASSERT(txq_params->evq < ef10ct->evq_n);
   EFHW_ASSERT(params.qid != EFCT_EVQ_NO_TXQ);
@@ -380,12 +380,12 @@ ef10ct_rx_buffer_post_register(struct efhw_nic* nic, int instance,
 {
   int rc;
   struct device *dev;
-  struct efx_auxiliary_device* edev;
-  struct efx_auxiliary_client* cli;
+  struct efx_auxdev* edev;
+  struct efx_auxdev_client* cli;
   union efx_auxiliary_param_value val = {.io_addr.qid_in = instance};
 
   EFCT_PRE(dev, edev, cli, nic, rc);
-  rc = edev->ops->get_param(cli, EFX_AUXILIARY_RXQ_POST, &val);
+  rc = edev->llct_ops->base_ops.get_param(cli, EFX_AUXILIARY_RXQ_POST, &val);
   EFCT_POST(dev, edev, cli, nic, rc);
 
   if( rc < 0 )
@@ -415,7 +415,7 @@ ef10ct_dmaq_rx_q_init(struct efhw_nic *nic,
     .suppress_events = rxq_params->rx.suppress_events,
   };
   int rc, rxq;
-  struct efx_auxiliary_rpc dummy;
+  struct efx_auxdev_rpc dummy;
   resource_size_t register_phys_addr;
 
 
@@ -490,7 +490,7 @@ ef10ct_flush_tx_dma_channel(struct efhw_nic *nic,
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct efhw_nic_ef10ct_evq *ef10ct_evq = &ef10ct->evq[evq];
   int rc = 0;
-  struct efx_auxiliary_rpc dummy;
+  struct efx_auxdev_rpc dummy;
 
   dummy.cmd = MC_CMD_FINI_TXQ;
   dummy.inlen = sizeof(int);
@@ -509,7 +509,7 @@ static int
 ef10ct_flush_rx_dma_channel(struct efhw_nic *nic, uint dmaq)
 {
   int rc = 0, evq_id;
-  struct efx_auxiliary_rpc dummy;
+  struct efx_auxdev_rpc dummy;
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct efhw_nic_ef10ct_evq *ef10ct_evq;
 
@@ -638,14 +638,12 @@ static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in_data,
                                         in_data->drv_opaque;
   EFHW_MCDI_DECLARE_BUF(in, MC_CMD_FILTER_OP_IN_LEN);
   EFHW_MCDI_DECLARE_BUF(out, MC_CMD_FILTER_OP_OUT_LEN);
-  size_t outlen_actual;
-  struct efx_auxiliary_rpc rpc = {
+  struct efx_auxdev_rpc rpc = {
     .cmd = MC_CMD_FILTER_OP,
     .inbuf = (u32*)&in,
     .inlen = MC_CMD_FILTER_OP_IN_LEN,
     .outbuf = (u32*)&out,
     .outlen = MC_CMD_FILTER_OP_OUT_LEN,
-    .outlen_actual = &outlen_actual,
   };
   int rxq;
   rxq = select_rxq(params, in_data->filter->ring_cookie);
@@ -704,14 +702,12 @@ ef10ct_filter_remove(struct efhw_nic *nic, int filter_id)
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   EFHW_MCDI_DECLARE_BUF(in, MC_CMD_FILTER_OP_IN_LEN);
   EFHW_MCDI_DECLARE_BUF(out, MC_CMD_FILTER_OP_OUT_LEN);
-  size_t outlen_actual;
-  struct efx_auxiliary_rpc rpc = {
+  struct efx_auxdev_rpc rpc = {
     .cmd = MC_CMD_FILTER_OP,
     .inbuf = (u32*)&in,
     .inlen = MC_CMD_FILTER_OP_IN_LEN,
     .outbuf = (u32*)&out,
     .outlen = MC_CMD_FILTER_OP_OUT_LEN,
-    .outlen_actual = &outlen_actual,
   };
   bool remove_drv;
   uint64_t drv_id;
@@ -781,13 +777,13 @@ ef10ct_vi_io_region(struct efhw_nic* nic, int instance, size_t* size_out,
                     resource_size_t* addr_out)
 {
   struct device *dev;
-  struct efx_auxiliary_device* edev;
-  struct efx_auxiliary_client* cli;
+  struct efx_auxdev* edev;
+  struct efx_auxdev_client* cli;
   union efx_auxiliary_param_value val;
   int rc = 0;
 
   EFCT_PRE(dev, edev, cli, nic, rc)
-  rc = edev->ops->get_param(cli, EFX_AUXILIARY_EVQ_WINDOW, &val);
+  rc = edev->llct_ops->base_ops.get_param(cli, EFX_AUXILIARY_EVQ_WINDOW, &val);
   EFCT_POST(dev, edev, cli, nic, rc);
 
   *size_out = val.evq_window.stride;
@@ -802,13 +798,15 @@ ef10ct_design_parameters(struct efhw_nic *nic,
                          struct efab_nic_design_parameters *dp)
 {
   struct device *dev;
-  struct efx_auxiliary_device* edev;
-  struct efx_auxiliary_client* cli;
+  struct efx_auxdev* edev;
+  struct efx_auxdev_client* cli;
   union efx_auxiliary_param_value val;
+  struct efx_design_params params;
   int rc = 0;
 
+  val.design_params = &params;
   EFCT_PRE(dev, edev, cli, nic, rc)
-  rc = edev->ops->get_param(cli, EFX_AUXILIARY_DESIGN_PARAM, &val);
+  rc = edev->llct_ops->base_ops.get_param(cli, EFX_DESIGN_PARAM, &val);
   EFCT_POST(dev, edev, cli, nic, rc);
 
   if( rc < 0 )
@@ -827,25 +825,25 @@ ef10ct_design_parameters(struct efhw_nic *nic,
   else if( (VALUE) != EFAB_NIC_DP_DEFAULT(PARAM) ) \
     return -ENODEV;
 
-  SET(rx_superbuf_bytes, val.design_params.rx_buffer_len);
-  if( val.design_params.meta_location == 0 ) {
+  SET(rx_superbuf_bytes, val.design_params->rx_buffer_len);
+  if( val.design_params->meta_location == 0 ) {
     SET(rx_frame_offset, EFCT_RX_HEADER_NEXT_FRAME_LOC_0 - 2);
   }
-  else if( val.design_params.meta_location == 1 ) {
+  else if( val.design_params->meta_location == 1 ) {
     SET(rx_frame_offset, EFCT_RX_HEADER_NEXT_FRAME_LOC_1 - 2);
   }
   else {
     EFHW_ERR("%s: Could not determine frame offset from meta_location %u",
-             __func__, val.design_params.meta_location);
+             __func__, val.design_params->meta_location);
     return -EOPNOTSUPP;
   }
-  SET(rx_stride, val.design_params.rx_stride);
-  SET(rx_queues, val.design_params.rx_queues);
-  SET(tx_aperture_bytes, val.design_params.tx_aperture_size);
-  SET(tx_fifo_bytes, val.design_params.tx_fifo_size);
-  SET(timestamp_subnano_bits, val.design_params.ts_subnano_bit);
-  SET(unsol_credit_seq_mask, val.design_params.unsol_credit_seq_mask);
-  SET(md_location, val.design_params.meta_location);
+  SET(rx_stride, val.design_params->rx_stride);
+  SET(rx_queues, val.design_params->rx_queues);
+  SET(tx_aperture_bytes, val.design_params->tx_aperture_size);
+  SET(tx_fifo_bytes, val.design_params->tx_fifo_size);
+  SET(timestamp_subnano_bits, val.design_params->ts_subnano_bit);
+  SET(unsol_credit_seq_mask, val.design_params->unsol_credit_seq_mask);
+  SET(md_location, val.design_params->meta_location);
 
   return 0;
 }
@@ -861,14 +859,14 @@ static int
 ef10ct_ctpio_addr(struct efhw_nic* nic, int instance, resource_size_t* addr)
 {
   struct device *dev;
-  struct efx_auxiliary_device* edev;
-  struct efx_auxiliary_client* cli;
+  struct efx_auxdev* edev;
+  struct efx_auxdev_client* cli;
   union efx_auxiliary_param_value val;
   int rc;
 
   val.io_addr.qid_in = instance;
   EFCT_PRE(dev, edev, cli, nic, rc);
-  rc = edev->ops->get_param(cli, EFX_AUXILIARY_CTPIO_WINDOW, &val);
+  rc = edev->llct_ops->base_ops.get_param(cli, EFX_AUXILIARY_CTPIO_WINDOW, &val);
   EFCT_POST(dev, edev, cli, nic, rc);
 
   /* Currently we assume throughout onload that we have a 4k region */

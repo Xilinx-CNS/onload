@@ -45,7 +45,7 @@ struct efhw_nic_ef10ct {
   struct ef10ct_shared_kernel_evq *shared;
   uint32_t rxq_n;
   struct efhw_nic_ef10ct_rxq *rxq;
-  struct efx_auxiliary_device *edev;
+  struct efx_auxdev *edev;
   struct efx_auxiliary_client *client;
   struct efhw_nic *nic;
   struct {

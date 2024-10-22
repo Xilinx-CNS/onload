@@ -13,16 +13,16 @@
 
 #if CI_HAVE_EF10CT
 
-static int ef10ct_handler(struct auxiliary_device *auxdev, void *drv_data,
-                          struct efx_auxiliary_event *event, int budget)
+static int ef10ct_handler(struct efx_auxdev_client *client,
+                        const struct efx_auxdev_event *event)
 {
-  EFRM_TRACE("%s: %s", __func__, dev_name(&auxdev->dev));
+  EFRM_TRACE("%s", __func__);
   return 0;
 }
 
 
-static int ef10ct_devtype_init(struct efx_auxiliary_device *edev,
-                               struct efx_auxiliary_client *client,
+static int ef10ct_devtype_init(struct efx_auxdev *edev,
+                               struct efx_auxdev_client *client,
                                struct efhw_device_type *dev_type)
 {
   dev_type->arch = EFHW_ARCH_EF10CT;
@@ -34,27 +34,28 @@ static int ef10ct_devtype_init(struct efx_auxiliary_device *edev,
 }
 
 
-static int ef10ct_resource_init(struct efx_auxiliary_device *edev,
-                                struct efx_auxiliary_client *client,
+static int ef10ct_resource_init(struct efx_auxdev *edev,
+                                struct efx_auxdev_client *client,
                                 struct efhw_nic_ef10ct *ef10ct,
                                 struct vi_resource_dimensions *res_dim)
 {
   union efx_auxiliary_param_value val;
+  struct efx_design_params dp;
   int n_txqs;
   int rc;
   int i;
 
-  rc = edev->ops->get_param(client, EFX_AUXILIARY_DESIGN_PARAM, &val);
+  val.design_params = &dp;
+  rc = edev->llct_ops->base_ops.get_param(client, EFX_DESIGN_PARAM, &val);
   if( rc < 0 )
     return rc;
-  rc = efct_filter_state_init(&ef10ct->filter_state, val.design_params.num_filter,
-                              val.design_params.rx_queues);
-  if( rc < 0 )
-    return rc;
+
+  rc = efct_filter_state_init(&ef10ct->filter_state, dp.num_filter,
+                              dp.rx_queues);
 
   res_dim->efhw_ops = &ef10ct_char_functional_units;
 
-  rc = edev->ops->get_param(client, EFX_AUXILIARY_NIC_RESOURCES, &val);
+  rc = edev->llct_ops->base_ops.get_param(client, EFX_AUXILIARY_NIC_RESOURCES, &val);
   if( rc < 0 )
     goto fail;
 
@@ -89,7 +90,7 @@ static int ef10ct_resource_init(struct efx_auxiliary_device *edev,
 
   res_dim->irq_n_ranges = 0;
 #if 0
-  rc = edev->ops->get_param(client, EFX_AUXILIARY_IRQ_RESOURCES, &val);
+  rc = edev->llct_ops->base_ops.get_param(client, EFX_AUXILIARY_IRQ_RESOURCES, &val);
   if( rc < 0 )
     return rc;
 
@@ -252,8 +253,8 @@ static void ef10ct_nic_free_shared_evq(struct efhw_nic *nic, int qid)
 static int ef10ct_probe(struct auxiliary_device *auxdev,
                         const struct auxiliary_device_id *id)
 {
-  struct efx_auxiliary_client *client;
-  struct efx_auxiliary_device *edev = to_sfc_aux_device(auxdev);
+  struct efx_auxdev_client *client;
+  struct efx_auxdev *edev = to_efx_auxdev(auxdev);
   struct efhw_device_type dev_type;
   struct linux_efhw_nic *lnic = NULL;
   struct efhw_nic *nic;
@@ -269,7 +270,8 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
     return -ENOMEM;
   ef10ct->edev = edev;
 
-  client = edev->ops->open(auxdev, &ef10ct_handler, EFX_ALL_EVENTS, NULL);
+  client = edev->llct_ops->base_ops.open(auxdev, &ef10ct_handler,
+                                         EFX_AUXDEV_ALL_EVENTS);
 
   EFRM_NOTICE("%s name %s", __func__, id->name);
 
@@ -278,7 +280,7 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
     goto fail1;
   }
 
-  rc = edev->ops->get_param(client, EFX_AUXILIARY_NETDEV, &val);
+  rc = edev->llct_ops->base_ops.get_param(client, EFX_NETDEV, &val);
   if( rc < 0 )
     goto fail2;
 
@@ -329,7 +331,7 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
  fail3:
   ef10ct_vi_allocator_dtor(ef10ct);
  fail2:
-  edev->ops->close(client);
+  edev->llct_ops->base_ops.close(client);
  fail1:
   vfree(ef10ct);
   EFRM_ERR("%s rc %d", __func__, rc);
@@ -339,8 +341,8 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
 
 void ef10ct_remove(struct auxiliary_device *auxdev)
 {
-  struct efx_auxiliary_device *edev = to_sfc_aux_device(auxdev);
-  struct efx_auxiliary_client *client;
+  struct efx_auxdev *edev = to_efx_auxdev(auxdev);
+  struct efx_auxdev_client *client;
   struct linux_efhw_nic *lnic;
   struct efhw_nic* nic;
   struct efhw_nic_ef10ct *ef10ct;
@@ -355,7 +357,7 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
   efhw_fini_debugfs_ef10ct(nic);
 
   lnic = linux_efhw_nic(nic);
-  client = (struct efx_auxiliary_client*)lnic->drv_device;
+  client = (struct efx_auxdev_client*)lnic->drv_device;
   if( !client )
     return;
 
@@ -385,9 +387,10 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
   /* mind we might still expect callbacks from close() context
    * TODO: rethink where to call close and how to synchronise with
    * the rest. */
-  edev->ops->close(client);
+  edev->llct_ops->base_ops.close(client);
 
   efct_filter_state_free(&ef10ct->filter_state);
+
   vfree(ef10ct->evq);
   vfree(ef10ct->rxq);
   vfree(ef10ct->shared);

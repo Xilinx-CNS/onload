@@ -4,9 +4,9 @@
 #ifndef LIB_EFHW_EFCT_H
 #define LIB_EFHW_EFCT_H
 
-struct efx_auxiliary_client;
+struct efx_auxdev_client;
 
-static inline struct efx_auxiliary_client*
+static inline struct efx_auxdev_client*
 efhw_nic_acquire_ef10ct_device(struct efhw_nic* nic)
 {
   EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF10CT);
@@ -15,7 +15,7 @@ efhw_nic_acquire_ef10ct_device(struct efhw_nic* nic)
 
 static inline void
 efhw_nic_release_ef10ct_device(struct efhw_nic* nic,
-                               struct efx_auxiliary_client* cli)
+                               struct efx_auxdev_client* cli)
 {
   EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF10CT);
   efhw_nic_release_drv_device(nic, cli);
@@ -24,7 +24,7 @@ efhw_nic_release_ef10ct_device(struct efhw_nic* nic,
 #define EFCT_PRE(dev, efct_dev, efct_cli, nic, rc) \
 { \
   (dev) = efhw_nic_get_dev(nic); \
-  (efct_dev) = to_sfc_aux_device(to_auxiliary_dev(dev)); \
+  (efct_dev) = to_efx_auxdev(to_auxiliary_dev(dev)); \
   (efct_cli) = efhw_nic_acquire_ef10ct_device((nic));\
   EFHW_ASSERT(!in_atomic()); \
   \
