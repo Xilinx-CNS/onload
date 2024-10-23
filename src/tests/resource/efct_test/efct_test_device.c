@@ -73,6 +73,10 @@ struct efct_test_device* efct_test_add_test_dev(struct device* parent,
   for( i = 0; i < EFCT_TEST_RXQS_N; i++)
     tdev->rxqs[i].evq = -1;
 
+  tdev->free_evqs = (1 << EFCT_TEST_EVQS_N) - 1;
+  tdev->free_txqs = (1 << EFCT_TEST_TXQS_N) - 1;
+  tdev->free_rxqs = (1 << EFCT_TEST_RXQS_N) - 1;
+
   /* Once we have successfully initted the aux dev then the lifetime of the
    * wrapping test dev must be associated with the aux device. This means
    * that the responsibility for cleanup devolves to the aux dev uninit

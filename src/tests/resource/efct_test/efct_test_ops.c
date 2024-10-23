@@ -89,7 +89,7 @@ static int efct_test_ctpio_addr(struct efx_auxdev_client *handle,
   struct efct_test_device *tdev = handle->tdev;
   int txq = io->qid_in;
 
-  printk(KERN_INFO "%s\n", __func__);
+  printk(KERN_INFO "%s: txq %d evq %d\n", __func__, txq, tdev->txqs[txq].evq);
 
   if( tdev->txqs[txq].evq < 0 )
     return -EINVAL;
@@ -249,26 +249,12 @@ static int efct_test_init_txq(struct efx_auxdev_client *handle,
 {
   struct efct_test_device *tdev = handle->tdev;
   struct efct_test_txq *txq;
-  int txq_idx = -1;
-  int i;
+  int txq_idx = params->qid;
   int evq = params->evq;
 
   printk(KERN_INFO "%s: evq %d\n", __func__, evq);
   if( !tdev->evqs[evq].inited )
     return -EINVAL;
-
-  /* Onload allocate vis (and hence EVQs) through a buddy allocator, so we can
-   * just allocate linearly and should end up testing differing EVQ and TXQ
-   * ids.
-   */
-  for( i = 0; i < EFCT_TEST_TXQS_N; i++ )
-    if( tdev->txqs[i].evq < 0 ) {
-      txq_idx = i;
-      break;
-    }
-
-  if( txq_idx < 0 )
-    return -EBUSY;
 
   txq = &tdev->txqs[txq_idx];
 
@@ -291,7 +277,7 @@ static int efct_test_init_txq(struct efx_auxdev_client *handle,
   printk(KERN_INFO "%s: bound txq %d to evq %d\n", __func__, txq_idx,
          evq);
 
-  return txq_idx;
+  return 0;
 }
 
 
@@ -458,6 +444,8 @@ static int efct_test_fw_rpc(struct efx_auxdev_client *handle,
 {
   int rc;
 
+  printk(KERN_INFO "%s: cmd %d\n", __func__, rpc->cmd);
+
   switch(rpc->cmd) {
    case MC_CMD_INIT_EVQ:
     if( rpc->inlen != sizeof(struct efx_auxiliary_evq_params) )
@@ -514,22 +502,77 @@ static int efct_test_fw_rpc(struct efx_auxdev_client *handle,
   };
 
   printk(KERN_INFO "%s: cmd %d rc %d\n", __func__, rpc->cmd, rc);
+
   return rc;
 }
 
 
-int efct_test_queues_alloc(struct efx_auxdev_client *handle,
-			   struct efx_auxiliary_queues_alloc_params *params)
+static int efct_test_queue_alloc(uint64_t *free, const char *type)
 {
-  return -ENOSYS;
+  int qid;
+
+  if( *free == 0)
+    return -ENOSPC;
+
+  qid = __ffs(*free);
+  *free &= ~(1 << qid);
+
+  printk(KERN_INFO "%s: alloced %s qid %d, free mask now %llx\n",
+         __func__, type, qid, *free);
+  return qid;
 }
 
-
-int efct_test_queues_free(struct efx_auxdev_client *handle,
-			  struct efx_auxiliary_queues_alloc_params *params)
+static void efct_test_queue_free(uint64_t *free, int channel_nr,
+                                 const char *type)
 {
-  return -ENOSYS;
+  if( (1 << channel_nr) & *free )
+    printk(KERN_ERR "%s: ERROR freeing %s qid %d, current free mask %llx\n",
+           __func__, type, channel_nr, *free);
+
+  *free |= 1 << channel_nr;
 }
+
+static int efct_test_channel_alloc(struct efx_auxdev_client *handle)
+{
+  return efct_test_queue_alloc(&handle->tdev->free_evqs, "EVQ");
+}
+
+static void efct_test_channel_free(struct efx_auxdev_client *handle, int channel_nr)
+{
+  return efct_test_queue_free(&handle->tdev->free_evqs, channel_nr, "EVQ");
+}
+
+static struct efx_auxdev_irq*
+efct_test_irq_alloc(struct efx_auxdev_client *handle)
+{
+  return NULL;
+}
+
+static void efct_test_irq_free(struct efx_auxdev_client *handle,
+                        struct efx_auxdev_irq *)
+{
+}
+
+static int efct_test_txq_alloc(struct efx_auxdev_client *handle)
+{
+  return efct_test_queue_alloc(&handle->tdev->free_txqs, "TXQ");
+}
+
+static void efct_test_txq_free(struct efx_auxdev_client *handle, int txq_nr)
+{
+  efct_test_queue_free(&handle->tdev->free_txqs, txq_nr, "TXQ");
+}
+
+static int efct_test_rxq_alloc(struct efx_auxdev_client *handle)
+{
+  return efct_test_queue_alloc(&handle->tdev->free_rxqs, "RXQ");
+}
+
+static void efct_test_rxq_free(struct efx_auxdev_client *handle, int rxq_nr)
+{
+  efct_test_queue_free(&handle->tdev->free_rxqs, rxq_nr, "RXQ");
+}
+
 
 const struct efx_auxdev_ops test_base_devops = {
   .open = efct_test_open,
@@ -537,11 +580,17 @@ const struct efx_auxdev_ops test_base_devops = {
   .get_param = efct_test_get_param,
   .set_param = efct_test_set_param,
   .fw_rpc = efct_test_fw_rpc,
-  .queues_alloc = efct_test_queues_alloc,
-  .queues_free = efct_test_queues_free,
 };
 
 const struct efx_auxdev_llct_ops test_devops = {
   .base_ops = test_base_devops,
+  .channel_alloc = efct_test_channel_alloc,
+  .channel_free = efct_test_channel_free,
+  .irq_alloc = efct_test_irq_alloc,
+  .irq_free = efct_test_irq_free,
+  .txq_alloc = efct_test_txq_alloc,
+  .txq_free = efct_test_txq_free,
+  .rxq_alloc = efct_test_rxq_alloc,
+  .rxq_free = efct_test_rxq_free,
 };
 

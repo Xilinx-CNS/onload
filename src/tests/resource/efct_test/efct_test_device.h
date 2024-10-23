@@ -97,6 +97,9 @@ struct efct_test_device {
   struct efx_auxdev dev;
   struct net_device* net_dev;
   struct efx_auxdev_client* client;
+  uint64_t free_evqs;
+  uint64_t free_txqs;
+  uint64_t free_rxqs;
   struct efct_test_evq evqs[EFCT_TEST_EVQS_N];
   struct efct_test_txq txqs[EFCT_TEST_TXQS_N];
   struct efct_test_rxq rxqs[EFCT_TEST_RXQS_N];

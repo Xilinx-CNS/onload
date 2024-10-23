@@ -318,26 +318,6 @@ union efx_auxiliary_param_value {
 };
 #endif
 
-#define EFX_AUXILIARY_QUEUE_ALLOC	-1
-#define EFX_AUXILIARY_QUEUE_DONT_ALLOC	-2
-/**
- * The parameters necessary to request allocation of a set of LL queues.
- *
- * @n_queue_sets: The number of entries in the q_sets array
- * @q_sets: Each set comprises a set of queue resources, of which any
- *          combination can be requested to be allocated.
- */
-struct efx_auxiliary_queues_alloc_params {
-        int n_queue_sets;
-        struct efx_auxiliary_queue_set {
-                int evq;
-                int txq;
-                int rxq;
-		int irq;
-        } q_sets[1];
-};
-
-
 /**
  * struct efx_auxdev_ops - Base device operations, common across multiple
  *	device types.
@@ -371,12 +351,7 @@ struct efx_auxdev_ops {
 			 enum efx_auxiliary_param p,
 			 union efx_auxiliary_param_value *arg);
 #endif
-	int (*queues_alloc)(struct efx_auxdev_client *handle,
-			    struct efx_auxiliary_queues_alloc_params *params);
-	int (*queues_free)(struct efx_auxdev_client *handle,
-			   struct efx_auxiliary_queues_alloc_params *params);
 };
-
 
 /**
  * struct efx_auxdev_onload_ops - Device operations on the full-featured
