@@ -237,7 +237,7 @@ efct_nic_tweak_hardware(struct efhw_nic *nic)
 }
 
 
-static void
+static int
 efct_nic_sw_ctor(struct efhw_nic *nic,
                  const struct vi_resource_dimensions *res)
 {
@@ -249,6 +249,7 @@ efct_nic_sw_ctor(struct efhw_nic *nic,
    * Also EF_VI code currently still limited to powers of 2 */
   nic->q_sizes[EFHW_RXQ] = 512 | 1024 | 2048 | 4096 | 8192 | 16384 | 32768 |
                            65536 | 131072;
+  return 0;
 }
 
 

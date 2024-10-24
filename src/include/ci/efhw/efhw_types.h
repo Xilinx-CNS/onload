@@ -242,9 +242,14 @@ struct efhw_func_ops {
 
   /*-------------- Initialisation ------------ */
 
-	/*! Early init of state that is known without needing HW to be up */
-	void (*sw_ctor) (struct efhw_nic *nic,
-                         const struct vi_resource_dimensions *res);
+	/*! Early init of state that is known without needing HW to be up.
+	 * This is called exactly once in the lifetime of an efhw_nic, so
+	 * the sw_ctor/sw_dtor are suitable for init/free of any state that
+	 * needs to persist over hotplug, where the lifetime of the state
+	 * needs to be aligned with the lifetime of the efhw_nic. */
+	int (*sw_ctor) (struct efhw_nic *nic,
+			const struct vi_resource_dimensions *res);
+	void (*sw_dtor) (struct efhw_nic *nic);
 
 	/*! initialise all hardware functional units */
 	int (*init_hardware) (struct efhw_nic *nic,
@@ -281,6 +286,7 @@ struct efhw_func_ops {
 
 	/*! Allocate at least n_vis contiguously. Note that n_vis>1 is only
 	 *  valid on nics that support RSS.
+	 *  Thread safe and must not be called in an atomic context.
 	 * 	Param n_vis: minimum number of vis to allocate
 	 *  Return: -EOPNOTSUPP if n_vis > 1 and nic does not support RSS.
 	 *  Otherwise return base vi index of allocation.
@@ -288,7 +294,9 @@ struct efhw_func_ops {
 	int (*vi_alloc) (struct efhw_nic *nic, struct efhw_vi_constraints *evc,
 			     unsigned n_vis);
 
-	/*! Free the vis allocated with vi_alloc */
+	/*! Free the vis allocated with vi_alloc
+	 *  Thread safe and must not be called in an atomic context.
+	 */
 	void (*vi_free) (struct efhw_nic *nic, int instance, unsigned n_vis);
 
   /*-------------- DMA support  ------------ */
@@ -547,6 +555,10 @@ struct efhw_nic {
 	unsigned char bus_number;
 	/*! Similarly we need the domain, as that's part of the bus state. */
 	int domain;
+	/*! Store pci info used for hotplug recognition to allow release of
+	 * the underlying pci device on unplug. */
+	unsigned int pci_dev_devfn;
+	unsigned short pci_dev_device;
 
 	/* hardware resources */
 

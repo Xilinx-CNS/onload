@@ -169,8 +169,47 @@ ef10_mcdi_vport_id(struct efhw_nic *nic, u32 aux_vport_in, u32* mcdi_vport_out)
 }
 
 
-static void ef10_nic_sw_ctor(struct efhw_nic *nic,
-                             const struct vi_resource_dimensions *res)
+static struct efhw_buddy_allocator *
+ef10_vi_allocator_ctor(int vi_min, int vi_lim)
+{
+  int rc;
+  struct efhw_buddy_allocator *vi_allocator = vzalloc(sizeof(*vi_allocator));
+  if( !vi_allocator )
+    return NULL;
+
+  rc = efhw_buddy_range_ctor(vi_allocator, vi_min, vi_lim);
+  if ( rc < 0 ) {
+    EFHW_ERR("%s: efhw_buddy_range_ctor(%d, %d) failed (%d)",
+             __FUNCTION__, vi_min, vi_lim, rc);
+    vfree(vi_allocator);
+    return NULL;
+  }
+  return vi_allocator;
+}
+
+
+static int ef10_nic_arch_extra_ctor(struct efhw_nic *nic, int min, int lim)
+{
+  struct ef10_aux_arch_extra *arch_extra;
+
+  EFHW_TRACE("%s:", __FUNCTION__);
+  arch_extra = kmalloc(sizeof(struct ef10_aux_arch_extra), GFP_KERNEL);
+  if( !arch_extra )
+    return -ENOMEM;
+
+  arch_extra->vi_allocator = ef10_vi_allocator_ctor(min, lim);
+  if( !arch_extra->vi_allocator ) {
+    kfree(arch_extra);
+    return -ENOMEM;
+  }
+
+  nic->arch_extra = arch_extra;
+  return 0;
+}
+
+
+static int ef10_nic_sw_ctor(struct efhw_nic *nic,
+                            const struct vi_resource_dimensions *res)
 {
   nic->q_sizes[EFHW_EVQ] = 512 | 1024 | 2048 | 4096 | 8192 | 16384 | 32768;
   nic->q_sizes[EFHW_TXQ] = 512 | 1024 | 2048;
@@ -200,6 +239,24 @@ static void ef10_nic_sw_ctor(struct efhw_nic *nic,
   nic->vi_base = res->vi_base;
   nic->vi_shift = res->vi_shift;
   nic->vi_stride = res->vi_stride;
+
+  return ef10_nic_arch_extra_ctor(nic, res->vi_min, res->vi_lim);
+}
+
+
+static void ef10_nic_sw_dtor(struct efhw_nic *nic)
+{
+  struct ef10_aux_arch_extra *arch_extra = nic->arch_extra;
+  EFHW_TRACE("%s:", __FUNCTION__);
+
+  if( arch_extra ) {
+    if( arch_extra->vi_allocator ) {
+      efhw_buddy_dtor(arch_extra->vi_allocator);
+      vfree(arch_extra->vi_allocator);
+      arch_extra->vi_allocator = NULL;
+    }
+    kfree(arch_extra);
+  }
 }
 
 
@@ -2443,6 +2500,7 @@ static int ef10_ctpio_addr(struct efhw_nic* nic, int instance,
 
 struct efhw_func_ops ef10aux_char_functional_units = {
 	.sw_ctor = ef10_nic_sw_ctor,
+	.sw_dtor = ef10_nic_sw_dtor,
 	.init_hardware = ef10_nic_init_hardware,
 	.post_reset = ef10_nic_tweak_hardware,
 	.release_hardware = ef10_nic_release_hardware,
