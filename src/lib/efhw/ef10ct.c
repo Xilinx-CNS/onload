@@ -23,6 +23,7 @@
 
 #include "etherfabric/internal/internal.h"
 
+#include "aux.h"
 #include "ef10ct.h"
 #include "sw_buffer_table.h"
 #include "mcdi_common.h"
@@ -45,9 +46,9 @@ int ef10ct_fw_rpc(struct efhw_nic *nic, struct efx_auxdev_rpc *cmd)
   struct efx_auxdev_client* cli;
 
   /* FIXME need to handle reset stuff here */
-  EFCT_PRE(dev, edev, cli, nic, rc);
+  AUX_PRE(dev, edev, cli, nic, rc);
   rc = edev->llct_ops->base_ops.fw_rpc(cli, cmd);
-  EFCT_POST(dev, edev, cli, nic, rc);
+  AUX_POST(dev, edev, cli, nic, rc);
 
   return rc;
 }
@@ -299,9 +300,9 @@ static int ef10ct_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc
   if( n_vis != 1 )
     return -EOPNOTSUPP;
 
-  /* Acquire ef10ct device as in EFCT_PRE to protect access to arch_extra which
+  /* Acquire ef10ct device as in AUX_PRE to protect access to arch_extra which
    * goes away after aux detach*/
-  cli = efhw_nic_acquire_ef10ct_device(nic);
+  cli = efhw_nic_acquire_auxdev(nic);
   if( cli == NULL )
     return -ENETDOWN;
 
@@ -312,7 +313,7 @@ static int ef10ct_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc
     rc = efhw_stack_vi_alloc(&ef10ct->vi_allocator.rx,
                              ef10ct_accept_rx_vi_constraints, ef10ct);
 
-  efhw_nic_release_ef10ct_device(nic, cli);
+  efhw_nic_release_auxdev(nic, cli);
 
   return rc;
 }
@@ -322,7 +323,7 @@ static void ef10ct_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis)
   struct efx_auxdev_client* cli;
 
   EFHW_ASSERT(n_vis == 1);
-  cli = efhw_nic_acquire_ef10ct_device(nic);
+  cli = efhw_nic_acquire_auxdev(nic);
   if( cli != NULL ) {
     struct efhw_nic_ef10ct* ef10ct = nic->arch_extra;
     /* If this vi is in the range [0..ef10ct->evq_n) it has a txq */
@@ -331,7 +332,7 @@ static void ef10ct_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis)
     else
       efhw_stack_vi_free(&ef10ct->vi_allocator.rx, instance);
 
-    efhw_nic_release_ef10ct_device(nic, cli);
+    efhw_nic_release_auxdev(nic, cli);
   }
 }
 
@@ -384,9 +385,9 @@ ef10ct_rx_buffer_post_register(struct efhw_nic* nic, int instance,
   struct efx_auxdev_client* cli;
   union efx_auxiliary_param_value val = {.io_addr.qid_in = instance};
 
-  EFCT_PRE(dev, edev, cli, nic, rc);
+  AUX_PRE(dev, edev, cli, nic, rc);
   rc = edev->llct_ops->base_ops.get_param(cli, EFX_AUXILIARY_RXQ_POST, &val);
-  EFCT_POST(dev, edev, cli, nic, rc);
+  AUX_POST(dev, edev, cli, nic, rc);
 
   if( rc < 0 )
     return rc;
@@ -782,9 +783,9 @@ ef10ct_vi_io_region(struct efhw_nic* nic, int instance, size_t* size_out,
   union efx_auxiliary_param_value val;
   int rc = 0;
 
-  EFCT_PRE(dev, edev, cli, nic, rc)
+  AUX_PRE(dev, edev, cli, nic, rc)
   rc = edev->llct_ops->base_ops.get_param(cli, EFX_AUXILIARY_EVQ_WINDOW, &val);
-  EFCT_POST(dev, edev, cli, nic, rc);
+  AUX_POST(dev, edev, cli, nic, rc);
 
   *size_out = val.evq_window.stride;
   *addr_out = val.evq_window.base;
@@ -805,9 +806,9 @@ ef10ct_design_parameters(struct efhw_nic *nic,
   int rc = 0;
 
   val.design_params = &params;
-  EFCT_PRE(dev, edev, cli, nic, rc)
+  AUX_PRE(dev, edev, cli, nic, rc)
   rc = edev->llct_ops->base_ops.get_param(cli, EFX_DESIGN_PARAM, &val);
-  EFCT_POST(dev, edev, cli, nic, rc);
+  AUX_POST(dev, edev, cli, nic, rc);
 
   if( rc < 0 )
     return rc;
@@ -865,9 +866,9 @@ ef10ct_ctpio_addr(struct efhw_nic* nic, int instance, resource_size_t* addr)
   int rc;
 
   val.io_addr.qid_in = instance;
-  EFCT_PRE(dev, edev, cli, nic, rc);
+  AUX_PRE(dev, edev, cli, nic, rc);
   rc = edev->llct_ops->base_ops.get_param(cli, EFX_AUXILIARY_CTPIO_WINDOW, &val);
-  EFCT_POST(dev, edev, cli, nic, rc);
+  AUX_POST(dev, edev, cli, nic, rc);
 
   /* Currently we assume throughout onload that we have a 4k region */
   if( (rc == 0) && (val.io_addr.size != 0x1000) )

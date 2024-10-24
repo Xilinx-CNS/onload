@@ -16,20 +16,6 @@ struct ef10_ef100_alloc_vi_constraints {
 	struct efhw_vi_constraints *evc;
 };
 
-static inline struct efx_auxdev_client*
-efhw_nic_acquire_auxdev(struct efhw_nic* nic)
-{
-  EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF10);
-  return efhw_nic_acquire_drv_device(nic);
-}
-
-static inline void
-efhw_nic_release_auxdev(struct efhw_nic* nic, struct efx_auxdev_client* cli)
-{
-  EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF10);
-  efhw_nic_release_drv_device(nic, cli);
-}
-
 #define EF10_EF100_RSS_INDIRECTION_TABLE_LEN 128
 #define EF10_EF100_RSS_KEY_LEN 40
 

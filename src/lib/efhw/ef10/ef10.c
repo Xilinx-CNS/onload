@@ -19,6 +19,7 @@
 
 #include <ci/efhw/ef10.h>
 #include <ci/efhw/mc_driver_pcol.h>
+#include "../aux.h"
 #include "../mcdi_common.h"
 #include "../ef10_ef100.h"
 
@@ -33,42 +34,6 @@ MODULE_PARM_DESC(force_ev_timer,
 #define MCDI_CHECK(op, rc, actual_len, rate_limit) \
 	ef10_mcdi_check_response(__func__, #op, (rc), op##_OUT_LEN, \
 				 (actual_len), (rate_limit))
-
-#define AUX_PRE(dev, auxdev, auxcli, nic, rc) \
-{ \
-  (dev) = efhw_nic_get_dev(nic); \
-  (auxdev) = to_efx_auxdev(to_auxiliary_dev(dev)); \
-  (auxcli) = efhw_nic_acquire_auxdev((nic));\
-  EFHW_ASSERT(!in_atomic()); \
-  \
-  if (!dev) { \
-    rc = -ENETDOWN; \
-  } \
-  else if ((nic)->resetting || (auxcli) == NULL) { \
-    /* [nic->resetting] means we have detected that we are in a reset.
-     * There is potentially a period after [nic->resetting] is cleared
-     * but before the aux client is re-enabled, during which time [auxcli]
-     * will be NULL. */ \
-    rc = -ENETDOWN; \
-  } \
-  else { \
-    /* Aux client handle is valid and we're not resetting, so issue
-     * the call. */ \
-
-#define AUX_POST(dev, auxdev, auxcli, nic, rc) \
-  \
-    /* If we see ENETDOWN here, we must be in the window between
-     * hardware being removed and being informed about this fact by
-     * the kernel. */ \
-    if ((rc) == -ENETDOWN) \
-      ci_atomic32_or(&(nic)->resetting, NIC_RESETTING_FLAG_VANISHED); \
-  } \
-  \
-  /* This is safe even if [auxcli] is NULL. */ \
-  efhw_nic_release_auxdev((nic), (auxcli)); \
-  put_device((dev)); \
-}
-
 
 /*----------------------------------------------------------------------------
  *
