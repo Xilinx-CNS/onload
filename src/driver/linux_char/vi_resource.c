@@ -337,11 +337,13 @@ efch_vi_rm_alloc(ci_resource_alloc_t* alloc, ci_resource_table_t* rt,
   if( rc < 0 )
     goto fail4;
 
-  rc = efhw_nic_superbuf_io_region(nic, &buf_io_size, &io_addr);
-  if( rc < 0 && rc != -EOPNOTSUPP )
-    goto fail4;
-  if( rc == -EOPNOTSUPP )
-      rc = 0;
+  if( virs->q[EFHW_RXQ].capacity ) {
+    rc = efhw_nic_superbuf_io_region(nic, &buf_io_size, &io_addr);
+    if( rc < 0 && rc != -EOPNOTSUPP )
+      goto fail4;
+    if( rc == -EOPNOTSUPP )
+        rc = 0;
+  }
 
   /* Initialise the outputs. */
   alloc_out = &alloc->u.vi_out;

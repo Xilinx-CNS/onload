@@ -286,39 +286,101 @@ ef10ct_nic_wakeup_request(struct efhw_nic *nic, volatile void __iomem* io_page,
 {
 }
 
-static bool ef10ct_accept_tx_vi_constraints(int instance, void* arg)
+static int ef10ct_alloc_evq(struct efhw_nic *nic)
 {
-  struct efhw_nic_ef10ct *ef10ct = arg;
-  return ef10ct->evq[instance].txq != EF10CT_EVQ_NO_TXQ;
+  struct efx_auxdev_client* cli;
+  struct efx_auxdev* edev;
+  struct device *dev;
+  int evq;
+
+  AUX_PRE(dev, edev, cli, nic, evq);
+  evq = edev->llct_ops->channel_alloc(cli);
+  AUX_POST(dev, edev, cli, nic, evq);
+
+  return evq;
+}
+
+static void ef10ct_free_evq(struct efhw_nic *nic, int evq)
+{
+  struct efx_auxdev_client* cli;
+  struct efx_auxdev* edev;
+  struct device *dev;
+  int rc;
+
+  AUX_PRE(dev, edev, cli, nic, rc);
+  edev->llct_ops->channel_free(cli, evq);
+  AUX_POST(dev, edev, cli, nic, rc);
+
+  /* Failure here will only occur in the case that the NIC is unavailable.
+   * If that's happened there's nothing to do - the queue is already gone and
+   * the upper layers will not restore it if the NIC comes back. */
+}
+
+static int ef10ct_alloc_txq(struct efhw_nic *nic)
+{
+  struct efx_auxdev_client* cli;
+  struct efx_auxdev* edev;
+  struct device *dev;
+  int txq;
+
+  AUX_PRE(dev, edev, cli, nic, txq);
+  txq = edev->llct_ops->txq_alloc(cli);
+  AUX_POST(dev, edev, cli, nic, txq);
+
+  return txq;
+}
+
+static int ef10ct_vi_alloc_hw(struct efhw_nic *nic,
+                              struct efhw_vi_constraints *evc, unsigned n_vis)
+{
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  int evq;
+  int evq_rc;
+  int txq_rc;
+
+  if( n_vis != 1 )
+    return -EOPNOTSUPP;
+
+  /* FIXME EF10CT re-allocation post reset needs consideration */
+
+  evq_rc = ef10ct_alloc_evq(nic);
+  evq = evq_rc;
+  EFHW_ASSERT(evq_rc < 0 || ef10ct->evq[evq].txq == EF10CT_EVQ_NO_TXQ);
+
+  if( evc->want_txq && evq >= 0 ) {
+    txq_rc = ef10ct_alloc_txq(nic);
+
+    if( txq_rc < 0 ) {
+      ef10ct_free_evq(nic, evq);
+      evq_rc = txq_rc;
+    }
+    else {
+      ef10ct->evq[evq].txq = txq_rc;
+    }
+  }
+
+  return evq_rc;
 }
 
 static bool ef10ct_accept_rx_vi_constraints(int instance, void* arg) {
   return true;
 }
 
-static int ef10ct_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc,
-                         unsigned n_vis)
+static int ef10ct_vi_alloc_sw(struct efhw_nic *nic,
+                              struct efhw_vi_constraints *evc, unsigned n_vis)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
-  struct efx_auxdev_client* cli;
-  int rc = 0;
-
-  if( n_vis != 1 )
-    return -EOPNOTSUPP;
-
   /* Acquire ef10ct device as in AUX_PRE to protect access to arch_extra which
    * goes away after aux detach*/
-  cli = efhw_nic_acquire_auxdev(nic);
+  struct efx_auxdev_client* cli = efhw_nic_acquire_auxdev(nic);
+  int rc;
+
   if( cli == NULL )
     return -ENETDOWN;
 
   mutex_lock(&ef10ct->vi_allocator.lock);
-  if( evc->want_txq )
-    rc = efhw_stack_vi_alloc(&ef10ct->vi_allocator.tx,
-                             ef10ct_accept_tx_vi_constraints, ef10ct);
-  else
-    rc = efhw_stack_vi_alloc(&ef10ct->vi_allocator.rx,
-                             ef10ct_accept_rx_vi_constraints, ef10ct);
+  rc = efhw_stack_vi_alloc(&ef10ct->vi_allocator.rx,
+                           ef10ct_accept_rx_vi_constraints, ef10ct);
   mutex_unlock(&ef10ct->vi_allocator.lock);
 
   efhw_nic_release_auxdev(nic, cli);
@@ -326,13 +388,42 @@ static int ef10ct_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc
   return rc;
 }
 
-static void ef10ct_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis)
+static int ef10ct_vi_alloc(struct efhw_nic *nic,
+                           struct efhw_vi_constraints *evc, unsigned n_vis)
 {
+  if( evc->want_txq )
+    return ef10ct_vi_alloc_hw(nic, evc, n_vis);
+  else
+    return ef10ct_vi_alloc_sw(nic, evc, n_vis);
+}
+
+static void ef10ct_vi_free_hw(struct efhw_nic *nic, int instance)
+{
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct efx_auxdev_client* cli;
+  struct efx_auxdev* edev;
+  struct device *dev;
+  int txq = ef10ct->evq[instance].txq;
+  int rc;
 
   EFHW_WARN("%s: q %d", __func__, instance);
-  EFHW_ASSERT(n_vis == 1);
-  cli = efhw_nic_acquire_auxdev(nic);
+
+  AUX_PRE(dev, edev, cli, nic, rc);
+  edev->llct_ops->channel_free(cli, instance);
+  AUX_POST(dev, edev, cli, nic, rc);
+
+  if( txq != EF10CT_EVQ_NO_TXQ) {
+    AUX_PRE(dev, edev, cli, nic, rc);
+    edev->llct_ops->txq_free(cli, txq);
+    AUX_POST(dev, edev, cli, nic, rc);
+  }
+
+  ef10ct->evq[instance].txq = EF10CT_EVQ_NO_TXQ;
+}
+
+static void ef10ct_vi_free_sw(struct efhw_nic *nic, int instance)
+{
+  struct efx_auxdev_client* cli = efhw_nic_acquire_auxdev(nic);
   if( cli != NULL ) {
     struct efhw_nic_ef10ct* ef10ct = nic->arch_extra;
     /* If this vi is in the range [0..ef10ct->evq_n) it has a txq */
@@ -345,6 +436,18 @@ static void ef10ct_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis)
 
     efhw_nic_release_auxdev(nic, cli);
   }
+}
+
+static void ef10ct_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis)
+{
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+
+  EFHW_ASSERT(n_vis == 1);
+
+  if( instance < ef10ct->evq_n )
+    ef10ct_vi_free_hw(nic, instance);
+  else
+    ef10ct_vi_free_sw(nic, instance);
 }
 
 /*----------------------------------------------------------------------------
@@ -360,6 +463,9 @@ ef10ct_dmaq_tx_q_init(struct efhw_nic *nic,
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct efhw_nic_ef10ct_evq *ef10ct_evq = &ef10ct->evq[txq_params->evq];
+  struct efx_auxdev_client* cli;
+  struct efx_auxdev* edev;
+  struct device *dev;
   struct efx_auxiliary_txq_params params = {
     .evq = txq_params->evq,
     .qid = ef10ct_evq->txq,
@@ -378,14 +484,15 @@ ef10ct_dmaq_tx_q_init(struct efhw_nic *nic,
   dummy.inbuf = (void*)&params;
   dummy.outlen = sizeof(struct efx_auxiliary_txq_params);
   dummy.outbuf = (void*)&params;
+
+  AUX_PRE(dev, edev, cli, nic, rc);
   rc = ef10ct_fw_rpc(nic, &dummy);
+  AUX_POST(dev, edev, cli, nic, rc);
 
-  if( rc >= 0 ) {
-    txq_params->qid_out = rc;
-    rc = 0;
-  }
+  if( rc == 0 )
+    txq_params->qid_out = params.qid;
 
-  return 0;
+  return rc;
 }
 
 static int
@@ -446,6 +553,10 @@ ef10ct_dmaq_rx_q_init(struct efhw_nic *nic,
       /* Not supported for now */
       return -EINVAL;
     }
+  }
+  else {
+    EFHW_WARN("%s: Not initting dummy rxq: evq %d", __func__, params.evq);
+    return 0;
   }
 
   dummy.cmd = MC_CMD_INIT_RXQ;
