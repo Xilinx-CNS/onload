@@ -45,6 +45,8 @@ int ef10ct_fw_rpc(struct efhw_nic *nic, struct efx_auxdev_rpc *cmd)
   struct efx_auxdev* edev;
   struct efx_auxdev_client* cli;
 
+  EFHW_WARN("%s", __func__);
+
   /* FIXME need to handle reset stuff here */
   AUX_PRE(dev, edev, cli, nic, rc);
   rc = edev->llct_ops->base_ops.fw_rpc(cli, cmd);
@@ -206,6 +208,8 @@ ef10ct_nic_event_queue_enable(struct efhw_nic *nic,
 #endif
   struct efx_auxdev_rpc dummy;
 
+  EFHW_WARN("%s: evq %d", __func__, efhw_params->evq);
+
   /* This is a dummy EVQ, so nothing to do. */
   if( efhw_params->evq >= ef10ct->evq_n )
     return 0;
@@ -253,6 +257,8 @@ ef10ct_nic_event_queue_disable(struct efhw_nic *nic,
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct efhw_nic_ef10ct_evq *ef10ct_evq;
   struct efx_auxdev_rpc dummy;
+
+  EFHW_WARN("%s: evq %d", __func__, evq);
 
   /* This is a dummy EVQ, so nothing to do. */
   if( evq >= ef10ct->evq_n )
@@ -324,6 +330,7 @@ static void ef10ct_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis)
 {
   struct efx_auxdev_client* cli;
 
+  EFHW_WARN("%s: q %d", __func__, instance);
   EFHW_ASSERT(n_vis == 1);
   cli = efhw_nic_acquire_auxdev(nic);
   if( cli != NULL ) {
@@ -361,6 +368,8 @@ ef10ct_dmaq_tx_q_init(struct efhw_nic *nic,
   int rc;
   struct efx_auxdev_rpc dummy;
 
+  EFHW_WARN("%s: txq %d evq %d", __func__, params.qid, params.evq);
+
   EFHW_ASSERT(txq_params->evq < ef10ct->evq_n);
   EFHW_ASSERT(params.qid != EFCT_EVQ_NO_TXQ);
 
@@ -388,6 +397,8 @@ ef10ct_rx_buffer_post_register(struct efhw_nic* nic, int instance,
   struct efx_auxdev* edev;
   struct efx_auxdev_client* cli;
   union efx_auxiliary_param_value val = {.io_addr.qid_in = instance};
+
+  EFHW_WARN("%s: instance %d", __func__, instance);
 
   AUX_PRE(dev, edev, cli, nic, rc);
   rc = edev->llct_ops->base_ops.get_param(cli, EFX_AUXILIARY_RXQ_POST, &val);
@@ -423,6 +434,7 @@ ef10ct_dmaq_rx_q_init(struct efhw_nic *nic,
   struct efx_auxdev_rpc dummy;
   resource_size_t register_phys_addr;
 
+  EFHW_WARN("%s: evq %d", __func__, params.evq);
 
   if( rxq_params->evq >= ef10ct->evq_n ) {
     /* We are using a dummy vi, so use a shared kernel evq. */
