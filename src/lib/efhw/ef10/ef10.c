@@ -202,6 +202,7 @@ static int ef10_nic_arch_extra_ctor(struct efhw_nic *nic, int min, int lim)
     kfree(arch_extra);
     return -ENOMEM;
   }
+  mutex_init(&arch_extra->vi_alloc_lock);
 
   nic->arch_extra = arch_extra;
   return 0;
@@ -1032,8 +1033,10 @@ int ef10_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc,
       .nic = nic,
       .evc = evc,
     };
+    mutex_lock(&arch_extra->vi_alloc_lock);
     rc = efhw_buddy_alloc_special(vi_allocator, order,
                                   ef10_accept_vi_constraints, &avc);
+    mutex_unlock(&arch_extra->vi_alloc_lock);
     efhw_nic_release_auxdev(nic, cli);
   }
   else
@@ -1050,7 +1053,9 @@ void ef10_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis) {
     unsigned order = fls(n_vis - 1);
     struct ef10_aux_arch_extra *arch_extra = nic->arch_extra;
     struct efhw_buddy_allocator *vi_allocator = arch_extra->vi_allocator;
+    mutex_lock(&arch_extra->vi_alloc_lock);
     efhw_buddy_free(vi_allocator, instance, order);
+    mutex_unlock(&arch_extra->vi_alloc_lock);
     efhw_nic_release_auxdev(nic, cli);
   }
 }

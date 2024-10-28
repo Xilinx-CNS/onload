@@ -301,12 +301,14 @@ static int ef10ct_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc
   if( cli == NULL )
     return -ENETDOWN;
 
+  mutex_lock(&ef10ct->vi_allocator.lock);
   if( evc->want_txq )
     rc = efhw_stack_vi_alloc(&ef10ct->vi_allocator.tx,
                              ef10ct_accept_tx_vi_constraints, ef10ct);
   else
     rc = efhw_stack_vi_alloc(&ef10ct->vi_allocator.rx,
                              ef10ct_accept_rx_vi_constraints, ef10ct);
+  mutex_unlock(&ef10ct->vi_allocator.lock);
 
   efhw_nic_release_ef10ct_device(nic, cli);
 
@@ -322,10 +324,12 @@ static void ef10ct_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis)
   if( cli != NULL ) {
     struct efhw_nic_ef10ct* ef10ct = nic->arch_extra;
     /* If this vi is in the range [0..ef10ct->evq_n) it has a txq */
+    mutex_lock(&ef10ct->vi_allocator.lock);
     if( instance < ef10ct->evq_n )
       efhw_stack_vi_free(&ef10ct->vi_allocator.tx, instance);
     else
       efhw_stack_vi_free(&ef10ct->vi_allocator.rx, instance);
+    mutex_unlock(&ef10ct->vi_allocator.lock);
 
     efhw_nic_release_ef10ct_device(nic, cli);
   }

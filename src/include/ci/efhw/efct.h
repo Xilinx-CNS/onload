@@ -225,6 +225,9 @@ struct efhw_nic_efct {
   struct {
     struct efhw_stack_vi_allocator tx;
     struct efhw_stack_vi_allocator rx;
+#ifdef __KERNEL__
+    struct mutex lock;
+#endif
   } vi_allocator;
   /* ZF emu includes this file from UL */
 #ifdef __KERNEL__

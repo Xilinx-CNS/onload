@@ -15,6 +15,7 @@ struct efhw_buddy_allocator;
 struct efx_auxdev_dl_vi_resources;
 struct ef10_aux_arch_extra {
   struct efhw_buddy_allocator *vi_allocator;
+  struct mutex vi_alloc_lock;
   struct efx_auxdev_dl_vi_resources *dl_res;
 };
 
