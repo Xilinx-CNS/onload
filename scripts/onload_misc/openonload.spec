@@ -125,10 +125,13 @@ License   	: Various
 URL             : http://www.openonload.org/
 Vendor		: Xilinx, Inc.
 Provides	: openonload = %{version}-%{release}
+Provides	: user(onload_cplane)
+Provides	: group(onload_cplane)
 Source0		: openonload-%{pkgversion}.tgz
 BuildRoot   	: %{_builddir}/%{name}-root
 AutoReqProv	: no
 ExclusiveArch	: i386 i586 i686 x86_64 ppc64
+Requires(pre)	: shadow-utils
 BuildRequires	: gawk gcc sed make bash libpcap libpcap-devel automake libtool autoconf libcap-devel
 # The glibc, python-devel, and libcap packages we need depend on distro and platform
 %if %{redhat}
@@ -248,7 +251,7 @@ mkdir -p "$i_prefix/etc/depmod.d"
   %{?debug:--debug} %{?setuid:--setuid} \
   --userfiles --modprobe --modulesloadd \
   --kernelfiles --kernelver "%{kernel}" \
-  --udev
+  --udev %{?_sysusersdir:--adduser}
 docdir="$i_prefix%{_defaultdocdir}/%{name}-%{pkgversion}"
 mkdir -p "$docdir"
 install -m 644 LICENSE* README* ChangeLog* ReleaseNotes* "$docdir"
@@ -258,6 +261,13 @@ rm -f "$i_prefix/usr/local/lib/modules-load.d/onload.conf"
 mkdir -p "$i_prefix/usr/share/onload"
 cp ./scripts/onload_misc/onload_modules-load.d.conf $i_prefix/usr/share/onload/onload_modules-load.d.conf
 cp ./scripts/onload_misc/sysconfig_onload_modules $i_prefix/usr/share/onload/sysconfig_onload_modules
+
+%pre
+getent group onload_cplane >/dev/null || groupadd -r onload_cplane
+getent passwd onload_cplane >/dev/null || \
+  useradd -r -g onload_cplane -M -d /run/openonload -s /usr/sbin/nologin \
+  -c "%{name} Control Plane" onload_cplane
+exit 0
 
 %post
 
@@ -270,7 +280,6 @@ else
   cp /usr/share/onload/sysconfig_onload_modules /etc/sysconfig/modules/onload.modules
 fi
 
-/sbin/onload_tool add_cplane_user
 ldconfig -n /usr/lib /usr/lib64
 
 %preun
@@ -345,7 +354,7 @@ rm -fR $RPM_BUILD_ROOT
 %attr(644, -, -) %{_sysconfdir}/depmod.d/onload.conf
 %config(noreplace) %attr(644, -, -) %{_sysconfdir}/sysconfig/openonload
 /usr/lib/udev/rules.d/*
-
+%{?_sysusersdir:%_sysusersdir/onload.conf}
 /usr/share/onload/onload_modules-load.d.conf
 /usr/share/onload/sysconfig_onload_modules
 

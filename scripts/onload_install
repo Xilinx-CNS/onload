@@ -333,13 +333,15 @@ install_ldconfig() {
 }
 
 
-# RPM/DEB call onload_tool directly
 install_adduser() {
-  if [ ! -f "$i_sbin/onload_tool" ]; then
-    fail "Cannot perform --adduser without onload_tool installed. Use --userfiles"
+  if [ -n "$i_prefix" ] || [ -f "$i_usr/lib/sysusers.d/" ]; then
+    install_f onload_misc/onload.sysusers "$i_usr/lib/sysusers.d/onload.conf"
   fi
 
-  try $do "$i_sbin/onload_tool" ${verbose:+-v} add_cplane_user
+  if [ -z "$i_prefix" ]; then
+    [ ! -x "$i_sbin/onload_tool" ] && fail "Cannot perform --adduser without onload_tool installed. Use --userfiles"
+    try $do "$i_sbin/onload_tool" ${verbose:+-v} set_cplane_user
+  fi
 }
 
 

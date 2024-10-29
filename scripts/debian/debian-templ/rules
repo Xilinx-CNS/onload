@@ -197,6 +197,7 @@ binary-arch: build install
 	dh_lintian
 	dh_testdir -a
 	dh_testroot -a
+	dh_installsysusers -a --name=onload || dh_sysuser -a onload_cplane home=/run/openonload
 #	dh_installdebconf -a
 	dh_installdocs -a
 	dh_installexamples -a
