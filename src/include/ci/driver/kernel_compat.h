@@ -502,6 +502,15 @@ static inline int efrm_follow_pfn(struct vm_area_struct *vma,
 }
 #elif defined(EFRM_HAVE_FOLLOW_PTE)
 /* exported in linux 5.10+ */
+
+#ifdef EFRM_HAVE_FOLLOW_PTE_VMA
+/* linux >= 6.10 */
+#define efrm_follow_pte follow_pte
+#else
+#define efrm_follow_pte(vma, addr, ptep, ptl) \
+  follow_pte(vma->vm_mm, addr, ptep, ptl)
+#endif /* EFRM_HAVE_FOLLOW_PTE_VMA */
+
 static inline int efrm_follow_pfn(struct vm_area_struct *vma,
                                   unsigned long addr, unsigned long *pfn)
 {
@@ -514,7 +523,7 @@ static inline int efrm_follow_pfn(struct vm_area_struct *vma,
 	if( !(vma->vm_flags & (VM_IO | VM_PFNMAP)) )
 		return -EINVAL;
 
-	rc = follow_pte(vma->vm_mm, addr, &ptep, &ptl);
+	rc = efrm_follow_pte(vma, addr, &ptep, &ptl);
 	if( rc == 0 ) {
 		*pfn = pte_pfn(ptep_get(ptep));
 		pte_unmap_unlock(ptep, ptl);
