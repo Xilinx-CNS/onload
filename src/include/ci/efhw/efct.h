@@ -22,19 +22,25 @@ typedef void efhw_efct_rxq_int_wake_func_t(struct efhw_efct_rxq*);
  * in a single superbuf */
 #define EFCT_INVALID_PKT_SEQNO (~0u)
 
-struct efhw_efct_rxq {
-  struct efhw_efct_rxq *next;
+struct efhw_efct_krxq {
   struct efab_efct_rxq_uk_shm_q *shm;
-  unsigned qid;
   bool destroy;
   uint32_t next_sbuf_seq;
   size_t n_hugepages;
-  uint32_t wake_at_seqno;
   uint32_t current_owned_superbufs;
   uint32_t max_allowed_superbufs;
   CI_BITS_DECLARE(owns_superbuf, CI_EFCT_MAX_SUPERBUFS);
   efhw_efct_rxq_free_func_t *freer;
+};
+
+struct efhw_efct_rxq {
+  struct efhw_efct_rxq *next;
+  unsigned qid;
+  uint32_t wake_at_seqno;
   unsigned wakeup_instance;
+  union {
+    struct efhw_efct_krxq krxq;
+  };
 };
 
 /* TODO EFCT find somewhere better to put this */

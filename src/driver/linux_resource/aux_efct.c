@@ -130,7 +130,7 @@ static int efct_handle_event(void *driver_data,
 
       q->time_sync = event->value;
       for( app = q->live_apps; app; app = app->next ) {
-        CI_WRITE_ONCE(app->shm->time_sync, event->value);
+        CI_WRITE_ONCE(app->krxq.shm->time_sync, event->value);
         spent += 1;
       }
       return spent;
@@ -226,13 +226,13 @@ static void efct_hugepage_list_changed(void *driver_data, int rxq)
   struct efhw_efct_rxq *app;
 
   for( app = q->live_apps; app; app = app->next ) {
-    if( ! app->destroy ) {
-      unsigned new_gen = app->shm->config_generation + 1;
+    if( ! app->krxq.destroy ) {
+      unsigned new_gen = app->krxq.shm->config_generation + 1;
       /* Avoid 0 so that the reader can always use it as a 'not yet initialised'
       * marker. */
       if( new_gen == 0 )
         ++new_gen;
-      CI_WRITE_ONCE(app->shm->config_generation, new_gen);
+      CI_WRITE_ONCE(app->krxq.shm->config_generation, new_gen);
     }
   }
 }

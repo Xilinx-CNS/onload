@@ -28,48 +28,48 @@ static bool post_superbuf_to_app(struct efhw_nic_efct_rxq* q, struct efhw_efct_r
   uint32_t removed;
 
 
-  if( app->destroy )
+  if( app->krxq.destroy )
     return false;
 
-  if( app->next_sbuf_seq == q->sbufs.added )
+  if( app->krxq.next_sbuf_seq == q->sbufs.added )
     /* nothing new */
     return false;
 
-  if( app->current_owned_superbufs >= app->max_allowed_superbufs ) {
-    ++app->shm->stats.too_many_owned;
+  if( app->krxq.current_owned_superbufs >= app->krxq.max_allowed_superbufs ) {
+    ++app->krxq.shm->stats.too_many_owned;
     return false;
   }
 
-  added = CI_READ_ONCE(app->shm->rxq.added);
-  removed = CI_READ_ONCE(app->shm->rxq.removed);
-  if( (uint32_t)(added - removed) >= CI_ARRAY_SIZE(app->shm->rxq.q) ) {
-    ++app->shm->stats.no_rxq_space;
+  added = CI_READ_ONCE(app->krxq.shm->rxq.added);
+  removed = CI_READ_ONCE(app->krxq.shm->rxq.removed);
+  if( (uint32_t)(added - removed) >= CI_ARRAY_SIZE(app->krxq.shm->rxq.q) ) {
+    ++app->krxq.shm->stats.no_rxq_space;
     return false;
   }
 
   /* pick the next buffer the app wants ... unless there is something wrong
    * (e.g. the app got stalled) in that case pick the oldest sbuf we have
    */
-  if( SEQ_LE(q->sbufs.oldest_app_seq, app->next_sbuf_seq) ) {
-    sbuf_seq = app->next_sbuf_seq;
+  if( SEQ_LE(q->sbufs.oldest_app_seq, app->krxq.next_sbuf_seq) ) {
+    sbuf_seq = app->krxq.next_sbuf_seq;
   } else {
     sbuf_seq = q->sbufs.oldest_app_seq;
-    app->shm->stats.skipped_bufs += (q->sbufs.oldest_app_seq - app->next_sbuf_seq);
+    app->krxq.shm->stats.skipped_bufs += (q->sbufs.oldest_app_seq - app->krxq.next_sbuf_seq);
     /* If an app has fallen behind, we should never advance up to added */
     EFHW_ASSERT(SEQ_LT(q->sbufs.oldest_app_seq, q->sbufs.added));
   }
 
   sbufs_q_entry = q->sbufs.q[sbuf_seq % CI_ARRAY_SIZE(q->sbufs.q)];
   sbid = sbufs_q_entry.sbid;
-  app->next_sbuf_seq = sbuf_seq + 1;
+  app->krxq.next_sbuf_seq = sbuf_seq + 1;
 
   ++q->superbuf_refcount[sbid];
-  ++app->current_owned_superbufs;
-  EFHW_ASSERT(!ci_bit_test(app->owns_superbuf, sbid));
-  __ci_bit_set(app->owns_superbuf, sbid);
-  RING_FIFO_ENTRY(app->shm->rxq.q, added) = sbufs_q_entry;
+  ++app->krxq.current_owned_superbufs;
+  EFHW_ASSERT(!ci_bit_test(app->krxq.owns_superbuf, sbid));
+  __ci_bit_set(app->krxq.owns_superbuf, sbid);
+  RING_FIFO_ENTRY(app->krxq.shm->rxq.q, added) = sbufs_q_entry;
   ci_wmb();
-  CI_WRITE_ONCE(app->shm->rxq.added, added + 1);
+  CI_WRITE_ONCE(app->krxq.shm->rxq.added, added + 1);
   return true;
 }
 
@@ -89,11 +89,11 @@ static bool drop_sbuf_ref(struct xlnx_efct_device *edev,
 static uint32_t next_app_seq_min(struct efhw_efct_rxq *app,
                          struct efhw_nic_efct_rxq* q,
                          uint32_t min) {
-  if( SEQ_LT(app->next_sbuf_seq, q->sbufs.oldest_app_seq) ) {
-    app->shm->stats.skipped_bufs += q->sbufs.oldest_app_seq - app->next_sbuf_seq;
-    app->next_sbuf_seq = q->sbufs.oldest_app_seq;
+  if( SEQ_LT(app->krxq.next_sbuf_seq, q->sbufs.oldest_app_seq) ) {
+    app->krxq.shm->stats.skipped_bufs += q->sbufs.oldest_app_seq - app->krxq.next_sbuf_seq;
+    app->krxq.next_sbuf_seq = q->sbufs.oldest_app_seq;
   }
-  return SEQ_MIN(app->next_sbuf_seq, min);
+  return SEQ_MIN(app->krxq.next_sbuf_seq, min);
 }
 
 static void advance_oldest_app_seq(struct xlnx_efct_device *edev,
@@ -162,16 +162,16 @@ static void finished_with_superbuf(struct xlnx_efct_device *edev,
                                    struct efhw_nic_efct_rxq* q,
                                    struct efhw_efct_rxq* app, int sbid)
 {
-  EFHW_ASSERT(app->current_owned_superbufs > 0);
+  EFHW_ASSERT(app->krxq.current_owned_superbufs > 0);
   EFHW_ASSERT(q->superbuf_refcount[sbid] > 0);
   /* check for wrap around, using max number of references <= CI_EFCT_MAX_SUPERBUFS
    * as clients are limited by number of superbufs */
   EFHW_ASSERT(q->superbuf_refcount[sbid] <= CI_EFCT_MAX_SUPERBUFS);
-  EFHW_ASSERT(ci_bit_test(app->owns_superbuf, sbid));
-  __ci_bit_clear(app->owns_superbuf, sbid);
-  --app->current_owned_superbufs;
+  EFHW_ASSERT(ci_bit_test(app->krxq.owns_superbuf, sbid));
+  __ci_bit_clear(app->krxq.owns_superbuf, sbid);
+  --app->krxq.current_owned_superbufs;
   drop_sbuf_ref(edev, client, qid, q, sbid);
-  EFHW_ASSERT(app->current_owned_superbufs < app->max_allowed_superbufs);
+  EFHW_ASSERT(app->krxq.current_owned_superbufs < app->krxq.max_allowed_superbufs);
   /* perhaps we can feed more buffer(s) to the app */
   if(post_superbuf_to_app(q, app))
     update_oldest_app_seq(edev, client, qid, q);
@@ -185,17 +185,17 @@ static void reap_superbufs_from_apps(struct xlnx_efct_device *edev,
 
   for( pprev = &q->live_apps; *pprev; ) {
     struct efhw_efct_rxq *app = *pprev;
-    if( app->destroy ) {
+    if( app->krxq.destroy ) {
       int sbid;
 
-      ci_bit_for_each_set(sbid, app->owns_superbuf, CI_EFCT_MAX_SUPERBUFS)
+      ci_bit_for_each_set(sbid, app->krxq.owns_superbuf, CI_EFCT_MAX_SUPERBUFS)
         finished_with_superbuf(edev, client, qid, q, app, sbid);
-      EFHW_ASSERT(app->current_owned_superbufs == 0);
+      EFHW_ASSERT(app->krxq.current_owned_superbufs == 0);
 
       /* Now this app is destroyed, its donated sbufs are gone and so
        * we must free sbufs until we have an appropriate amount. */
       *pprev = app->next;
-      q->apps_max_sbufs -= app->max_allowed_superbufs;
+      q->apps_max_sbufs -= app->krxq.max_allowed_superbufs;
       while( SEQ_LT(q->sbufs.oldest_app_seq, q->sbufs.removed) &&
              q->total_sbufs > q->apps_max_sbufs )
         skip_sbufs(edev, client, qid, q);
@@ -203,21 +203,21 @@ static void reap_superbufs_from_apps(struct xlnx_efct_device *edev,
       schedule_work(&q->destruct_wq);
     }
     else {
-      uint32_t added = CI_READ_ONCE(app->shm->freeq.added);
-      uint32_t removed = CI_READ_ONCE(app->shm->freeq.removed);
-      int maxloop = CI_ARRAY_SIZE(app->shm->freeq.q);
+      uint32_t added = CI_READ_ONCE(app->krxq.shm->freeq.added);
+      uint32_t removed = CI_READ_ONCE(app->krxq.shm->freeq.removed);
+      int maxloop = CI_ARRAY_SIZE(app->krxq.shm->freeq.q);
       if( removed != added ) {
         ci_rmb();
         while( removed != added && maxloop-- ) {
-          uint16_t id = CI_READ_ONCE(RING_FIFO_ENTRY(app->shm->freeq.q, removed));
+          uint16_t id = CI_READ_ONCE(RING_FIFO_ENTRY(app->krxq.shm->freeq.q, removed));
           ++removed;
 
           /* Validate app isn't being malicious: */
-          if( id < CI_EFCT_MAX_SUPERBUFS && ci_bit_test(app->owns_superbuf, id) )
+          if( id < CI_EFCT_MAX_SUPERBUFS && ci_bit_test(app->krxq.owns_superbuf, id) )
             finished_with_superbuf(edev, client, qid, q, app, id);
         }
         ci_wmb();
-        CI_WRITE_ONCE(app->shm->freeq.removed, removed);
+        CI_WRITE_ONCE(app->krxq.shm->freeq.removed, removed);
       }
       pprev = &(*pprev)->next;
     }
@@ -242,10 +242,10 @@ static void activate_new_apps(struct efhw_nic_efct_rxq *q)
          * x3net's rollover_rxq calls our efct_buffer_start
          * which calls this function. And we rely on x3net's rollover_rxq behaviour
          * for corner cases. */
-        app->next_sbuf_seq = q->sbufs.added;
-        app->shm->time_sync = q->time_sync;
+        app->krxq.next_sbuf_seq = q->sbufs.added;
+        app->krxq.shm->time_sync = q->time_sync;
         last = app;
-        q->apps_max_sbufs += app->max_allowed_superbufs;
+        q->apps_max_sbufs += app->krxq.max_allowed_superbufs;
       }
       last->next = q->live_apps;
       q->live_apps = new_apps;
@@ -261,8 +261,8 @@ void efct_destruct_apps_work(struct work_struct* work)
     ci_xchg_uintptr(&q->destroy_apps, (ci_uintptr_t) (NULL));
   while( app ) {
     struct efhw_efct_rxq *next = app->next;
-    EFHW_ASSERT(app->current_owned_superbufs == 0);
-    app->freer(app);
+    EFHW_ASSERT(app->krxq.current_owned_superbufs == 0);
+    app->krxq.freer(app);
     app = next;
   }
 }
@@ -348,9 +348,9 @@ __efct_nic_rxq_bind(struct xlnx_efct_device* edev,
   int rc;
 
 
-  rxq->n_hugepages = n_hugepages;
-  rxq->max_allowed_superbufs = n_hugepages * CI_EFCT_SUPERBUFS_PER_PAGE;
-  rxq->shm = shm;
+  rxq->krxq.n_hugepages = n_hugepages;
+  rxq->krxq.max_allowed_superbufs = n_hugepages * CI_EFCT_SUPERBUFS_PER_PAGE;
+  rxq->krxq.shm = shm;
   rxq->wakeup_instance = wakeup_instance;
   rxq->wake_at_seqno = EFCT_INVALID_PKT_SEQNO;
 
@@ -391,10 +391,10 @@ __efct_nic_rxq_free(struct xlnx_efct_device* edev,
                     struct efhw_efct_rxq *rxq,
                     efhw_efct_rxq_free_func_t *freer)
 {
-  rxq->shm->superbuf_pkts = 0;
-  rxq->destroy = true;
-  rxq->freer = freer;
-  edev->ops->free_rxq(cli, rxq->qid, rxq->n_hugepages);
+  rxq->krxq.shm->superbuf_pkts = 0;
+  rxq->krxq.destroy = true;
+  rxq->krxq.freer = freer;
+  edev->ops->free_rxq(cli, rxq->qid, rxq->krxq.n_hugepages);
 }
 
 #endif
