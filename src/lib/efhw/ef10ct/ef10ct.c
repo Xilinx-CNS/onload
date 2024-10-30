@@ -527,6 +527,20 @@ ef10ct_superbuf_io_region(struct efhw_nic* nic, size_t* size_out,
   return ef10ct_rx_buffer_post_register(nic, 0, addr_out);
 }
 
+static int
+ef10ct_shared_rxq_bind(struct efhw_nic* nic,
+                       struct efhw_shared_bind_params *params)
+{
+  EFHW_WARN("%s: rxq %d", __func__, params->qid);
+  return 0;
+}
+
+static void
+ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
+                         efhw_efct_rxq_free_func_t *freer)
+{
+}
+
 static int 
 ef10ct_dmaq_rx_q_init(struct efhw_nic *nic,
                       struct efhw_dmaq_params *rxq_params)
@@ -1102,6 +1116,8 @@ struct efhw_func_ops ef10ct_char_functional_units = {
   .post_superbuf =  ef10ct_rxq_post_superbuf,
   .design_parameters = ef10ct_design_parameters,
   .max_shared_rxqs = ef10ct_max_shared_rxqs,
+  .shared_rxq_bind = ef10ct_shared_rxq_bind,
+  .shared_rxq_unbind = ef10ct_shared_rxq_unbind,
 };
 
 #endif

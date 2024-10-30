@@ -28,6 +28,12 @@ void* mmap(void* p, size_t l, int pr, int fl, int fd, off_t off)
   return real_mmap(p, l, pr, fl, fd, off);
 }
 
+/* Used for ci_resource_alloc */
+int ioctl (int __fd, unsigned long int __request, ...)
+{
+  return 0;
+}
+
 static const size_t sbufs_per_rxq = CI_EFCT_MAX_SUPERBUFS;
 static const size_t sbuf_bytes_per_rxq = sbufs_per_rxq * EFCT_RX_SUPERBUF_BYTES;
 

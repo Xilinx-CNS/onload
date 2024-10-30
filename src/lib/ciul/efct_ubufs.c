@@ -40,6 +40,9 @@ struct efct_ubufs_rxq
 
   /* Buffer memory region */
   ef_memreg memreg;
+
+  /* shared queue resource */
+  unsigned resource_id;
 };
 
 struct efct_ubufs
@@ -267,6 +270,7 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd, unsigned n_superb
   size_t map_bytes;
   struct efct_ubufs* ubufs = get_ubufs(vi);
   struct efct_ubufs_rxq* rxq;
+  ci_resource_alloc_t ra;
 
   int flags = (fd < 0 ? MAP_PRIVATE | MAP_ANONYMOUS : MAP_SHARED);
 
@@ -276,6 +280,22 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd, unsigned n_superb
   ix = efct_vi_find_free_rxq(vi, qid);
   if( ix < 0 )
     return ix;
+  rxq = &ubufs->q[ix];
+
+  ef_vi_init_resource_alloc(&ra, EFRM_RESOURCE_EFCT_RXQ);
+  ra.u.rxq.in_abi_version = CI_EFCT_SWRXQ_ABI_VERSION;
+  ra.u.rxq.in_flags = EFCH_EFCT_RXQ_FLAG_UBUF;
+  ra.u.rxq.in_qid = qid;
+  ra.u.rxq.in_shm_ix = -1;
+  ra.u.rxq.in_vi_rs_id = efch_make_resource_id(vi->vi_resource_id);
+  ra.u.rxq.in_timestamp_req = true;
+  rc = ci_resource_alloc(vi->dh, &ra);
+  if( rc < 0 ) {
+    LOGVV(ef_log("%s: ci_resource_alloc rxq %d", __FUNCTION__, rc));
+    return rc;
+  }
+  rxq->resource_id = ra.out_id.index;
+  /* FIXME SCJ cleanup on failure */
 
   map_bytes = CI_ROUND_UP((size_t)n_superbufs * EFCT_RX_SUPERBUF_BYTES,
                           CI_HUGEPAGE_SIZE);
@@ -291,7 +311,6 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd, unsigned n_superb
     return -ENOMEM;
   }
 
-  rxq = &ubufs->q[ix];
   rc = ef_shrub_init_pool(n_superbufs, &rxq->buffer_pool);
   if( rc < 0 ) {
     munmap(map, map_bytes);
@@ -323,17 +342,34 @@ static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd, unsigned n_s
   int ix;
   struct efct_ubufs* ubufs = get_ubufs(vi);
   struct efct_ubufs_rxq* rxq;
+  ci_resource_alloc_t ra;
+  int rc;
 
   EF_VI_ASSERT(qid < vi->efct_rxqs.max_qs);
 
   ix = efct_vi_find_free_rxq(vi, qid);
   if( ix < 0 )
     return ix;
-
   rxq = &ubufs->q[ix];
-  int rc = ef_shrub_client_open(&rxq->shrub_client,
-                                (void*)vi->efct_rxqs.q[ix].superbuf,
-                                EF_SHRUB_CONTROLLER_PATH, qid);
+
+  ef_vi_init_resource_alloc(&ra, EFRM_RESOURCE_EFCT_RXQ);
+  ra.u.rxq.in_abi_version = CI_EFCT_SWRXQ_ABI_VERSION;
+  ra.u.rxq.in_flags = EFCH_EFCT_RXQ_FLAG_UBUF;
+  ra.u.rxq.in_qid = qid;
+  ra.u.rxq.in_shm_ix = -1;
+  ra.u.rxq.in_vi_rs_id = efch_make_resource_id(vi->vi_resource_id);
+  ra.u.rxq.in_timestamp_req = true;
+  rc = ci_resource_alloc(vi->dh, &ra);
+  if( rc < 0 ) {
+    LOGVV(ef_log("%s: ci_resource_alloc rxq %d", __FUNCTION__, rc));
+    return rc;
+  }
+  rxq->resource_id = ra.out_id.index;
+  /* FIXME SCJ cleanup on failure */
+
+  rc = ef_shrub_client_open(&rxq->shrub_client,
+                            (void*)vi->efct_rxqs.q[ix].superbuf,
+                            EF_SHRUB_CONTROLLER_PATH, qid);
   if ( rc != 0 ) {
     LOG(ef_log("%s: ERROR initializing shrub client! rc=%d", __FUNCTION__, rc));
     return -rc;
