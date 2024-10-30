@@ -28,15 +28,19 @@ struct efct_ubufs_desc
   unsigned sentinel : 1;
 };
 
+/* FIFO to record local buffers posted to the NIC. */
+struct efct_ubufs_rxq_fifo
+{
+  unsigned added, filled, removed;
+  struct efct_ubufs_desc buffers[CI_EFCT_MAX_SUPERBUFS];
+};
+
 struct efct_ubufs_rxq
 {
   uint32_t superbuf_pkts;
+  struct efct_ubufs_rxq_fifo* fifo;
   struct ef_shrub_client shrub_client;
-  bool local; // indicates that buffers are managed locally
-
-  /* FIFO to record buffers posted to the NIC. */
-  unsigned added, filled, removed;
-  struct efct_ubufs_desc fifo[CI_EFCT_MAX_SUPERBUFS];
+  unsigned sbseq; // TODO will need to be in shared state for Onload
 
   /* Buffer memory region */
   ef_memreg memreg;
@@ -70,12 +74,12 @@ static const struct efct_ubufs* const_ubufs(const ef_vi* vi)
 
 static bool rxq_is_local(const ef_vi* vi, int qid)
 {
-  return const_ubufs(vi)->q[qid].local;
+  return const_ubufs(vi)->q[qid].fifo;
 }
 
-static void update_filled(ef_vi* vi, struct efct_ubufs_rxq* rxq, int qid)
+static void update_filled(ef_vi* vi, struct efct_ubufs_rxq_fifo* fifo, int qid)
 {
-  while( rxq->added - rxq->filled > 1 ) {
+  while( fifo->added - fifo->filled > 1 ) {
     const ci_qword_t* header;
     struct efct_ubufs_desc desc;
 
@@ -91,11 +95,11 @@ static void update_filled(ef_vi* vi, struct efct_ubufs_rxq* rxq, int qid)
      * buffer and perhaps post a new buffer slightly earlier, but I don't
      * think the extra complexity is justified.
      */
-    desc = rxq->fifo[(rxq->filled + 1) % CI_EFCT_MAX_SUPERBUFS];
+    desc = fifo->buffers[(fifo->filled + 1) % CI_EFCT_MAX_SUPERBUFS];
     header = efct_superbuf_access(vi, qid, desc.id);
     if( CI_QWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL) != desc.sentinel )
       break;
-    ++rxq->filled;
+    ++fifo->filled;
   }
 }
 
@@ -114,12 +118,12 @@ static void poison_superbuf(char *sbuf)
   wmb();
 }
 
-static void post_buffers(ef_vi* vi, struct efct_ubufs_rxq* rxq, int qid)
+static void post_buffers(ef_vi* vi, struct efct_ubufs_rxq_fifo* fifo, int qid)
 {
   int16_t* head = &vi->ep_state->rxq.sb_desc_free_head[qid];
   unsigned limit = get_ubufs(vi)->nic_fifo_limit;
 
-  while( *head != -1 && rxq->added - rxq->filled < limit ) {
+  while( *head != -1 && fifo->added - fifo->filled < limit ) {
     const ci_qword_t* header;
     struct efct_ubufs_desc desc;
 
@@ -135,8 +139,8 @@ static void post_buffers(ef_vi* vi, struct efct_ubufs_rxq* rxq, int qid)
     desc.id = id;
     desc.sentinel = ! CI_QWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL);
 
-    EF_VI_ASSERT(rxq->added - rxq->removed < CI_EFCT_MAX_SUPERBUFS);
-    rxq->fifo[rxq->added++ % CI_EFCT_MAX_SUPERBUFS] = desc;
+    EF_VI_ASSERT(fifo->added - fifo->removed < CI_EFCT_MAX_SUPERBUFS);
+    fifo->buffers[fifo->added++ % CI_EFCT_MAX_SUPERBUFS] = desc;
 
     vi->efct_rxqs.ops->post(vi, qid, id, desc.sentinel);
   }
@@ -151,24 +155,24 @@ static int efct_ubufs_next_shared(ef_vi* vi, int qid, bool* sentinel, unsigned* 
   if ( rc < 0 ) {
     return rc;
   }
-  *sbseq = rxq->removed++;
+  *sbseq = rxq->sbseq++;
   return id;
 }
 
 static int efct_ubufs_next_local(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq)
 {
-  struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[qid];
+  struct efct_ubufs_rxq_fifo* fifo = get_ubufs(vi)->q[qid].fifo;
   struct efct_ubufs_desc desc;
   unsigned seq;
 
-  update_filled(vi, rxq, qid);
-  post_buffers(vi, rxq, qid);
+  update_filled(vi, fifo, qid);
+  post_buffers(vi, fifo, qid);
 
-  if( rxq->added == rxq->removed )
+  if( fifo->added == fifo->removed )
     return -EAGAIN;
 
-  seq = rxq->removed++;
-  desc = rxq->fifo[seq % CI_EFCT_MAX_SUPERBUFS];
+  seq = fifo->removed++;
+  desc = fifo->buffers[seq % CI_EFCT_MAX_SUPERBUFS];
 
   *sentinel = desc.sentinel;
   *sbseq = seq;
@@ -185,11 +189,11 @@ static int efct_ubufs_next(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq)
 
 static void efct_ubufs_free_local(ef_vi* vi, int qid, int sbid)
 {
-  struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[qid];
+  struct efct_ubufs_rxq_fifo* fifo = get_ubufs(vi)->q[qid].fifo;
 
   efct_rx_sb_free_push(vi, qid, sbid);
-  update_filled(vi, rxq, qid);
-  post_buffers(vi, rxq, qid);
+  update_filled(vi, fifo, qid);
+  post_buffers(vi, fifo, qid);
 }
 
 static void efct_ubufs_free_shared(ef_vi* vi, int qid, int sbid)
@@ -208,8 +212,8 @@ static void efct_ubufs_free(ef_vi* vi, int qid, int sbid)
 
 static bool efct_ubufs_local_available(const ef_vi* vi, int qid)
 {
-  const struct efct_ubufs_rxq* rxq = &const_ubufs(vi)->q[qid];
-  return rxq->added != rxq->removed;
+  const struct efct_ubufs_rxq_fifo* fifo = const_ubufs(vi)->q[qid].fifo;
+  return fifo->added != fifo->removed;
 }
 
 static bool efct_ubufs_shared_available(const ef_vi* vi, int qid)
@@ -332,7 +336,13 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
   }
 
   rxq = &ubufs->q[ix];
-  rxq->local = true;
+
+  rxq->fifo = calloc(1, sizeof(struct efct_ubufs_rxq_fifo));
+  if( rxq->fifo == NULL ) {
+    munmap(map, map_bytes);
+    return -ENOMEM;
+  }
+
   for( id = 0; id < n_superbufs; ++id )
     efct_rx_sb_free_push(vi, qid, id);
 
@@ -341,6 +351,7 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
   rc = ef_memreg_alloc_flags(&rxq->memreg, vi->dh, ubufs->pd, ubufs->pd_dh,
                              map, map_bytes, 0);
   if( rc < 0 ) {
+    free(rxq->fifo);
     munmap(map, map_bytes);
     return rc;
   }
@@ -360,7 +371,7 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
 
   ubufs->active_qs |= 1 << ix;
   efct_vi_start_rxq(vi, ix, qid);
-  post_buffers(vi, rxq, ix);
+  post_buffers(vi, rxq->fifo, ix);
 
   return ix;
 #endif
@@ -397,7 +408,7 @@ static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd,
     return rc;
   }
 
-  rxq->local = false;
+  rxq->fifo = NULL;
   rxq->superbuf_pkts = rxq->shrub_client.state->metrics.buffer_bytes / EFCT_PKT_STRIDE;
 
   ubufs->active_qs |= 1 << ix;
@@ -450,6 +461,7 @@ static void efct_ubufs_cleanup(ef_vi* vi)
     ef_memreg_free(&rxq->memreg, vi->dh);
     ci_resource_munmap(vi->dh, (void *)rxq->rx_post_buffer_reg,
                        CI_ROUND_UP(sizeof(uint64_t), CI_PAGE_SIZE));
+    free(rxq->fifo);
   }
   free(ubufs);
 #endif
