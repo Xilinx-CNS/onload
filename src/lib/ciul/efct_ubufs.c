@@ -13,7 +13,6 @@
 #include <linux/mman.h>
 #include <etherfabric/memreg.h>
 #include "ef_vi_internal.h"
-#include "shrub_pool.h"
 #include "driver_access.h"
 #include "shrub_client.h"
 #include "shrub_pool.h"
@@ -32,8 +31,8 @@ struct efct_ubufs_desc
 struct efct_ubufs_rxq
 {
   uint32_t superbuf_pkts;
-  struct ef_shrub_buffer_pool* buffer_pool;
   struct ef_shrub_client shrub_client;
+  bool local; // indicates that buffers are managed locally
 
   /* FIFO to record buffers posted to the NIC. */
   unsigned added, filled, removed;
@@ -67,6 +66,11 @@ static struct efct_ubufs* get_ubufs(ef_vi* vi)
 static const struct efct_ubufs* const_ubufs(const ef_vi* vi)
 {
   return CI_CONTAINER(struct efct_ubufs, ops, vi->efct_rxqs.ops);
+}
+
+static bool rxq_is_local(const ef_vi* vi, int qid)
+{
+  return const_ubufs(vi)->q[qid].local;
 }
 
 static void update_filled(ef_vi* vi, struct efct_ubufs_rxq* rxq, int qid)
@@ -112,13 +116,15 @@ static void poison_superbuf(char *sbuf)
 
 static void post_buffers(ef_vi* vi, struct efct_ubufs_rxq* rxq, int qid)
 {
-  while( rxq->added - rxq->filled < get_ubufs(vi)->nic_fifo_limit ) {
+  int16_t* head = &vi->ep_state->rxq.sb_desc_free_head[qid];
+  unsigned limit = get_ubufs(vi)->nic_fifo_limit;
+
+  while( *head != -1 && rxq->added - rxq->filled < limit ) {
     const ci_qword_t* header;
     struct efct_ubufs_desc desc;
 
-    ef_shrub_buffer_id id = ef_shrub_alloc_buffer(rxq->buffer_pool);
-    if( id == EF_SHRUB_INVALID_BUFFER )
-      break;
+    ef_shrub_buffer_id id = *head;
+    *head = efct_rx_sb_free_next(vi, qid, id);
 
     /* We assume that the first sentinel value applies to the whole superbuf.
      * TBD: will we ever need to deal with manual rollover?
@@ -171,8 +177,7 @@ static int efct_ubufs_next_local(ef_vi* vi, int qid, bool* sentinel, unsigned* s
 
 static int efct_ubufs_next(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq)
 {
-  const struct efct_ubufs_rxq* rxq = &const_ubufs(vi)->q[qid];
-  if( rxq->buffer_pool )
+  if( rxq_is_local(vi, qid) )
     return efct_ubufs_next_local(vi, qid, sentinel, sbseq);
   else
     return efct_ubufs_next_shared(vi, qid, sentinel, sbseq);
@@ -182,7 +187,7 @@ static void efct_ubufs_free_local(ef_vi* vi, int qid, int sbid)
 {
   struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[qid];
 
-  ef_shrub_free_buffer(rxq->buffer_pool, sbid);
+  efct_rx_sb_free_push(vi, qid, sbid);
   update_filled(vi, rxq, qid);
   post_buffers(vi, rxq, qid);
 }
@@ -195,8 +200,7 @@ static void efct_ubufs_free_shared(ef_vi* vi, int qid, int sbid)
 
 static void efct_ubufs_free(ef_vi* vi, int qid, int sbid)
 {
-  const struct efct_ubufs_rxq* rxq = &const_ubufs(vi)->q[qid];
-  if( rxq->buffer_pool )
+  if( rxq_is_local(vi, qid) )
     efct_ubufs_free_local(vi, qid, sbid);
   else
     efct_ubufs_free_shared(vi, qid, sbid);
@@ -216,8 +220,7 @@ static bool efct_ubufs_shared_available(const ef_vi* vi, int qid)
 
 static bool efct_ubufs_available(const ef_vi* vi, int qid)
 {
-  const struct efct_ubufs_rxq* rxq = &const_ubufs(vi)->q[qid];
-  if( rxq->buffer_pool )
+  if( rxq_is_local(vi, qid) )
     return efct_ubufs_local_available(vi, qid);
   else
     return efct_ubufs_shared_available(vi, qid);
@@ -328,20 +331,16 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
     return -ENOMEM;
   }
 
-  rc = ef_shrub_init_pool(n_superbufs, &rxq->buffer_pool);
-  if( rc < 0 ) {
-    munmap(map, map_bytes);
-    return rc;
-  }
+  rxq = &ubufs->q[ix];
+  rxq->local = true;
   for( id = 0; id < n_superbufs; ++id )
-    ef_shrub_free_buffer(rxq->buffer_pool, id);
+    efct_rx_sb_free_push(vi, qid, id);
 
   rxq->superbuf_pkts = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
 
   rc = ef_memreg_alloc_flags(&rxq->memreg, vi->dh, ubufs->pd, ubufs->pd_dh,
                              map, map_bytes, 0);
   if( rc < 0 ) {
-    ef_shrub_fini_pool(rxq->buffer_pool);
     munmap(map, map_bytes);
     return rc;
   }
@@ -353,7 +352,6 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
                           CI_ROUND_UP(sizeof(uint64_t), CI_PAGE_SIZE),
                           &p);
     if( rc < 0 ) {
-      ef_shrub_fini_pool(rxq->buffer_pool);
       munmap(map, map_bytes);
       return rc;
     }
@@ -398,6 +396,8 @@ static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd,
     LOG(ef_log("%s: ERROR initializing shrub client! rc=%d", __FUNCTION__, rc));
     return rc;
   }
+
+  rxq->local = false;
   rxq->superbuf_pkts = rxq->shrub_client.state->metrics.buffer_bytes / EFCT_PKT_STRIDE;
 
   ubufs->active_qs |= 1 << ix;
@@ -447,8 +447,6 @@ static void efct_ubufs_cleanup(ef_vi* vi)
   int i;
   for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
     struct efct_ubufs_rxq* rxq = &ubufs->q[i];
-    if( rxq->buffer_pool )
-      ef_shrub_fini_pool(rxq->buffer_pool);
     ef_memreg_free(&rxq->memreg, vi->dh);
     ci_resource_munmap(vi->dh, (void *)rxq->rx_post_buffer_reg,
                        CI_ROUND_UP(sizeof(uint64_t), CI_PAGE_SIZE));

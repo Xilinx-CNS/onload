@@ -77,36 +77,26 @@ int ef_memreg_free(ef_memreg* mr, ef_driver_handle mr_dh)
   return 0;
 }
 
-#include "shrub_pool.h"
-
 #define SUPERBUF_COUNT 16
+static int sb_free_next[EF_VI_MAX_EFCT_RXQS][SUPERBUF_COUNT];
 
-struct ef_shrub_buffer_pool {
-  ef_shrub_buffer_id ids[SUPERBUF_COUNT];
-  int next;
-};
-
-int ef_shrub_init_pool(size_t n, struct ef_shrub_buffer_pool **pool_out)
+void efct_rx_sb_free_push(ef_vi* vi, uint32_t qid, uint32_t sbid)
 {
-  *pool_out = calloc(1, sizeof(struct ef_shrub_buffer_pool));
-  return 0;
+  int16_t* head;
+
+  assert(qid < EF_VI_MAX_EFCT_RXQS);
+  assert(sbid < SUPERBUF_COUNT);
+
+  head = &vi->ep_state->rxq.sb_desc_free_head[qid];
+  sb_free_next[qid][sbid] = *head;
+  *head = sbid;
 }
 
-void ef_shrub_fini_pool(struct ef_shrub_buffer_pool *pool)
+int16_t efct_rx_sb_free_next(ef_vi* vi, uint32_t qid, uint32_t sbid)
 {
-  free(pool);
-}
-
-ef_shrub_buffer_id ef_shrub_alloc_buffer(struct ef_shrub_buffer_pool *pool)
-{
-  return pool->next == 0 ? EF_SHRUB_INVALID_BUFFER : pool->ids[--pool->next];
-}
-
-void ef_shrub_free_buffer(struct ef_shrub_buffer_pool *pool,
-                          ef_shrub_buffer_id buffer)
-{
-  assert(pool->next < SUPERBUF_COUNT);
-  pool->ids[pool->next++] = buffer;
+  assert(qid < EF_VI_MAX_EFCT_RXQS);
+  assert(sbid < SUPERBUF_COUNT);
+  return sb_free_next[qid][sbid];
 }
 
 static const void* get_superbuf(ef_vi* vi, int qid, int sbid)
@@ -154,6 +144,30 @@ static void check_poison(char *sbuf) {
   }
 }
 
+static ef_vi* alloc_vi(void)
+{
+  int i;
+
+  STATE_ALLOC(ef_vi, vi);
+  STATE_ALLOC(ef_vi_state, state);
+  vi->ep_state = state;
+  for( i = 0; i < EF_VI_MAX_EFCT_RXQS; ++i )
+    state->rxq.sb_desc_free_head[i] = -1;
+  CHECK(efct_ubufs_init(vi, NULL, 0), ==, 0);
+  STATE_STASH(vi);
+  STATE_STASH(state);
+
+  vi->efct_rxqs.ops->post = mock_post;
+  return vi;
+}
+
+static void free_vi(ef_vi* vi)
+{
+  vi->efct_rxqs.ops->cleanup(vi);
+  STATE_FREE(vi->ep_state);
+  STATE_FREE(vi);
+}
+
 /* Test cases */
 static void test_efct_ubufs(void)
 {
@@ -161,13 +175,10 @@ static void test_efct_ubufs(void)
   int bufs[SUPERBUF_COUNT];
   bool sentinel;
   unsigned sbseq, expect_seq=0;
-  ef_vi_efct_rxq_ops* ops;
 
-  STATE_ALLOC(ef_vi, vi);
-  CHECK(efct_ubufs_init(vi, NULL, 0), ==, 0);
-  STATE_STASH(vi);
-  ops = vi->efct_rxqs.ops;
-  ops->post = mock_post;
+  ef_vi* vi = alloc_vi();
+  ef_vi_efct_rxq_ops* ops = vi->efct_rxqs.ops;
+
   CHECK(ops->attach(vi, 0, -1, SUPERBUF_COUNT, false), ==, 0);
 
   for( rep = 0; rep < 3; ++rep ) {
@@ -197,8 +208,7 @@ static void test_efct_ubufs(void)
     }
   }
 
-  ops->cleanup(vi);
-  STATE_FREE(vi);
+  free_vi(vi);
 }
 
 static void test_sentinel(void)
@@ -206,13 +216,10 @@ static void test_sentinel(void)
   bool sentinel;
   unsigned sbseq;
   int buf;
-  ef_vi_efct_rxq_ops* ops;
 
-  STATE_ALLOC(ef_vi, vi);
-  CHECK(efct_ubufs_init(vi, NULL, 0), ==, 0);
-  STATE_STASH(vi);
-  ops = vi->efct_rxqs.ops;
-  ops->post = mock_post;
+  ef_vi* vi = alloc_vi();
+  ef_vi_efct_rxq_ops* ops = vi->efct_rxqs.ops;
+
   CHECK(ops->attach(vi, 0, -1, 1, false), ==, 0);
 
   buf = ops->next(vi, 0, &sentinel, &sbseq);
@@ -241,8 +248,7 @@ static void test_sentinel(void)
   CHECK(get_sentinel(vi, 0, buf), ==, false);
   CHECK(sentinel, ==, true);
 
-  ops->cleanup(vi);
-  STATE_FREE(vi);
+  free_vi(vi);
 }
 
 static void test_poison(void)
@@ -250,23 +256,20 @@ static void test_poison(void)
   bool sentinel;
   unsigned sbseq;
   int buf;
-  ef_vi_efct_rxq_ops* ops;
 
-  STATE_ALLOC(ef_vi, vi);
-  CHECK(efct_ubufs_init(vi, NULL, 0), ==, 0);
-  STATE_STASH(vi);
+  ef_vi* vi = alloc_vi();
+  ef_vi_efct_rxq_ops* ops = vi->efct_rxqs.ops;
+
   ops = vi->efct_rxqs.ops;
-  ops->post = mock_post;
   CHECK(ops->attach(vi, 0, -1, 1, false), ==, 0);
 
   buf = ops->next(vi, 0, &sentinel, &sbseq);
   CHECK(buf, >=, 0);
   CHECK(get_posted(), ==, buf);
   check_poison((void *)get_superbuf(vi, 0, buf));
-
   ops->free(vi, 0, buf);
-  ops->cleanup(vi);
-  STATE_FREE(vi);
+
+  free_vi(vi);
 }
 
 int main(void)
