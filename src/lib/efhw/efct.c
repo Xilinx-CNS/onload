@@ -23,6 +23,8 @@
 #include "ethtool_flow.h"
 #include <linux/hashtable.h>
 #include <etherfabric/internal/internal.h>
+#include <kernel_utils/hugetlb.h>
+#include <linux/mman.h>
 #include "efct.h"
 #include "efct_superbuf.h"
 #include "mcdi_common.h"
@@ -35,11 +37,7 @@ static ssize_t
 efct_get_used_hugepages(struct efhw_nic *nic, int qid);
 
 int
-efct_nic_rxq_bind(struct efhw_nic *nic, int qid, bool timestamp_req,
-                  size_t n_hugepages,
-                  struct oo_hugetlb_allocator *hugetlb_alloc,
-                  struct efab_efct_rxq_uk_shm_q *shm,
-                  unsigned wakeup_instance, struct efhw_efct_rxq *rxq)
+efct_nic_rxq_bind(struct efhw_nic *nic, struct efhw_shared_bind_params *params)
 {
   struct device *dev;
   struct xlnx_efct_device* edev;
@@ -48,15 +46,15 @@ efct_nic_rxq_bind(struct efhw_nic *nic, int qid, bool timestamp_req,
   int rc;
 
   struct xlnx_efct_rxq_params qparams = {
-    .qid = qid,
-    .timestamp_req = timestamp_req,
-    .n_hugepages = n_hugepages,
+    .qid = params->qid,
+    .timestamp_req = params->timestamp_req,
+    .n_hugepages = params->n_hugepages,
   };
 
   /* We implicitly lock here by calling `efct_provide_hugetlb_alloc` so that
    * `used_hugepages` does not become invalid between now and binding */
-  efct_provide_hugetlb_alloc(hugetlb_alloc);
-  used_hugepages = efct_get_used_hugepages(nic, qid);
+  efct_provide_hugetlb_alloc(params->hugetlb_alloc);
+  used_hugepages = efct_get_used_hugepages(nic, params->qid);
   if( used_hugepages < 0 ) {
     efct_unprovide_hugetlb_alloc();
     return used_hugepages;
@@ -64,7 +62,7 @@ efct_nic_rxq_bind(struct efhw_nic *nic, int qid, bool timestamp_req,
 
   EFHW_ASSERT(used_hugepages <= CI_EFCT_MAX_HUGEPAGES);
 
-  if( n_hugepages + used_hugepages > CI_EFCT_MAX_HUGEPAGES ) {
+  if( params->n_hugepages + used_hugepages > CI_EFCT_MAX_HUGEPAGES ) {
     /* Ensure we do not donate more hugepages than we should otherwise
      * sbids > CI_EFCT_MAX_SUPERBUFS will be posted */
     efct_unprovide_hugetlb_alloc();
@@ -72,7 +70,9 @@ efct_nic_rxq_bind(struct efhw_nic *nic, int qid, bool timestamp_req,
   }
 
   EFCT_PRE(dev, edev, cli, nic, rc);
-  rc = __efct_nic_rxq_bind(edev, cli, &qparams, nic->arch_extra, n_hugepages, shm, wakeup_instance, rxq);
+  rc = __efct_nic_rxq_bind(edev, cli, &qparams, nic->arch_extra,
+                           params->n_hugepages, params->shm,
+                           params->wakeup_instance, params->rxq);
   EFCT_POST(dev, edev, cli, nic, rc);
 
   efct_unprovide_hugetlb_alloc();
@@ -92,6 +92,188 @@ efct_nic_rxq_free(struct efhw_nic *nic, struct efhw_efct_rxq *rxq,
   EFCT_PRE(dev, edev, cli, nic, rc)
   __efct_nic_rxq_free(edev, cli, rxq, freer);
   EFCT_POST(dev, edev, cli, nic, rc);
+}
+
+#define REFRESH_BATCH_SIZE  8
+#define EFCT_INVALID_PFN   (~0ull)
+
+static int
+map_one_superbuf(unsigned long addr, const struct xlnx_efct_hugepage *kern)
+{
+  unsigned long rc;
+  rc = vm_mmap(kern->file, addr, CI_HUGEPAGE_SIZE, PROT_READ, MAP_FIXED |
+               MAP_SHARED | MAP_POPULATE | MAP_HUGETLB | MAP_HUGE_2MB,
+               oo_hugetlb_page_offset(kern->page));
+  if (IS_ERR((void*)rc))
+    return PTR_ERR((void*)rc);
+  return 0;
+}
+
+static int
+fixup_superbuf_mapping(unsigned long addr, uint64_t *user,
+                       const struct xlnx_efct_hugepage *kern,
+                       const struct xlnx_efct_hugepage *spare_page)
+{
+  uint64_t pfn = kern->page ? __pa(kern->page) : EFCT_INVALID_PFN;
+  if (*user == pfn)
+    return 0;
+
+  if (pfn == EFCT_INVALID_PFN) {
+    /* Rather than actually unmapping the memory, we prefer to map in some
+     * random other valid page instead. Ideally we'd use the huge zero
+     * page, but we can't get at that so we pick a random other one of our
+     * pages instead.
+     * The reason for all this is that we promise that
+     * ef_eventq_has_event() is safe to call concurrently with
+     * ef_eventq_poll(). The latter might call in to this function to
+     * unmap the exact page that the former is just about to look at. */
+    if (!spare_page->page || map_one_superbuf(addr, spare_page))
+      vm_munmap(addr, CI_HUGEPAGE_SIZE);
+  }
+  else {
+    int rc = map_one_superbuf(addr, kern);
+    if (rc)
+      return rc;
+  }
+  *user = pfn;
+  return 1;
+}
+
+int
+efct_nic_shared_rxq_refresh(struct efhw_nic *nic, int hwqid,
+                            unsigned long superbufs,
+                            uint64_t __user *user_current,
+                            unsigned max_superbufs)
+{
+  struct xlnx_efct_hugepage *pages;
+  struct xlnx_efct_hugepage spare_page = {};
+  size_t i;
+  int rc = 0;
+  bool is_sbuf_err_logged = false;
+  unsigned n_hugepages = CI_MIN(max_superbufs,
+                (unsigned)CI_EFCT_MAX_SUPERBUFS) / CI_EFCT_SUPERBUFS_PER_PAGE;
+
+  if (max_superbufs < CI_EFCT_MAX_SUPERBUFS) {
+    EFHW_TRACE("max_superbufs: %u passed in by user less than kernel's: %u. "
+               "Ensure you do not create enough apps to donate more than %u "
+               "superbufs! Alternatively, applications should be compiled with"
+               " a newer userspace.", max_superbufs, CI_EFCT_MAX_SUPERBUFS,
+               n_hugepages * CI_EFCT_SUPERBUFS_PER_PAGE);
+  }
+
+  pages = kmalloc_array(sizeof(pages[0]), CI_EFCT_MAX_HUGEPAGES, GFP_KERNEL);
+  if (!pages)
+    return -ENOMEM;
+
+  rc = efct_get_hugepages(nic, hwqid, pages, CI_EFCT_MAX_HUGEPAGES);
+  if (rc < 0) {
+    kfree(pages);
+    return rc;
+  }
+  for (i = 0; i < CI_EFCT_MAX_HUGEPAGES; ++i) {
+    if (pages[i].page) {
+      /* See commentary in fixup_superbuf_mapping(). It'd be possible to
+       * have extensive debates about which is the least-worst page to
+       * use for this purpose, but any decision would be crystal ball
+       * work: we're trying to avoid wasting memory by having a page
+       * mapped which is used for no other purpose other than as our
+       * free page filler. */
+      spare_page = pages[i];
+      break;
+    }
+  }
+  for (i = 0; i < n_hugepages; i += REFRESH_BATCH_SIZE) {
+    uint64_t local_current[REFRESH_BATCH_SIZE];
+    size_t j;
+    size_t n = min((size_t)REFRESH_BATCH_SIZE, n_hugepages - i);
+    bool changes = false;
+
+    if (copy_from_user(local_current, user_current + i,
+                       n * sizeof(*local_current))) {
+      rc = -EFAULT;
+      break;
+    }
+
+    for (j = 0; j < n; ++j) {
+      rc = fixup_superbuf_mapping(superbufs + CI_HUGEPAGE_SIZE * (i + j),
+                                  &local_current[j], &pages[i + j],
+                                  &spare_page);
+      if (rc < 0)
+        break;
+      if (rc)
+        changes = true;
+    }
+
+    if (changes)
+      if (copy_to_user(user_current + i, local_current,
+                       n * sizeof(*local_current)))
+        rc = -EFAULT;
+
+    if (rc < 0)
+      break;
+  }
+
+  for (i = 0; i < CI_EFCT_MAX_HUGEPAGES; i++) {
+    if (pages[i].page != NULL) {
+      put_page(pages[i].page);
+      fput(pages[i].file);
+      if (i > n_hugepages && !is_sbuf_err_logged) {
+        EFHW_ERR("More than %d superbufs have been donated. User max: %u, "
+                 "kernel max: %u. Applications should be recompiled with a "
+                 "newer userspace.",
+                 n_hugepages * CI_EFCT_SUPERBUFS_PER_PAGE, max_superbufs,
+                 CI_EFCT_MAX_SUPERBUFS);
+        is_sbuf_err_logged = true;
+      }
+    }
+  }
+
+  kfree(pages);
+  return rc;
+}
+
+int
+efct_nic_shared_rxq_refresh_kernel(struct efhw_nic *nic, int hwqid,
+                                   const char** superbufs)
+{
+  struct xlnx_efct_hugepage *pages;
+  size_t i;
+  int rc = 0;
+
+  pages = kmalloc_array(sizeof(pages[0]), CI_EFCT_MAX_HUGEPAGES, GFP_KERNEL);
+  if (!pages)
+    return -ENOMEM;
+
+  rc = efct_get_hugepages(nic, hwqid, pages, CI_EFCT_MAX_HUGEPAGES);
+  if (rc < 0) {
+    kfree(pages);
+    return rc;
+  }
+  for (i = 0; i < CI_EFCT_MAX_SUPERBUFS; ++i) {
+    struct page* page = pages[i / CI_EFCT_SUPERBUFS_PER_PAGE].page;
+    superbufs[i] = page_to_virt(page) +
+                   EFCT_RX_SUPERBUF_BYTES * (i % CI_EFCT_SUPERBUFS_PER_PAGE);
+  }
+
+  for (i = 0; i < CI_EFCT_MAX_HUGEPAGES; ++i) {
+    if (pages[i].page != NULL) {
+      put_page(pages[i].page);
+      fput(pages[i].file);
+    }
+  }
+
+  kfree(pages);
+  return rc;
+}
+
+int
+efct_nic_shared_rxq_request_wakeup(struct efhw_nic *nic,
+                                   struct efhw_efct_rxq *rxq,
+                                   unsigned sbseq, unsigned pktix,
+                                   bool allow_recursion)
+{
+  return efct_request_wakeup(nic->arch_extra, rxq, sbseq, pktix,
+                             allow_recursion);
 }
 
 
@@ -899,6 +1081,11 @@ struct efhw_func_ops efct_char_functional_units = {
   .ctpio_addr = efct_ctpio_addr,
   .design_parameters = efct_design_parameters,
   .max_shared_rxqs = efct_max_shared_rxqs,
+  .shared_rxq_bind = efct_nic_rxq_bind,
+  .shared_rxq_unbind = efct_nic_rxq_free,
+  .shared_rxq_refresh = efct_nic_shared_rxq_refresh,
+  .shared_rxq_refresh_kernel = efct_nic_shared_rxq_refresh_kernel,
+  .shared_rxq_request_wakeup = efct_nic_shared_rxq_request_wakeup,
 };
 
 #endif

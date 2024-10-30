@@ -260,6 +260,24 @@
 	 (nic)->efhw_func->post_superbuf((nic), (instance), (addr), \
 					 (sentinel), (rollover), (owner_id)) : \
 	 -EOPNOTSUPP)
+#define efhw_nic_shared_rxq_bind(nic, params) \
+	((nic)->efhw_func->shared_rxq_bind ? \
+	 (nic)->efhw_func->shared_rxq_bind((nic), (params)) : -EOPNOTSUPP)
+#define efhw_nic_shared_rxq_unbind(nic, rxq, freer) \
+	((nic)->efhw_func->shared_rxq_unbind ? \
+	 (nic)->efhw_func->shared_rxq_unbind((nic), (rxq), (freer)) : (void)0)
+#define efhw_nic_shared_rxq_refresh(nic, hwqid, superbufs, user, max) \
+	((nic)->efhw_func->shared_rxq_refresh ? \
+	 (nic)->efhw_func->shared_rxq_refresh((nic), (hwqid), (superbufs), \
+                                              (user), (max)) : -EOPNOTSUPP)
+#define efhw_nic_shared_rxq_refresh_kernel(nic, hwqid, sbufs) \
+	((nic)->efhw_func->shared_rxq_refresh_kernel ? \
+	 (nic)->efhw_func->shared_rxq_refresh_kernel((nic), (hwqid), \
+                                                     (sbufs)) : -EOPNOTSUPP)
+#define efhw_nic_shared_rxq_request_wakeup(nic, rxq, sbseq, pktix, rec) \
+	((nic)->efhw_func->shared_rxq_request_wakeup ? \
+	 (nic)->efhw_func->shared_rxq_request_wakeup((nic), (rxq), (sbseq), \
+                                              (pktix), (rec)) : -ENOSYS)
 
 /*-------------- design parameters ------------ */
 #define efhw_nic_design_parameters(nic, dp) \

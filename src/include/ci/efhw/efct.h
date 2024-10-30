@@ -7,6 +7,7 @@
 #include <ci/driver/ci_efct.h>
 #include <ci/tools/sysdep.h>
 #include <ci/efhw/stack_vi_allocator.h>
+#include <ci/efhw/efhw_types.h>
 
 extern struct efhw_func_ops efct_char_functional_units;
 
@@ -14,7 +15,6 @@ struct efhw_efct_rxq;
 struct xlnx_efct_hugepage;
 struct xlnx_efct_rxq_params;
 struct oo_hugetlb_allocator;
-typedef void efhw_efct_rxq_free_func_t(struct efhw_efct_rxq*);
 typedef void efhw_efct_rxq_int_wake_func_t(struct efhw_efct_rxq*);
 
 /* Packet sequences are defined as (superbuf_seqno << 16) | pkt_index_in_sb,
@@ -243,13 +243,6 @@ struct efhw_nic_efct {
 };
 
 #if CI_HAVE_EFCT_AUX
-int efct_nic_rxq_bind(struct efhw_nic *nic, int qid, bool timestamp_req,
-                      size_t n_hugepages,
-                      struct oo_hugetlb_allocator *hugetlb_alloc,
-                      struct efab_efct_rxq_uk_shm_q *shm,
-                      unsigned wakeup_instance, struct efhw_efct_rxq *rxq);
-void efct_nic_rxq_free(struct efhw_nic *nic, struct efhw_efct_rxq *rxq,
-                       efhw_efct_rxq_free_func_t *freer);
 int efct_get_hugepages(struct efhw_nic *nic, int hwqid,
                        struct xlnx_efct_hugepage *pages, size_t n_pages);
 int efct_request_wakeup(struct efhw_nic_efct *efct, struct efhw_efct_rxq *app,

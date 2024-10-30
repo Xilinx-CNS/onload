@@ -147,6 +147,18 @@ struct efhw_dmaq_params {
 	} rx;
 };
 
+struct efhw_efct_rxq;
+struct efhw_shared_bind_params {
+	int qid;
+	bool timestamp_req;
+	size_t n_hugepages;
+	struct oo_hugetlb_allocator *hugetlb_alloc;
+	struct efab_efct_rxq_uk_shm_q *shm;
+	unsigned wakeup_instance;
+	struct efhw_efct_rxq *rxq;
+};
+typedef void efhw_efct_rxq_free_func_t(struct efhw_efct_rxq*);
+
 struct efhw_vi_constraints {
 	int channel;
 	int min_vis_in_set;
@@ -487,6 +499,22 @@ struct efhw_func_ops {
 	int (*post_superbuf)(struct efhw_nic* nic, int instance,
 			     resource_size_t dma_addr, bool sentinel,
 			     bool rollover, int owner_id);
+
+	int (*shared_rxq_bind)(struct efhw_nic* nic,
+			       struct efhw_shared_bind_params *params);
+	void (*shared_rxq_unbind)(struct efhw_nic* nic,
+				  struct efhw_efct_rxq *rxq,
+				  efhw_efct_rxq_free_func_t *freer);
+	int (*shared_rxq_refresh)(struct efhw_nic *nic, int hwqid,
+				  unsigned long superbufs,
+				  uint64_t __user *user_current,
+				  unsigned max_superbufs);
+	int (*shared_rxq_refresh_kernel)(struct efhw_nic *nic, int hwqid,
+					const char** superbufs);
+	int (*shared_rxq_request_wakeup)(struct efhw_nic *nic,
+					 struct efhw_efct_rxq *app,
+					 unsigned sbseq, unsigned pktix,
+					 bool allow_recursion);
 
   /*-------------- design parameters ------------------------ */
 

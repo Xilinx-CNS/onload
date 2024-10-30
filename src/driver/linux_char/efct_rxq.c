@@ -23,11 +23,12 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
   struct efch_efct_rxq_alloc* alloc = &alloc_->u.rxq;
   struct efrm_efct_rxq* rxq;
   struct efrm_vi* vi;
-  struct oo_hugetlb_allocator *hugetlb_alloc;
+  struct oo_hugetlb_allocator *hugetlb_alloc = NULL;
   efch_resource_t* vi_rs;
+  int shm_ix;
   int rc;
 
-  if (alloc->in_flags != 0) {
+  if ((alloc->in_flags & ~EFCH_EFCT_RXQ_FLAG_UBUF) != 0) {
     EFCH_ERR("%s: ERROR: flags != 0", __FUNCTION__);
     return -EINVAL;
   }
@@ -56,17 +57,31 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
 
   vi = efrm_vi_from_resource(vi_rs->rs_base);
 
-  hugetlb_alloc = oo_hugetlb_allocator_create(alloc->in_memfd);
-  if (IS_ERR(hugetlb_alloc)) {
-    EFCH_ERR("%s: ERROR: Unable to create hugetlb allocator (%ld)",
-             __FUNCTION__, PTR_ERR(hugetlb_alloc));
-    return PTR_ERR(hugetlb_alloc);
+  if( (alloc->in_flags & EFCH_EFCT_RXQ_FLAG_UBUF) == 0 ) {
+    if( alloc->in_shm_ix < 0 ) {
+      EFCH_ERR("%s: ERROR: id="EFCH_RESOURCE_ID_FMT" provides bad shm ix %d",
+               __FUNCTION__,
+               EFCH_RESOURCE_ID_PRI_ARG(alloc->in_vi_rs_id), alloc->in_shm_ix);
+      return -EINVAL;
+    }
+    shm_ix = alloc->in_shm_ix;
+
+    hugetlb_alloc = oo_hugetlb_allocator_create(alloc->in_memfd);
+    if (IS_ERR(hugetlb_alloc)) {
+      EFCH_ERR("%s: ERROR: Unable to create hugetlb allocator (%ld)",
+               __FUNCTION__, PTR_ERR(hugetlb_alloc));
+      return PTR_ERR(hugetlb_alloc);
+    }
+  }
+  else {
+    shm_ix = -1;
   }
 
-  rc = efrm_rxq_alloc(vi, alloc->in_qid, alloc->in_shm_ix,
+  rc = efrm_rxq_alloc(vi, alloc->in_qid, shm_ix,
                       alloc->in_timestamp_req, alloc->in_n_hugepages,
                       hugetlb_alloc, &rxq);
-  oo_hugetlb_allocator_put(hugetlb_alloc);
+  if( (alloc->in_flags & EFCH_EFCT_RXQ_FLAG_UBUF) == 0 )
+    oo_hugetlb_allocator_put(hugetlb_alloc);
 
   if (rc < 0) {
     EFCH_ERR("%s: ERROR: rxq_alloc failed (%d)", __FUNCTION__, rc);

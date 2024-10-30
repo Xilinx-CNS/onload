@@ -4,6 +4,7 @@
 #ifdef __KERNEL__
 #include <ci/driver/kernel_compat.h>
 #include <ci/efhw/debug_linux.h>
+#include <ci/efhw/efhw_types.h>
 
 #endif
 

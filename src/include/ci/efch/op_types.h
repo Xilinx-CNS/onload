@@ -127,10 +127,11 @@ struct efch_pd_alloc {
   int16_t             in_vlan_id;
 };
 
+#define EFCH_EFCT_RXQ_FLAG_UBUF 0x1
 
 struct efch_efct_rxq_alloc {
   efch_resource_id_t  in_vi_rs_id;
-  uint32_t            in_flags;  /* none currently defined */
+  uint32_t            in_flags;
   uint32_t            in_abi_version;
   uint8_t             in_qid;
   uint8_t             in_shm_ix;
