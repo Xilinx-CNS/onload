@@ -76,7 +76,6 @@ int oo_shmbuf_fault(struct oo_shmbuf* sh, struct vm_area_struct* vma,
   int i = off >> sh->order >> PAGE_SHIFT;
   unsigned long start_off = (unsigned long)i << sh->order << PAGE_SHIFT;
   unsigned long size = oo_shmbuf_chunk_size(sh);
-  int rc;
 
   ci_assert_lt(i, sh->max);
   if( sh->addrs[i] == 0 )
@@ -88,10 +87,6 @@ int oo_shmbuf_fault(struct oo_shmbuf* sh, struct vm_area_struct* vma,
     size *= sh->init_num;
   }
 
-  rc = oo_remap_vmalloc_range_partial(vma, vma->vm_start + start_off,
-                                      (void*)sh->addrs[i], size);
-  if( rc >= 0 )
-    /* remap_vmalloc_range_partial sets this */
-    vm_flags_clear(vma, VM_DONTDUMP);
-  return rc;
+  return oo_remap_vmalloc_range_partial(vma, vma->vm_start + start_off,
+                                        (void*)sh->addrs[i], size);
 }
