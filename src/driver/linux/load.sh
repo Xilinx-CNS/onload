@@ -31,7 +31,7 @@ USER_NET="xilinx_efct"
 
 
 usage () {
-  err 
+  err
   err "bad command line for linux/load.sh '$allargs'"
   err
   err "usage:  $p [options] [targets]"
@@ -319,7 +319,7 @@ donet () {
     # wait for any device nodes to be created
     sleep 0.5
     # udev may or may not create the device nodes for us
-    # so use /proc/mtd to check what nodes should be created 
+    # so use /proc/mtd to check what nodes should be created
     # and make sure they are created
     i=0
     for F in _ `cat /proc/mtd | awk -F : '/mtd/ {print $1}'`; do
@@ -352,7 +352,7 @@ donet () {
       houseip=$(ifconfig $houseeth | grep -o "inet addr:[0-9.]\+")
       houseip=${houseip##*:}
       netpf=$(/sbin/ip address show dev "$houseeth"  | grep inet | head -1)
-      netpf=$(echo "$netpf" | egrep -o "/[0-9]+ " | sed 's+[/ ]++g')
+      netpf=$(echo "$netpf" | grep -E -o "/[0-9]+ " | sed 's+[/ ]++g')
       os=`uname -a`
       os=${os// /%20}
       for ethif in $(get_interfaces); do
@@ -451,7 +451,7 @@ donet () {
   done
 
   # Make sure alternate DBI is not set
-        
+
   # Add to database
   [ "$SETUP_UL_APPLOG" = "yes" ] && dologsetup
 }
@@ -642,14 +642,14 @@ while [ $# -gt 0 ]; do
     -noonloadconfig)
 		LOAD_CONFIG=false;;
     -onloadnoconfigspec)
-		LOAD_CONFIG=true; LOAD_NOCONFIG=true;;  
+		LOAD_CONFIG=true; LOAD_NOCONFIG=true;;
     -probecpserverpath)
 		PROBE_CP_SERVER_PATH=true;;
     -noprobecpserverpath)
 		PROBE_CP_SERVER_PATH=false;;
     -onloadsafeconfig)
 		CONFIG_OWNER="/dev/null"; CONFIG_DRIVER="$CONFIG_DISABLE";;
-    -myconfig)	CONFIG_OWNER="$2"; shift;;  
+    -myconfig)	CONFIG_OWNER="$2"; shift;;
     -onloadcfg)	CMD_EFABCFG="$2"; shift;;
     -oo_bits)   ONLOAD_OPT="$ONLOAD_OPT oo_debug_bits=$2"; shift;;
     -noct)      ONLOAD_OPT="$ONLOAD_OPT no_ct=1";;
@@ -710,7 +710,7 @@ if [ $# = 0 ]; then
 else
   while [ $# -gt 0 ]; do
     case "$1" in
-    net)	
+    net)
       donet
       ;;
     char|netchar)

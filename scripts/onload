@@ -88,7 +88,7 @@ sfc_preload_linux() {
     preload=libonload.so
   fi
 
-  # Enable the preload 
+  # Enable the preload
   rawecho "$LD_PRELOAD" | grep -q "$(basename "$preload")" || {
     if [ -z "$LD_PRELOAD" ]; then
       LD_PRELOAD="$preload"
@@ -100,7 +100,7 @@ sfc_preload_linux() {
 
   if $verbose; then
     # Dump interesting bits of the environment.
-    env | egrep "^EF_|^LD_PRELOAD=|^LD_LIBRARY_PATH=|^LD_PRELOAD_64=" | sed "s/^/$me: env: /"
+    env | grep -E "^EF_|^LD_PRELOAD=|^LD_LIBRARY_PATH=|^LD_PRELOAD_64=" | sed "s/^/$me: env: /"
   fi
 }
 
