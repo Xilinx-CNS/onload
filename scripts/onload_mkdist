@@ -138,10 +138,15 @@ distfiles_d="$TOP/src/onload/distfiles"
 try [ -d "$distfiles_d" ]
 
 releasedir="$product-$version"
-[ -d "$releasedir" ] && fail "ERROR: $releasedir already exists"
-[ -f "$releasedir.tgz" ] && fail "ERROR: $releasedir.tgz already exists"
+[ -d "$releasedir" ] && fail "ERROR: $releasedir/ already exists"
+[ -f "$releasedir.tgz" ] && ! $force && fail "ERROR: $releasedir.tgz already exists"
 try mkdir --mode=755 "$releasedir"
 try cd "$releasedir"
+
+warn_releasedir() {
+  log "WARNING: $releasedir/ not cleaned up"
+}
+trap warn_releasedir INT
 
 # Copy lots of sources.
 docopy src/lib                citools ciul ciapp efhw efrm efthrm cplane
