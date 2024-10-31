@@ -184,6 +184,7 @@ static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid)
     /* Other fields are ignored for ef10ct */
   };
 
+  /* FIXME EF10CT check assumption here about qid */
   vi = efhw_nic_vi_alloc(nic, &evc, 1);
   if(vi < 0) {
     rc = vi;

@@ -132,6 +132,20 @@ ef10ct_nic_release_hardware(struct efhw_nic *nic)
  *
  *--------------------------------------------------------------------*/
 
+static void ef10ct_free_rxq(struct efhw_nic *nic, int qid)
+{
+  int rc = 0;
+  struct device *dev;
+  struct efx_auxdev* edev;
+  struct efx_auxdev_client* cli;
+
+  EFHW_WARN("%s", __func__);
+
+  AUX_PRE(dev, edev, cli, nic, rc);
+  edev->llct_ops->rxq_free(cli, qid);
+  AUX_POST(dev, edev, cli, nic, rc);
+}
+
 static void ef10ct_check_for_flushes(struct work_struct *work)
 {
   struct efhw_nic_ef10ct_evq *evq = 
@@ -162,7 +176,9 @@ static void ef10ct_check_for_flushes(struct work_struct *work)
 
         q_id = ef10ct->rxq[hw_rxq].q_id;
         ef10ct->rxq[hw_rxq].q_id = -1;
-        efhw_handle_rxdmaq_flushed(evq->nic, q_id, false);
+        ef10ct_free_rxq(evq->nic, q_id);
+        /* RXQ flush is not reported upwards. The HW RXQ is managed within
+         * efhw. */
       }
       evq->next = offset;
       /* Clear the event so that we don't see it during the next check. */
@@ -359,6 +375,8 @@ static int ef10ct_vi_alloc_hw(struct efhw_nic *nic,
     }
   }
 
+  EFHW_WARN("%s: rc %d", __func__, evq_rc);
+
   return evq_rc;
 }
 
@@ -385,6 +403,8 @@ static int ef10ct_vi_alloc_sw(struct efhw_nic *nic,
 
   efhw_nic_release_auxdev(nic, cli);
 
+  EFHW_WARN("%s: rc %d", __func__, rc);
+
   return rc;
 }
 
@@ -404,7 +424,7 @@ static void ef10ct_vi_free_hw(struct efhw_nic *nic, int instance)
   struct efx_auxdev* edev;
   struct device *dev;
   int txq = ef10ct->evq[instance].txq;
-  int rc;
+  int rc = 0;
 
   EFHW_WARN("%s: q %d", __func__, instance);
 
@@ -531,61 +551,47 @@ static int
 ef10ct_shared_rxq_bind(struct efhw_nic* nic,
                        struct efhw_shared_bind_params *params)
 {
-  EFHW_WARN("%s: rxq %d", __func__, params->qid);
-  return 0;
-}
-
-static void
-ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
-                         efhw_efct_rxq_free_func_t *freer)
-{
-}
-
-static int 
-ef10ct_dmaq_rx_q_init(struct efhw_nic *nic,
-                      struct efhw_dmaq_params *rxq_params)
-{
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
-  struct efx_auxiliary_rxq_params params = {
-    .evq = rxq_params->evq,
-    .label = rxq_params->tag, /* TODO This will be necessary for shared evqs. */
-    .suppress_events = rxq_params->rx.suppress_events,
+  int rxq = params->qid;
+  struct efx_auxiliary_rxq_params rxq_params = {
+    .qid = rxq,
+    .label = rxq, /* TODO This will be necessary for shared evqs. */
+    .suppress_events = true, /* FIXME SCJ */
   };
-  int rc, rxq;
+  int rc;
   struct efx_auxdev_rpc dummy;
   resource_size_t register_phys_addr;
 
-  EFHW_WARN("%s: evq %d", __func__, params.evq);
+  EFHW_WARN("%s: evq %d, rxq %d", __func__, params->wakeup_instance,
+            params->qid);
 
-  if( rxq_params->evq >= ef10ct->evq_n ) {
+  if( params->wakeup_instance >= ef10ct->evq_n ) {
     /* We are using a dummy vi, so use a shared kernel evq. */
     /* TODO: Determine the appropriate shared evq to use */
-    if( rxq_params->rx.suppress_events ) {
+    if( rxq_params.suppress_events ) {
       EFHW_ASSERT(ef10ct->shared_n >= 1 );
-      params.evq = ef10ct->shared[0].vi;
+      rxq_params.evq = ef10ct->shared[0].vi;
+      EFHW_WARN("%s: Using shared evq %d", __func__, rxq_params.evq);
     } else {
       /* Not supported for now */
       return -EINVAL;
     }
   }
   else {
-    EFHW_WARN("%s: Not initting dummy rxq: evq %d", __func__, params.evq);
+    EFHW_WARN("%s: Not initting dummy rxq: evq %d", __func__, rxq_params.evq);
     return 0;
   }
 
   dummy.cmd = MC_CMD_INIT_RXQ;
   dummy.inlen = sizeof(struct efx_auxiliary_rxq_params);
-  dummy.inbuf = (void*)&params;
+  dummy.inbuf = (void*)&rxq_params;
   dummy.outlen = sizeof(struct efx_auxiliary_rxq_params);
-  dummy.outbuf = (void*)&params;
+  dummy.outbuf = (void*)&rxq_params;
   rc = ef10ct_fw_rpc(nic, &dummy);
   if( rc < 0 ) {
     EFHW_ERR("%s ef10ct_fw_rpc failed. rc = %d\n", __FUNCTION__, rc);
     return rc;
   }
-
-  rxq_params->qid_out = rc;
-  rxq = rc;
 
   if( rxq < 0 || rxq >= ef10ct->rxq_n ) {
     EFHW_ERR(KERN_INFO "%s rxq outside of expected range. rxq = %d",
@@ -600,21 +606,68 @@ ef10ct_dmaq_rx_q_init(struct efhw_nic *nic,
   }
   ef10ct->rxq[rxq].post_buffer_addr = phys_to_virt(register_phys_addr);
 
-  flush_delayed_work(&ef10ct->evq[rxq].check_flushes);
+  flush_delayed_work(&ef10ct->evq[rxq_params.evq].check_flushes);
   EFHW_ASSERT(ef10ct->rxq[rxq].evq == -1);
   EFHW_ASSERT(ef10ct->rxq[rxq].q_id == -1);
 
-  ef10ct->rxq[rxq].evq = params.evq;
-  ef10ct->rxq[rxq].q_id = rxq_params->dmaq;
+  ef10ct->rxq[rxq].evq = rxq_params.evq;
+  ef10ct->rxq[rxq].q_id = rxq;
+  params->rxq->qid = rxq;
 
   return rc;
+}
+
+static void
+ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
+                         efhw_efct_rxq_free_func_t *freer)
+{
+  int evq_id;
+  struct efx_auxdev_rpc dummy;
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  struct efhw_nic_ef10ct_evq *ef10ct_evq;
+  int dmaq = rxq->qid;
+
+  /* FIXME EF10CT this needs to be done based on ref count of users */
+  /* FIXME EF10CT check errors here */
+
+  dummy.cmd = MC_CMD_FINI_RXQ;
+  dummy.inlen = sizeof(int);
+  dummy.inbuf = &dmaq;
+  dummy.outlen = 0;
+  ef10ct_fw_rpc(nic, &dummy);
+
+  evq_id = ef10ct->rxq[dmaq].evq;
+  ef10ct_evq = &ef10ct->evq[evq_id];
+
+  atomic_inc(&ef10ct_evq->queues_flushing);
+  schedule_delayed_work(&ef10ct_evq->check_flushes, 0);
+
+  /* ef10ct->rxq[dmaq].q_id is updated in check_flushes. */
+  ef10ct->rxq[dmaq].evq = -1;
+  ef10ct->rxq[dmaq].post_buffer_addr = 0;
+
+  /* This releases the SW RXQ resource, so is independent of the underlying
+   * HW RXQ flush and free. */
+  freer(rxq);
+}
+
+static int
+ef10ct_dmaq_rx_q_init(struct efhw_nic *nic,
+                      struct efhw_dmaq_params *rxq_params)
+{
+  /* efct doesn't do rxqs like this, so nothing to do here */
+  rxq_params->qid_out = rxq_params->dmaq;
+  return 0;
 }
 
 static size_t
 ef10ct_max_shared_rxqs(struct efhw_nic *nic)
 {
-  /* FIXME SCJ efct vi requires this at the moment */
-  return 8;
+  /* FIXME EF10CT this needs to mean exactly one of "needs packet shm"
+   * (efct_only) or "attaches to shared rxq resource" (efct and ef10ct). I
+   * think at the moment the former is what we want, but this should be
+   * revisited once we've built up more of the RX stuff. */
+  return 0;
 }
 
 
@@ -650,29 +703,9 @@ ef10ct_flush_tx_dma_channel(struct efhw_nic *nic,
 static int
 ef10ct_flush_rx_dma_channel(struct efhw_nic *nic, uint dmaq)
 {
-  int rc = 0, evq_id;
-  struct efx_auxdev_rpc dummy;
-  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
-  struct efhw_nic_ef10ct_evq *ef10ct_evq;
-
-  dummy.cmd = MC_CMD_FINI_RXQ;
-  dummy.inlen = sizeof(int);
-  dummy.inbuf = &dmaq;
-  dummy.outlen = 0;
-  rc = ef10ct_fw_rpc(nic, &dummy);
-
-  evq_id = ef10ct->rxq[dmaq].evq;
-  if( evq_id < 0 )
-    return -EINVAL;
-  ef10ct_evq = &ef10ct->evq[evq_id];
-
-  atomic_inc(&ef10ct_evq->queues_flushing);
-  schedule_delayed_work(&ef10ct_evq->check_flushes, 0);
-
-  /* ef10ct->rxq[dmaq].q_id is updated in check_flushes. */
-  ef10ct->rxq[dmaq].evq = -1;
-  ef10ct->rxq[dmaq].post_buffer_addr = 0;
-  return rc;
+  /* Free and flush of RXQs are managed through tracking users, so nothing to
+   * do here. */
+  return -EALREADY;
 }
 
 
@@ -720,10 +753,31 @@ static void filter_to_mcdi(ci_dword_t *buf, int rxq,
 }
 
 
-static int get_rxq_from_mask(struct efhw_nic_ef10ct *ef10ct,
+static int get_rxq_from_mask(struct efhw_nic *nic,
                              const struct cpumask *mask, bool exclusive)
 {
-  return 0;
+  int rc;
+  struct device *dev;
+  struct efx_auxdev* edev;
+  struct efx_auxdev_client* cli;
+
+  EFHW_WARN("%s", __func__);
+
+  AUX_PRE(dev, edev, cli, nic, rc);
+  rc = edev->llct_ops->rxq_alloc(cli);
+  AUX_POST(dev, edev, cli, nic, rc);
+
+  /* FIXME EF10CT full lifetime management of this RXQ. We do the queue init
+   * on demand on first attach, where we have information about the VI user
+   * that we need to make decisions such as whether to enable RX event
+   * generation and the target EVQ. The flush and release happen on queue
+   * detach. There are outstanding bugs to track related work:
+   * - ref counting users of the queue
+   * - permission handling for additional shared users of the queue
+   * - resource re-allocation post reset
+   */
+
+  return rc;
 }
 
 
@@ -749,13 +803,13 @@ static int select_rxq(struct filter_insert_params *params, uint64_t rxq_in)
   }
   else {
     if( params->mask )
-      rxq = get_rxq_from_mask(ef10ct, params->mask, exclusive);
+      rxq = get_rxq_from_mask(params->nic, params->mask, exclusive);
   }
 
   /* Failed to get an rxq matching our cpumask, so allow fallback to any cpu
    * if allowed */
   if( rxq < 0 && loose )
-    rxq = get_rxq_from_mask(ef10ct, cpu_online_mask, exclusive);
+    rxq = get_rxq_from_mask(params->nic, cpu_online_mask, exclusive);
 
   if( rxq < 0 ) {
     EFHW_WARN("%s: Unable to find the queue ID for given mask, flags= %d\n",

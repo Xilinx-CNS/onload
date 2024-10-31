@@ -538,6 +538,7 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
     mem_mmap_ptr = mem_mmap_ptr_orig = (char*) p;
   }
 
+  /* FIXME SCJ this set up this mapping per-queue on attach */
   if( ra.u.vi_out.rx_post_buffer_mmap_bytes &&
       vi_flags & EF_VI_RX_PHYS_ADDR &&
       ra.u.vi_out.out_flags & EFHW_VI_POST_BUF_SIZE_SET ) {
