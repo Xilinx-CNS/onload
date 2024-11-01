@@ -565,22 +565,15 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
   EFHW_WARN("%s: evq %d, rxq %d", __func__, params->wakeup_instance,
             params->qid);
 
-  if( params->wakeup_instance >= ef10ct->evq_n ) {
-    /* We are using a dummy vi, so use a shared kernel evq. */
-    /* TODO: Determine the appropriate shared evq to use */
-    if( rxq_params.suppress_events ) {
-      EFHW_ASSERT(ef10ct->shared_n >= 1 );
-      rxq_params.evq = ef10ct->shared[0].vi;
-      EFHW_WARN("%s: Using shared evq %d", __func__, rxq_params.evq);
-    } else {
-      /* Not supported for now */
-      return -EINVAL;
-    }
-  }
-  else {
-    EFHW_WARN("%s: Not initting dummy rxq: evq %d", __func__, rxq_params.evq);
-    return 0;
-  }
+  /* FIXME EF10CT the evq used here is not mapped to userspace, so isn't part
+   * of the higher level resource management. We need to decide what evq to
+   * attach to - a shared queue with rx event suppression, or a dedicated
+   * queue. Currently we only support using a single shared queue. When we
+   * start supporting onload with interrupts we'll need to be able to alloc
+   * and attach to an evq. */
+  EFHW_ASSERT(ef10ct->shared_n >= 1 );
+  rxq_params.evq = ef10ct->shared[0].vi;
+  EFHW_WARN("%s: Using shared evq %d", __func__, rxq_params.evq);
 
   dummy.cmd = MC_CMD_INIT_RXQ;
   dummy.inlen = sizeof(struct efx_auxiliary_rxq_params);
