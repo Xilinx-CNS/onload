@@ -104,6 +104,7 @@ struct efct_test_device {
   struct efct_test_txq txqs[EFCT_TEST_TXQS_N];
   struct efct_test_rxq rxqs[EFCT_TEST_RXQS_N];
   uint8_t *evq_window;
+  uint8_t *rxq_window;
   uint32_t filter_handle;
 };
 

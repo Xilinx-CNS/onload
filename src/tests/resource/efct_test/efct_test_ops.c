@@ -108,13 +108,17 @@ static int efct_test_buffer_post_addr(struct efx_auxdev_client *handle,
   struct efct_test_device *tdev = handle->tdev;
   int rxq = io->qid_in;
   
+  /* FIXME EF10CT when we support multi-queue dynamic attach can re-instate
+   * these checks. */
+#if 0
   if( rxq < 0 || rxq >= EFCT_TEST_RXQS_N)
     return -EINVAL;
 
   if( tdev->rxqs[rxq].evq < 0 )
     return -EINVAL;
+#endif
 
-  io->base = virt_to_phys(tdev->rxqs[rxq].post_register);
+  io->base = virt_to_phys(tdev->rxq_window + (0x1000 * rxq));
   io->size = 0x1000;
 
   return 0;
@@ -309,8 +313,7 @@ static int efct_test_init_rxq(struct efx_auxdev_client *handle,
 {
   struct efct_test_device *tdev = handle->tdev;
   struct efct_test_rxq *rxq;
-  int rxq_idx = -1;
-  int i;
+  int rxq_idx = params->qid;
   int evq = params->evq;
 
   printk(KERN_INFO "%s: evq %d\n", __func__, evq);
@@ -319,37 +322,25 @@ static int efct_test_init_rxq(struct efx_auxdev_client *handle,
   if( !tdev->evqs[evq].inited )
     return -EINVAL;
 
-  /* Find rxq */
-  for( i = 0; i < EFCT_TEST_RXQS_N; i++ )
-    if( tdev->rxqs[i].evq < 0 ) {
-      rxq_idx = i;
-      break;
-    }
-
   if( rxq_idx < 0 )
-    return -EBUSY;
+    return -EINVAL;
 
   rxq = &tdev->rxqs[rxq_idx];
-
-  /* Allocate memory */
-  rxq->post_register = kmalloc(0x1000, GFP_KERNEL);
-  if( !rxq->post_register )
-    return -ENOMEM;
-  memset(rxq->post_register, 0x00, 0x1000);
-  set_memory_wc((unsigned long)rxq->post_register, 1);
 
   atomic_set(&rxq->timer_running, 1);
   INIT_DELAYED_WORK(&rxq->timer, efct_test_rx_timer);
   schedule_delayed_work(&rxq->timer, 100);
 
-  hrtimer_init(&tdev->rxqs[i].rx_tick, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-  tdev->rxqs[i].rx_tick.function = efct_rx_tick;
+  hrtimer_init(&tdev->rxqs[rxq_idx].rx_tick, CLOCK_MONOTONIC,
+               HRTIMER_MODE_REL);
+  tdev->rxqs[rxq_idx].rx_tick.function = efct_rx_tick;
 
   /* Set fields */
   rxq->evq = evq;
   rxq->tdev = tdev;
   tdev->evqs[evq].rxqs |= 1 << rxq_idx;
   rxq->events_suppressed = params->suppress_events;
+  rxq->post_register = (ci_qword_t*)(tdev->rxq_window + (0x1000 * rxq_idx));
 
   /* Everything should be memset to 0, but I want to be sure */
   if(rxq->next_bid != 0)
@@ -361,7 +352,7 @@ static int efct_test_init_rxq(struct efx_auxdev_client *handle,
 
   printk(KERN_INFO "%s: bound rxq %d to evq %d\n", __func__, rxq_idx, evq);
 
-  return rxq_idx;
+  return 0;
 }
 
 
@@ -383,8 +374,6 @@ static void efct_test_free_rxq(struct efx_auxdev_client *handle, int rxq_idx)
   evq_push_rx_flush_complete(&tdev->evqs[evq], rxq_idx);
 
   tdev->evqs[evq].rxqs &= ~(1 << rxq_idx);
-  kfree(rxq->post_register);
-  set_memory_wb((unsigned long)rxq->post_register, 1);
 
   memset(rxq, 0, sizeof(*rxq));
   rxq->evq = -1;
