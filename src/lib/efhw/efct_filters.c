@@ -605,10 +605,6 @@ efct_filter_insert(struct efct_filter_state *state, struct efx_filter_spec *spec
   }
   mutex_unlock(&state->driver_filters_mtx);
 
-  /* If we are returning successfully having requested an exclusive queue, that
-   * queue should not be shared with the net driver. */
-  EFHW_ASSERT((rc < 0) || !(flags & EFHW_FILTER_F_EXCL_RXQ) || (*rxq > 0));
-
   return rc < 0 ? rc : node.filter_id;
 }
 
