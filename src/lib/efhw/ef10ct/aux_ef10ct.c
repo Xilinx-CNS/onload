@@ -55,29 +55,25 @@ static int ef10ct_resource_init(struct efx_auxdev *edev,
 
   res_dim->efhw_ops = &ef10ct_char_functional_units;
 
-  rc = edev->llct_ops->base_ops.get_param(client, EFX_AUXILIARY_NIC_RESOURCES, &val);
-  if( rc < 0 )
-    goto fail;
-
-  ef10ct->evq_n = val.nic_res.evq_lim;
+  ef10ct->evq_n = dp.evqs;
   ef10ct->evq = vzalloc(sizeof(*ef10ct->evq) * ef10ct->evq_n);
   if( ! ef10ct->evq ) {
     rc = -ENOMEM;
     goto fail;
   }
 
-  res_dim->vi_min = val.nic_res.evq_min;
+  res_dim->vi_min = 0;
   res_dim->vi_lim = EF10CT_EVQ_DUMMY_MAX;
   res_dim->mem_bar = VI_RES_MEM_BAR_UNDEFINED;
 
   for( i = 0; i < ef10ct->evq_n; i++ )
     ef10ct->evq[i].txq = EF10CT_EVQ_NO_TXQ;
 
-  n_txqs = val.nic_res.txq_lim - val.nic_res.txq_min;
-  for( i = 0; i < n_txqs && val.nic_res.evq_min + i < val.nic_res.evq_lim; ++i )
-    ef10ct->evq[val.nic_res.evq_min + i].txq = val.nic_res.txq_min + i;
+  n_txqs = dp.tx_apertures;
+  for( i = 0; i < n_txqs && i < dp.evqs; ++i )
+    ef10ct->evq[i].txq = i;
 
-  ef10ct->rxq_n = val.nic_res.rxq_lim;
+  ef10ct->rxq_n = dp.rx_queues;
   ef10ct->rxq = vzalloc(sizeof(*ef10ct->rxq) * ef10ct->rxq_n);
   if( ! ef10ct->rxq ) {
     rc = -ENOMEM;
