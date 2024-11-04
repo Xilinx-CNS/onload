@@ -130,8 +130,8 @@ static void efct_test_design_param(struct efx_auxdev_client *handle,
   dp->rx_stride = 4096;
   /* NIC reports value to be multiplied by 4k */
   dp->rx_buffer_len = 256 * 4096;
-  dp->rx_queues = 256;
-  dp->tx_apertures = 256;
+  dp->rx_queues = EFCT_TEST_RXQS_N;
+  dp->tx_apertures = EFCT_TEST_TXQS_N;
   dp->rx_buf_fifo_size = 128;
   dp->frame_offset_fixed = 0;
   dp->rx_metadata_len = 16;
@@ -143,6 +143,7 @@ static void efct_test_design_param(struct efx_auxdev_client *handle,
   dp->l4_csum_proto = 0;
   dp->max_runt = 60;
   dp->evq_sizes = 0x7f;
+  dp->evqs = EFCT_TEST_EVQS_N;
   dp->num_filter = 8192;
   dp->user_bits_width = 0;
   dp->timestamp_set_sync = 1;
@@ -171,15 +172,6 @@ static int efct_test_get_param(struct efx_auxdev_client *handle,
     break;
    case EFX_DEVICE_REVISION:
     arg->value = 1;
-    rc = 0;
-    break;
-   case EFX_AUXILIARY_NIC_RESOURCES:
-    arg->nic_res.evq_min = 0;
-    arg->nic_res.evq_lim = EFCT_TEST_EVQS_N - 1;
-    arg->nic_res.txq_min = 0;
-    arg->nic_res.txq_lim = EFCT_TEST_TXQS_N - 1;
-    arg->nic_res.rxq_min = 0;
-    arg->nic_res.rxq_lim = EFCT_TEST_RXQS_N - 1;
     rc = 0;
     break;
    case EFX_AUXILIARY_EVQ_WINDOW:

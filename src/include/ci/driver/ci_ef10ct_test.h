@@ -102,6 +102,7 @@ struct efx_auxdev;
  * @l4_csum_proto: L4 csum fields.
  * @max_runt: Max length of frame data when LEN_ERR indicates runt.
  * @evq_sizes: Event queue sizes.
+ * @evqs: Number of event queues available.
  * @num_filter: Number of filters.
  */
 struct efx_design_params {
@@ -120,6 +121,7 @@ struct efx_design_params {
 	u32 l4_csum_proto;
 	u32 max_runt;
 	u32 evq_sizes;
+	u32 evqs;
 	u32 num_filter;
 	/* Width of USER in RX meta */
 	u32 user_bits_width;
@@ -131,40 +133,6 @@ struct efx_design_params {
 	u32 meta_location;
 	/* Rollover meta delivers zeroes */
 	u32 rollover_zeros_pkt;
-};
-
-
-/**
- * Interrupt resource information
- *
- * @flags: currently none
- * @n_ranges: Number of entries in irq_ranges. Must be > 0.
- * @int_prime: Address of the INT_PRIME register.
- * @irq_ranges: Array of interrupts, specified as base vector + range.
- */
-struct efx_auxiliary_irq_resources {
-        u16 flags;
-        u16 n_ranges;
-        void __iomem *int_prime;
-        struct efx_auxiliary_irq_range {
-                int vector;
-                int range;
-        } irq_ranges[1];
-};
-
-/**
- * Queue resource information
- *
- * @evq_min: index of first available event queue
- * @evq_lim: index of last available event queue + 1
- */
-struct efx_auxiliary_nic_resources {
-        unsigned int evq_min;
-        unsigned int evq_lim;
-        unsigned int txq_min;
-        unsigned int txq_lim;
-        unsigned int rxq_min;
-        unsigned int rxq_lim;
 };
 
 
@@ -296,20 +264,6 @@ struct efx_auxdev_dl_vi_resources {
  * @EFX_AUXILIARY_VARIANT: The HW variant of this interface.
  *      Get only.
  *      Returned through @variant.
- * @EFX_AUXILIARY_NIC_RESOURCES: Details of the available queue ranges.
- *      The client must provide the pointer to the structure. On
- *      successful return from get_param() the values will be
- *      populated.
- *      Get only.
- *      Returned through @nic_res.
- * @EFX_AUXILIARY_IRQ_RESOURCES: Details of available irq resources.
- *      The irq resources will correspond to the NIC resources
- *      retrievable via EFX_AUXILIARY_NIC_RESOURCES.
- *      The client must provide the pointer to the structure. On
- *      successful return from get_param() the values will be
- *      populated.
- *      Get only.
- *      Returned through @irq_res.
  * @EFX_AUXILIARY_EVQ_WINDOW: The location of control area for event queues.
  *      The base address is for the event queue evq_min provided through
  *      EFX_AUXILIARY_NIC_RESOURCES. The stride can be used to calculate the
@@ -345,8 +299,6 @@ enum efx_auxiliary_param {
 	EFX_PARAM_FILTER_BLOCK_KERNEL_UCAST,
 	EFX_PARAM_FILTER_BLOCK_KERNEL_MCAST,
         EFX_AUXILIARY_VARIANT,
-        EFX_AUXILIARY_NIC_RESOURCES,
-        EFX_AUXILIARY_IRQ_RESOURCES,
         EFX_AUXILIARY_EVQ_WINDOW,
         EFX_AUXILIARY_CTPIO_WINDOW,
         EFX_AUXILIARY_RXQ_POST,
@@ -364,8 +316,6 @@ union efx_auxiliary_param_value {
 	struct efx_design_params *design_params;
 	void *driver_data;
 	struct pci_dev *pci_dev;
-        struct efx_auxiliary_irq_resources *irq_res;
-        struct efx_auxiliary_nic_resources nic_res;
         struct efx_auxiliary_evq_window evq_window;
 	struct efx_auxiliary_io_addr io_addr;
         char variant;
