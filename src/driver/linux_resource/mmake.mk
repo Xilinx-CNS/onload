@@ -53,8 +53,7 @@ EFHW_EF10_SRCS	:=
 endif
 
 ifeq ($(HAVE_EF10CT),1)
-EFHW_EF10CT_SRCS := aux_ef10ct.c
-EFHW_SRCS += ef10ct.c
+EFHW_EF10CT_SRCS := aux_ef10ct.c ef10ct.c
 else
 EFHW_EF10CT_SRCS :=
 endif

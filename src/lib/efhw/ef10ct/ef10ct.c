@@ -23,11 +23,11 @@
 
 #include "etherfabric/internal/internal.h"
 
-#include "aux.h"
-#include "ef10ct.h"
-#include "sw_buffer_table.h"
-#include "mcdi_common.h"
-#include "ethtool_flow.h"
+#include "../aux.h"
+#include "../ef10ct.h"
+#include "../sw_buffer_table.h"
+#include "../mcdi_common.h"
+#include "../ethtool_flow.h"
 
 
 #if CI_HAVE_EF10CT
