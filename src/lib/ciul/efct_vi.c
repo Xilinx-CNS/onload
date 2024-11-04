@@ -1450,10 +1450,9 @@ void efct_vi_stop_transmit_warm(ef_vi* vi)
 static const size_t sbuf_bytes_per_rxq =
   (size_t)CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES;
 
-int efct_superbufs_reserve(ef_vi* vi)
+int efct_superbufs_reserve(ef_vi* vi, void* space)
 {
   int i;
-  void* space;
 
   vi->efct_rxqs.max_qs = EF_VI_MAX_EFCT_RXQS;
 
@@ -1464,21 +1463,23 @@ int efct_superbufs_reserve(ef_vi* vi)
   if( space == NULL )
     return -ENOMEM;
 #else
-  /* This is reserving a gigantic amount of virtual address space (with no
-   * memory behind it) so we can later on (in efct_vi_attach_rxq()) plonk the
-   * actual mmappings for each specific superbuf into a computable place
-   * within this space, i.e. so that conversion from {rxq#,superbuf#} to
-   * memory address is trivial arithmetic rather than needing various array
-   * lookups.
-   *
-   * In kernelspace we can't do this trickery (see the other #ifdef branch), so
-   * we pay the price of doing the naive array lookups: we have an array of
-   * pointers to superbufs. */
-  space = mmap(NULL, sbuf_bytes_per_rxq * vi->efct_rxqs.max_qs, PROT_NONE,
-               MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_HUGETLB,
-               -1, 0);
-  if( space == MAP_FAILED )
-    return -ENOMEM;
+  if( space == NULL ) {
+    /* This is reserving a gigantic amount of virtual address space (with no
+     * memory behind it) so we can later on (in efct_vi_attach_rxq()) plonk the
+     * actual mmappings for each specific superbuf into a computable place
+     * within this space, i.e. so that conversion from {rxq#,superbuf#} to
+     * memory address is trivial arithmetic rather than needing various array
+     * lookups.
+     *
+     * In kernelspace we can't do this trickery (see the other #ifdef branch), so
+     * we pay the price of doing the naive array lookups: we have an array of
+     * pointers to superbufs. */
+    space = mmap(NULL, sbuf_bytes_per_rxq * vi->efct_rxqs.max_qs, PROT_NONE,
+                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_HUGETLB,
+                 -1, 0);
+    if( space == MAP_FAILED )
+      return -ENOMEM;
+  }
 
   madvise(space, sbuf_bytes_per_rxq * vi->efct_rxqs.max_qs, MADV_DONTDUMP);
 #endif

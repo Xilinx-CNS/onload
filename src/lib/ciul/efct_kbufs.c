@@ -273,12 +273,13 @@ static void efct_kbufs_cleanup(ef_vi* vi)
 int efct_kbufs_init_internal(ef_vi* vi,
                              struct efab_efct_rxq_uk_shm_base *shm,
                              int (*refresh)(ef_vi* vi, int qid),
-                             uintptr_t refresh_user)
+                             uintptr_t refresh_user,
+                             void* space)
 {
   struct efct_kbufs* rxqs;
   int i, rc;
 
-  rc = efct_superbufs_reserve(vi);
+  rc = efct_superbufs_reserve(vi, space);
   if( rc < 0 )
     return rc;
 
@@ -353,7 +354,7 @@ int efct_kbufs_init(ef_vi* vi)
     return rc;
   }
 
-  rc = efct_kbufs_init_internal(vi, p, efct_kbufs_refresh, 0);
+  rc = efct_kbufs_init_internal(vi, p, efct_kbufs_refresh, 0, NULL);
   if( rc )
     ci_resource_munmap(vi->dh, get_kbufs(vi)->shm,
                        CI_ROUND_UP(CI_EFCT_SHM_BYTES(EF_VI_MAX_EFCT_RXQS),

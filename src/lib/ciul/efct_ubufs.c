@@ -396,7 +396,7 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
   struct efct_ubufs* ubufs;
   int i, rc;
 
-  rc = efct_superbufs_reserve(vi);
+  rc = efct_superbufs_reserve(vi, NULL);
   if( rc < 0 )
     return rc;
 
