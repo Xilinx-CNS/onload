@@ -123,13 +123,13 @@ BuildRoot:        %{_builddir}/%{name}-root
 AutoReqProv:      no
 ExclusiveArch:    x86_64 ppc64
 
-%global base_build_requires gawk gcc sed make bash libpcap libpcap-devel automake libtool autoconf libcap-devel
-%if 0%{?suse_version}
-%global dist_build_requires glibc-devel glibc python3-devel libcap2
-%else
-%global dist_build_requires glibc-common python3-devel libcap
+%global base_build_requires gawk gcc sed make bash automake libtool autoconf
+BuildRequires:    %{base_build_requires}
+
+%global user_build_requires libpcap-devel libcap-devel python3-devel
+%if %{with user}
+BuildRequires:    %{user_build_requires}
 %endif
-BuildRequires:    %{base_build_requires} %{dist_build_requires}
 
 %description
 OpenOnload is a high performance user-level network stack.  Please see
@@ -223,7 +223,7 @@ fi
 %if %{with akmod}
 %package akmod
 Summary:          OpenOnload kernel modules as Akmod source
-Requires:         akmods %{base_build_requires} %{dist_build_requires} %{?efct_build_requires:%efct_build_requires}
+Requires:         akmods %{base_build_requires} %{user_build_requires} %{?efct_build_requires:%efct_build_requires}
 Conflicts:        kernel-module-sfc-RHEL%{maindist}
 Provides:         openonload-kmod = %{version}-%{release}
 Provides:         sfc-kmod-symvers = %{version}-%{release}
