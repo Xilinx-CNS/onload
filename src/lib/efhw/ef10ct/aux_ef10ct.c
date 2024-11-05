@@ -25,10 +25,40 @@ static int ef10ct_devtype_init(struct efx_auxdev *edev,
                                struct efx_auxdev_client *client,
                                struct efhw_device_type *dev_type)
 {
+  union efx_auxiliary_param_value val;
+  int rc;
+
+  rc = edev->llct_ops->base_ops.get_param(client, EFX_PCI_DEV_DEVICE, &val);
+  if( rc < 0 )
+    return rc;
+  switch( val.value ) {
+   case 0x0c03:
+    dev_type->variant = 'A';
+    dev_type->function = EFHW_FUNCTION_PF;
+    break;
+   case 0x1c03:
+    dev_type->variant = 'A';
+    dev_type->function = EFHW_FUNCTION_VF;
+    break;
+   case 0xffff:
+    /* This is the test device provided via the efct_test driver. We use a
+     * specific variant for this to avoid trying to do things that the test
+     * driver doesn't support, like interrupts. */
+    dev_type->variant = 'T';
+    dev_type->function = EFHW_FUNCTION_PF;
+    break;
+   default:
+    EFRM_ERR("%s: Not binding to llct device %s with unknown device id %x",
+             __func__, dev_name(&edev->auxdev.dev), val.value);
+    return -ENOTSUPP;
+  };
+
+  rc = edev->llct_ops->base_ops.get_param(client, EFX_DEVICE_REVISION, &val);
+  if( rc < 0 )
+    return rc;
+  dev_type->revision = val.value;
+
   dev_type->arch = EFHW_ARCH_EF10CT;
-  dev_type->function = EFHW_FUNCTION_PF;
-  dev_type->variant = 'L';
-  dev_type->revision = 0;
 
   return 0;
 }
