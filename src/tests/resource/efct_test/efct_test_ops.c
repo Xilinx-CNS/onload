@@ -166,8 +166,8 @@ static int efct_test_get_param(struct efx_auxdev_client *handle,
     arg->net_dev = handle->net_dev;
     rc = 0;
     break;
-   case EFX_AUXILIARY_VARIANT:
-    arg->variant = 'T';
+   case EFX_PCI_DEV_DEVICE:
+    arg->value = 0xffff;
     rc = 0;
     break;
    case EFX_DEVICE_REVISION:

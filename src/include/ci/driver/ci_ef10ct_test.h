@@ -261,9 +261,6 @@ struct efx_auxdev_dl_vi_resources {
  *	Value passed via @b.
  * @EFX_PARAM_FILTER_BLOCK_KERNEL_MCAST: Block multicast traffic. Get or set.
  *	Value passed via @b.
- * @EFX_AUXILIARY_VARIANT: The HW variant of this interface.
- *      Get only.
- *      Returned through @variant.
  * @EFX_AUXILIARY_EVQ_WINDOW: The location of control area for event queues.
  *      The base address is for the event queue evq_min provided through
  *      EFX_AUXILIARY_NIC_RESOURCES. The stride can be used to calculate the
@@ -298,7 +295,6 @@ enum efx_auxiliary_param {
 	EFX_DRIVER_DATA,
 	EFX_PARAM_FILTER_BLOCK_KERNEL_UCAST,
 	EFX_PARAM_FILTER_BLOCK_KERNEL_MCAST,
-        EFX_AUXILIARY_VARIANT,
         EFX_AUXILIARY_EVQ_WINDOW,
         EFX_AUXILIARY_CTPIO_WINDOW,
         EFX_AUXILIARY_RXQ_POST,
@@ -318,7 +314,6 @@ union efx_auxiliary_param_value {
 	struct pci_dev *pci_dev;
         struct efx_auxiliary_evq_window evq_window;
 	struct efx_auxiliary_io_addr io_addr;
-        char variant;
         void *ptr;
 };
 #endif
