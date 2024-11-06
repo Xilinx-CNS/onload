@@ -389,11 +389,17 @@ oo_remap_vmalloc_range_partial(struct vm_area_struct *vma, unsigned long uaddr,
 {
 #ifdef EFRM_HAS_REMAP_VMALLOC_RANGE_PARTIAL
   /* linux<5.13 */
-  return remap_vmalloc_range_partial(vma, uaddr, kaddr,
+  int rc = remap_vmalloc_range_partial(vma, uaddr, kaddr,
 #ifdef EFRM_REMAP_VMALLOC_RANGE_PARTIAL_NEW
                                      0 /*pgoff, in linux>=5.7 */,
 #endif
                                      size);
+
+  if( rc >= 0 )
+    /* remap_vmalloc_range_partial sets this */
+    vm_flags_clear(vma, VM_DONTDUMP);
+
+  return rc;
 #else
   /* linux>=5.13 */
   unsigned long npages = size >> PAGE_SHIFT;
