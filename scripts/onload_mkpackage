@@ -462,8 +462,8 @@ while [ $# -gt 0 ]; do
     --rpm-spec) shift; spec_path="$1";;
     -K|--keep) clean=false;;
     # Mkdist options
-    --product|--version) mkdist_args+=("$1" "$2"); shift;;
-    --release|--enterprise|--cloud) mkdist_args+=("$1");;
+    --product|--version|--srcrev) mkdist_args+=("$1" "$2"); shift;;
+    --release|--enterprise|--cloud|--testciul) mkdist_args+=("$1");;
     --tarball);; # Just shift for onload_mkdkms & onload_mksrcdeb compat
     # Files
     *src.rpm) { [ -z "$srpm_path$debiansource_path$tarball_path" ] && srpm_path="$1"; } || fail "Supply one SRPM only.";;
@@ -581,6 +581,7 @@ if [ -n "$tarball_path" ]; then
 else
   [ -f "$bin"/onload_mkdist ] || fail "CRITICAL: Missing onload_mkdist. Run in working tree or provide source file."
   $force && mkdist_args+=(--force)
+  $verbose && mkdist_args+=(--debug)
   tryquiet pushd "$resultdir"
   mkdist_vars="$(try "$bin"/onload_mkdist "${mkdist_args[@]}" --output-vars)" || exit 2
   tryquiet popd
