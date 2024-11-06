@@ -115,6 +115,8 @@ License:          Various
 URL:              https://www.openonload.org/
 Vendor:           Advanced Micro Devices, Inc.
 Provides:         openonload = %{version}-%{release}
+Provides:         user(onload_cplane)
+Provides:         group(onload_cplane)
 %if 0%{?rhel} >= 8
 Recommends:       openonload-devel = %{version}-%{release}
 %endif
@@ -122,6 +124,7 @@ Source0:          %{name}-%{pkgversion}.tgz
 BuildRoot:        %{_builddir}/%{name}-root
 AutoReqProv:      no
 ExclusiveArch:    x86_64 ppc64
+Requires(pre):    shadow-utils
 
 %global base_build_requires gawk gcc sed make bash automake libtool autoconf
 BuildRequires:    %{base_build_requires}
@@ -410,6 +413,13 @@ mkdir -p %{buildroot}%{_usrsrc}
 tar xf %{SOURCE0} -C %{buildroot}%{_usrsrc}
 %endif
 
+%pre
+getent group onload_cplane >/dev/null || groupadd -r onload_cplane
+getent passwd onload_cplane >/dev/null || \
+  useradd -r -g onload_cplane -M -d /run/openonload -s /usr/sbin/nologin \
+  -c "%{name} Control Plane" onload_cplane
+exit 0
+
 %post
 
 if [ `cat /proc/1/comm` == systemd ]
@@ -474,7 +484,7 @@ rm -fR $RPM_BUILD_ROOT
 %attr(644, -, -) %{_sysconfdir}/depmod.d/onload.conf
 %config(noreplace) %attr(644, -, -) %{_sysconfdir}/sysconfig/openonload
 /usr/lib/udev/rules.d/*
-
+%{?_sysusersdir:%_sysusersdir/onload.conf}
 /usr/share/onload/onload_modules-load.d.conf
 /usr/share/onload/sysconfig_onload_modules
 
