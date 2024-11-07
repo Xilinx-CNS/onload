@@ -165,8 +165,9 @@ static int ef10ct_vi_allocator_ctor(struct efhw_nic_ef10ct *nic,
                                     res_dim->vi_lim);
   if(rc < 0)
     goto fail2;
-  return rc;
 
+  mutex_init(&nic->vi_allocator.lock);
+  return rc;
  fail2:
   efhw_stack_vi_allocator_dtor(&nic->vi_allocator.tx);
  fail1:

@@ -473,17 +473,20 @@ static int efct_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc,
     return -EOPNOTSUPP;
 
   /* Acquire efct device as in EFCT_PRE to protect access to arch_extra which
-   * goes away after aux detach*/
+   * goes away after aux detach. Also aquire an allocation lock so accesses to
+   * the vi allocator are synchronised. */
   cli = efhw_nic_acquire_efct_device(nic);
   if( cli == NULL )
     return -ENETDOWN;
 
+  mutex_lock(&efct->vi_allocator.lock);
   if( evc->want_txq )
     rc = efhw_stack_vi_alloc(&efct->vi_allocator.tx,
                              efct_accept_tx_vi_constraints, efct);
   else
     rc = efhw_stack_vi_alloc(&efct->vi_allocator.rx,
                              efct_accept_rx_vi_constraints, efct);
+  mutex_unlock(&efct->vi_allocator.lock);
 
   efhw_nic_release_efct_device(nic, cli);
 
@@ -499,11 +502,13 @@ static void efct_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis)
   cli = efhw_nic_acquire_efct_device(nic);
   if( cli != NULL ) {
     /* If this vi is in the range [0..efct->evq_n) it has a txq */
+    mutex_lock(&efct->vi_allocator.lock);
     if( instance < efct->evq_n )
       efhw_stack_vi_free(&efct->vi_allocator.tx, instance);
     else
       efhw_stack_vi_free(&efct->vi_allocator.rx, instance);
 
+    mutex_unlock(&efct->vi_allocator.lock);
     efhw_nic_release_efct_device(nic, cli);
   }
 }

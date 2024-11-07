@@ -32,16 +32,16 @@ SFC_CHAR_MODE=666
 
 # onload_cp_server user.
 #
-# The following setting controls the user which will run the Onload control
-# plane server process. The user must exist, and does not need any privileges.
+# The Onload Control Plane user is configured in `/etc/modprobe.d/onload.conf`
+# as a variable corresponding to the following setting. The user must exist,
+# and does not need any privileges. If this setting is not defined, or the user
+# does not exist when the server starts, the server will run as root.
 #
-# As part of the install process, the command `onload_tool add_cplane_user`
-# will have typically been run to create the user specified below, which
-# is initially 'onload_cplane'. After updating this setting, running this
-# command is one way to create the user.
+# As part of the full install process, a default user 'onload_cplane' is
+# created, typically by sysusers.d/onload.conf.
 #
-# If this setting is not defined, or the user does not exist when the server
-# starts, the server will run as root.
+# To change, either modify the following to an existing user or create with:
+#   onload_tool set_cplane_user onload_cplane
 
 ONLOAD_CPLANE_USER=onload_cplane
 

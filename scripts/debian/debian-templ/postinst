@@ -17,10 +17,8 @@ set -e
 # for details, see http://www.debian.org/doc/debian-policy/ or
 # the debian-policy package
 
-
 case "$1" in
     configure)
-      /sbin/onload_tool add_cplane_user
       ldconfig -n /usr/lib /usr/lib32 /usr/lib64
     ;;
 

@@ -194,26 +194,11 @@ ifneq (,$(filter #TYPE#-source,$(DOPACKAGES)))
 	cd debian/$(psource)/usr/src && tar c modules | bzip2 -9 > $(sname).tar.bz2 && rm -rf modules
 endif
 
-	# perform above operations also for the DKMS build:
 ifneq (,$(filter #TYPE#-dkms,$(DOPACKAGES)))
-	# Create the directories to install the source into
-	dh_installdirs -p$(pdkms)  usr/src/modules/$(sname)-#VERSION#/debian
-
-	# Copy only the driver source to the proper location
-	cp Makefile  debian/$(pdkms)/usr/src/modules/$(sname)-#VERSION#
-	cp -r src  debian/$(pdkms)/usr/src/modules/$(sname)-#VERSION#
-	cp -r scripts  debian/$(pdkms)/usr/src/modules/$(sname)-#VERSION#
-	cp -r mk  debian/$(pdkms)/usr/src/modules/$(sname)-#VERSION#
-	# Copy the needed debian/ pieces to the proper location
-	cp debian/*modules.in* \
-		debian/$(pdkms)/usr/src/modules/$(sname)-#VERSION#/debian
-	cp debian/control \
-		debian/$(pdkms)/usr/src/modules/$(sname)-#VERSION#/debian
-	cp debian/rules debian/changelog debian/copyright \
-		debian/compat debian/$(pdkms)/usr/src/modules/$(sname)-#VERSION#/debian/
-	sed -e "s,#BUILDFLAGS#,$(BUILD_FLAGS),g" \
-		< debian/#TYPE#-dkms.dkms > debian/$(pdkms)/usr/src/modules/$(sname)-#VERSION#/debian/#TYPE#-dkms.dkms
-	cd debian/$(pdkms)/usr/src && tar c modules | bzip2 -9 > $(sname).tar.bz2 && rm -rf modules
+	echo "ONLOAD_INSTALL_ARGS=\"$(BUILD_FLAGS)\"" > dkms_override.conf
+	install -D -m 644 dkms_override.conf debian/$(pdkms)/etc/dkms/$(sname).conf
+	dh_installdirs -p$(pdkms) usr/src/
+	tar xf ../#TYPE#_#VERSION#.orig.tar.gz -C debian/$(pdkms)/usr/src/
 endif
 
 	# Add here commands to install the package into debian/#TYPE#.
@@ -262,6 +247,7 @@ binary-arch: build install
 	dh_lintian
 	dh_testdir -a
 	dh_testroot -a
+	dh_installsysusers -a --name=onload || dh_sysuser -a onload_cplane home=/run/openonload
 #	dh_installdebconf -a
 	dh_installdocs -a
 	dh_installexamples -a

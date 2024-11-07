@@ -59,6 +59,25 @@ Distributing as tarball
  target machine. Note that the built tarball can be installed with `--debug`
  to enable debugging mode, which provides additional logging and error-checking.
 
+Distributing as DEB or RPM package
+==================================
+
+To install Onload from source as DEB or RPM packages:
+
+    ./scripts/onload_mkpackage --install
+
+This script can also just build binary packages (omit `--install`), including
+those for different Redhat-based distributions (use `--mock-config`), or
+just create source packages (use `--only-source-packages`). It can also
+build specific packages (eg. `--devel --user`) and variants (eg. `--debug`).
+
+Official Onload release bundles include the mkdist tarball detailed in
+'Distributing as tarball' above, along with source packages. The User Guide
+details the standard distribution build tools and package managers for
+installing these source packages. Alternatively, these artifacts can simply
+be specified as command line arguments to `onload_mkpackage` for use as inputs
+in place of the current working tree.
+
 Distributing as container image
 ===============================
 

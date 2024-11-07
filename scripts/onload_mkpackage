@@ -1,0 +1,606 @@
+#!/bin/bash
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Copyright 2024 Advanced Micro Devices, Inc.
+#
+# See DEVELOPING.md
+
+me=$(basename "$0")
+abs=$(readlink -f "$(realpath "$0")")
+abs_me="$(basename "$abs")"
+bin=$(realpath "$(dirname "$abs")")
+
+err()  { echo >&2 "$*"; }
+log()  { err "$me: $*"; }
+fail() { log "$*"; exit 1; }
+try()  { "$@" || fail "FAILED: $*"; }
+tryquiet()  { "$@" >/dev/null || fail "FAILED: $*"; }
+
+maybe_install() {
+  hash "$1" &>/dev/null && return
+  local cmd=()
+  case "${1}_$pkgmgr" in
+    rpmbuild_yum) cmd=(yum install -y rpm-build);;
+    rpmbuild_zypper) cmd=(zypper install -y rpm-build);;
+    rpmbuild_apt) cmd=(apt-get install -y rpm);;
+    mock_yum) cmd=(yum install -y mock);;
+    mock_*) fail "CRITICAL: Mock is not supported on this platform. Try in a Red Hat based host.";;
+    debuild_yum|mk-build-deps_yum) cmd=(yum install -y devscripts);;
+    debuild_zypper|mk-build-deps_zypper) cmd=(zypper install -y devscripts);;
+    debuild_apt|mk-build-deps_apt) cmd=(apt-get install -y devscripts);;
+    equivs-build_apt) cmd=(apt-get install -y equivs);;
+    equivs*) return;;
+    dpkg-*_apt) cmd=(apt-get install -y dpkg-dev);;
+    dpkg-*_yum) cmd=(yum install -y dpkg-dev);; # In EPEL
+    dpkg-*_zypper) cmd=(zypper install -y dpkg);;
+  esac
+  $install_deps || fail "CRITICAL: Missing $1. Try --install-deps or manually run \`${cmd[*]}\`"
+  trylog --sudo "$builddir/install-dep.log" \
+    "${cmd[@]}"
+  [ "$1" == "mock" ] && trylog --sudo "$builddir/install-dep.log" \
+    /usr/sbin/usermod -a -G mock "$USER"
+}
+
+store_result() {
+  local from=$1
+  local name=${1##*/}
+  if [ -f "$resultdir/$name" ] && ! $force; then
+    fail "CRITICAL: Cannot continue as result already exists. Use --force to ovewrite $resultdir/$name with $from"
+  else
+    try install -D "$from" "$resultdir/$name"
+    log "Result: $resultdir/$name"
+  fi
+}
+
+
+trylog()  {
+  local cmd=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      *.log) logfile=$1;;
+      --sudo) [ "$USER" != "root" ] && cmd+=(sudo);;
+      *) cmd+=("$1");;
+    esac
+    shift
+  done
+
+  [ -f "$logfile" ] || log "Logging to $logfile ..."
+  echo "${cmd[*]}" >> "$logfile"
+
+  if $verbose; then
+    "${cmd[@]}" 2>&1 | tee -a "$logfile"
+    [ "${PIPESTATUS[0]}" -eq 0 ] || fail "FAILED(${PIPESTATUS[0]}): ${cmd[*]}"
+  else
+    if ! "${cmd[@]}" >>"$logfile" 2>&1; then
+      rc=$?
+      [ -f "${logfile%.*}/build.log" ] &&
+        log "Tail of ${logfile%.*}/build.log:" && \
+        tail -n20 "${logfile%.*}/build.log" && \
+        echo
+      [ -f "$logfile" ] && \
+        log "Tail of $logfile:" && \
+        tail -n20 "$logfile"
+      fail "FAILED($rc): ${cmd[*]}"
+    fi
+  fi
+}
+
+
+build_spec() {
+  # Reads: $tarball_path, $static_config, and all config modifiers
+  # Writes: $spec_path
+  local spec_dir=$builddir/${tarball_path%.*}_tarball
+  try rm -rf "$spec_dir"
+  try mkdir -p "$spec_dir"
+
+  if [ -z "$spec_path" ]; then
+    try tar Oxzf "$tarball_path" \
+      --wildcards \
+      "*/scripts/onload_misc/openonload.spec" > "$spec_dir/openonload.spec"
+  else
+    try cp "$spec_path" "$spec_dir/openonload.spec"
+  fi
+  spec_path=$spec_dir/openonload.spec
+
+  $static_config || return
+  sed_args=()
+  [ -n "$rpm_release" ] && sed_args+=(-e "/^Release:/ s/1/$rpm_release/")
+  ! ${with_user:-$with_all} && sed_args+=(-e "/bcond_without user/ {s/without/with/; s/skip/include/}")
+  ! ${with_kmod:-$with_all} && sed_args+=(-e "/bcond_without kmod/ {s/without/with/; s/skip/include/}")
+  ! ${with_devel:-$with_all} && sed_args+=(-e "/bcond_without devel/ {s/without/with/; s/skip/include/}")
+  ! ${with_akmod:-$with_all} && sed_args+=(-e "/bcond_without akmod/ {s/without/with/; s/skip/include/}")
+  ! ${with_dkms:-$with_all} && sed_args+=(-e "/bcond_without dkms/ {s/without/with/; s/skip/include/}")
+  ${with_debuginfo:-$with_all} && sed_args+=(-e "/bcond_with debuginfo/ {s/with/without/; s/include/skip/}")
+  $option_kernel_package_deps && sed_args+=(-e "/bcond_with kernel_package_deps/ {s/with/without/; s/include/skip/}")
+  $option_debug && sed_args+=(-e '/define "debug true"/ s/.*/%global debug true/')
+  $option_setuid && sed_args+=(-e '/define "setuid true"/ s/.*/%global setuid true/')
+  [ -n "$option_build_profile" ] && sed_args+=(-e "/define \"build_profile <profile>\"/ s/.*/%global build_profile $option_build_profile/")
+  try sed -i "${sed_args[@]}" "$spec_path"
+}
+
+
+build_srpm() {
+  # $tarball_path + $spec_path -> $srpm_path
+  if [ -n "$mock_config" ]; then
+    maybe_install mock
+    local srpm_resultdir=$builddir/${tarball_name%.*}_mock_source
+    trylog "$srpm_resultdir.log" \
+      mock \
+      "${mock_args[@]}" \
+      "${mock_source_args[@]}" \
+      -r "$mock_config" \
+      --buildsrpm \
+      --resultdir "$srpm_resultdir/" \
+      --sources "$tarball_path" \
+      --spec "$spec_path"
+  else
+    maybe_install rpmbuild
+    local topdir=$builddir/${tarball_name%.*}_rpmbuild_source
+    local srpm_resultdir=$topdir/SRPMS
+    try rm -rf "$topdir"
+    try mkdir -p "$topdir"/{SOURCES,SPECS,SRPMS}
+    try cp "$tarball_path" "$topdir/SOURCES/"
+    trylog "$topdir/build.log" \
+      rpmbuild -bs \
+      "${rpmbuild_args[@]}" \
+      "${rpmbuild_source_args[@]}" \
+      --define "_topdir $topdir" \
+      "$spec_path"
+  fi
+  srpm_paths=("$srpm_resultdir"/*.src.rpm)
+  srpm_path="${srpm_paths[0]}"
+  (( target_stage < stage_install )) || ! $clean && store_result "$srpm_path"
+}
+
+
+build_rpm() {
+  # $srpm_path -> $rpm_paths
+  local srpm_name=${srpm_path##*/}
+  if [ -n "$mock_config" ]; then
+    local rpm_resultdir=$builddir/${srpm_name%.*}_mock_rebuild
+    maybe_install mock
+    trylog "$rpm_resultdir.log" \
+      mock \
+      "${mock_args[@]}" \
+      "${mock_binary_args[@]}" \
+      -r "$mock_config" \
+      --resultdir "$rpm_resultdir" \
+      --rebuild "$srpm_path"
+    rpm_paths=()
+    for rpm_path in "$rpm_resultdir"/*.rpm; do
+      [[ "$rpm_path" != *.src.rpm ]] && rpm_paths+=("$rpm_path")
+    done
+  else
+    if $install_deps; then
+      case $pkgmgr in
+        yum) cmd=(yum-builddep -y "$srpm_path");;
+        zypper) cmd=(zypper source-install -d "$srpm_path");;
+        apt) fail "Installing build dependencies for SRPM on Debian-based host is not supported.";;
+      esac
+      trylog --sudo "$builddir/install-dep.log" \
+        "${cmd[@]}"
+    fi
+    local topdir=$builddir/${srpm_name%.*}_rpmbuild_rebuild
+    try rm -rf "$topdir"
+    try mkdir -p "$topdir"/RPMS
+    maybe_install rpmbuild
+    trylog "$topdir/build.log" \
+      rpmbuild \
+      "${rpmbuild_args[@]}" \
+      "${rpmbuild_binary_args[@]}" \
+      --define "_topdir $topdir" \
+      --rebuild "$srpm_path"
+    rpm_paths=("$topdir"/RPMS/*/*.rpm)
+  fi
+  for rpm_path in "${rpm_paths[@]}"; do
+    (( target_stage < stage_install )) || ! $clean && store_result "$rpm_path"
+  done
+}
+
+
+install_rpm() {
+  # $rpm_paths -> host
+  trylog --sudo "$builddir/install.log" \
+    yum install -y "${rpm_paths[@]}"
+  if ${with_akmod:-$with_all} && ! ${with_kmod:-$with_all}; then
+    trylog --sudo "$builddir/install.log" \
+      akmods --akmod onload
+  fi
+}
+
+
+build_sdeb() {
+  # $tarball_path -> $debiansource_path
+  local sdeb_dir="${builddir:?}/${tarball_name%.*}_mksrcdeb"
+  try rm -rf "${sdeb_dir:?}/*"
+  try mkdir -p "$sdeb_dir"
+  maybe_install debuild
+  mksrcdeb_args=(--tarball "$tarball_path" --out "$sdeb_dir")
+  trylog "$sdeb_dir/build.log" \
+    "$bin/debian/onload_mksrcdeb.sh" "${mksrcdeb_args[@]}"
+  local debiansource_paths=("$sdeb_dir"/*debiansource.tgz)
+  debiansource_path="${debiansource_paths[0]}"
+  (( target_stage < stage_install )) || ! $clean && store_result "$debiansource_path"
+}
+
+
+build_deb() {
+  # $debiansource_path -> $deb_path
+  debiansource_name=${debiansource_path##*/}
+  local deb_dir="$builddir/${debiansource_name%.*}_debuild"
+  local product=${debiansource_name%%_*}
+  try rm -rf "$deb_dir"
+  try mkdir -p "$deb_dir"
+  try tar -x -C "$deb_dir" -f "$debiansource_path"
+  dsc_paths=("$deb_dir"/*.dsc)
+  dsc_path="${dsc_paths[0]}"
+  dsc_dir=${dsc_path%.*}
+
+  maybe_install dpkg-source
+  trylog "$deb_dir/build.log" \
+    dpkg-source -x "$dsc_path" "$dsc_dir"
+
+  printf -v build_profiles_csv "pkg.$product.%s," "${build_profiles_short[@]}"
+  if [ ${#devscripts_build_profiles[@]} -ne 0 ]; then
+    printf -v build_profiles_ext_csv "%s," "${devscripts_build_profiles[@]}"
+    build_profiles_csv+="$build_profiles_ext_csv"
+  fi
+  if $install_deps; then
+    maybe_install mk-build-deps
+    maybe_install equivs-build # dependency of mk-build-deps
+    tryquiet pushd "$deb_dir"
+    trylog "$deb_dir/install-deps.log" \
+      mk-build-deps --build-profiles="${build_profiles_csv%,}" --build-dep "$dsc_path"
+    tryquiet popd
+    deb_dep_paths=("$deb_dir"/*build-deps-depends*.deb)
+    case $pkgmgr in
+      yum|zypper) fail "Installing build dependencies for DEB on Redhat-based host is not supported.";;
+      apt) cmd=(apt-get install --fix-broken --allow-downgrades -y "${deb_dep_paths[@]}");;
+    esac
+    trylog --sudo "$builddir/install-dep.log" \
+      "${cmd[@]}"
+  fi
+
+  maybe_install debuild
+  tryquiet pushd "$dsc_dir"
+  trylog "$deb_dir/build.log" \
+    debuild "${debuild_args[@]}" -i -uc -us "${dpkg_buildpackage_args[@]}" \
+    --build-profiles="${build_profiles_csv%,}"
+  tryquiet popd
+  deb_paths=("$deb_dir"/*.deb)
+  for deb_path in "${deb_paths[@]}"; do
+    (( target_stage < stage_install )) || ! $clean && store_result "$deb_path"
+  done
+}
+
+
+install_deb() {
+  # $deb_paths -> host
+  trylog --sudo "$builddir/install.log" \
+    apt-get install --allow-downgrades -y "${deb_paths[@]}"
+  if ${with_kmod:-$with_all}; then
+    trylog --sudo "$builddir/install.log" \
+      module-assistant auto-install -i onload
+  fi
+}
+
+
+install_reload() {
+  trylog --sudo "$builddir/install.log" \
+    onload_tool reload
+}
+
+
+print_vars() {
+  [ -n "$spec_path" ] && echo "spec_path=$spec_path"
+  [ -n "$srpm_path" ] && echo "srpm_path=$srpm_path"
+  [ -n "$debiansource_path" ] && echo "debiansource_path=$debiansource_path"
+  [ -n "${rpm_paths[*]}" ] && echo "rpm_paths=${rpm_paths[*]}"
+  [ -n "${deb_paths[*]}" ] && echo "deb_paths=${deb_paths[*]}"
+  echo "dist_rpm=$dist_rpm"
+  echo "dist_deb=$dist_deb"
+  echo -n
+}
+
+
+tidy() {
+  if $clean; then
+    log "Removing $builddir (--keep not specified)"
+    rm -rf "${builddir:?}"
+  fi
+  if [ "$output_vars" == '-' ]; then
+    print_vars
+  elif [ -n "$output_vars" ]; then
+    print_vars > "$output_vars"
+  fi
+  exit 0
+}
+
+
+dist_rpm=false
+dist_deb=false
+stage_config=0
+stage_source_packages=1
+stage_binary_packages=2
+stage_install=3
+stage_reload=4
+target_stage=$stage_binary_packages
+install_deps=false
+with_all=true
+with_user=
+with_kmod=
+with_devel=
+with_akmod=
+with_dkms=
+with_debuginfo=
+option_debug=false
+option_setuid=false
+option_kernel_package_deps=false
+option_build_profile=
+rpm_release=2 # Only when static writing -- indicates changes occured which may not otherwise be evident from filename
+static_config=false
+build_profiles_short=()
+tarball_path=
+debiansource_path=
+srpm_path=
+rpm_paths=()
+deb_paths=()
+spec_path=
+verbose=false
+force=false
+output_vars=
+mock_config=
+resultdir="$PWD"
+
+clean=true
+builddir=build/packages
+[[ "$bin" == *scripts ]] && builddir="$bin/../build/packages"
+mkdir -p "$builddir" 2>/dev/null && builddir=$(realpath "$builddir" 2>/dev/null) || \
+  builddir="$(mktemp -d --suffix=.onload)"
+
+read -r -a mkdist_args <<< "$mkdist_args"
+read -r -a rpmbuild_args <<< "$rpmbuild_args"
+read -r -a rpmbuild_source_args <<< "$rpmbuild_source_args"
+read -r -a rpmbuild_binary_args <<< "$rpmbuild_binary_args"
+read -r -a mock_args <<< "$mock_args"
+read -r -a mock_source_args <<< "$mock_source_args"
+read -r -a mock_binary_args <<< "$mock_binary_args"
+read -r -a devscripts_build_profiles <<< "$devscripts_build_profiles"
+read -r -a debuild_args <<< "$debuild_args"
+read -r -a dpkg_buildpackage_args <<< "$dpkg_buildpackage_args"
+
+usage() {
+  err
+  err "Usage:"
+  err "  $abs_me [OPTIONS] [MKDIST_TGZ|DEBIANSOURCE|SRPM]"
+  err
+  err "Distribution options (default based on this host):"
+  err "  -R, --rpm                        Redhat-based packages"
+  err "  -D, --deb                        Debian-based packages"
+  err
+  err "Package options (defaults aligned to package specs):"
+  err "  -u, --user                       With only user-space package"
+  err "  -e, --devel                      With only headers package"
+  err "  -k, --kmod                       With only KMOD (DEB -source) package"
+  err "  -a, --akmod                      With only AKMOD RPM package"
+  err "  -d, --dkms                       With only DKMS package"
+  err "      --debuginfo                  With only debuginfo RPM package"
+  err "      --debug                      Enable Onload debug mode"
+  err "      --setuid                     Enable SETUID dev file mode"
+  err "      --kernel-package-deps        Enable kernel package dependencies in RPM"
+  err "      --kernelver \`uname -r\`       Sets kernel version (KVER)"
+  err "      --profile cloud              Sets Onload Build Profile to Cloud"
+  err "      --rpm-release NUM            Sets RPM Release"
+  err "      --static-config              Write above settings to package source"
+  err
+  err "Build stage options (binary package builds by default):"
+  err "      --only-config                Stop after config file writes by --static-config"
+  err "  -s, --only-source-packages       Stop after creating source package(s)"
+  err "  -i, --install                    Install packages on this host"
+  err "  -x, --install-reloaded           Install packages and reload drivers on this host"
+  err
+  err "Build options:"
+  err "  -b, --install-deps               Install missing build requirements"
+  err "  -r, --mock-config CONFIG         Use Red Hat Mock with cfg file"
+  err "      --resultdir DIRECTORY        Output package artifacts (default is \$PWD)"
+  err "      --builddir DIRECTORY         Workspace (default is \$PWD/build/packages/)"
+  err "  -o, --output-vars -              Print SPEC/SRPM paths to STDOUT or file"
+  err "  -f, --force                      Overwrite contents of --resultdir"
+  err "  -v, --verbose                    Debug this script"
+  err "      --rpm-spec SPEC_PATH         Override Mkdist tarball SPEC file"
+  err "  -K, --keep                       Do not clean up builddir & always output results"
+  err
+  err "onload_mkdist passed options:"
+  err "      --product PRODUCT, --version VERSION, --release, --enterprise, ..."
+  err
+  err "Env vars:"
+  err "  KVER                             Sets kernel version (--kernelver)"
+  err "  mkdist_args                      Extra params for onload_mkdist"
+  err "  rpmbuild_args                    Extra params for all rpmbuild builds"
+  err "  rpmbuild_source_args             Extra params for rpmbuild source build"
+  err "  rpmbuild_binary_args             Extra params for rpmbuild binary build"
+  err "  mock_args                        Extra params for all Mock builds"
+  err "  mock_source_args                 Extra params for Mock source build"
+  err "  mock_binary_args                 Extra params for Mock binary build"
+  err "  devscripts_build_profiles        Extra params for Debian packaging scripts"
+  err "  debuild_args                     Extra params for Debian debuild"
+  err "  dpkg_buildpackage_args           Extra params for Debian dpkg-buildpackage"
+  exit 1
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    # Distribution options
+    -R|--rpm) dist_rpm=true;;
+    -D|--deb) dist_deb=true;;
+    # Package options
+    -u|--user) with_all=false; with_user=true;;
+    -e|--devel) with_all=false; with_devel=true;;
+    -k|--kmod) with_all=false; with_kmod=true;;
+    -a|--akmod) with_all=false; with_akmod=true;;
+    -d|--dkms) with_all=false; with_dkms=true;;
+    --debuginfo) with_all=false; with_debuginfo=true;;
+    --debug) option_debug=true;;
+    --setuid) option_setuid=true;;
+    --kernel-package-deps) option_kernel_package_deps=true;;
+    --kernelver) shift; KVER="$1";;
+    --profile) shift; option_build_profile="$1";;
+    --rpm-release) shift; rpm_release="$1";;
+    --static-config) static_config=true;;
+    # Build stage options
+    --only-config) target_stage=$stage_config;;
+    -s|--only-source-packages) target_stage=$stage_source_packages;;
+    -i|--install) target_stage=$stage_install; install_deps=true;;
+    -x|--install-reloaded) target_stage=$stage_reload; install_deps=true;;
+    # Build options
+    -b|--install-deps) install_deps=true;;
+    -r|--mock-config) shift; mock_config="$1";;
+    --resultdir|--out) shift; resultdir="$1";;
+    --builddir|--working-dir) shift; builddir="${1%%/}"; clean=false;;
+    -o|--output-vars) shift; output_vars="$1";;
+    -f|--force) force=true;;
+    -v|--verbose) verbose=true; set -x; rpmbuild_args+=(--verbose); mock_args+=(--verbose);;
+    --rpm-spec) shift; spec_path="$1";;
+    -K|--keep) clean=false;;
+    # Mkdist options
+    --product|--version|--srcrev) mkdist_args+=("$1" "$2"); shift;;
+    --release|--enterprise|--cloud|--testciul) mkdist_args+=("$1");;
+    --tarball);; # Just shift for onload_mkdkms & onload_mksrcdeb compat
+    # Files
+    *src.rpm) { [ -z "$srpm_path$debiansource_path$tarball_path" ] && srpm_path="$1"; } || fail "Supply one SRPM only.";;
+    *debiansource.tgz) { [ -z "$debiansource_path$srpm_path$tarball_path" ] && debiansource_path="$1"; } || fail "Supply one tarball only.";;
+    *.tgz|*.tar.gz) { [ -z "$tarball_path$debiansource_path$srpm_path" ] && tarball_path="$1"; } || fail "Supply one tarball only.";;
+    -*)  log "Unrecognised command: $1"; usage;;
+    *)   break;;
+  esac
+  shift
+done
+
+[ $# = 0 ] || usage
+
+# Backwards compatibility
+case "$me" in
+  onload-make-official-srpm)
+    log "Called $abs_me from legacy $me, continuing with user-space & KMOD SRPM build."
+    dist_rpm=true; dist_deb=false
+    target_stage=$stage_source_packages
+    with_all=false; with_user=true; with_kmod=true
+    rpmbuild_args+=(--undefine dist --nodeps); mock_args+=(--undefine dist --nodeps)
+    ;;
+  onload_mkdkms)
+    log "Called $abs_me from legacy $me, continuing with DKMS RPM build."
+    dist_rpm=true; dist_deb=false
+    target_stage=$stage_binary_packages
+    with_all=false; with_dkms=true
+    rpm_release=0; static_config=true
+    rpmbuild_args+=(--undefine dist); mock_args+=(--undefine dist)
+    ;;
+esac
+
+# Build options
+! ${with_user:-$with_all} && rpmbuild_args+=(--without user) && mock_args+=(--without user) && build_profiles_short+=(nouser)
+! ${with_kmod:-$with_all} && rpmbuild_args+=(--without kmod) && mock_args+=(--without kmod) && build_profiles_short+=(nosource)
+! ${with_devel:-$with_all} && rpmbuild_args+=(--without devel) && mock_args+=(--without devel) && build_profiles_short+=(nodev)
+! ${with_akmod:-$with_all} && rpmbuild_args+=(--without akmod) && mock_args+=(--without akmod)
+! ${with_dkms:-$with_all} && rpmbuild_args+=(--without dkms) && mock_args+=(--without dkms) && build_profiles_short+=(nodkms)
+${with_debuginfo:-$with_all} && rpmbuild_args+=(--with debuginfo) && mock_args+=(--with debuginfo)
+$option_debug && rpmbuild_args+=(--define "debug true") && mock_args+=(--define "debug true") && build_profiles_short+=(debug)
+$option_setuid && rpmbuild_args+=(--define "setuid true") && mock_args+=(--define "setuid true") && build_profiles_short+=(setuid)
+$option_kernel_package_deps && rpmbuild_args+=(--with kernel_package_deps) && mock_args+=(--with kernel_package_deps)
+[ -n "$option_build_profile" ] && rpmbuild_args+=(--define "build_profile $option_build_profile") && mock_args+=(--define "build_profile $option_build_profile") && build_profiles_short+=("profile-$option_build_profile")
+[ -n "$KVER" ] && rpmbuild_args+=(--define "kernel $KVER") && mock_args+=(--define "kernel $KVER")
+
+# Determine distro
+if [ -f /etc/redhat-release ]; then
+  pkgmgr=yum
+  ! $dist_deb && dist_rpm=true
+  $dist_deb && (( target_stage >= stage_install )) && \
+    fail "CRITICAL: Cannot --install DEB packages on Red Hat host."
+elif [ -f /etc/debian_version ]; then
+  pkgmgr=apt
+  ! $dist_rpm && dist_deb=true
+  $dist_rpm && (( target_stage >= stage_install )) && \
+    fail "CRITICAL: Cannot --install RPM packages on Debian-based host."
+elif [ -f /etc/SuSE-release ]; then
+  pkgmgr=zypper
+  ! $dist_deb && dist_rpm=true
+  $dist_deb && (( target_stage >= stage_install )) && \
+    fail "CRITICAL: Cannot --install DEB packages on SuSE host."
+elif $install_deps; then
+  fail "This script only supports Red Hat-based, Debian-based, and SuSE hosts."
+else
+  err "Unrecognised host distribution. Preinstall build dependencies and try --deb or --rpm."
+fi
+
+if ((target_stage >= stage_install)); then
+  if [ -z "$with_akmod" ] && [ -z "$with_dkms" ] && [ -z "$with_kmod" ]; then
+    if $with_all; then
+      if $dist_rpm; then
+        log "Default --install mode of --kmod --akmod for kernel module selected."
+        with_dkms=false
+      else
+        log "Default --install mode of --kmod for kernel module selected."
+        with_dkms=false
+        with_akmod=false
+      fi
+      log "To install DKMS instead, specify --dkms."
+    else
+      log "WARNING: Installing without kernel modules."
+    fi
+  fi
+  ${with_akmod:-$with_all} && ${with_dkms:-$with_all} && fail "Install only one of --akmod or --dkms"
+  ${with_dkms:-$with_all} && ${with_kmod:-$with_all} && fail "Install only one of --kmod or --dkms"
+  [ -f "$builddir/install.log" ] && mv "$builddir/install.log" "$builddir/install.$(stat -c%Y "$builddir/install.log").log"
+fi
+if $install_deps && [ -f "$builddir/install-deps.log" ]; then
+  mv "$builddir/install-deps.log" "$builddir/install-deps.$(stat -c%Y "$builddir/install-deps.log").log"
+fi
+
+# SRPM supplied as input
+if [ -n "$srpm_path" ]; then
+  [ -f "$srpm_path" ] || fail "CRITICAL: Missing Onload SRPM '$srpm_path'"
+  build_rpm
+  (( target_stage >= stage_install )) && install_rpm
+  (( target_stage >= stage_reload )) && install_reload
+  tidy
+fi
+
+# Debian source supplied as input
+if [ -n "$debiansource_path" ]; then
+  [ -f "$debiansource_path" ] || fail "CRITICAL: Missing Onload Debian source '$debiansource_path'"
+  (( target_stage >= stage_binary_packages )) && build_deb
+  (( target_stage >= stage_install )) && install_deb
+  (( target_stage >= stage_reload )) && install_reload
+  tidy
+fi
+
+# Mkdist tarball supplied as input or built now
+if [ -n "$tarball_path" ]; then
+  [ -f "$tarball_path" ] || fail "CRITICAL: Missing Onload mkdist tarball '$tarball_path'"
+  [ ${#mkdist_args[@]} -ne 0 ] && log "WARNING: Ignoring supplied mkdist args: ${mkdist_args[*]}"
+  tarball_name=${tarball_path##*/}
+else
+  [ -f "$bin"/onload_mkdist ] || fail "CRITICAL: Missing onload_mkdist. Run in working tree or provide source file."
+  $force && mkdist_args+=(--force)
+  $verbose && mkdist_args+=(--debug)
+  tryquiet pushd "$resultdir"
+  mkdist_vars="$(try "$bin"/onload_mkdist "${mkdist_args[@]}" --output-vars)" || exit 2
+  tryquiet popd
+  # shellcheck source=scripts/onload_mkdist
+  source <(echo "$mkdist_vars")
+  tarball_path=$resultdir/$tarball_name
+  log "Created $tarball_path"
+fi
+if $dist_rpm; then
+  build_spec
+  (( target_stage >= stage_source_packages )) && build_srpm
+  (( target_stage >= stage_binary_packages )) && build_rpm
+  (( target_stage >= stage_install )) && install_rpm
+fi
+if $dist_deb; then
+  (( target_stage >= stage_source_packages )) && build_sdeb
+  (( target_stage >= stage_binary_packages )) && build_deb
+  (( target_stage >= stage_install )) && install_deb
+fi
+(( target_stage >= stage_reload )) && install_reload
+
+tidy

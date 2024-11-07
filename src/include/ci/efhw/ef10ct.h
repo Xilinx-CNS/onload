@@ -8,6 +8,7 @@
 #include <ci/driver/ci_ef10ct.h>
 #include <ci/tools/sysdep.h>
 #include <ci/efhw/stack_vi_allocator.h>
+#include <linux/mutex.h>
 
 extern struct efhw_func_ops ef10ct_char_functional_units;
 
@@ -51,6 +52,7 @@ struct efhw_nic_ef10ct {
   struct {
     struct efhw_stack_vi_allocator tx;
     struct efhw_stack_vi_allocator rx;
+    struct mutex lock;
   } vi_allocator;
   struct efct_filter_state filter_state;
   struct dentry* debug_dir;

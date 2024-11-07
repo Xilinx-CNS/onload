@@ -383,17 +383,36 @@ static inline int oo_file_is_in_epoll(struct file* file)
 }
 
 
+#ifndef EFRM_HAVE_VM_FLAGS_SET
+/* Linux < 6.3 */
+static inline void vm_flags_set(struct vm_area_struct *vma, vm_flags_t flags)
+{
+  vma->vm_flags |= flags;
+}
+static inline void vm_flags_clear(struct vm_area_struct *vma, vm_flags_t flags)
+{
+  vma->vm_flags &= ~flags;
+}
+#endif /* EFRM_HAVE_VM_FLAGS_SET */
+
+
 static inline int
 oo_remap_vmalloc_range_partial(struct vm_area_struct *vma, unsigned long uaddr,
                                void *kaddr, unsigned long size)
 {
 #ifdef EFRM_HAS_REMAP_VMALLOC_RANGE_PARTIAL
   /* linux<5.13 */
-  return remap_vmalloc_range_partial(vma, uaddr, kaddr,
+  int rc = remap_vmalloc_range_partial(vma, uaddr, kaddr,
 #ifdef EFRM_REMAP_VMALLOC_RANGE_PARTIAL_NEW
                                      0 /*pgoff, in linux>=5.7 */,
 #endif
                                      size);
+
+  if( rc >= 0 )
+    /* remap_vmalloc_range_partial sets this */
+    vm_flags_clear(vma, VM_DONTDUMP);
+
+  return rc;
 #else
   /* linux>=5.13 */
   unsigned long npages = size >> PAGE_SHIFT;
@@ -437,18 +456,6 @@ oo_remap_vmalloc_range_partial(struct vm_area_struct *vma, unsigned long uaddr,
 #else
 #define ci_netif_rx_non_irq netif_rx
 #endif /* EFRM_HAVE_NETIF_RX_NI */
-
-#ifndef EFRM_HAVE_VM_FLAGS_SET
-/* Linux < 6.3 */
-static inline void vm_flags_set(struct vm_area_struct *vma, vm_flags_t flags)
-{
-  vma->vm_flags |= flags;
-}
-static inline void vm_flags_clear(struct vm_area_struct *vma, vm_flags_t flags)
-{
-  vma->vm_flags &= ~flags;
-}
-#endif /* EFRM_HAVE_VM_FLAGS_SET */
 
 #ifndef EFRM_HAVE_GET_RANDOM_U32
 /* linux < 4.11 */

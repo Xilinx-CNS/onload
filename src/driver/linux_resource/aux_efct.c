@@ -372,6 +372,8 @@ static int efct_vi_allocator_ctor(struct efhw_nic_efct *nic,
   rc = efhw_stack_vi_allocator_ctor(&nic->vi_allocator.rx, nic->evq_n, res_dim->vi_lim);
   if(rc < 0)
     goto fail2;
+
+  mutex_init(&nic->vi_allocator.lock);
   return rc;
 
  fail2:

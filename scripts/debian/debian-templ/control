@@ -2,7 +2,7 @@ Source: #TYPE#
 Section: net
 Priority: extra
 Maintainer: Support <support@solarflare.com>
-Build-Depends: debhelper (>= 8.0.0), bzip2, gawk, glibc | libc6, python3-dev, libpcap-dev, libcap-dev
+Build-Depends: debhelper (>= 8.0.0), bzip2, gawk, glibc | libc6, python3-dev, libpcap-dev, libcap-dev, debhelper (>= 13.3) | dh-sysuser
 Standards-Version: 3.9.3
 Homepage: http://www.openonload.org
 

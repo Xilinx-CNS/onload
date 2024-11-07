@@ -162,23 +162,31 @@ cmd_mod_params() {
 }
 
 ######################################################################
-# The add_cplane_user command is recommended in /etc/sysconfig/openonload
-# and typically called by install processes to create 'onload_cplane' user.
+# The set_cplane_user command takes the ONLOAD_CPLANE_USER user
+# specified in /etc/sysconfig/openonload or as a command line arg
+# and performs local admin configuration to enable its use.
 
-cmd_add_cplane_user() {
-  id -u "$ONLOAD_CPLANE_USER" >/dev/null 2>/dev/null && exit 0
-
-  # We do not require this home directory to exist
-  if command -v adduser; then
-    try adduser --system --no-create-home --home /run/openonload \
-                --shell /usr/sbin/nologin "$ONLOAD_CPLANE_USER" >/dev/null
-  elif command -v useradd; then
-    try useradd --system --home /run/openonload \
-                --shell /usr/sbin/nologin "$ONLOAD_CPLANE_USER" >/dev/null
-  else
-    fail "ERROR: Shadow utils not found. The user $ONLOAD_CPLANE_USER needs adding manually."
+cmd_set_cplane_user() {
+  if [ -n "$1" ] && [ "$ONLOAD_CPLANE_USER" != "$1" ]; then
+    sed -i -e "/^ONLOAD_CPLANE_USER=/ s/.*/ONLOAD_CPLANE_USER=$1/" /etc/sysconfig/openonload
+    ONLOAD_CPLANE_USER="$1"
   fi
-  exit 0
+
+  if [ -f /usr/lib/sysusers.d/onload.conf ] && [ "$ONLOAD_CPLANE_USER" != "onload_cplane" ]; then
+    mkdir -p /etc/sysusers.d
+    sed -e "s/onload_cplane/$ONLOAD_CPLANE_USER/" /usr/lib/sysusers.d/onload.conf > /etc/sysusers.d/onload.conf
+  fi
+
+  if systemd-analyze cat-config sysusers.d/onload.conf 2>/dev/null | grep ^u; then
+    systemd-sysusers onload.conf
+  else
+    getent group "$ONLOAD_CPLANE_USER" >/dev/null || groupadd -r "$ONLOAD_CPLANE_USER"
+    # We do not require this home directory to exist
+    getent passwd "$ONLOAD_CPLANE_USER" >/dev/null || \
+      try useradd --system --home /run/openonload --gid "$ONLOAD_CPLANE_USER" \
+                  --shell /usr/sbin/nologin "$ONLOAD_CPLANE_USER" >/dev/null
+    exit 0
+  fi
 }
 
 ######################################################################
@@ -384,8 +392,8 @@ case "$cmd" in
   configure_container)
     cmd_configure_container "$@"
     ;;
-  add_cplane_user)
-    cmd_add_cplane_user
+  set_cplane_user|add_cplane_user)
+    cmd_set_cplane_user "$@"
     ;;
   post_install)
     cmd_post_install "$@"

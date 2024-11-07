@@ -22,8 +22,11 @@
 # If you don't want to build the kernel module package, use:
 #   --without kmod
 #
-# If you want to build the kernel module Akmods package, use:
-#   --with akmod
+# If you don't want to build the kernel module Akmods package, use:
+#   --without akmod
+#
+# If you don't want to build the kernel module DKMS package, use:
+#   --without dkms
 #
 # If you don't want to build the userland package, use:
 #   --without user
@@ -65,10 +68,11 @@
 # is unavailable at build time:
 #    --define "have_efct 1"
 
-%bcond_without user # add option to skip userland builds
-%bcond_without kmod # add option to skip kmod builds
-%bcond_without devel # add option to skip devel builds
-%bcond_with akmod # add option to include Akmods package
+%bcond_without user # add option to skip userland package
+%bcond_without kmod # add option to skip kmod package
+%bcond_without devel # add option to skip devel package
+%bcond_without akmod # add option to skip Akmods package
+%bcond_without dkms # add option to skip DKMS package
 
 %define pkgversion 20100910
 
@@ -111,6 +115,8 @@ License:          Various
 URL:              https://www.openonload.org/
 Vendor:           Advanced Micro Devices, Inc.
 Provides:         openonload = %{version}-%{release}
+Provides:         user(onload_cplane)
+Provides:         group(onload_cplane)
 %if 0%{?rhel} >= 8
 Recommends:       openonload-devel = %{version}-%{release}
 %endif
@@ -118,14 +124,15 @@ Source0:          %{name}-%{pkgversion}.tgz
 BuildRoot:        %{_builddir}/%{name}-root
 AutoReqProv:      no
 ExclusiveArch:    x86_64 ppc64
+Requires(pre):    shadow-utils
 
-%global base_build_requires gawk gcc sed make bash libpcap libpcap-devel automake libtool autoconf libcap-devel
-%if 0%{?suse_version}
-%global dist_build_requires glibc-devel glibc python3-devel libcap2
-%else
-%global dist_build_requires glibc-common python3-devel libcap
+%global base_build_requires gawk gcc sed make bash automake libtool autoconf
+BuildRequires:    %{base_build_requires}
+
+%global user_build_requires libpcap-devel libcap-devel python3-devel
+%if %{with user}
+BuildRequires:    %{user_build_requires}
 %endif
-BuildRequires:    %{base_build_requires} %{dist_build_requires}
 
 %description
 OpenOnload is a high performance user-level network stack.  Please see
@@ -219,7 +226,7 @@ fi
 %if %{with akmod}
 %package akmod
 Summary:          OpenOnload kernel modules as Akmod source
-Requires:         akmods %{base_build_requires} %{dist_build_requires} %{?efct_build_requires:%efct_build_requires}
+Requires:         akmods %{base_build_requires} %{user_build_requires} %{?efct_build_requires:%efct_build_requires}
 Conflicts:        kernel-module-sfc-RHEL%{maindist}
 Provides:         openonload-kmod = %{version}-%{release}
 Provides:         sfc-kmod-symvers = %{version}-%{release}
@@ -264,7 +271,61 @@ This package comprises development headers for the components of OpenOnload.
 %{_includedir}/etherfabric
 %{_includedir}/onload
 %endif
+
 ###############################################################################
+
+%if %{with dkms}
+%package dkms
+Summary:          OpenOnload kernel modules as DKMS source
+Group:            System Environment/Kernel
+Requires:         dkms >= 2.6
+Requires:         openonload = %{version}-%{release}
+Provides:         openonload-kmod = %{version}-%{release}
+Provides:         sfc-kmod-symvers = %{version}-%{release}
+BuildArch:        noarch
+
+%description dkms
+OpenOnload is a high performance user-level network stack.  Please see
+www.openonload.org for more information.
+
+This package comprises the kernel module components of OpenOnload as DKMS.
+
+%post dkms
+dkms add -m %{name} -v %{pkgversion} --rpm_safe_upgrade
+if [ `uname -r | grep -c "BOOT"` -eq 0 ] && [ -e /lib/modules/`uname -r`/build/include ]; then
+  dkms build -m %{name} -v %{pkgversion}
+  dkms install -m %{name} -v %{pkgversion} --force
+elif [ `uname -r | grep -c "BOOT"` -gt 0 ]; then
+  echo -e ""
+  echo -e "Module build for the currently running kernel was skipped since you"
+  echo -e "are running a BOOT variant of the kernel."
+else
+  echo -e ""
+  echo -e "Module build for the currently running kernel was skipped since the"
+  echo -e "kernel headers for this kernel do not seem to be installed."
+fi
+exit 0
+
+%preun dkms
+echo -e
+echo -e "Uninstall of %{name} module (version %{pkgversion}) beginning:"
+dkms remove -m %{name} -v %{pkgversion} --all --rpm_safe_upgrade
+
+%files dkms
+%defattr(-,root,root)
+%{_usrsrc}/%{name}-%{pkgversion}/
+%config(noreplace) %{_sysconfdir}/dkms/%{name}.conf
+%if 0%{?license:1}
+%license LICENSE*
+%else
+%doc LICENSE*
+%endif
+%doc README* ChangeLog*
+
+%endif
+
+###############################################################################
+
 %prep
 [ "$RPM_BUILD_ROOT" != / ] && rm -rf "$RPM_BUILD_ROOT"
 %setup -q -n %{name}-%{pkgversion}
@@ -330,6 +391,7 @@ sed \
   -e "/bcond_without user/ {s/without/with/; s/skip/include/}" \
   -e "/bcond_without devel/ {s/without/with/; s/skip/include/}" \
   -e "/bcond_without akmod/ {s/without/with/; s/skip/include/}" \
+  -e "/bcond_without dkms/ {s/without/with/; s/skip/include/}" \
   -e "/bcond_with kernel_package_deps/ {s/with/without/; s/include/skip/}" \
   -e '/define "moddir extra"/ s/.*/%%global moddir extra\/onload/' \
   %{?debug:-e '/define "debug true"/ s/.*/%%global debug true/'} \
@@ -344,6 +406,19 @@ rpmbuild \
     -bs --nodeps %{_specdir}/%{name}-akmod.spec
 ln -s $(ls %{buildroot}/%{_usrsrc}/akmods/) %{buildroot}/%{_usrsrc}/akmods/%{name}-kmod.latest
 %endif
+%if %{with dkms}
+echo "ONLOAD_INSTALL_ARGS=\"%{?debug:--debug}%{?build_profile: --build-profile %build_profile}%{?moddir: --moddir=%moddir}\"" > dkms_overrides.conf
+install -D -m 644 dkms_overrides.conf %{buildroot}%{_sysconfdir}/dkms/%{name}.conf
+mkdir -p %{buildroot}%{_usrsrc}
+tar xf %{SOURCE0} -C %{buildroot}%{_usrsrc}
+%endif
+
+%pre
+getent group onload_cplane >/dev/null || groupadd -r onload_cplane
+getent passwd onload_cplane >/dev/null || \
+  useradd -r -g onload_cplane -M -d /run/openonload -s /usr/sbin/nologin \
+  -c "%{name} Control Plane" onload_cplane
+exit 0
 
 %post
 
@@ -403,13 +478,13 @@ rm -fR $RPM_BUILD_ROOT
 %else
 %doc LICENSE*
 %endif
-%doc README* ChangeLog* ReleaseNotes*
+%doc README* ChangeLog*
 
 %attr(644, -, -) %{_sysconfdir}/modprobe.d/onload.conf
 %attr(644, -, -) %{_sysconfdir}/depmod.d/onload.conf
 %config(noreplace) %attr(644, -, -) %{_sysconfdir}/sysconfig/openonload
 /usr/lib/udev/rules.d/*
-
+%{?_sysusersdir:%_sysusersdir/onload.conf}
 /usr/share/onload/onload_modules-load.d.conf
 /usr/share/onload/sysconfig_onload_modules
 
