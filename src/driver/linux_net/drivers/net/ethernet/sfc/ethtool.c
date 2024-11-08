@@ -256,24 +256,43 @@ static int efx_ethtool_set_ringparam(struct net_device *net_dev,
 	if (rc)
 		return rc;
 
-#ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
-	if (efx->open_count > is_up) {
-		netif_err(efx, drv, efx->net_dev,
-			  "unable to set ring sizes. device in use by driverlink stack\n");
-		return -EBUSY;
-	}
-#endif
-#endif
-
-	/* Apply the new settings */
-	efx->rxq_entries = ring->rx_pending;
-	efx->txq_entries = ring->tx_pending;
-
 	/* Update the datapath with the new settings if the interface is up */
 	if (is_up) {
 		dev_close(net_dev);
+#ifdef EFX_NOT_UPSTREAM
+		if (efx->open_count) {
+			/* Onload is still attached, which is ok. We can
+			 * safely operate on the netdev channels now.
+			 */
+			efx_disable_interrupts(efx);
+			efx_remove_channels(efx);
+			/* netdev queues are gone now , apply the new settings.
+			 */
+			efx->rxq_entries = ring->rx_pending;
+			efx->txq_entries = ring->tx_pending;
+
+			rc = efx_probe_channels(efx);
+			if (rc)
+				return rc;
+
+			rc = efx_enable_interrupts(efx);
+			if (rc)
+				return rc;
+		} else {
+			/* Apply the new settings */
+			efx->rxq_entries = ring->rx_pending;
+			efx->txq_entries = ring->tx_pending;
+		}
+#else
+		/* Apply the new settings */
+		efx->rxq_entries = ring->rx_pending;
+		efx->txq_entries = ring->tx_pending;
+#endif
 		rc = dev_open(net_dev, NULL);
+	} else {
+		/* Apply the new settings */
+		efx->rxq_entries = ring->rx_pending;
+		efx->txq_entries = ring->tx_pending;
 	}
 
 	return rc;
