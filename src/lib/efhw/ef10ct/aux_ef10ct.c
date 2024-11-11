@@ -44,7 +44,7 @@ static int ef10ct_devtype_init(struct efx_auxdev *edev,
     /* This is the test device provided via the efct_test driver. We use a
      * specific variant for this to avoid trying to do things that the test
      * driver doesn't support, like interrupts. */
-    dev_type->variant = 'T';
+    dev_type->variant = 'L';
     dev_type->function = EFHW_FUNCTION_PF;
     break;
    default:
