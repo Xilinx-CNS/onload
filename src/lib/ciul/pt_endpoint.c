@@ -59,6 +59,7 @@ static unsigned vi_flags_to_efab_flags(unsigned vi_flags)
                                                     EFHW_VI_TX_CTPIO_NO_POISON;
   if( vi_flags & EF_VI_RX_ZEROCOPY ) efab_flags |= EFHW_VI_RX_ZEROCOPY;
   if( vi_flags & EF_VI_ENABLE_TPH ) efab_flags |= EFHW_VI_ENABLE_TPH;
+  if( vi_flags & EF_VI_TPH_TAG_MODE ) efab_flags |= EFHW_VI_TPH_TAG_MODE;
   return efab_flags;
 }
 
@@ -429,8 +430,10 @@ static enum ef_vi_flags get_vi_flags_from_env(void)
         tok_end = strchr(s, ',');
         if( ! tok_end )
             tok_end = s + strlen(s);
-        if( ef_tok_eq(s, tok_end - s, "tph") )
+        if( ef_tok_eq(s, tok_end - s, "tph_nost") )
             new_flags |= EF_VI_ENABLE_TPH;
+        if( ef_tok_eq(s, tok_end - s, "tph_st") )
+            new_flags |= (EF_VI_ENABLE_TPH | EF_VI_TPH_TAG_MODE);
         s = tok_end + 1;
     } while( *tok_end != '\0' );
 

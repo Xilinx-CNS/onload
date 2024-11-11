@@ -1154,8 +1154,8 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
   if ( (s = getenv("EF_TCP_TIME_WAIT_ASSASSINATION")))
     opts->time_wait_assassinate = atoi(s);
 
-  if ( (s = getenv("EF_ENABLE_TPH")))
-    opts->enable_tph = atoi(s);
+  if ( (s = getenv("EF_TPH_MODE")))
+    opts->tph_mode = atoi(s);
 
   /* Get our netifs to inherit flags if the O/S is being forced to */
   if (CITP_OPTS.accept_force_inherit_nonblock)

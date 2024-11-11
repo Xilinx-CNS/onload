@@ -11,6 +11,7 @@
 #include <ci/efhw/checks.h>
 #include <ci/efhw/efhw_buftable.h>
 #include <ci/efhw/buddy.h>
+#include <ci/efhw/tph.h>
 
 #include <ci/driver/ci_ef10.h>
 #include <ci/driver/resource/driverlink.h>
@@ -860,7 +861,8 @@ ef10_mcdi_cmd_get_vi_tlp_processing(struct efhw_nic *nic, unsigned instance,
 
 
 static int
-ef10_mcdi_cmd_set_vi_tlp_processing(struct efhw_nic *nic, uint instance, int set)
+ef10_mcdi_cmd_set_vi_tlp_processing(struct efhw_nic *nic, uint instance,
+                                    int set, uint8_t tag)
 {
   int rc;
   size_t out_size;
@@ -874,7 +876,7 @@ ef10_mcdi_cmd_set_vi_tlp_processing(struct efhw_nic *nic, uint instance, int set
               __FUNCTION__, tlp.tph, tlp.data, instance, rc);
 
   tlp.tph = set ? 1 : 0;
-  tlp.tag1 = tlp.tag2 = 0x0;
+  tlp.tag1 = tlp.tag2 = tag;
   tlp.relaxed = 0;
   tlp.snoop = 0;
   tlp.inorder = 0;
@@ -896,7 +898,7 @@ ef10_mcdi_cmd_set_vi_tlp_processing(struct efhw_nic *nic, uint instance, int set
   EFHW_MCDI_SET_DWORD(set_in, SET_VI_TLP_PROCESSING_IN_DATA, tlp.data);
 
   EFHW_NOTICE("%s: setting tph %x (data %x)",
-              __FUNCTION__, tlp.data & (1 << 19), tlp.data);
+              __FUNCTION__, (tlp.data >> 19) & 1, tlp.data);
   rc = ef10_mcdi_rpc(nic, MC_CMD_SET_VI_TLP_PROCESSING, sizeof(set_in), 0,
                      &out_size, set_in, NULL);
   MCDI_CHECK(MC_CMD_SET_VI_TLP_PROCESSING, rc, out_size, 0);
@@ -1669,6 +1671,7 @@ ef10_dmaq_rx_q_init(struct efhw_nic *nic, struct efhw_dmaq_params *params)
   int flag_force_rx_merge = (params->flags & EFHW_VI_NO_RX_CUT_THROUGH) &&
                        (nic->flags & NIC_FLAG_RX_FORCE_EVENT_MERGING) ? 1 : 0;
   int flag_enable_tph = (params->flags & EFHW_VI_ENABLE_TPH) != 0;
+  int flag_tph_tag_mode = (params->flags & EFHW_VI_TPH_TAG_MODE) != 0;
   int ps_buf_size_mcdi = 0;
   int dma_mode = MC_CMD_INIT_RXQ_EXT_IN_SINGLE_PACKET;
   size_t outlen;
@@ -1721,9 +1724,21 @@ ef10_dmaq_rx_q_init(struct efhw_nic *nic, struct efhw_dmaq_params *params)
   rc = ef10_mcdi_rpc(nic, MC_CMD_INIT_RXQ, MC_CMD_INIT_RXQ_V4_IN_LEN,
                      MC_CMD_INIT_RXQ_V4_OUT_LEN, &outlen, in, NULL);
 
-  if( rc == 0 )
-    rc = ef10_mcdi_cmd_set_vi_tlp_processing(nic, params->evq, flag_enable_tph);
+  if( rc == 0 ) {
+    uint16_t tag = 0;
+    if( flag_tph_tag_mode != 0 ) {
+      /* TODO verify that raw_smp_processor_id() returns the right value */
+      rc = pcie_tph_get_cpu_st(nic->pci_dev, TPH_MEM_TYPE_VM, raw_smp_processor_id(), &tag);
+      if( rc != 0 )
+        EFHW_WARN("Failed to read steering tag (error %d), continuing without it\n", rc);
+    }
 
+    rc = ef10_mcdi_cmd_set_vi_tlp_processing(nic, params->evq, flag_enable_tph, tag);
+    if( rc != 0 ) {
+      EFHW_WARN("Failed to set steering tag (error %d), continuing without it\n", rc);
+      rc = 0;
+    }
+  }
   if( rc == 0 )
     params->qid_out = params->dmaq;
 

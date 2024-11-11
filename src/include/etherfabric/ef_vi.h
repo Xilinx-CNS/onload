@@ -600,6 +600,9 @@ enum ef_vi_flags {
   EF_VI_RX_EXCLUSIVE = 0x20000000,
   /** Turn on PCIe transaction processing hints to steer traffic (X2000 series) */
   EF_VI_ENABLE_TPH = 0x40000000,
+  /** Tag mode to use for SDCI TPH tags: 0 = no ST mode; 1 = use steering tags
+   ** Depends on EF_VI_ENABLE_TPH being set */
+  EF_VI_TPH_TAG_MODE = 0x80000000,
 };
 
 /*! \brief Flags that can be returned when an ef_vi has been allocated */
