@@ -28,6 +28,7 @@ int efrm_rxq_refresh_kernel(struct efhw_nic *nic, int hwqid,
                             const char** superbufs);
 int efrm_rxq_request_wakeup(struct efrm_efct_rxq *rxq, unsigned sbseq,
                             unsigned pktix, bool allow_recursion);
+resource_size_t efrm_rxq_superbuf_window(struct efrm_efct_rxq *rxq);
 
 
 #endif

@@ -39,6 +39,10 @@ struct efhw_efct_krxq {
   efhw_efct_rxq_free_func_t *freer;
 };
 
+struct efhw_efct_urxq {
+  resource_size_t rx_buffer_post_register;
+};
+
 struct efhw_efct_rxq {
   struct efhw_efct_rxq *next;
   unsigned qid;
@@ -46,6 +50,7 @@ struct efhw_efct_rxq {
   unsigned wakeup_instance;
   union {
     struct efhw_efct_krxq krxq;
+    struct efhw_efct_urxq urxq;
   };
 };
 

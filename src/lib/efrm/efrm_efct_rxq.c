@@ -183,6 +183,23 @@ static void efrm_fini_debugfs_efct_rxq(struct efrm_efct_rxq *rxq)
 
 #endif
 
+#if CI_HAVE_EFCT_COMMON
+static void free_rxq_work(struct work_struct *data)
+{
+	struct efrm_efct_rxq *rmrxq = container_of(data, struct efrm_efct_rxq,
+	                                           free_work);
+	efrm_vi_resource_release(rmrxq->vi);
+	kfree(rmrxq);
+}
+
+static void free_rxq(struct efhw_efct_rxq *rxq)
+{
+	struct efrm_efct_rxq *rmrxq = container_of(rxq, struct efrm_efct_rxq, hw);
+	INIT_WORK(&rmrxq->free_work, free_rxq_work);
+	queue_work(efrm_vi_manager->workqueue, &rmrxq->free_work);
+}
+#endif
+
 int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix, bool timestamp_req,
                    size_t n_hugepages,
                    struct oo_hugetlb_allocator *hugetlb_alloc,
@@ -200,12 +217,15 @@ int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix, bool timestamp_req,
 		.shm = NULL,
 		.wakeup_instance = vi->rs.rs_instance,
 	};
+	struct efhw_nic *nic;
 
 	if (!check_efct(vi_rs))
 		return -EOPNOTSUPP;
 
+	nic = vi_rs->rs_client->nic;
+
 	if (shm_ix >= 0 &&
-	    shm_ix >= efhw_nic_max_shared_rxqs(vi_rs->rs_client->nic))
+	    shm_ix >= efhw_nic_max_shared_rxqs(nic))
 		return -EINVAL;
 
 	if (shm_ix >= 0 && !hugetlb_alloc)
@@ -220,13 +240,19 @@ int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix, bool timestamp_req,
 		params.shm = &vi->efct_shm->q[shm_ix];
 
 	rxq->vi = vi;
-	rc = efhw_nic_shared_rxq_bind(vi_rs->rs_client->nic, &params);
-	if (rc < 0) {
-		kfree(rxq);
-		return rc;
-	}
+	rc = efhw_nic_shared_rxq_bind(nic, &params);
+	if (rc < 0)
+		goto fail_bind;
 	if( shm_ix >= 0 )
 	  vi->efct_shm->active_qs |= 1ull << shm_ix;
+	if( shm_ix < 0 ) {
+		resource_size_t io_addr;
+		rc = efhw_nic_rxq_window(nic, rxq->hw.qid, &io_addr);
+		if( rc < 0 )
+			goto fail_rxq_window;
+
+		rxq->hw.urxq.rx_buffer_post_register = io_addr;
+	}
 	efrm_resource_init(&rxq->rs, EFRM_RESOURCE_EFCT_RXQ, 0);
 	efrm_client_add_resource(vi_rs->rs_client, &rxq->rs);
 	efrm_resource_ref(vi_rs);
@@ -234,29 +260,23 @@ int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix, bool timestamp_req,
 	  efrm_init_debugfs_efct_rxq(rxq);
 	*rxq_out = rxq;
 	return 0;
+
+fail_rxq_window:
+	efhw_nic_shared_rxq_unbind(nic, &rxq->hw, free_rxq);
+fail_bind:
+	kfree(rxq);
+	return rc;
 #else
 	return -EOPNOTSUPP;
 #endif
 }
 EXPORT_SYMBOL(efrm_rxq_alloc);
 
-
-#if CI_HAVE_EFCT_COMMON
-static void free_rxq_work(struct work_struct *data)
+resource_size_t efrm_rxq_superbuf_window(struct efrm_efct_rxq *rxq)
 {
-	struct efrm_efct_rxq *rmrxq = container_of(data, struct efrm_efct_rxq,
-	                                           free_work);
-	efrm_vi_resource_release(rmrxq->vi);
-	kfree(rmrxq);
+	return rxq->hw.urxq.rx_buffer_post_register;
 }
-
-static void free_rxq(struct efhw_efct_rxq *rxq)
-{
-	struct efrm_efct_rxq *rmrxq = container_of(rxq, struct efrm_efct_rxq, hw);
-	INIT_WORK(&rmrxq->free_work, free_rxq_work);
-	queue_work(efrm_vi_manager->workqueue, &rmrxq->free_work);
-}
-#endif
+EXPORT_SYMBOL(efrm_rxq_superbuf_window);
 
 void efrm_rxq_release(struct efrm_efct_rxq *rxq)
 {

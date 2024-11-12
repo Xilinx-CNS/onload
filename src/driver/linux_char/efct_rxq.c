@@ -126,15 +126,48 @@ rxq_rm_rsops(efch_resource_t* rs, ci_resource_table_t* priv_opt,
   }
 }
 
+static int efrm_rxq_mmap_buffer_post(struct efrm_efct_rxq *rxq, 
+                                     unsigned long *bytes, void *opaque,
+                                     int *map_num, unsigned long *offset)
+{
+  int rc;
+  size_t len;
+  resource_size_t io_addr;
+  resource_size_t io_page_addr;
+  struct efrm_resource *rs = efrm_rxq_to_resource(rxq);
+  struct efhw_nic *nic = efrm_client_get_nic(rs->rs_client);
+
+  io_addr = efrm_rxq_superbuf_window(rxq);
+
+  len = CI_ROUND_UP(*bytes, (unsigned long)CI_PAGE_SIZE);
+  *bytes -= len;
+
+  io_page_addr = io_addr & CI_PAGE_MASK;
+
+  rc = ci_mmap_io(nic, io_page_addr, len, opaque, map_num, offset, 0);
+  if( rc < 0 )
+    EFCH_ERR("%s: ERROR: ci_mmap_io failed rc=%d", __FUNCTION__, rc);
+
+  return rc;
+}
+
 static int rxq_rm_mmap(struct efrm_resource *rs, unsigned long *bytes,
                        struct vm_area_struct *vma, int index)
 {
   int rc = -EINVAL;
+  struct efrm_efct_rxq* rxq = efrm_rxq_from_resource(rs);
+  int map_num = 0;
+  unsigned long offset = 0;
 
   EFRM_RESOURCE_ASSERT_VALID(rs, 0);
   ci_assert_equal((*bytes &~ CI_PAGE_MASK), 0);
 
   switch( index ) {
+    case EFCH_VI_MMAP_RX_BUFFER_POST:
+      if( !ci_in_egroup(phys_mode_gid) )
+        return -EPERM;
+      rc = efrm_rxq_mmap_buffer_post(rxq, bytes, vma, &map_num, &offset);
+      break;
     default:
       ci_assert(0);
   }
