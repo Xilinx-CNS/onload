@@ -118,7 +118,7 @@ static int efct_test_buffer_post_addr(struct efx_auxdev_client *handle,
     return -EINVAL;
 #endif
 
-  io->base = virt_to_phys(tdev->rxq_window + (0x1000 * rxq));
+  io->base = virt_to_phys(tdev->rxqs[rxq].post_register);
   io->size = 0x1000;
 
   return 0;
@@ -382,6 +382,8 @@ static int efct_test_init_rxq(struct efx_auxdev_client *handle,
 
   rxq_idx = EFHW_MCDI_DWORD(rpc->inbuf, INIT_RXQ_V4_IN_INSTANCE);
   evq = EFHW_MCDI_DWORD(rpc->inbuf, INIT_RXQ_V4_IN_TARGET_EVQ);
+  void *rxq_window;
+  int rc;
 
   printk(KERN_INFO "%s: evq %d\n", __func__, evq);
 
@@ -393,6 +395,15 @@ static int efct_test_init_rxq(struct efx_auxdev_client *handle,
     return -EINVAL;
 
   rxq = &tdev->rxqs[rxq_idx];
+
+  rxq_window = kzalloc(0x1000, GFP_KERNEL);
+  if( !rxq_window )
+    return -ENOMEM;
+  rc = set_memory_uc((unsigned long)rxq_window, 1);
+  if( rc ) {
+    kfree(rxq_window);
+    return rc;
+  }
 
   atomic_set(&rxq->timer_running, 1);
   INIT_DELAYED_WORK(&rxq->timer, efct_test_rx_timer);
@@ -407,7 +418,7 @@ static int efct_test_init_rxq(struct efx_auxdev_client *handle,
   rxq->tdev = tdev;
   tdev->evqs[evq].rxqs |= 1 << rxq_idx;
   rxq->events_suppressed = true;
-  rxq->post_register = (ci_qword_t*)(tdev->rxq_window + (0x1000 * rxq_idx));
+  rxq->post_register = (ci_qword_t*)rxq_window;
 
   /* Everything should be memset to 0, but I want to be sure */
   if(rxq->next_bid != 0)
@@ -451,6 +462,8 @@ static int efct_test_free_rxq(struct efx_auxdev_client *handle,
   evq_push_rx_flush_complete(&tdev->evqs[evq], rxq_idx);
 
   tdev->evqs[evq].rxqs &= ~(1 << rxq_idx);
+  kfree(rxq->post_register);
+  set_memory_wb((unsigned long)rxq->post_register, 1);
 
   memset(rxq, 0, sizeof(*rxq));
   rxq->evq = -1;

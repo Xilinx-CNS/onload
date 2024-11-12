@@ -65,15 +65,6 @@ struct efct_test_device* efct_test_add_test_dev(struct device* parent,
   }
   set_memory_uc((unsigned long)tdev->evq_window, EFCT_TEST_EVQS_N);
 
-  /* FIXME EF10CT This should be alloced on RXQ init, but we haven't yet
-   * sorted dynamic mapping for multiple queues, so ef_vi currently queries
-   * this before it knows what queue it wants to attach to, so we need to
-   * allocate up front. */
-  tdev->rxq_window = kzalloc(0x1000 * EFCT_TEST_RXQS_N, GFP_KERNEL);
-  if( !tdev->rxq_window )
-    return ERR_PTR(-ENOMEM);
-  set_memory_uc((unsigned long)tdev->rxq_window, EFCT_TEST_RXQS_N);
-
   tdev->dev.llct_ops = &test_devops;
   dev_hold(net_dev);
   tdev->net_dev = net_dev;
@@ -126,8 +117,6 @@ void efct_test_remove_test_dev(struct efct_test_device* tdev)
   rtnl_unlock();
   auxiliary_device_uninit(adev);
 
-  set_memory_wb((unsigned long)tdev->rxq_window, EFCT_TEST_RXQS_N);
-  kfree(tdev->rxq_window);
   set_memory_wb((unsigned long)tdev->evq_window, EFCT_TEST_EVQS_N);
   kfree(tdev->evq_window);
 }
