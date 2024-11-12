@@ -43,6 +43,8 @@ struct efct_ubufs_rxq
 
   /* shared queue resource */
   unsigned resource_id;
+
+  volatile uint64_t *rx_post_buffer_reg;
 };
 
 struct efct_ubufs
@@ -225,9 +227,7 @@ static void efct_ubufs_post_direct(ef_vi* vi, int qid, int sbid, bool sentinel)
 {
   ef_addr addr = ef_memreg_dma_addr(&get_ubufs(vi)->q[qid].memreg,
                                     sbid * EFCT_RX_SUPERBUF_BYTES);
-  volatile uint64_t* reg =
-    (uint64_t*)(vi->vi_rx_post_buffer_mmap_ptr +
-                vi->efct_rxqs.q[qid].qid * vi->efct_rxqs.rx_stride);
+  struct efct_ubufs_rxq *rxq = &get_ubufs(vi)->q[qid];
 
   ci_qword_t qword;
   CI_POPULATE_QWORD_3(qword,
@@ -235,7 +235,7 @@ static void efct_ubufs_post_direct(ef_vi* vi, int qid, int sbid, bool sentinel)
                       EFCT_RX_BUFFER_POST_SENTINEL, sentinel,
                       EFCT_RX_BUFFER_POST_ROLLOVER, 0); // TBD support for rollover?
 
-  *reg = qword.u64[0];
+  *rxq->rx_post_buffer_reg = qword.u64[0];
 }
 
 static void efct_ubufs_post_kernel(ef_vi* vi, int qid, int sbid, bool sentinel)
@@ -332,6 +332,20 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd, unsigned n_superb
     return rc;
   }
 
+  if( vi->vi_flags & EF_VI_RX_PHYS_ADDR ) {
+    void *p;
+
+    rc = ci_resource_mmap(vi->dh, rxq->resource_id, EFCH_VI_MMAP_RX_BUFFER_POST,
+                          CI_ROUND_UP(sizeof(uint64_t), CI_PAGE_SIZE),
+                          &p);
+    if( rc < 0 ) {
+      ef_shrub_fini_pool(rxq->buffer_pool);
+      munmap(map, map_bytes);
+      return rc;
+    }
+    rxq->rx_post_buffer_reg = (volatile uint64_t *)p;
+  }
+
   ubufs->active_qs |= 1 << ix;
   efct_vi_start_rxq(vi, ix, qid);
   post_buffers(vi, rxq, ix);
@@ -425,6 +439,8 @@ static void efct_ubufs_cleanup(ef_vi* vi)
     if( rxq->buffer_pool )
       ef_shrub_fini_pool(rxq->buffer_pool);
     ef_memreg_free(&rxq->memreg, vi->dh);
+    ci_resource_munmap(vi->dh, (void *)rxq->rx_post_buffer_reg,
+                       CI_ROUND_UP(sizeof(uint64_t), CI_PAGE_SIZE));
   }
   free(ubufs);
 #endif
