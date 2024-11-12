@@ -1,7 +1,7 @@
 onload-9.0.1
 ------------
 
-Updated sfc net driver to v6.0.1.1006
+Updated sfc net driver to v6.0.2.1000
 
 Add support for:
  - Red Hat Enterprise Linux 9.5
@@ -9,7 +9,13 @@ Add support for:
 
 Changes:
 
-ON-15113: simplify DKMS using pure mkdist tarball
+ON-15830: remove support for out-of-tree aux bus
+ON-15852: use unbound work queue
+ON-16018: add sfcaffinity_config support for ecores
+ON-16076: X3: don't restrict EF_SHARED_RXQ_NUM to first 8 queues.
+ON-16130: drop aux bus handle on device unplug, avoiding kernel crash
+ON-16132: rpm, deb: detect cplane user/group error and fail installation early
+ON-16144: fix race in VI allocation over aux bus, avoiding kernel crash
 
 
 onload-9.0.0.39
