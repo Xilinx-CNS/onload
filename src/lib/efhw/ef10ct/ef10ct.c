@@ -171,11 +171,6 @@ static void ef10ct_check_for_flushes(struct work_struct *work)
       if(CI_QWORD_FIELD(*event, EFCT_FLUSH_TYPE) == EFCT_FLUSH_TYPE_TX) {
         efhw_handle_txdmaq_flushed(evq->nic, q_id);
       } else /* EFCT_FLUSH_TYPE_RX */ {
-        struct efhw_nic_ef10ct *ef10ct = evq->nic->arch_extra;
-        int hw_rxq = q_id;
-
-        q_id = ef10ct->rxq[hw_rxq].q_id;
-        ef10ct->rxq[hw_rxq].q_id = -1;
         ef10ct_free_rxq(evq->nic, q_id);
         /* RXQ flush is not reported upwards. The HW RXQ is managed within
          * efhw. */
@@ -565,6 +560,21 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
   EFHW_WARN("%s: evq %d, rxq %d", __func__, params->wakeup_instance,
             params->qid);
 
+
+  /* FIXME EF10CT basic ref counting to avoid breaking shared queues while
+   * this is properly dealt with. At a minimum we need to ensure this is
+   * concurrency safe, but the details of lifecycle management need more
+   * consideration in general. */
+  if( ef10ct->rxq[rxq].ref_count > 0 ) {
+    /* This queue is already bound, so all that's needed is to inc the refs. */
+    ef10ct->rxq[rxq].ref_count++;
+
+    /* Already bound, so should have an associated evq */
+    EFHW_ASSERT(ef10ct->rxq[rxq].evq >= 0);
+
+    return 0;
+  }
+
   /* FIXME EF10CT the evq used here is not mapped to userspace, so isn't part
    * of the higher level resource management. We need to decide what evq to
    * attach to - a shared queue with rx event suppression, or a dedicated
@@ -601,10 +611,9 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
 
   flush_delayed_work(&ef10ct->evq[rxq_params.evq].check_flushes);
   EFHW_ASSERT(ef10ct->rxq[rxq].evq == -1);
-  EFHW_ASSERT(ef10ct->rxq[rxq].q_id == -1);
 
+  ef10ct->rxq[rxq].ref_count++;
   ef10ct->rxq[rxq].evq = rxq_params.evq;
-  ef10ct->rxq[rxq].q_id = rxq;
   params->rxq->qid = rxq;
 
   return rc;
@@ -620,7 +629,13 @@ ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
   struct efhw_nic_ef10ct_evq *ef10ct_evq;
   int dmaq = rxq->qid;
 
-  /* FIXME EF10CT this needs to be done based on ref count of users */
+  /* FIXME EF10CT proper refcounting */
+  EFHW_ASSERT(ef10ct->rxq[dmaq].ref_count > 0);
+  ef10ct->rxq[dmaq].ref_count--;
+
+  if( ef10ct->rxq[dmaq].ref_count > 0 )
+    return;
+
   /* FIXME EF10CT check errors here */
 
   dummy.cmd = MC_CMD_FINI_RXQ;

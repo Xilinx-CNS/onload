@@ -104,10 +104,8 @@ static int ef10ct_resource_init(struct efx_auxdev *edev,
     rc = -ENOMEM;
     goto fail1;
   }
-  for( i = 0; i < ef10ct->rxq_n; i++ ) {
+  for( i = 0; i < ef10ct->rxq_n; i++ )
     ef10ct->rxq[i].evq = -1;
-    ef10ct->rxq[i].q_id = -1;
-  }
 
   res_dim->irq_n_ranges = 0;
 #if 0

@@ -26,9 +26,7 @@ struct efhw_nic_ef10ct_evq {
 
 struct efhw_nic_ef10ct_rxq {
   int evq;
-  /* ID of the software vi that is bound to this hardware rxq */
-  /* TODO: Does this need to be expanded for shared rxqs? */
-  int q_id;
+  int ref_count;
   uint64_t *post_buffer_addr;
 };
 
