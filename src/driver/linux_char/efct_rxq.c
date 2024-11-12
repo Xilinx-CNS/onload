@@ -9,6 +9,8 @@
 #include <etherfabric/internal/efct_uk_api.h>
 #include "char_internal.h"
 #include <kernel_utils/hugetlb.h>
+#include "linux_char_internal.h"
+#include <ci/efch/mmap.h>
 
 
 
@@ -124,11 +126,27 @@ rxq_rm_rsops(efch_resource_t* rs, ci_resource_table_t* priv_opt,
   }
 }
 
+static int rxq_rm_mmap(struct efrm_resource *rs, unsigned long *bytes,
+                       struct vm_area_struct *vma, int index)
+{
+  int rc = -EINVAL;
+
+  EFRM_RESOURCE_ASSERT_VALID(rs, 0);
+  ci_assert_equal((*bytes &~ CI_PAGE_MASK), 0);
+
+  switch( index ) {
+    default:
+      ci_assert(0);
+  }
+
+  return rc;
+}
+
 
 efch_resource_ops efch_efct_rxq_ops = {
   .rm_alloc  = rxq_rm_alloc,
   .rm_free   = rxq_rm_free,
-  .rm_mmap   = NULL,
+  .rm_mmap   = rxq_rm_mmap,
   .rm_nopage = NULL,
   .rm_dump   = NULL,
   .rm_rsops  = rxq_rm_rsops,
