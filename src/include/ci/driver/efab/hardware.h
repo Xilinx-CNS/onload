@@ -255,6 +255,12 @@
 	((nic)->efhw_func->superbuf_io_region ? \
 	 (nic)->efhw_func->superbuf_io_region((nic), (size_out), (addr_out)) : \
 	 -EOPNOTSUPP)
+
+#define efhw_nic_rxq_window(nic, instance, addr_out) \
+	((nic)->efhw_func->rxq_window ? \
+	 (nic)->efhw_func->rxq_window((nic), (instance), (addr_out)) : \
+	 -EOPNOTSUPP)
+
 #define efhw_nic_post_superbuf(nic, instance, addr, sentinel, rollover, owner_id) \
 	((nic)->efhw_func->post_superbuf ? \
 	 (nic)->efhw_func->post_superbuf((nic), (instance), (addr), \
