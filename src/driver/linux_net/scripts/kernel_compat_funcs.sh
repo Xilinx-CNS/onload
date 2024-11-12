@@ -208,7 +208,7 @@ function test_symbol()
             fi
             [ -f "$KBUILD_SRC/$prefix$file" ] &&  \
                 strip_comments $KBUILD_SRC/$prefix$file | \
-                grep -E -w "$symbol" >/dev/null && \
+                egrep -w "$symbol" >/dev/null && \
                 return 0
         done
     done
@@ -299,13 +299,13 @@ function test_inline_symbol()
     # look for the inline..symbol. This is complicated since the inline
     # and the symbol may be on different lines.
     strip_comments $KBUILD_SRC/$file | \
-	grep -E -m 1 -B 1 '(^|[,\* \(])'"$symbol"'($|[,; \(\)])' > $t
+	egrep -m 1 -B 1 '(^|[,\* \(])'"$symbol"'($|[,; \(\)])' > $t
     [ $? = 0 ] || return $?
 
     # there is either an inline on the final line, or an inline and
     # no semicolon on the previous line
-    head -1 $t | grep -E -q 'inline[^;]*$' && return
-    tail -1 $t | grep -E -q 'inline' && return
+    head -1 $t | egrep -q 'inline[^;]*$' && return
+    tail -1 $t | egrep -q 'inline' && return
 
     return 1
 }
@@ -335,14 +335,14 @@ function test_export()
 		echo >&2 "Looking for export of $symbol in $KBUILD_SRC/$file"
             fi
             if [ -f $KBUILD_SRC/$file ]; then
-		grep -E -q 'EXPORT_(PER_CPU)?SYMBOL(_GPL)?\('"$symbol"'\)' $KBUILD_SRC/$file && return
+		egrep -q 'EXPORT_(PER_CPU)?SYMBOL(_GPL)?\('"$symbol"'\)' $KBUILD_SRC/$file && return
             fi
 	done
 	if [ -n "$MAP" ]; then
             if [ $efx_verbose = true ]; then
 		echo >&2 "Looking for export of $symbol in $MAP"
             fi
-	    grep -E -q "[A-Z] $symbol\$" $MAP && return
+	    egrep -q "[A-Z] $symbol\$" $MAP && return
 	fi
 	return 1
     fi
@@ -594,7 +594,7 @@ fi
 
 # filter the available symbols
 if [ -n "$FILTER" ]; then
-    kompat_symbols="$(echo "$kompat_symbols" | grep -E "^($FILTER):")"
+    kompat_symbols="$(echo "$kompat_symbols" | egrep "^($FILTER):")"
 fi
 
 compile_dir="$(mktemp -d)"

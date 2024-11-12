@@ -18,6 +18,11 @@
 #include <linux/cpu_rmap.h>
 #endif
 #include "net_driver.h"
+#ifdef CONFIG_SFC_TPH
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCIE_ENABLE_TPH)
+#include <linux/pci-tph.h>
+#endif
+#endif
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_CPU_RMAP)
 #include <linux/cpu_rmap.h>
 #endif
@@ -96,6 +101,15 @@ int efx_nic_init_interrupt(struct efx_nic *efx)
 	unsigned int n_irqs;
 	int rc;
 
+#ifdef CONFIG_SFC_TPH
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCIE_ENABLE_TPH)
+	rc = pcie_enable_tph(efx->pci_dev, PCI_TPH_ST_DS_MODE);
+	if (rc)
+		netif_dbg(efx, drv, efx->net_dev,
+			  "failed enabling TPH support\n");
+#endif
+#endif
+
 #ifdef CONFIG_RFS_ACCEL
 	if (efx->interrupt_mode == EFX_INT_MODE_MSIX) {
 		cpu_rmap = alloc_irq_cpu_rmap(efx_channels(efx));
@@ -173,6 +187,12 @@ void efx_nic_fini_interrupt(struct efx_nic *efx)
 					 &efx->msi_context[channel->channel]);
 		}
 	efx->irqs_hooked = false;
+
+#ifdef CONFIG_SFC_TPH
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCIE_ENABLE_TPH)
+	pcie_disable_tph(efx->pci_dev);
+#endif
+#endif
 }
 
 #ifdef EFX_NOT_UPSTREAM

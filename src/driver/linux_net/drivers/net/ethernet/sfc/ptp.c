@@ -3354,7 +3354,7 @@ int efx_ptp_change_mode(struct efx_nic *efx, bool enable_wanted,
 		efx->ptp_data->mode = new_mode;
 		if (netif_running(efx->net_dev))
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK) || defined(CONFIG_AUXILIARY_BUS)
 		{
 			/* if it exists then we *actually* want to check
 			 * open_count.

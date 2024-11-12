@@ -158,7 +158,7 @@ void ef100_net_dealloc(struct efx_nic *efx)
 	struct ef100_nic_data *nic_data;
 
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK) || defined(CONFIG_AUXILIARY_BUS)
 	if (--efx->open_count) {
 		netif_dbg(efx, drv, efx->net_dev, "still open\n");
 		return;
@@ -297,7 +297,7 @@ int ef100_net_alloc(struct efx_nic *efx)
 	int rc;
 
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK) || defined(CONFIG_AUXILIARY_BUS)
 	if (efx->open_count++) {
 		netif_dbg(efx, drv, efx->net_dev, "already open\n");
 		/* inform the kernel about link state again */

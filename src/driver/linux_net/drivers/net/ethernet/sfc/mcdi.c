@@ -2635,8 +2635,6 @@ int efx_mcdi_rpc_proxy_cmd(struct efx_nic *efx, u32 pf, u32 vf,
 }
 
 
-#define EFX_MCDI_NVRAM_LEN_MAX 128
-
 int efx_mcdi_nvram_update_start(struct efx_nic *efx, unsigned int type)
 {
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_NVRAM_UPDATE_START_V2_IN_LEN);

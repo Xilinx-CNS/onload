@@ -14,6 +14,7 @@
 #include "mcdi_functions.h"
 #include "mcdi_pcol.h"
 #include "efx_reflash.h"
+#include "nvlog.h"
 
 /* Custom devlink-info version object names for details that do not map to the
  * generic standardized names.
@@ -457,6 +458,63 @@ static int efx_devlink_flash_update(struct devlink *devlink,
 #endif
 }
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER)
+static int efx_devlink_reporter_nvlog_diagnose(struct devlink_health_reporter *reporter,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER_OPS_EXTACK)
+					       struct devlink_fmsg *fmsg,
+					       struct netlink_ext_ack *extack)
+#else
+					       struct devlink_fmsg *fmsg)
+#endif
+{
+	struct efx_devlink *devlink_private =
+		devlink_health_reporter_priv(reporter);
+	struct efx_nic *efx = devlink_private->efx;
+	int rc;
+
+	rc = efx_nvlog_do(efx, NVRAM_PARTITION_TYPE_LOG, true, false);
+	if (rc)
+		return rc;
+
+	return efx_nvlog_to_devlink(efx, fmsg);
+}
+
+static const struct devlink_health_reporter_ops sfc_devlink_nvlog_ops = {
+	.name		= "nvlog",
+	.diagnose	= efx_devlink_reporter_nvlog_diagnose,
+};
+
+static int efx_devlink_reporter_nvlog_clear_diagnose(struct devlink_health_reporter *reporter,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER_OPS_EXTACK)
+						     struct devlink_fmsg *fmsg,
+						     struct netlink_ext_ack *extack)
+#else
+						     struct devlink_fmsg *fmsg)
+#endif
+{
+	struct efx_devlink *devlink_private =
+		devlink_health_reporter_priv(reporter);
+	struct efx_nic *efx = devlink_private->efx;
+	int rc;
+
+	rc = efx_nvlog_do(efx, NVRAM_PARTITION_TYPE_LOG, true, false);
+	if (rc)
+		return rc;
+
+	rc = efx_nvlog_to_devlink(efx, fmsg);
+	if (rc)
+		return rc;
+
+	/* log output ready, so now safe to clear flash */
+	return efx_nvlog_do(efx, NVRAM_PARTITION_TYPE_LOG, false, true);
+}
+
+static const struct devlink_health_reporter_ops sfc_devlink_nvlog_clear_ops = {
+	.name		= "nvlog-clear",
+	.diagnose	= efx_devlink_reporter_nvlog_clear_diagnose,
+};
+#endif /* EFX_HAVE_DEVLINK_HEALTH */
+
 static const struct devlink_ops sfc_devlink_ops = {
 #ifdef EFX_HAVE_DEVLINK_OPS_SUPPORTED_FLASH_UPDATE_PARAMS
 	.supported_flash_update_params	= 0,
@@ -468,6 +526,13 @@ static const struct devlink_ops sfc_devlink_ops = {
 void efx_fini_devlink(struct efx_nic *efx)
 {
 	if (efx->devlink) {
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER)
+		if (efx->devlink_reporter_nvlog)
+			devlink_health_reporter_destroy(efx->devlink_reporter_nvlog);
+		if (efx->devlink_reporter_nvlog_clear)
+			devlink_health_reporter_destroy(efx->devlink_reporter_nvlog_clear);
+		efx_nvlog_fini(efx);
+#endif
 		devlink_unregister(efx->devlink);
 		devlink_free(efx->devlink);
 	}
@@ -494,7 +559,8 @@ void efx_fini_devlink_port(struct efx_nic *efx)
 int efx_probe_devlink(struct efx_nic *efx)
 {
 	struct efx_devlink *devlink_private;
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VOID_DEVLINK_REGISTER)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER) || \
+defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VOID_DEVLINK_REGISTER)
 	int rc;
 #endif
 
@@ -520,6 +586,24 @@ int efx_probe_devlink(struct efx_nic *efx)
 	rc = devlink_register(efx->devlink, &efx->pci_dev->dev);
 	if (rc)
 		goto out_free;
+#endif
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER)
+	if (PCI_FUNC(efx->pci_dev->devfn) == 0) {
+		rc = efx_nvlog_init(efx);
+		if (!rc) {
+			efx->devlink_reporter_nvlog =
+				devlink_health_reporter_create(efx->devlink,
+							       &sfc_devlink_nvlog_ops,
+							       0,
+							       devlink_private);
+			efx->devlink_reporter_nvlog_clear =
+				devlink_health_reporter_create(efx->devlink,
+							       &sfc_devlink_nvlog_clear_ops,
+							       0,
+							       devlink_private);
+		}
+	}
 #endif
 	return 0;
 

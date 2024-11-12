@@ -88,10 +88,11 @@ static int ef100_ethtool_set_ringparam(struct net_device *net_dev,
 	}
 
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK) || defined(CONFIG_AUXILIARY_BUS)
 	if (efx->open_count > is_up) {
 		netif_err(efx, drv, efx->net_dev,
-			  "unable to set ring sizes. device in use by driverlink stack\n");
+			  "unable to set ring sizes. device in use by %hu clients\n",
+			  efx->open_count);
 		return -EBUSY;
 	}
 #endif

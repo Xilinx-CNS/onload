@@ -388,15 +388,18 @@ void mcdi_to_ethtool_linkset(struct efx_nic *efx, u32 media, u32 cap,
 			SET_CAP(10000baseKX4_Full);
 		if (CHECK_CAP(40000FDX))
 			SET_CAP(40000baseKR4_Full);
+#ifdef EFX_NOT_UPSTREAM
 #if !defined (EFX_USE_KCOMPAT) || defined (EFX_HAVE_LINK_MODE_25_50_100)
-		if (!EFX_WORKAROUND_3130(efx))
-			break;
-		if (CHECK_CAP(100000FDX))
-			SET_CAP(100000baseKR4_Full);
-		if (CHECK_CAP(25000FDX))
-			SET_CAP(25000baseKR_Full);
-		if (CHECK_CAP(50000FDX))
-			SET_CAP(50000baseKR2_Full);
+		if (EFX_WORKAROUND_3130(efx)) {
+			/* Some pre-silicon models use backplane link modes */
+			if (CHECK_CAP(100000FDX))
+				SET_CAP(100000baseKR4_Full);
+			if (CHECK_CAP(25000FDX))
+				SET_CAP(25000baseKR_Full);
+			if (CHECK_CAP(50000FDX))
+				SET_CAP(50000baseKR2_Full);
+		}
+#endif
 #endif
 		break;
 
@@ -572,6 +575,15 @@ u32 ethtool_linkset_to_mcdi_cap(const unsigned long *linkset)
 		result |= (1 << MC_CMD_PHY_CAP_25000FDX_LBN);
 	if (TEST_BIT(50000baseCR2_Full))
 		result |= (1 << MC_CMD_PHY_CAP_50000FDX_LBN);
+#ifdef EFX_NOT_UPSTREAM
+	/* Some pre-silicon models use backplane link modes */
+	if (TEST_BIT(25000baseKR_Full))
+		result |= (1 << MC_CMD_PHY_CAP_25000FDX_LBN);
+	if (TEST_BIT(50000baseKR2_Full))
+		result |= (1 << MC_CMD_PHY_CAP_50000FDX_LBN);
+	if (TEST_BIT(100000baseKR4_Full))
+		result |= (1 << MC_CMD_PHY_CAP_100000FDX_LBN);
+#endif
 #endif
 	if (TEST_BIT(Pause))
 		result |= (1 << MC_CMD_PHY_CAP_PAUSE_LBN);

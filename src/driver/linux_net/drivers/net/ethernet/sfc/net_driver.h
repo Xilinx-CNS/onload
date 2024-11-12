@@ -92,7 +92,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.0.1.1000"
+#define EFX_DRIVER_VERSION	"6.0.1.1006"
 #endif
 
 #ifdef DEBUG
@@ -1853,7 +1853,12 @@ struct efx_nic {
 	struct devlink *devlink;
 	/** @devlink_port: Devlink port instance */
 	struct devlink_port *devlink_port;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER)
+	struct devlink_health_reporter *devlink_reporter_nvlog;
+	struct devlink_health_reporter *devlink_reporter_nvlog_clear;
 #endif
+#endif
+	struct efx_nvlog_data *nvlog_data;
 	unsigned int mem_bar;
 	u32 reg_base;
 	enum efx_buf_alloc_mode mcdi_buf_mode;

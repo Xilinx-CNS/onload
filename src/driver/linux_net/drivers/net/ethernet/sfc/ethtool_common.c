@@ -701,10 +701,11 @@ int efx_ethtool_set_priv_flags(struct net_device *net_dev, u32 flags)
 		(prev_flags & EFX_ETHTOOL_PRIV_FLAGS_XDP);
 
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK) || defined(CONFIG_AUXILIARY_BUS)
 	if (xdp_change && efx->open_count > is_up) {
 		netif_err(efx, drv, efx->net_dev,
-			  "unable to set XDP. device in use by driverlink stack\n");
+			  "unable to set XDP. device in use by %hu clients\n",
+			  efx->open_count);
 		return -EBUSY;
 	}
 #endif
@@ -877,10 +878,11 @@ int efx_ethtool_set_channels(struct net_device *net_dev,
 		return -EINVAL;
 
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK) || defined(CONFIG_AUXILIARY_BUS)
 	if (efx->open_count > is_up) {
 		netif_err(efx, drv, efx->net_dev,
-			  "unable to set channels. device in use by driverlink stack\n");
+			  "unable to set channels. device in use by %hu clients\n",
+			  efx->open_count);
 		return -EBUSY;
 	}
 #endif

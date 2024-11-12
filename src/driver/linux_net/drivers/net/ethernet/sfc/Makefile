@@ -36,6 +36,7 @@ export CONFIG_SFC_DRIVERLINK := n
 export CONFIG_SFC_BUSYPOLL := n
 export CONFIG_SFC_EF100 := n
 export CONFIG_SFC_VDPA := n
+export CONFIG_SFC_TPH := n
 
 ifndef CONFIG_SFC_SIENA
 export CONFIG_SFC_SIENA :=
@@ -86,6 +87,14 @@ endif
 ifdef CONFIG_SFC_TRACING
 ifndef CONFIG_EVENT_TRACING
 $(error Kernel does not support EVENT_TRACING)
+endif
+endif
+
+ifeq ($(CONFIG_SFC_TPH),y)
+ifndef CONFIG_PCIE_TPH
+$(warning Kernel does not support PCIE_TPH)
+override CONFIG_SFC_TPH :=
+$(warning => TPH functionality will be disabled)
 endif
 endif
 ifndef CONFIG_SFC_MCDI_LOGGING
@@ -141,7 +150,7 @@ sfc-y			:= efx.o efx_common.o efx_channels.o nic.o ef10.o \
 			   selftest.o ethtool_common.o ethtool.o \
 			   mcdi.o mcdi_port.o mcdi_port_common.o mcdi_functions.o \
 			   mcdi_filters.o ef10_sriov.o tx_tso.o \
-			   efx_devlink.o xdp.o efx_reflash.o
+			   efx_devlink.o xdp.o efx_reflash.o nvlog.o
 
 sfc_driverlink-y	:= driverlink.o
 
@@ -219,7 +228,7 @@ TOPDIR = $(src)/../../../..
 include $(TOPDIR)/scripts/Makefile.common
 
 define filechk_config.h
-	printf "$(foreach name,SFC SFC_DUMP SFC_MCDI_MON SFC_MTD SFC_SIENA SFC_SRIOV SFC_PTP SFC_PPS SFC_TRACING SFC_MCDI_LOGGING SFC_DRIVERLINK SFC_BUSYPOLL SFC_EF100 SFC_VDPA,$(if $(filter y,$(CONFIG_$(name))),#undef CONFIG_$(name)\n#define CONFIG_$(name) 1\n,$(if $(filter m,$(CONFIG_$(name))),#undef CONFIG_$(name)_MODULE\n#define CONFIG_$(name)_MODULE 1\n,#undef CONFIG_$(name)\n#undef CONFIG_$(name)_MODULE\n)))"
+	printf "$(foreach name,SFC SFC_DUMP SFC_MCDI_MON SFC_MTD SFC_SIENA SFC_SRIOV SFC_PTP SFC_PPS SFC_TRACING SFC_MCDI_LOGGING SFC_DRIVERLINK SFC_BUSYPOLL SFC_EF100 SFC_VDPA SFC_TPH,$(if $(filter y,$(CONFIG_$(name))),#undef CONFIG_$(name)\n#define CONFIG_$(name) 1\n,$(if $(filter m,$(CONFIG_$(name))),#undef CONFIG_$(name)_MODULE\n#define CONFIG_$(name)_MODULE 1\n,#undef CONFIG_$(name)\n#undef CONFIG_$(name)_MODULE\n)))"
 endef
 
 $(obj)/config.h: $(src)/Makefile FORCE
