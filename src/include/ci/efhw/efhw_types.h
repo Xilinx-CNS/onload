@@ -486,14 +486,6 @@ struct efhw_func_ops {
 
   /*-------------- superbufs ------------------------ */
 
-	/*! Provides the size and address (if present) of the io area for the
-	 * receive window containing the RX_BUFFER_POST registers of the rxqs.
-	 * addr_out and size_out are only valid when the return value is 0.
-	 * Returns 0 on success.
-	 * Returns negative error on other failure. */
-	int (*superbuf_io_region)(struct efhw_nic* nic,
-                                  size_t* size_out, resource_size_t* addr_out);
-
 	/*! Provides the address (if present) of the io area for the receive
 	 * window containing the RX_BUFFER_POST register of the requested rxq.
 	 * addr_out is only valid when the return value is 0.

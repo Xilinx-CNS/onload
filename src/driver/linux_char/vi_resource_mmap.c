@@ -216,38 +216,6 @@ efab_vi_rm_mmap_mem(struct efrm_vi *virs,
   return 0;
 }
 
-static int
-efab_vi_rm_mmap_rx_buffer_post(struct efrm_vi *virs, unsigned long *bytes,
-                               void *opaque, int *map_num,
-                               unsigned long *offset)
-{
-  int rc;
-  size_t len;
-  resource_size_t io_addr;
-  resource_size_t io_page_addr;
-  struct efhw_nic *nic = efrm_client_get_nic(virs->rs.rs_client);
-
-  if( !ci_in_egroup(phys_mode_gid) )
-    return -EPERM;
-
-  rc = efhw_nic_superbuf_io_region(nic, &len, &io_addr);
-  if( rc < 0 )
-    return rc;
-
-
-  len = CI_ROUND_UP(*bytes, (unsigned long)CI_PAGE_SIZE);
-  *bytes -= len;
-
-  io_page_addr = io_addr & CI_PAGE_MASK;
-
-  rc = ci_mmap_io(nic, io_page_addr, len, opaque, map_num, offset, 1);
-  if( rc < 0 )
-    EFCH_ERR("%s: ERROR: ci_mmap_io failed rc=%d", __FUNCTION__, rc);
-
-  return rc;
-}
-
-
 int efab_vi_resource_mmap(struct efrm_vi *virs, unsigned long *bytes,
                           struct vm_area_struct* vma, int *map_num,
                           unsigned long *offset, int index)
@@ -275,9 +243,6 @@ int efab_vi_resource_mmap(struct efrm_vi *virs, unsigned long *bytes,
       break;
     case EFCH_VI_MMAP_RXQ_SHM:
       rc = efab_vi_rm_mmap_rxq_shm(virs, bytes, vma, map_num, offset);
-      break;
-    case EFCH_VI_MMAP_RX_BUFFER_POST:
-      rc = efab_vi_rm_mmap_rx_buffer_post(virs, bytes, vma, map_num, offset);
       break;
     default:
       ci_assert(0);

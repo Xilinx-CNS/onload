@@ -370,7 +370,7 @@ static void ef_vi_set_intf_ver(char* intf_ver, size_t len)
    * It'd also be possible to enhance the checksum computation to be smarter
    * (e.g. by ignoring comments, etc.).
    */
-  if( strcmp(EFCH_INTF_VER, "49d3c51301f69b007c8395ae5f5a10f8") ) {
+  if( strcmp(EFCH_INTF_VER, "6b8dac9ff87569fa74ce686ee98ff457") ) {
     fprintf(stderr, "ef_vi: ERROR: char interface has changed\n");
     abort();
   }
@@ -421,7 +421,6 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   char *mem_mmap_ptr_orig, *mem_mmap_ptr;
   char *io_mmap_ptr;
   char* ctpio_mmap_ptr;
-  char *rx_post_buffer_mmap_ptr;
   ef_vi_state* state;
   int rc;
   const char* s;
@@ -450,7 +449,6 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   io_mmap_ptr = NULL;
   mem_mmap_ptr = mem_mmap_ptr_orig = NULL;
   ctpio_mmap_ptr = NULL;
-  rx_post_buffer_mmap_ptr = NULL;
 
   if( evq == NULL )
     q_label = 0;
@@ -538,26 +536,12 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
     mem_mmap_ptr = mem_mmap_ptr_orig = (char*) p;
   }
 
-  /* FIXME SCJ this set up this mapping per-queue on attach */
-  if( ra.u.vi_out.rx_post_buffer_mmap_bytes &&
-      vi_flags & EF_VI_RX_PHYS_ADDR &&
-      ra.u.vi_out.out_flags & EFHW_VI_POST_BUF_SIZE_SET ) {
-    rc = ci_resource_mmap(vi_dh, ra.out_id.index, EFCH_VI_MMAP_RX_BUFFER_POST,
-                          ra.u.vi_out.rx_post_buffer_mmap_bytes, &p);
-    if( rc < 0 ) {
-      LOGVV(ef_log("%s: ci_resource_mmap (rx buffer post) %d",
-                   __FUNCTION__, rc));
-      goto fail4;
-    }
-    rx_post_buffer_mmap_ptr = p;
-  }
-
   if( vi_flags & EF_VI_TX_CTPIO ) {
     rc = ci_resource_mmap(vi_dh, ra.out_id.index, EFCH_VI_MMAP_CTPIO,
 			  CTPIO_MMAP_LEN, &p);
     if( rc < 0 ) {
       LOGVV(ef_log("%s: ci_resource_mmap (ctpio) %d", __FUNCTION__, rc));
-      goto fail5;
+      goto fail4;
     }
     ctpio_mmap_ptr = (char*) p;
   }
@@ -630,10 +614,8 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   vi->vi_io_mmap_ptr = io_mmap_ptr;
   vi->vi_mem_mmap_ptr = mem_mmap_ptr_orig;
   vi->vi_ctpio_mmap_ptr = ctpio_mmap_ptr;
-  vi->vi_rx_post_buffer_mmap_ptr = rx_post_buffer_mmap_ptr;
   vi->vi_io_mmap_bytes = ra.u.vi_out.io_mmap_bytes;
   vi->vi_mem_mmap_bytes = ra.u.vi_out.mem_mmap_bytes;
-  vi->vi_rx_post_buffer_mmap_bytes = ra.u.vi_out.rx_post_buffer_mmap_bytes;
   vi->ep_state_bytes = state_bytes;
   if( ra.u.vi_out.out_flags & EFHW_VI_PS_BUF_SIZE_SET )
     vi->vi_ps_buf_size = ra.u.vi_out.ps_buf_size;
@@ -660,9 +642,6 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
  fail5:
   if( ctpio_mmap_ptr != NULL )
     ci_resource_munmap(vi_dh, ctpio_mmap_ptr, CTPIO_MMAP_LEN);
-  if( rx_post_buffer_mmap_ptr != NULL )
-    ci_resource_munmap(vi_dh, rx_post_buffer_mmap_ptr,
-                       ra.u.vi_out.rx_post_buffer_mmap_bytes);
  fail4:
   if( mem_mmap_ptr_orig != NULL )
     ci_resource_munmap(vi_dh, mem_mmap_ptr_orig, ra.u.vi_out.mem_mmap_bytes);

@@ -31,7 +31,7 @@ CI_BUILD_ASSERT(__builtin_offsetof(struct efch_vi_alloc_in, tx_q_tag) == 40);
 CI_BUILD_ASSERT(__builtin_offsetof(struct efch_vi_alloc_in, rx_q_tag) == 41);
 CI_BUILD_ASSERT(__builtin_offsetof(struct efch_vi_alloc_in, ps_buf_size_kb) == 42);
 
-CI_BUILD_ASSERT(sizeof(struct efch_vi_alloc_out) == 48);
+CI_BUILD_ASSERT(sizeof(struct efch_vi_alloc_out) == 44);
 CI_BUILD_ASSERT(__builtin_offsetof(struct efch_vi_alloc_out, evq_capacity) == 0);
 CI_BUILD_ASSERT(__builtin_offsetof(struct efch_vi_alloc_out, txq_capacity) == 4);
 CI_BUILD_ASSERT(__builtin_offsetof(struct efch_vi_alloc_out, rxq_capacity) == 8);

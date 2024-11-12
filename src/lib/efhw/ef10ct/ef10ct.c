@@ -563,14 +563,6 @@ ef10ct_rx_buffer_post_register(struct efhw_nic* nic, int instance,
 }
 
 static int
-ef10ct_superbuf_io_region(struct efhw_nic* nic, size_t* size_out,
-                          resource_size_t* addr_out)
-{
-  *size_out = 0x100000; // TODO from design parameters: rx_queues * rx_stride
-  return ef10ct_rx_buffer_post_register(nic, 0, addr_out);
-}
-
-static int
 ef10ct_shared_rxq_bind(struct efhw_nic* nic,
                        struct efhw_shared_bind_params *params)
 {
@@ -1235,7 +1227,6 @@ struct efhw_func_ops ef10ct_char_functional_units = {
   .get_pci_dev = ef10ct_get_pci_dev,
   .vi_io_region = ef10ct_vi_io_region,
   .ctpio_addr = ef10ct_ctpio_addr,
-  .superbuf_io_region = ef10ct_superbuf_io_region,
   .rxq_window = ef10ct_rx_buffer_post_register,
   .post_superbuf =  ef10ct_rxq_post_superbuf,
   .design_parameters = ef10ct_design_parameters,

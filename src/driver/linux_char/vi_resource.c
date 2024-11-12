@@ -236,7 +236,7 @@ efch_vi_rm_alloc(ci_resource_alloc_t* alloc, ci_resource_table_t* rt,
   int in_flags;
   struct efrm_pd* rmpd = NULL;
   resource_size_t io_addr;
-  size_t io_size, buf_io_size = 0;
+  size_t io_size;
   uint32_t in_struct_size;
 
   ci_assert(alloc != NULL);
@@ -337,14 +337,6 @@ efch_vi_rm_alloc(ci_resource_alloc_t* alloc, ci_resource_table_t* rt,
   if( rc < 0 )
     goto fail4;
 
-  if( virs->q[EFHW_RXQ].capacity ) {
-    rc = efhw_nic_superbuf_io_region(nic, &buf_io_size, &io_addr);
-    if( rc < 0 && rc != -EOPNOTSUPP )
-      goto fail4;
-    if( rc == -EOPNOTSUPP )
-        rc = 0;
-  }
-
   /* Initialise the outputs. */
   alloc_out = &alloc->u.vi_out;
   CI_DEBUG(alloc = NULL);
@@ -364,16 +356,6 @@ efch_vi_rm_alloc(ci_resource_alloc_t* alloc, ci_resource_table_t* rt,
   alloc_out->out_flags = virs->out_flags;
   alloc_out->out_flags |= EFHW_VI_PS_BUF_SIZE_SET;
   alloc_out->ps_buf_size = virs->ps_buf_size;
-  if( buf_io_size != 0 ) {
-    if( offsetofend(ci_resource_alloc_t, u.vi_out.rx_post_buffer_mmap_bytes) >
-        in_struct_size ) {
-      rc = -EINVAL;
-      goto fail4;
-    } else {
-      alloc_out->rx_post_buffer_mmap_bytes = buf_io_size;
-      alloc_out->out_flags |= EFHW_VI_POST_BUF_SIZE_SET;
-    }
-  }
 
   EFCH_TRACE("%s: Allocated "EFRM_RESOURCE_FMT" rc=%d", __FUNCTION__,
              EFRM_RESOURCE_PRI_ARG(&virs->rs), rc);
