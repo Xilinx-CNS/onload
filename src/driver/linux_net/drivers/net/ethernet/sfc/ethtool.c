@@ -260,7 +260,7 @@ static int efx_ethtool_set_ringparam(struct net_device *net_dev,
 	if (is_up) {
 		dev_close(net_dev);
 #ifdef EFX_NOT_UPSTREAM
-#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK) || defined(CONFIG_AUXILIARY_BUS)
 		if (efx->open_count) {
 			/* Onload is still attached, which is ok. We can
 			 * safely operate on the netdev channels now.

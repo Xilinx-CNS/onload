@@ -92,7 +92,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.0.1.1006"
+#define EFX_DRIVER_VERSION	"6.0.2.1000"
 #endif
 
 #ifdef DEBUG
@@ -1554,6 +1554,7 @@ struct efx_mae;
  * @netdev_notifier: Netdevice notifier.
  * @netevent_notifier: Netevent notifier (for neighbour updates).
  * @tc: state for TC offload (EF100).
+ * @nvlog_data: state for nvlog dumping support
  * @mem_bar: The BAR that is mapped into membase.
  * @reg_base: Offset from the start of the bar to the function control window.
  * @mcdi_buf_mode: mcdi buffer allocation mode
@@ -1854,7 +1855,9 @@ struct efx_nic {
 	/** @devlink_port: Devlink port instance */
 	struct devlink_port *devlink_port;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER)
+	/** @devlink_reporter_nvlog: Devlink reporter for nvlog */
 	struct devlink_health_reporter *devlink_reporter_nvlog;
+	/** @devlink_reporter_nvlog_clear: Devlink reporter for nvlog-clear */
 	struct devlink_health_reporter *devlink_reporter_nvlog_clear;
 #endif
 #endif
