@@ -8,6 +8,11 @@
 #include <ci/tools/sysdep.h>
 #include <ci/efhw/stack_vi_allocator.h>
 
+/* Avoid dragging the full efhw_types.h header into the ZF unit test build. */
+#ifdef __KERNEL__
+  #include <ci/efhw/efhw_types.h>
+#endif
+
 extern struct efhw_func_ops efct_char_functional_units;
 
 struct efhw_efct_rxq;
