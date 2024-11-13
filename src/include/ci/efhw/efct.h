@@ -7,7 +7,13 @@
 #include <ci/driver/ci_efct.h>
 #include <ci/tools/sysdep.h>
 #include <ci/efhw/stack_vi_allocator.h>
-#include <ci/efhw/efhw_types.h>
+
+/* Avoid dragging the full efhw_types.h header into the ZF unit test build. */
+#ifdef __KERNEL__
+  #include <ci/efhw/efhw_types.h>
+#else
+  typedef void efhw_efct_rxq_free_func_t(struct efhw_efct_rxq*);
+#endif
 
 extern struct efhw_func_ops efct_char_functional_units;
 
