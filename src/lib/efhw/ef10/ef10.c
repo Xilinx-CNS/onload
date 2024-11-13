@@ -96,7 +96,7 @@ static int ef10_mcdi_rpc(struct efhw_nic *nic, unsigned int cmd, size_t inlen,
 
   *outlen_actual = 0;
   AUX_PRE(dev, auxdev, cli, nic, rc);
-  rc = auxdev->onload_ops->base_ops.fw_rpc(cli, &rpc);
+  rc = auxdev->onload_ops->base_ops->fw_rpc(cli, &rpc);
   AUX_POST(dev, auxdev, cli, nic, rc);
   *outlen_actual = rpc.outlen_actual;
 
@@ -2137,8 +2137,8 @@ ef10_rss_flags(struct efhw_nic *nic, u32 *flags_out)
   union efx_auxiliary_param_value val;
 
   AUX_PRE(dev, auxdev, cli, nic, rc);
-  rc = auxdev->onload_ops->base_ops.get_param(cli, EFX_RXFH_DEFAULT_FLAGS,
-                                              &val);
+  rc = auxdev->onload_ops->base_ops->get_param(cli, EFX_RXFH_DEFAULT_FLAGS,
+                                               &val);
   AUX_POST(dev, auxdev, cli, nic, rc);
 
   if( rc == 0 )
@@ -2373,7 +2373,7 @@ static int ef10_multicast_block(struct efhw_nic *nic, bool block)
   union efx_auxiliary_param_value val = { .b = block };
 
   AUX_PRE(dev, auxdev, cli, nic, rc);
-  rc = auxdev->onload_ops->base_ops.set_param(cli,
+  rc = auxdev->onload_ops->base_ops->set_param(cli,
       EFX_PARAM_FILTER_BLOCK_KERNEL_MCAST, &val);
   AUX_POST(dev, auxdev, cli, nic, rc);
   return rc;
@@ -2388,7 +2388,7 @@ static int ef10_unicast_block(struct efhw_nic *nic, bool block)
   union efx_auxiliary_param_value val = { .b = block };
 
   AUX_PRE(dev, auxdev, cli, nic, rc);
-  rc = auxdev->onload_ops->base_ops.set_param(cli,
+  rc = auxdev->onload_ops->base_ops->set_param(cli,
       EFX_PARAM_FILTER_BLOCK_KERNEL_UCAST, &val);
   AUX_POST(dev, auxdev, cli, nic, rc);
   return rc;
