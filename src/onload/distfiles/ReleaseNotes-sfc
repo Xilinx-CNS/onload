@@ -1,6 +1,6 @@
 Solarflare 5.X Linux network driver
 ===================================
-Version:  v5.3.18.1012
+Version:  v5_3_19_1012
 
 
 Overview
@@ -58,7 +58,7 @@ kernel
 Installation of the driver can be confirmed by typing:
    modinfo sfc | grep version
 and checking for the line:
-   version: v5.3.18.1012
+   version: v5_3_19_1012
 
 All network interfaces available on the system can be found with:
   ifconfig -a
@@ -68,9 +68,8 @@ Linux distribution support for Solarflare Adapters
 --------------------------------------------------
 
 This driver package is supported on:
- - RedHat Enterprise Linux                        7.9
  - RedHat Enterprise Linux                        8.8, 8.9, 8.10
- - RedHat Enterprise Linux                        9.2, 9.3, 9.4
+ - RedHat Enterprise Linux                        9.2, 9.3, 9.4, 9.5
  - SuSE Linux Enterprise Server 15                sp4, sp5
  - Canonical Ubuntu Server LTS                    20.04, 22.04, 24.04
  - Debian 11 "Bullseye"                           11.0
@@ -94,9 +93,21 @@ Please contact your local AMD support representative or email
 Changelog
 ---------
 
-### v5.3.18.1012
+### v5_3_19_1012
 [General changes]
-~ Improve kernel compatibility for efx_ptp_get_host_time
+~ Fixes for newer kernels
+~ Removal of kcompat for older kernels
+
+SWNETLINUX-5469
+~ Add support for RHEL 9.5
+
+SWNETLINUX-5369
+~ Avoid crashing when adjusting ringsizes via ethtool whilst Onload module
+ is loaded.
+
+### v5_3_18_1012
+[General changes]
+~ Improve kcompat for efx_ptp_get_host_time
 
 SWNETLINUX-5201
 ~ Add support for RHEL 8.10
@@ -106,7 +117,7 @@ SWNETLINUX-5200
 
 SWNETLINUX-5126
 ~ Fix skb leak when attempting to drop PTP packets and check
-  if PTP channel exists before transmitting PTP packets
+  if PTP channel exists before PTP TX
 
 SWNETLINUX-5215
 ~ Fix RSS indirection table reporting
@@ -115,25 +126,23 @@ SWNETLINUX-5310
 ~ Report PORT_FIBRE to ethtool for optical module connectors
 
 SWNETLINUX-5165
-~ Fix null pointer issue when using separate_tx_channels=1
+~ Check tx_channel before de-referencing
 
 SWNETLINUX-5206
-~ Don't log unnecessary error messages when trying to enable hardware PPS when
-  it has already been enabled
+~ Don't log error message when trying to enable HW PPS
 
 SWNETLINUX-5002
-~ Implement setting and querying hardware timestamp settings
+~ Implement ndo_hwtstamp_(get|set)
 
 SWNETLINUX-5185
-~ Enable physical hardware clock support when PTP_1588_CLOCK is included in
-  kernel as a module
+~ Build PHC if CONFIG_PTP_1588_CLOCK=m and fix
+  efx_phc_gettimex64 defined but not used
 
 SWNETLINUX-5204
-~ Ensure that PPS workqueues are always correctly cleaned up.
+~ Ensure that PPS workqueue is always destroyed
 
 SWNETLINUX-5136
-~ Add support to enable and disable hardware PPS input via userspace
-  EXTTS events
+~ Enable/Disable hardware PPS input via userspace EXTTS events
 
 SWNETLINUX-4550
 ~ Improve kernel compatibility when using struct netlink_ext_ack and
@@ -2673,8 +2682,6 @@ Deprecated features
 
 Support for SuSE Linux Enterprise Server is deprecated.
 
-Support for RHEL 7.9 is deprecated.
-
 Support for EF100 is deprecated.
 
 Removed features
@@ -2909,14 +2916,14 @@ Issue 47490:
 Known Issues with Solarflare driver/firmware
 --------------------------------------------
 SWNETLINUX-5350 / SWNETLINUX-5126:
- ~ When enabling the "separate_tx_channels" module parameter in combination with
-   sfptpd, user may experience reduced timestamping accuracy due to the system
-   falling back to software timestamps instead of using hardware timestamps.
+ ~ When enabling the "separate_tx_channels" module parameter in combination with sfptpd,
+   user may experience reduced performance due to the system falling back to software
+   timestamps instead of using hardware timestamps.
 
 SWNETLINUX-5070:
- ~ Due to a race between the adjustment of ring sizes and NIC reset it is
-   recommended to avoid using ethtool during boot. For more details see:
-   <https://support.xilinx.com/s/article/000036487>
+ ~ Due to a race between the adjustment of ring sizes and NIC reset, the device may
+   appear to be absent. It is recommended to avoid using ethtool during boot and where
+   possible instead rely on module parameters for NIC configuration.
 
 SWNETLINUX-4855:
  ~ For some overlay network encapsulation offloads the NIC must maintain a list
