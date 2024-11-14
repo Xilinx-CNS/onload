@@ -81,6 +81,7 @@ struct eflatency_vi {
   ef_event  evs[EF_VI_EVENT_POLL_MIN_EVS];
   ef_pd     pd;
   ef_memreg memreg;
+  bool      needs_rx_post;
 };
 
 static ef_driver_handle  driver_handle;
@@ -221,8 +222,23 @@ typedef struct {
   void (*cleanup)(ef_vi* rx_vi, ef_vi* tx_vi);
 } test_t;
 
-static void
+static int
 generic_desc_check(struct eflatency_vi* vi, int wait);
+
+static inline
+void poll_tx_and_wait_for_pkt(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi,
+                              void (*rx_wait)(struct eflatency_vi*))
+{
+  if( rx_vi->needs_rx_post )
+    rx_post(&rx_vi->vi);
+
+  /* Check once for a TX completion and then wait for packet.
+   * If rx_vi == tx_vi we may observe received packet in poll on tx_vi
+   * so only wait if initial poll doesn't see an RX event. */
+  if ( !generic_desc_check(tx_vi, 0) )
+    rx_wait(rx_vi);
+}
+
 
 static void
 generic_ping(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi,
@@ -231,14 +247,10 @@ generic_ping(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi,
 {
   struct timeval start, end;
   int i;
-  int do_rx_post = ( rx_vi->vi.nic_type.arch != EF_VI_ARCH_EFCT );
 
   for( i = 0; i < cfg_warmups; ++i ) {
     tx_send(tx_vi);
-    if( do_rx_post )
-      rx_post(&rx_vi->vi);
-    rx_wait(rx_vi);
-   generic_desc_check(tx_vi, 0);
+    poll_tx_and_wait_for_pkt(rx_vi, tx_vi, rx_wait);
   }
 
   gettimeofday(&start, NULL);
@@ -246,12 +258,9 @@ generic_ping(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi,
   for( i = 0; i < cfg_iter; ++i ) {
     uint64_t start = ci_frc64_get();
     tx_send(tx_vi);
-    if( do_rx_post )
-      rx_post(&rx_vi->vi);
-    rx_wait(rx_vi);
+    poll_tx_and_wait_for_pkt(rx_vi, tx_vi, rx_wait);
     uint64_t stop = ci_frc64_get();
     timings[i] = stop - start;
-    generic_desc_check(tx_vi, 0);
   }
 
   gettimeofday(&end, NULL);
@@ -266,13 +275,10 @@ generic_pong(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi,
              void (*tx_send)(struct eflatency_vi*))
 {
   int i;
-  int do_rx_post = ( rx_vi->vi.nic_type.arch != EF_VI_ARCH_EFCT );
 
   for( i = 0; i < cfg_warmups + cfg_iter; ++i ) {
-    rx_wait(rx_vi);
+    poll_tx_and_wait_for_pkt(rx_vi, tx_vi, rx_wait);
     tx_send(tx_vi);
-    if( do_rx_post )
-      rx_post(&rx_vi->vi);
   }
 }
 
@@ -430,7 +436,14 @@ static const test_t x3_ctpio_test = {
 
 /**********************************************************************/
 
-static void
+/* Poll for events. Will always return as soon as RX event found,
+ * possibly leaving other events to be processed on next call
+ *
+ * wait - continue polling until RX event found
+ *
+ * Returns 1 if RX event found, else 0
+ */
+static int
 generic_desc_check(struct eflatency_vi* vi, int wait)
 {
   /* We might exit with events read but unprocessed. */
@@ -446,11 +459,11 @@ generic_desc_check(struct eflatency_vi* vi, int wait)
       switch( EF_EVENT_TYPE(evs[i]) ) {
       case EF_EVENT_TYPE_RX:
         vi->i = ++i;
-        return;
+        return 1;
       case EF_EVENT_TYPE_RX_REF:
         handle_rx_ref(&vi->vi, evs[i].rx_ref.pkt_id, evs[i].rx_ref.len);
         vi->i = ++i;
-        return;
+        return 1;
       case EF_EVENT_TYPE_TX:
         ef_vi_transmit_unbundle(&vi->vi, &(evs[i]), tx_ids);
         break;
@@ -462,13 +475,13 @@ generic_desc_check(struct eflatency_vi* vi, int wait)
         n_rx = ef_vi_receive_unbundle(&vi->vi, &(evs[i]), rx_ids);
         TEST(n_rx == 1);
         vi->i = ++i;
-        return;
+        return 1;
       case EF_EVENT_TYPE_RX_MULTI_PKTS:
         n_rx = evs[i].rx_multi_pkts.n_pkts;
         TEST(n_rx == 1);
         ef_vi_rxq_next_desc_id(&vi->vi);
         vi->i = ++i;
-        return;
+        return 1;
       case EF_EVENT_TYPE_RX_REF_DISCARD:
         handle_rx_ref(&vi->vi, evs[i].rx_ref_discard.pkt_id,
                       evs[i].rx_ref_discard.len);
@@ -502,6 +515,7 @@ generic_desc_check(struct eflatency_vi* vi, int wait)
     if( ! n_ev && ! wait )
       break;
   }
+  return 0;
 }
 
 static inline void rx_wait_poll_evq(struct eflatency_vi* vi)
@@ -618,15 +632,16 @@ static const test_t* do_init(int ifindex, int mode,
   return t;
 }
 
-static void prepare(ef_vi* vi)
+static void prepare(struct eflatency_vi* rx_vi)
 {
   int i;
-  if( vi->nic_type.arch != EF_VI_ARCH_EFCT ) {
+  rx_vi->needs_rx_post = ( rx_vi->vi.nic_type.arch != EF_VI_ARCH_EFCT );
+  if( rx_vi->needs_rx_post ) {
     /* Ensure we leave space to allow ping/pong to unconditionally post a
      * buffer, which they do at the start of their loop.
      */
-    for( i = 0; i < N_RX_BUFS && ef_vi_receive_space(vi) > 1; ++i )
-      rx_post(vi);
+    for( i = 0; i < N_RX_BUFS && ef_vi_receive_space(&rx_vi->vi) > 1; ++i )
+      rx_post(&rx_vi->vi);
   }
 }
 
@@ -833,7 +848,7 @@ int main(int argc, char* argv[])
     pb->dma_buf_addr += offsetof(struct pkt_buf, dma_buf);
   }
 
-  prepare(&rx_vi.vi);
+  prepare(&rx_vi);
 
   if( ping ) {
     timings = mmap(NULL, cfg_iter * sizeof(timings[0]), PROT_READ | PROT_WRITE,
