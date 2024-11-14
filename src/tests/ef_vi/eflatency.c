@@ -32,6 +32,7 @@
 /* Forward declarations. */
 struct eflatency_vi;
 static inline void rx_wait_poll_evq(struct eflatency_vi*);
+static inline void rx_wait_poll_rx(struct eflatency_vi*);
 
 
 #define DEFAULT_PAYLOAD_SIZE  0
@@ -518,6 +519,39 @@ generic_desc_check(struct eflatency_vi* vi, int wait)
   return 0;
 }
 
+
+static void rx_wait_poll_rx(struct eflatency_vi* vi)
+{
+  ef_event ev;
+
+  while( 1 ) {
+    while( !ef_receive_poll(&vi->vi, &ev, 1) )
+      ;
+
+    switch( EF_EVENT_TYPE(ev) ) {
+    case EF_EVENT_TYPE_RX_REF:
+      handle_rx_ref(&vi->vi, ev.rx_ref.pkt_id, ev.rx_ref.len);
+      return;
+    case EF_EVENT_TYPE_RX_REF_DISCARD:
+      handle_rx_ref(&vi->vi, ev.rx_ref_discard.pkt_id,
+                    ev.rx_ref_discard.len);
+      if( ev.rx_ref_discard.flags & EF_VI_DISCARD_RX_ETH_FCS_ERR &&
+          cfg_ctpio_thresh < tx_frame_len )
+        break;
+      fprintf(stderr, "ERROR: unexpected ref discard flags=%x\n",
+              ev.rx_ref_discard.flags);
+      TEST(0);
+      break;
+    default:
+      fprintf(stderr, "ERROR: unexpected event "EF_EVENT_FMT"\n",
+              EF_EVENT_PRI_ARG(ev));
+      TEST(0);
+      break;
+    }
+  }
+}
+
+
 static inline void rx_wait_poll_evq(struct eflatency_vi* vi)
 {
   generic_desc_check(vi, 1);
@@ -682,8 +716,10 @@ int main(int argc, char* argv[])
   const test_t* t;
   int iters_run = 0;
   struct eflatency_vi* tx_vi_ptr;
+  void (*rx_wait)(struct eflatency_vi*);
   unsigned long rx_min_page_size;
   unsigned long min_page_size;
+  unsigned long can_rx_poll;
   void* pkt_mem;
   int pkt_mem_bytes;
   int i;
@@ -841,6 +877,14 @@ int main(int argc, char* argv[])
     tx_vi_ptr = &tx_vi;
   }
 
+  /* Test gives TX send method. Determine RX polling method */
+  if( ef_vi_capabilities_get(driver_handle, rx_ifindex,
+                             EF_VI_CAP_RX_POLL,
+                             &can_rx_poll) == 0 && can_rx_poll )
+    rx_wait = rx_wait_poll_rx;
+  else
+    rx_wait = rx_wait_poll_evq;
+
   for( i = 0; i < N_BUFS; ++i ) {
     struct pkt_buf* pb = (void*) ((char*) pkt_mem + i * BUF_SIZE);
     ef_memreg* memreg = i < N_RX_BUFS ? &rx_vi.memreg : &tx_vi_ptr->memreg;
@@ -897,7 +941,7 @@ int main(int argc, char* argv[])
     ++iters_run;
     if( t->init )
       t->init(&rx_vi, tx_vi_ptr);
-    (ping ? generic_ping : generic_pong)(&rx_vi, tx_vi_ptr, rx_wait_poll_evq, t->send);
+    (ping ? generic_ping : generic_pong)(&rx_vi, tx_vi_ptr, rx_wait, t->send);
     if( t->cleanup != NULL )
       t->cleanup(&rx_vi.vi, &tx_vi_ptr->vi);
     cfg_payload_len += cfg_payload_step;
