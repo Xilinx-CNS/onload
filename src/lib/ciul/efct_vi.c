@@ -1076,7 +1076,7 @@ int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
   return n_evs;
 }
 
-static int efct_ef_eventq_poll(ef_vi* vi, ef_event* evs, int evs_len)
+static int efct_ef_receive_poll(ef_vi* vi, ef_event* evs, int evs_len)
 {
   int n = 0;
   uint64_t qs = *vi->efct_rxqs.active_qs;
@@ -1088,6 +1088,12 @@ static int efct_ef_eventq_poll(ef_vi* vi, ef_event* evs, int evs_len)
     qs &= ~(1ull << i);
     n += efct_poll_rx(vi, i, evs + n, evs_len - n);
   }
+  return n;
+}
+
+static int efct_ef_eventq_poll(ef_vi* vi, ef_event* evs, int evs_len)
+{
+  int n = efct_ef_receive_poll(vi, evs, evs_len);
   if( vi->vi_txq.mask )
     n += efct_poll_tx(vi, evs + n, evs_len - n);
   return n;
@@ -1542,6 +1548,7 @@ static void efct_vi_initialise_ops(ef_vi* vi)
   vi->internal_ops.design_parameters = efct_design_parameters;
   vi->internal_ops.post_filter_add = efct_post_filter_add;
   vi->ops.eventq_poll = efct_ef_eventq_poll;
+  vi->ops.receive_poll = efct_ef_receive_poll;
 }
 
 void efct_vi_init(ef_vi* vi)

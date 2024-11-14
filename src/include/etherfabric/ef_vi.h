@@ -1210,6 +1210,8 @@ typedef struct ef_vi {
                                    size_t len, ef_request_id dma_id);
     int (*transmitv_ctpio_fallback)(struct ef_vi* vi, const ef_iovec* dma_iov,
                                     int dma_iov_len, ef_request_id dma_id);
+    /** Poll for received data event */
+    int (*receive_poll)(struct ef_vi*, ef_event* evs, int evs_len);
   } ops;  /**< Driver-dependent operations. */
   /* Doxygen comment above is documentation for the ops member of ef_vi */
 
@@ -1601,7 +1603,8 @@ ef_vi_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
 **
 ** This function:
 ** - must be called after retrieving the associated RX event via
-**   ef_eventq_poll(), and before calling ef_eventq_poll() again
+**   ef_eventq_poll() or ef_receive_poll(), and before calling
+**   ef_eventq_poll() or ef_receive_poll() again
 ** - must only be called for the first segment of a jumbo packet
 ** - must not be called for any events other than RX.
 **
@@ -2711,6 +2714,26 @@ ef_vi_transmit_ctpio(ef_vi* vi, const void* frame_buf, size_t frame_len,
 */
 #define ef_eventq_poll(evq, evs, evs_len)               \
   (evq)->ops.eventq_poll((evq), (evs), (evs_len))
+
+
+/*! \brief Poll for received data event
+**
+** \param evq     The vi to poll.
+** \param evs     Array in which to return polled events.
+** \param evs_len Length of the evs array, set maximum
+**                number of events to return.
+**
+** \return The number of events retrieved.
+**
+** Poll for received data event. For platforms that support polling for data
+** data independently of other events, this may offer a performance advantage
+** over using ef_eventq_poll when waiting for data.
+**
+** This function returns immediately, even if there are no outstanding
+** events. The array might not be full on return.
+*/
+#define ef_receive_poll(evq, evs, evs_len)               \
+  (evq)->ops.receive_poll((evq), (evs), (evs_len))
 
 
 /*! \brief Returns the capacity of an event queue
