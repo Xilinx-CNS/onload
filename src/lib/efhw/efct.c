@@ -307,6 +307,7 @@ efct_nic_init_hardware(struct efhw_nic *nic,
              | NIC_FLAG_RX_SHARED
              | NIC_FLAG_HW_MULTICAST_REPLICATION
              | NIC_FLAG_SHARED_PD
+             | NIC_FLAG_RX_POLL
              ;
 
   nic->filter_flags |= efct_nic_supported_filter_flags(nic);

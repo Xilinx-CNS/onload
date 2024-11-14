@@ -248,6 +248,8 @@ typedef union {
    vis. */
 #define NIC_FLAG_SHARED_PD 0x40000000000000LL
 #define NIC_FLAG_LLCT 0x100000000000000LL
+/* Can poll for RX independently of other events */
+#define NIC_FLAG_RX_POLL 0x200000000000000LL
 
 /* Filter type flags */
 #define NIC_FILTER_FLAG_RX_TYPE_IP_LOCAL 0x1
