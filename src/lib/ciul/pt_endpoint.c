@@ -408,6 +408,36 @@ static int init_design_parameters(ef_vi* vi)
   return vi->internal_ops.design_parameters(vi, &dp);
 }
 
+
+static int ef_tok_eq(const char* tok, size_t tok_len, const char* tmpl)
+{
+    size_t l = strlen(tmpl);
+    return l == tok_len && ! strncmp(tok, tmpl, l);
+}
+
+
+static enum ef_vi_flags get_vi_flags_from_env(void)
+{
+    const char* s = getenv("EF_VI_EXTRA_VI_FLAGS");
+    if( s == NULL )
+        return 0;
+
+    enum ef_vi_flags new_flags = 0;
+    const char* tok_end;
+    do
+    {
+        tok_end = strchr(s, ',');
+        if( ! tok_end )
+            tok_end = s + strlen(s);
+        if( ef_tok_eq(s, tok_end - s, "tph") )
+            new_flags |= EF_VI_ENABLE_TPH;
+        s = tok_end + 1;
+    } while( *tok_end != '\0' );
+
+    return new_flags;
+}
+
+
 int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
                   efch_resource_id_t pd_or_vi_set_id,
                   ef_driver_handle pd_or_vi_set_dh,
@@ -430,6 +460,8 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   void* p;
   int q_label;
   int state_bytes;
+
+  vi_flags |= get_vi_flags_from_env();
 
   if( txq_capacity < 0 && (s = getenv("EF_VI_TXQ_SIZE")) )
     txq_capacity = atoi(s);
