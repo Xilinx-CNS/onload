@@ -31,8 +31,7 @@
 
 /* Forward declarations. */
 struct eflatency_vi;
-static inline void rx_wait_no_ts(struct eflatency_vi*);
-static inline void rx_wait_with_ts(struct eflatency_vi*);
+static inline void rx_wait_poll_evq(struct eflatency_vi*);
 
 
 #define DEFAULT_PAYLOAD_SIZE  0
@@ -218,8 +217,7 @@ static void output_results(struct timeval start, struct timeval end)
 typedef struct {
   const char* name;
   void (*init)(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi);
-  void (*ping)(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi);
-  void (*pong)(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi);
+  void (*send)(struct eflatency_vi* tx_vi);
   void (*cleanup)(ef_vi* rx_vi, ef_vi* tx_vi);
 } test_t;
 
@@ -293,20 +291,9 @@ static inline void dma_send(struct eflatency_vi* vi)
   TRY(ef_vi_transmit(&vi->vi, pb->dma_buf_addr, tx_frame_len, 0));
 }
 
-static void dma_ping(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
-{
-  generic_ping(rx_vi, tx_vi, rx_wait_no_ts, dma_send);
-}
-
-static void dma_pong(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
-{
-  generic_pong(rx_vi, tx_vi, rx_wait_no_ts, dma_send);
-}
-
 static const test_t dma_test = {
   .name = "DMA",
-  .ping = dma_ping,
-  .pong = dma_pong,
+  .send = dma_send,
   .cleanup = NULL,
 };
 
@@ -326,21 +313,10 @@ static void pio_init(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
                     tx_frame_len));
 }
 
-static void pio_ping(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
-{
-  generic_ping(rx_vi, tx_vi, rx_wait_no_ts, pio_send);
-}
-
-static void pio_pong(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
-{
-  generic_pong(rx_vi, tx_vi, rx_wait_no_ts, pio_send);
-}
-
 static const test_t pio_test = {
   .name = "PIO",
   .init = pio_init,
-  .ping = pio_ping,
-  .pong = pio_pong,
+  .send = pio_send,
   .cleanup = NULL,
 };
 
@@ -407,21 +383,10 @@ static inline void alt_send(struct eflatency_vi* vi)
   alt_fill(vi);
 }
 
-static void alt_ping(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
-{
-  generic_ping(rx_vi, tx_vi, rx_wait_with_ts, alt_send);
-}
-
-static void alt_pong(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
-{
-  generic_pong(rx_vi, tx_vi, rx_wait_with_ts, alt_send);
-}
-
 static const test_t alt_test = {
   .name = "Alternatives",
   .init = alt_init,
-  .ping = alt_ping,
-  .pong = alt_pong,
+  .send = alt_send,
   /* Flush the alternative before freeing it. */
   .cleanup = alt_discard,
 };
@@ -449,27 +414,15 @@ static inline void ctpio_send(struct eflatency_vi* vi)
   }
 }
 
-static void ctpio_ping(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
-{
-  generic_ping(rx_vi, tx_vi, rx_wait_no_ts, ctpio_send);
-}
-
-static void ctpio_pong(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
-{
-  generic_pong(rx_vi, tx_vi, rx_wait_no_ts, ctpio_send);
-}
-
 static const test_t ctpio_test = {
   .name = "CTPIO",
-  .ping = ctpio_ping,
-  .pong = ctpio_pong,
+  .send = ctpio_send,
   .cleanup = NULL,
 };
 
 static const test_t x3_ctpio_test = {
   .name = "X3 CTPIO",
-  .ping = ctpio_ping,
-  .pong = ctpio_pong,
+  .send = ctpio_send,
   .cleanup = NULL,
 };
 
@@ -551,28 +504,9 @@ generic_desc_check(struct eflatency_vi* vi, int wait)
   }
 }
 
-static void
-generic_rx_wait(struct eflatency_vi* vi)
+static inline void rx_wait_poll_evq(struct eflatency_vi* vi)
 {
   generic_desc_check(vi, 1);
-}
-
-static inline void rx_wait_no_ts(struct eflatency_vi* vi)
-{
-  generic_rx_wait(vi);
-}
-
-static inline int
-tx_with_ts_handler(ef_vi* vi, const ef_event* ev, ef_request_id* ids)
-{
-  ++tx_alt.complete_id;
-  alt_assert_state_validity();
-  return 0;
-}
-
-static inline void rx_wait_with_ts(struct eflatency_vi* vi)
-{
-  generic_rx_wait(vi);
 }
 
 /**********************************************************************/
@@ -948,7 +882,7 @@ int main(int argc, char* argv[])
     ++iters_run;
     if( t->init )
       t->init(&rx_vi, tx_vi_ptr);
-    (ping ? t->ping : t->pong)(&rx_vi, tx_vi_ptr);
+    (ping ? generic_ping : generic_pong)(&rx_vi, tx_vi_ptr, rx_wait_poll_evq, t->send);
     if( t->cleanup != NULL )
       t->cleanup(&rx_vi.vi, &tx_vi_ptr->vi);
     cfg_payload_len += cfg_payload_step;
