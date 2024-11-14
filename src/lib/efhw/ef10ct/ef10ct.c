@@ -316,7 +316,7 @@ static void ef10ct_free_evq(struct efhw_nic *nic, int evq)
   struct efx_auxdev_client* cli;
   struct efx_auxdev* edev;
   struct device *dev;
-  int rc;
+  int rc = 0;
 
   AUX_PRE(dev, edev, cli, nic, rc);
   edev->llct_ops->channel_free(cli, evq);

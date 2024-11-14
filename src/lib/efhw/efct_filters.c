@@ -371,7 +371,7 @@ efct_filter_insert(struct efct_filter_state *state, struct efx_filter_spec *spec
                    int *rxq, unsigned pd_excl_token, unsigned flags,
                    drv_filter_insert insert_op, void *insert_data)
 {
-  int rc;
+  int rc = 0;
   struct efct_filter_insert_in op_in;
   struct efct_filter_insert_out op_out;
   struct efct_filter_node node;

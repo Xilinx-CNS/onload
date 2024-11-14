@@ -538,7 +538,7 @@ efct_test_irq_alloc(struct efx_auxdev_client *handle)
 }
 
 static void efct_test_irq_free(struct efx_auxdev_client *handle,
-                        struct efx_auxdev_irq *)
+                        struct efx_auxdev_irq *irq)
 {
 }
 

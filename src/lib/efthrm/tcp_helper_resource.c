@@ -6215,7 +6215,7 @@ efab_tcp_helper_more_bufs(tcp_helper_resource_t* trs)
   uint64_t *hw_addrs;
   ci_irqlock_state_t lock_flags;
   ci_netif* ni = &trs->netif;
-  int i, rc, bufset_id, intf_i, page_order;
+  int i, rc, bufset_id, intf_i, page_order = 0;
 
   ci_assert(ci_netif_is_locked(ni));
 
