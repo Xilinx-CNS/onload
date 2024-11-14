@@ -199,25 +199,15 @@ static int
 ef10ct_nic_event_queue_enable(struct efhw_nic *nic,
                               struct efhw_evq_params *efhw_params)
 {
-  struct efx_auxiliary_evq_params qparams = {
-    .qid = efhw_params->evq,
-    .entries = efhw_params->evq_size,
-    /* We don't provide a pci_dev to enable queue memory to be mapped for us,
-     * so we're given plain physical addresses.
-     */
-    .q_page = pfn_to_page(efhw_params->dma_addrs[0] >> PAGE_SHIFT),
-    .page_offset = 0,
-    .q_size = efhw_params->evq_size * sizeof(efhw_event_t),
-    .subscribe_time_sync = efhw_params->flags & EFHW_VI_TX_TIMESTAMPS,
-    .unsol_credit = efhw_params->flags & EFHW_VI_TX_TIMESTAMPS ? CI_CFG_TIME_SYNC_EVENT_EVQ_CAPACITY  - 1 : 0,
-  };
+  EFHW_MCDI_DECLARE_BUF(out, MC_CMD_INIT_EVQ_V2_OUT_LEN);
+  EFHW_MCDI_DECLARE_BUF(in, MC_CMD_INIT_EVQ_V2_IN_LEN(1));
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct efhw_nic_ef10ct_evq *ef10ct_evq;
   int rc;
 #ifndef NDEBUG
   int i;
 #endif
-  struct efx_auxdev_rpc dummy;
+  struct efx_auxdev_rpc rpc;
 
   EFHW_WARN("%s: evq %d", __func__, efhw_params->evq);
 
@@ -233,7 +223,7 @@ ef10ct_nic_event_queue_enable(struct efhw_nic *nic,
    * we're asking for.
    */
   EFHW_ASSERT(efhw_params->n_pages * EFHW_NIC_PAGES_IN_OS_PAGE * CI_PAGE_SIZE
-	      >= qparams.q_size);
+	      >= efhw_params->evq_size * sizeof(efhw_event_t));
 #ifndef NDEBUG
   /* We should have been provided with physical addresses of physically
    * contiguous memory, so sanity check the addresses look right.
@@ -244,11 +234,41 @@ ef10ct_nic_event_queue_enable(struct efhw_nic *nic,
   }
 #endif
 
-  dummy.cmd = MC_CMD_INIT_EVQ;
-  dummy.inlen = sizeof(qparams);
-  dummy.inbuf = (void*)&qparams;
-  dummy.outlen = 0;
-  rc = ef10ct_fw_rpc(nic, &dummy);
+  EFHW_MCDI_INITIALISE_BUF(in);
+
+  EFHW_MCDI_SET_DWORD(in, INIT_EVQ_V2_IN_SIZE, efhw_params->evq_size);
+  EFHW_MCDI_SET_DWORD(in, INIT_EVQ_V2_IN_INSTANCE, efhw_params->evq);
+
+  EFHW_MCDI_SET_QWORD(in, INIT_EVQ_V2_IN_DMA_ADDR, efhw_params->dma_addrs[0]);
+
+  EFHW_MCDI_SET_DWORD(in, INIT_EVQ_V2_IN_TMR_MODE,
+                      MC_CMD_INIT_EVQ_V2_IN_TMR_MODE_DIS);
+  EFHW_MCDI_SET_DWORD(in, INIT_EVQ_V2_IN_TMR_LOAD, 0);
+  EFHW_MCDI_SET_DWORD(in, INIT_EVQ_V2_IN_TMR_RELOAD, 0);
+
+  EFHW_MCDI_POPULATE_DWORD_6(in, INIT_EVQ_V2_IN_FLAGS,
+                             INIT_EVQ_V2_IN_FLAG_INTERRUPTING, 0,
+                             INIT_EVQ_V2_IN_FLAG_RX_MERGE, 1,
+                             INIT_EVQ_V2_IN_FLAG_TX_MERGE, 1,
+                             INIT_EVQ_V2_IN_FLAG_TYPE,
+                             MC_CMD_INIT_EVQ_V2_IN_FLAG_TYPE_MANUAL,
+                             INIT_EVQ_V2_IN_FLAG_USE_TIMER, 1,
+                             INIT_EVQ_V2_IN_FLAG_CUT_THRU, 0);
+
+  EFHW_MCDI_SET_DWORD(in, INIT_EVQ_V2_IN_COUNT_MODE,
+                      MC_CMD_INIT_EVQ_V2_IN_COUNT_MODE_DIS);
+  EFHW_MCDI_SET_DWORD(in, INIT_EVQ_V2_IN_COUNT_THRSHLD, 0);
+
+  /* TODO: replace with the index into the vector table if we want to choose */
+  EFHW_MCDI_SET_DWORD(in, INIT_EVQ_V2_IN_IRQ_NUM,
+                      MC_CMD_RESOURCE_INSTANCE_ANY);
+
+  rpc.cmd = MC_CMD_INIT_EVQ;
+  rpc.inlen = sizeof(in);
+  rpc.inbuf = (void*)in;
+  rpc.outlen = sizeof(out);
+  rpc.outbuf = (void*)out;
+  rc = ef10ct_fw_rpc(nic, &rpc);
 
   if( rc == 0 ) {
     ef10ct_evq->nic = nic;
@@ -265,9 +285,10 @@ static void
 ef10ct_nic_event_queue_disable(struct efhw_nic *nic,
                                uint evq, int time_sync_events_enabled)
 {
+  EFHW_MCDI_DECLARE_BUF(in, MC_CMD_FINI_EVQ_IN_LEN);
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct efhw_nic_ef10ct_evq *ef10ct_evq;
-  struct efx_auxdev_rpc dummy;
+  struct efx_auxdev_rpc rpc;
 
   EFHW_WARN("%s: evq %d", __func__, evq);
 
@@ -284,11 +305,15 @@ ef10ct_nic_event_queue_disable(struct efhw_nic *nic,
   atomic_set(&ef10ct_evq->queues_flushing, -1);
   cancel_delayed_work_sync(&ef10ct_evq->check_flushes);
 
-  dummy.cmd = MC_CMD_FINI_EVQ;
-  dummy.inlen = sizeof(int);
-  dummy.inbuf = &evq;
-  dummy.outlen = 0;
-  ef10ct_fw_rpc(nic, &dummy);
+  EFHW_MCDI_INITIALISE_BUF(in);
+  EFHW_MCDI_SET_DWORD(in, FINI_EVQ_IN_INSTANCE, evq);
+
+  rpc.cmd = MC_CMD_FINI_EVQ;
+  rpc.inlen = sizeof(in);
+  rpc.inbuf = (void*)in;
+  rpc.outlen = 0;
+  rpc.outbuf = NULL;
+  ef10ct_fw_rpc(nic, &rpc);
 }
 
 static void
@@ -476,36 +501,39 @@ static int
 ef10ct_dmaq_tx_q_init(struct efhw_nic *nic,
                       struct efhw_dmaq_params *txq_params)
 {
+  EFHW_MCDI_DECLARE_BUF(in, MC_CMD_INIT_TXQ_EXT_IN_LEN);
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct efhw_nic_ef10ct_evq *ef10ct_evq = &ef10ct->evq[txq_params->evq];
-  struct efx_auxdev_client* cli;
-  struct efx_auxdev* edev;
-  struct device *dev;
-  struct efx_auxiliary_txq_params params = {
-    .evq = txq_params->evq,
-    .qid = ef10ct_evq->txq,
-    .label = txq_params->tag,
-  };
+  struct efx_auxdev_rpc rpc;
   int rc;
-  struct efx_auxdev_rpc dummy;
 
-  EFHW_WARN("%s: txq %d evq %d", __func__, params.qid, params.evq);
+  EFHW_WARN("%s: txq %d evq %d", __func__, ef10ct_evq->txq, txq_params->evq);
 
   EFHW_ASSERT(txq_params->evq < ef10ct->evq_n);
-  EFHW_ASSERT(params.qid != EFCT_EVQ_NO_TXQ);
+  EFHW_ASSERT(ef10ct_evq->txq != EFCT_EVQ_NO_TXQ);
 
-  dummy.cmd = MC_CMD_INIT_TXQ;
-  dummy.inlen = sizeof(struct efx_auxiliary_txq_params);
-  dummy.inbuf = (void*)&params;
-  dummy.outlen = sizeof(struct efx_auxiliary_txq_params);
-  dummy.outbuf = (void*)&params;
+  EFHW_MCDI_INITIALISE_BUF(in);
 
-  AUX_PRE(dev, edev, cli, nic, rc);
-  rc = ef10ct_fw_rpc(nic, &dummy);
-  AUX_POST(dev, edev, cli, nic, rc);
+  EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_TARGET_EVQ, txq_params->evq);
+  EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_LABEL, txq_params->tag);
+  EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_INSTANCE, ef10ct_evq->txq);
+  EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_PORT_ID, txq_params->vport_id);
 
+  EFHW_MCDI_POPULATE_DWORD_4(in, INIT_TXQ_EXT_IN_FLAGS,
+                             INIT_TXQ_EXT_IN_FLAG_IP_CSUM_DIS, 1,
+			     INIT_TXQ_EXT_IN_FLAG_TCP_CSUM_DIS, 1,
+			     INIT_TXQ_EXT_IN_FLAG_CTPIO, 1,
+			     INIT_TXQ_EXT_IN_FLAG_CTPIO_UTHRESH, 1);
+
+  rpc.cmd = MC_CMD_INIT_TXQ;
+  rpc.inlen = sizeof(in);
+  rpc.inbuf = (void*)in;
+  rpc.outlen = 0;
+  rpc.outbuf = NULL;
+
+  rc = ef10ct_fw_rpc(nic, &rpc);
   if( rc == 0 )
-    txq_params->qid_out = params.qid;
+    txq_params->qid_out = ef10ct_evq->txq;
 
   return rc;
 }
@@ -546,15 +574,12 @@ static int
 ef10ct_shared_rxq_bind(struct efhw_nic* nic,
                        struct efhw_shared_bind_params *params)
 {
+  EFHW_MCDI_DECLARE_BUF(in, MC_CMD_INIT_RXQ_V4_IN_LEN);
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   int rxq = params->qid;
-  struct efx_auxiliary_rxq_params rxq_params = {
-    .qid = rxq,
-    .label = rxq, /* TODO This will be necessary for shared evqs. */
-    .suppress_events = true, /* FIXME SCJ */
-  };
+  int evq;
   int rc;
-  struct efx_auxdev_rpc dummy;
+  struct efx_auxdev_rpc rpc;
   resource_size_t register_phys_addr;
 
   EFHW_WARN("%s: evq %d, rxq %d", __func__, params->wakeup_instance,
@@ -582,15 +607,39 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
    * start supporting onload with interrupts we'll need to be able to alloc
    * and attach to an evq. */
   EFHW_ASSERT(ef10ct->shared_n >= 1 );
-  rxq_params.evq = ef10ct->shared[0].vi;
-  EFHW_WARN("%s: Using shared evq %d", __func__, rxq_params.evq);
+  evq = ef10ct->shared[0].vi;
+  EFHW_WARN("%s: Using shared evq %d", __func__, evq);
 
-  dummy.cmd = MC_CMD_INIT_RXQ;
-  dummy.inlen = sizeof(struct efx_auxiliary_rxq_params);
-  dummy.inbuf = (void*)&rxq_params;
-  dummy.outlen = sizeof(struct efx_auxiliary_rxq_params);
-  dummy.outbuf = (void*)&rxq_params;
-  rc = ef10ct_fw_rpc(nic, &dummy);
+  EFHW_MCDI_INITIALISE_BUF(in);
+
+  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V4_IN_SIZE,
+                      roundup_pow_of_two(
+                        DIV_ROUND_UP(EFCT_RX_SUPERBUF_BYTES, EFCT_PKT_STRIDE) *
+                        CI_EFCT_SUPERBUFS_PER_PAGE * params->n_hugepages
+                      ));
+  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V4_IN_TARGET_EVQ, evq);
+  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V4_IN_LABEL, rxq);
+  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V4_IN_INSTANCE, rxq);
+  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V4_IN_PORT_ID, EVB_PORT_ID_ASSIGNED);
+
+  EFHW_MCDI_POPULATE_DWORD_4(in, INIT_RXQ_V4_IN_FLAGS,
+                             INIT_RXQ_V4_IN_DMA_MODE,
+			     MC_CMD_INIT_RXQ_V4_IN_EQUAL_STRIDE_SUPER_BUFFER,
+			     INIT_RXQ_V4_IN_FLAG_TIMESTAMP, 1,
+			     INIT_RXQ_V4_IN_FLAG_PREFIX, 1,
+			     INIT_RXQ_V4_IN_FLAG_DISABLE_SCATTER, 1);
+
+  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V4_IN_ES_PACKET_STRIDE, EFCT_PKT_STRIDE);
+  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V4_IN_ES_MAX_DMA_LEN, nic->mtu);
+  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V4_IN_ES_PACKET_BUFFERS_PER_BUCKET,
+		       DIV_ROUND_UP(EFCT_RX_SUPERBUF_BYTES, EFCT_PKT_STRIDE));
+
+  rpc.cmd = MC_CMD_INIT_RXQ;
+  rpc.inlen = sizeof(in);
+  rpc.inbuf = (void*)in;
+  rpc.outlen = 0;
+  rpc.outbuf = NULL;
+  rc = ef10ct_fw_rpc(nic, &rpc);
   if( rc < 0 ) {
     EFHW_ERR("%s ef10ct_fw_rpc failed. rc = %d\n", __FUNCTION__, rc);
     return rc;
@@ -609,11 +658,11 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
   }
   ef10ct->rxq[rxq].post_buffer_addr = phys_to_virt(register_phys_addr);
 
-  flush_delayed_work(&ef10ct->evq[rxq_params.evq].check_flushes);
+  flush_delayed_work(&ef10ct->evq[evq].check_flushes);
   EFHW_ASSERT(ef10ct->rxq[rxq].evq == -1);
 
   ef10ct->rxq[rxq].ref_count++;
-  ef10ct->rxq[rxq].evq = rxq_params.evq;
+  ef10ct->rxq[rxq].evq = evq;
   params->rxq->qid = rxq;
 
   return rc;
@@ -623,8 +672,9 @@ static void
 ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
                          efhw_efct_rxq_free_func_t *freer)
 {
+  EFHW_MCDI_DECLARE_BUF(in, MC_CMD_FINI_RXQ_IN_LEN);
   int evq_id;
-  struct efx_auxdev_rpc dummy;
+  struct efx_auxdev_rpc rpc;
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct efhw_nic_ef10ct_evq *ef10ct_evq;
   int dmaq = rxq->qid;
@@ -638,11 +688,15 @@ ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
 
   /* FIXME EF10CT check errors here */
 
-  dummy.cmd = MC_CMD_FINI_RXQ;
-  dummy.inlen = sizeof(int);
-  dummy.inbuf = &dmaq;
-  dummy.outlen = 0;
-  ef10ct_fw_rpc(nic, &dummy);
+  EFHW_MCDI_INITIALISE_BUF(in);
+  EFHW_MCDI_SET_DWORD(in, FINI_RXQ_IN_INSTANCE, dmaq);
+
+  rpc.cmd = MC_CMD_FINI_RXQ;
+  rpc.inlen = sizeof(in);
+  rpc.inbuf = (void*)in;
+  rpc.outlen = 0;
+  rpc.outbuf = NULL;
+  ef10ct_fw_rpc(nic, &rpc);
 
   evq_id = ef10ct->rxq[dmaq].evq;
   ef10ct_evq = &ef10ct->evq[evq_id];
@@ -690,16 +744,21 @@ static int
 ef10ct_flush_tx_dma_channel(struct efhw_nic *nic,
                             uint dmaq, uint evq)
 {
+  EFHW_MCDI_DECLARE_BUF(in, MC_CMD_FINI_TXQ_IN_LEN);
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct efhw_nic_ef10ct_evq *ef10ct_evq = &ef10ct->evq[evq];
   int rc = 0;
-  struct efx_auxdev_rpc dummy;
+  struct efx_auxdev_rpc rpc;
 
-  dummy.cmd = MC_CMD_FINI_TXQ;
-  dummy.inlen = sizeof(int);
-  dummy.inbuf = &dmaq;
-  dummy.outlen = 0;
-  rc = ef10ct_fw_rpc(nic, &dummy);
+  EFHW_MCDI_INITIALISE_BUF(in);
+  EFHW_MCDI_SET_DWORD(in, FINI_TXQ_IN_INSTANCE, dmaq);
+
+  rpc.cmd = MC_CMD_FINI_TXQ;
+  rpc.inlen = sizeof(in);
+  rpc.inbuf = (void*)in;
+  rpc.outlen = 0;
+  rpc.outbuf = NULL;
+  rc = ef10ct_fw_rpc(nic, &rpc);
 
   atomic_inc(&ef10ct_evq->queues_flushing);
   schedule_delayed_work(&ef10ct_evq->check_flushes, 0);

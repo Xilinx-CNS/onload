@@ -103,6 +103,10 @@ ci_inline ci_uint16 efhw_mcdi_read(char *addr)
 #define EFHW_MCDI_INITIALISE_BUF(_name)				\
 	EFHW_MCDI_INITIALISE_BUF_SIZE(_name, sizeof(_name))
 
+#define EFHW_MCDI_QWORD(_buf, _field)					\
+	(efhw_mcdi_readl(_EFHW_MCDI_DWORD_FIELD((_buf), _field)) | \
+	 (u64)efhw_mcdi_readl(_EFHW_MCDI_DWORD_FIELD((_buf), _field) + 4) << 32)
+
 #define EFHW_MCDI_DWORD(_buf, _field)					\
 	efhw_mcdi_readl(_EFHW_MCDI_DWORD_FIELD((_buf), _field))
 
@@ -263,5 +267,9 @@ ci_inline ci_uint16 efhw_mcdi_read(char *addr)
 			     MC_CMD_ ## _name9, _value9,		\
 			     MC_CMD_ ## _name10, _value10,		\
 			     MC_CMD_ ## _name11, _value11)
+
+#define EFHW_MCDI_DWORD_FIELD(_buf, _name) \
+  ((EFHW_MCDI_DWORD(_buf, _name) >> (MC_CMD_ ## _name ## _LBN)) \
+   & ((1 << (MC_CMD_ ## _name ## _WIDTH)) - 1))
 
 #endif /* LIB_EFHW_MCDI_COMMMON_H */

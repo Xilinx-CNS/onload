@@ -214,28 +214,67 @@ static int efct_test_set_param(struct efx_auxdev_client *handle,
 
 
 static int efct_test_init_evq(struct efx_auxdev_client *handle,
-                              struct efx_auxiliary_evq_params *params)
+                              struct efx_auxdev_rpc *rpc)
 {
-  struct efct_test_evq *evq = &handle->tdev->evqs[params->qid];
+  struct efct_test_evq *evq;
+  size_t q_size;
+  dma_addr_t dma;
+  int qid;
 
-  printk(KERN_INFO "%s: qid %d\n", __func__, params->qid);
+  if(WARN_ON( rpc->cmd != MC_CMD_INIT_EVQ ||
+              rpc->inbuf == NULL ||
+              rpc->inlen != MC_CMD_INIT_EVQ_V2_IN_LEN(1) ||
+              rpc->outbuf == NULL ||
+              rpc->outlen != MC_CMD_INIT_EVQ_V2_OUT_LEN ))
+    return -EINVAL;
+
+  qid = EFHW_MCDI_DWORD(rpc->inbuf, INIT_EVQ_V2_IN_INSTANCE);
+  evq = &handle->tdev->evqs[qid];
+
+  printk(KERN_INFO "%s: qid %d\n", __func__, qid);
   if( evq->inited )
     return -EBUSY;
+
+  q_size = EFHW_MCDI_DWORD(rpc->inbuf, INIT_EVQ_V2_IN_SIZE);
+  dma = EFHW_MCDI_QWORD(rpc->inbuf, INIT_EVQ_V2_IN_DMA_ADDR);
 
   BUG_ON(evq->txqs != 0);
 
   evq->inited = true;
-  evq->q_base = page_to_virt(params->q_page);
-  evq->entries = params->entries;
+  evq->q_base = page_to_virt(pfn_to_page(dma >> PAGE_SHIFT));
+  evq->entries = q_size;
   evq->ptr = 0;
   evq->mask = evq->entries - 1;
+
+  EFHW_MCDI_POPULATE_DWORD_4(
+    (ci_dword_t*)rpc->outbuf,
+    INIT_EVQ_V2_OUT_FLAGS,
+    INIT_EVQ_V2_OUT_FLAG_RXQ_FORCE_EV_MERGING, 0,
+    INIT_EVQ_V2_OUT_FLAG_CUT_THRU, 0,
+    INIT_EVQ_V2_OUT_FLAG_TX_MERGE,
+    EFHW_MCDI_DWORD_FIELD(rpc->inbuf, INIT_EVQ_V2_IN_FLAG_TX_MERGE),
+    INIT_EVQ_V2_OUT_FLAG_RX_MERGE,
+    EFHW_MCDI_DWORD_FIELD(rpc->inbuf, INIT_EVQ_V2_IN_FLAG_RX_MERGE)
+  );
+
+  rpc->outlen_actual = MC_CMD_INIT_EVQ_V2_OUT_LEN;
 
   return 0;
 }
 
 
-static void efct_test_free_evq(struct efx_auxdev_client *handle, int evq)
+static int efct_test_free_evq(struct efx_auxdev_client *handle,
+                              struct efx_auxdev_rpc *rpc)
 {
+  int evq;
+
+  if(WARN_ON( rpc->cmd != MC_CMD_FINI_EVQ ||
+              rpc->inbuf == NULL ||
+              rpc->inlen != MC_CMD_FINI_EVQ_IN_LEN ))
+    return -EINVAL;
+
+  evq = EFHW_MCDI_DWORD(rpc->inbuf, FINI_EVQ_IN_INSTANCE);
+
   printk(KERN_INFO "%s: qid %d\n", __func__, evq);
   WARN(!handle->tdev->evqs[evq].inited,
        "%s: Error freeing q %d but not inited\n", __func__, evq);
@@ -245,16 +284,25 @@ static void efct_test_free_evq(struct efx_auxdev_client *handle, int evq)
        __func__, evq, handle->tdev->evqs[evq].txqs);
 
   handle->tdev->evqs[evq].inited = false;
+
+  return 0;
 }
 
 
 static int efct_test_init_txq(struct efx_auxdev_client *handle,
-                              struct efx_auxiliary_txq_params *params)
+                              struct efx_auxdev_rpc *rpc)
 {
   struct efct_test_device *tdev = handle->tdev;
   struct efct_test_txq *txq;
-  int txq_idx = params->qid;
-  int evq = params->evq;
+  int txq_idx, evq;
+
+  if(WARN_ON( rpc->cmd != MC_CMD_INIT_TXQ ||
+              rpc->inbuf == NULL ||
+              rpc->inlen != MC_CMD_INIT_TXQ_EXT_IN_LEN ))
+    return -EINVAL;
+
+  txq_idx = EFHW_MCDI_DWORD(rpc->inbuf, INIT_TXQ_EXT_IN_INSTANCE);
+  evq = EFHW_MCDI_DWORD(rpc->inbuf, INIT_TXQ_EXT_IN_TARGET_EVQ);
 
   printk(KERN_INFO "%s: evq %d\n", __func__, evq);
   if( !tdev->evqs[evq].inited )
@@ -285,11 +333,21 @@ static int efct_test_init_txq(struct efx_auxdev_client *handle,
 }
 
 
-static void efct_test_free_txq(struct efx_auxdev_client *handle, int txq_idx)
+static int efct_test_free_txq(struct efx_auxdev_client *handle,
+                              struct efx_auxdev_rpc *rpc)
 {
   struct efct_test_device *tdev = handle->tdev;
-  int evq = tdev->txqs[txq_idx].evq;
-  struct efct_test_txq *txq = &tdev->txqs[txq_idx];
+  struct efct_test_txq *txq;
+  int txq_idx, evq;
+
+  if(WARN_ON( rpc->cmd != MC_CMD_FINI_TXQ ||
+              rpc->inbuf == NULL ||
+              rpc->inlen != MC_CMD_FINI_TXQ_IN_LEN ))
+    return -EINVAL;
+
+  txq_idx = EFHW_MCDI_DWORD(rpc->inbuf, FINI_TXQ_IN_INSTANCE);
+  txq = &tdev->txqs[txq_idx];
+  evq = txq->evq;
 
   printk(KERN_INFO "%s: txq %d\n", __func__, txq_idx);
   WARN(evq < 0,
@@ -305,16 +363,25 @@ static void efct_test_free_txq(struct efx_auxdev_client *handle, int txq_idx)
   set_memory_wb((unsigned long)txq->ctpio, 1);
 
   kfree(txq->ctpio);
+
+  return 0;
 }
 
 
 static int efct_test_init_rxq(struct efx_auxdev_client *handle,
-                              struct efx_auxiliary_rxq_params *params)
+                              struct efx_auxdev_rpc *rpc)
 {
   struct efct_test_device *tdev = handle->tdev;
   struct efct_test_rxq *rxq;
-  int rxq_idx = params->qid;
-  int evq = params->evq;
+  int rxq_idx, evq;
+
+  if(WARN_ON( rpc->cmd != MC_CMD_INIT_RXQ ||
+              rpc->inbuf == NULL ||
+              rpc->inlen != MC_CMD_INIT_RXQ_V4_IN_LEN ))
+    return -EINVAL;
+
+  rxq_idx = EFHW_MCDI_DWORD(rpc->inbuf, INIT_RXQ_V4_IN_INSTANCE);
+  evq = EFHW_MCDI_DWORD(rpc->inbuf, INIT_RXQ_V4_IN_TARGET_EVQ);
 
   printk(KERN_INFO "%s: evq %d\n", __func__, evq);
 
@@ -339,7 +406,7 @@ static int efct_test_init_rxq(struct efx_auxdev_client *handle,
   rxq->evq = evq;
   rxq->tdev = tdev;
   tdev->evqs[evq].rxqs |= 1 << rxq_idx;
-  rxq->events_suppressed = params->suppress_events;
+  rxq->events_suppressed = true;
   rxq->post_register = (ci_qword_t*)(tdev->rxq_window + (0x1000 * rxq_idx));
 
   /* Everything should be memset to 0, but I want to be sure */
@@ -356,11 +423,21 @@ static int efct_test_init_rxq(struct efx_auxdev_client *handle,
 }
 
 
-static void efct_test_free_rxq(struct efx_auxdev_client *handle, int rxq_idx)
+static int efct_test_free_rxq(struct efx_auxdev_client *handle,
+                              struct efx_auxdev_rpc *rpc)
 {
   struct efct_test_device *tdev = handle->tdev;
-  int evq = tdev->rxqs[rxq_idx].evq;
-  struct efct_test_rxq *rxq = &tdev->rxqs[rxq_idx];
+  struct efct_test_rxq *rxq;
+  int rxq_idx, evq;
+
+  if(WARN_ON( rpc->cmd != MC_CMD_FINI_RXQ ||
+              rpc->inbuf == NULL ||
+              rpc->inlen != MC_CMD_FINI_RXQ_IN_LEN ))
+    return -EINVAL;
+
+  rxq_idx = EFHW_MCDI_DWORD(rpc->inbuf, FINI_RXQ_IN_INSTANCE);
+  rxq = &tdev->rxqs[rxq_idx];
+  evq = rxq->evq;
 
   printk(KERN_INFO "%s: rxq %d\n", __func__, rxq_idx);
   WARN(evq < 0,
@@ -377,6 +454,8 @@ static void efct_test_free_rxq(struct efx_auxdev_client *handle, int rxq_idx)
 
   memset(rxq, 0, sizeof(*rxq));
   rxq->evq = -1;
+
+  return 0;
 }
 
 
@@ -437,51 +516,22 @@ static int efct_test_fw_rpc(struct efx_auxdev_client *handle,
 
   switch(rpc->cmd) {
    case MC_CMD_INIT_EVQ:
-    if( rpc->inlen != sizeof(struct efx_auxiliary_evq_params) )
-      rc = -EINVAL;
-    else
-      rc = efct_test_init_evq(handle,
-                             (struct efx_auxiliary_evq_params *)rpc->inbuf);
+    rc = efct_test_init_evq(handle, rpc);
     break;
    case MC_CMD_FINI_EVQ:
-    if( rpc->inlen != sizeof(int) ) {
-      rc = -EINVAL;
-    }
-    else {
-      efct_test_free_evq(handle, *rpc->inbuf);
-      rc = 0;
-    }
+    rc = efct_test_free_evq(handle, rpc);
     break;
    case MC_CMD_INIT_TXQ:
-    if( rpc->inlen != sizeof(struct efx_auxiliary_txq_params) )
-      rc = -EINVAL;
-    else
-      rc = efct_test_init_txq(handle,
-                             (struct efx_auxiliary_txq_params *)rpc->inbuf);
+    rc = efct_test_init_txq(handle, rpc);
     break;
    case MC_CMD_FINI_TXQ:
-    if( rpc->inlen != sizeof(int) ) {
-      rc = -EINVAL;
-    }
-    else {
-      efct_test_free_txq(handle, *rpc->inbuf);
-      rc = 0;
-    }
+    rc = efct_test_free_txq(handle, rpc);
     break;
    case MC_CMD_INIT_RXQ:
-    if( rpc->inlen != sizeof(struct efx_auxiliary_rxq_params) )
-      rc = -EINVAL;
-    else
-      rc = efct_test_init_rxq(handle, (struct efx_auxiliary_rxq_params *)rpc->inbuf);
+    rc = efct_test_init_rxq(handle, rpc);
     break;
    case MC_CMD_FINI_RXQ:
-    if( rpc->inlen != sizeof(int) ) {
-      rc = -EINVAL;
-    }
-    else {
-      efct_test_free_rxq(handle, *rpc->inbuf);
-      rc = 0;
-    }
+    rc = efct_test_free_rxq(handle, rpc);
     break;
    case MC_CMD_FILTER_OP:
      rc = efct_test_filter_op(handle, rpc);
