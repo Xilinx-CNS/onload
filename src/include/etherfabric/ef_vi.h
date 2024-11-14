@@ -598,6 +598,8 @@ enum ef_vi_flags {
   EF_VI_EFCT_UNIQUEUE = 0x10000000,
   /** DEPRECATED FLAG */
   EF_VI_RX_EXCLUSIVE = 0x20000000,
+  /** Turn on PCIe transaction processing hints to steer traffic (X2000 series) */
+  EF_VI_ENABLE_TPH = 0x40000000,
 };
 
 /*! \brief Flags that can be returned when an ef_vi has been allocated */

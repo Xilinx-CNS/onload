@@ -63,6 +63,7 @@ typedef union {
 /* Flags for TX/RX queues */
 #define EFHW_VI_JUMBO_EN           0x01    /*! scatter RX over multiple desc */
 #define EFHW_VI_RX_ZEROCOPY        0x02    /*! Zerocopy for AF_XDP */
+#define EFHW_VI_ENABLE_TPH         0x08    /*! PCIe TPH steering hints */
 #define EFHW_VI_TX_PHYS_ADDR_EN    0x20    /*! TX physical address mode */
 #define EFHW_VI_RX_PHYS_ADDR_EN    0x40    /*! RX physical address mode */
 #define EFHW_VI_TX_IP_CSUM_DIS     0x100   /*! enable ip checksum generation */

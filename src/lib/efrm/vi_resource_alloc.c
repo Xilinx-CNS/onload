@@ -729,6 +729,8 @@ static unsigned q_flags_to_vi_flags(unsigned q_flags, enum efhw_q_type q_type)
 			vi_flags |= EFHW_VI_NO_RX_CUT_THROUGH;
 		if (q_flags & EFRM_VI_RX_ZEROCOPY)
 			vi_flags |= EFHW_VI_RX_ZEROCOPY;
+		if (q_flags & EFRM_VI_ENABLE_TPH)
+			vi_flags |= EFHW_VI_ENABLE_TPH;
 		break;
 	case EFHW_EVQ:
 		if (q_flags & EFRM_VI_RX_TIMESTAMPS)
@@ -790,6 +792,8 @@ static unsigned vi_flags_to_q_flags(unsigned vi_flags, enum efhw_q_type q_type)
 			q_flags |= EFRM_VI_NO_RX_CUT_THROUGH;
 		if (vi_flags & EFHW_VI_RX_ZEROCOPY)
 			q_flags |= EFRM_VI_RX_ZEROCOPY;
+		if (vi_flags & EFHW_VI_ENABLE_TPH)
+			q_flags |= EFRM_VI_ENABLE_TPH;
 		break;
 	case EFHW_EVQ:
 		if (vi_flags & EFHW_VI_RX_TIMESTAMPS)

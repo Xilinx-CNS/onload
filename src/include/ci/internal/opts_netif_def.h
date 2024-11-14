@@ -514,6 +514,10 @@ CI_CFG_OPT("EF_TCP_TIME_WAIT_ASSASSINATION", time_wait_assassinate, ci_uint32,
 "/proc/sys/net/ipv4/tcp_rfc1337 set to  0",
            1, , CI_CFG_TIME_WAIT_ASSASSINATE, 0, 1, yesno)
 
+CI_CFG_OPT("EF_ENABLE_TPH", enable_tph, ci_uint32,
+"Enable use of PCIe TPH steering hints",
+           1, , 0, 0, 1, yesno)
+
 /**********************************************************************
  * Narrow fields (few bits).
  */
