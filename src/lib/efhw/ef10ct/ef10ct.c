@@ -815,14 +815,6 @@ struct filter_insert_params {
 };
 
 
-static void filter_to_mcdi(ci_dword_t *buf, int rxq,
-                           const struct ethtool_rx_flow_spec *filter)
-{
-  /* FIXME EF10CT to implement */
-  EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_OP, MC_CMD_FILTER_OP_IN_OP_INSERT);
-}
-
-
 static int get_rxq_from_mask(struct efhw_nic *nic,
                              const struct cpumask *mask, bool exclusive)
 {
@@ -918,7 +910,7 @@ static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in_data,
 
   EFHW_MCDI_INITIALISE_BUF(in);
   EFHW_MCDI_INITIALISE_BUF(out);
-  filter_to_mcdi(in, rxq, in_data->filter);
+  ethtool_flow_to_mcdi_op(in, rxq, in_data->filter);
 
   rc = ef10ct_fw_rpc(params->nic, &rpc);
 
@@ -926,7 +918,7 @@ static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in_data,
     uint32_t id_low = EFHW_MCDI_DWORD(out, FILTER_OP_OUT_HANDLE_LO);
     uint32_t id_hi = EFHW_MCDI_DWORD(out, FILTER_OP_OUT_HANDLE_HI);
     out_data->rxq = rxq;
-    out_data->drv_id = id_low || (uint64_t)id_hi << 32;
+    out_data->drv_id = id_low | (uint64_t)id_hi << 32;
     /* Metadata filter_id is the bottom 16 bits of MCDI filter handle */
     out_data->filter_handle = id_low & 0xffff;
   }
@@ -977,13 +969,16 @@ ef10ct_filter_remove(struct efhw_nic *nic, int filter_id)
   };
   bool remove_drv;
   uint64_t drv_id;
+  bool is_multicast;
   int rc;
 
-  remove_drv = efct_filter_remove(&ef10ct->filter_state, filter_id, &drv_id);
+  remove_drv = efct_filter_remove(&ef10ct->filter_state, filter_id, &drv_id,
+                                  &is_multicast);
 
-  /* FIXME EF10CT need to support remove/unsubscribe */
   if( remove_drv ) {
-    EFHW_MCDI_SET_DWORD(in, FILTER_OP_IN_OP, MC_CMD_FILTER_OP_IN_OP_REMOVE);
+    EFHW_MCDI_SET_DWORD(in, FILTER_OP_IN_OP,
+                        is_multicast ? MC_CMD_FILTER_OP_IN_OP_UNSUBSCRIBE :
+                                       MC_CMD_FILTER_OP_IN_OP_REMOVE);
     EFHW_MCDI_SET_DWORD(in, FILTER_OP_IN_HANDLE_LO, drv_id);
     EFHW_MCDI_SET_DWORD(in, FILTER_OP_IN_HANDLE_HI, drv_id >> 32);
 

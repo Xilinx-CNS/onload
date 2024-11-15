@@ -3,6 +3,8 @@
 #ifndef INCLUDED_ETHTOOL_FLOW_H_
 #define INCLUDED_ETHTOOL_FLOW_H_
 
+#include <ci/tools/bitfield.h>
+
 struct efx_filter_spec;
 struct ethtool_rx_flow_spec;
 
@@ -14,4 +16,8 @@ struct ethtool_rx_flow_spec;
 int efx_spec_to_ethtool_flow(const struct efx_filter_spec *src,
                              struct ethtool_rx_flow_spec *dst);
 
+/** Converts an ethtool filter spec into an mcdi request. Does no additional
+ * checking or validation that the filter would be supported by the nic. */
+void ethtool_flow_to_mcdi_op(ci_dword_t *buf, int rxq,
+                             const struct ethtool_rx_flow_spec *filter);
 #endif

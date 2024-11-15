@@ -192,7 +192,7 @@ static const size_t MAX_ALLOWED_mac_vlan = 128;
   action(mac_vlan)
 
 struct efct_hw_filter {
-  int drv_id;
+  uint64_t drv_id;
   unsigned refcount;
   uint32_t hw_id;
   uint8_t rxq;

@@ -27,7 +27,7 @@ static int efct_debugfs_read_hw_filters(struct seq_file *file,
   for( i = 0; i < fs->hw_filters_n; i++ ) {
     filter = &fs->hw_filters[i];
     if( filter->refcount > 0 )
-      seq_printf(file, "%03x: ref: %d\tid: %d/%d\trxq: %d\t%s:%pI4:%d "
+      seq_printf(file, "%03x: ref: %d\tid: %d/%llu\trxq: %d\t%s:%pI4:%d "
                        "%pM %d\n", i,
                  filter->refcount, filter->hw_id, filter->drv_id, filter->rxq,
                  filter->proto == IPPROTO_UDP ? "udp" :

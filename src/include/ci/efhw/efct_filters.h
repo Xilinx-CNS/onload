@@ -25,7 +25,7 @@ efct_filter_insert(struct efct_filter_state *state, struct efx_filter_spec *spec
                    drv_filter_insert insert_op, void *insert_data);
 extern bool
 efct_filter_remove(struct efct_filter_state *state, int filter_id,
-                   uint64_t *drv_id_out);
+                   uint64_t *drv_id_out, bool *is_multicast);
 extern int
 efct_filter_query(struct efct_filter_state *state, int filter_id,
                   struct efhw_filter_info *info);

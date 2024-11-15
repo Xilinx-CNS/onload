@@ -475,6 +475,44 @@ static int efct_test_free_rxq(struct efx_auxdev_client *handle,
   return 0;
 }
 
+static const uint32_t supported_filter_types[] = {
+  /* IP match full */
+  EFHW_MCDI_MATCH_FIELD_BIT(ETHER_TYPE) | EFHW_MCDI_MATCH_FIELD_BIT(SRC_IP) |
+  EFHW_MCDI_MATCH_FIELD_BIT(SRC_PORT) | EFHW_MCDI_MATCH_FIELD_BIT(DST_IP) |
+  EFHW_MCDI_MATCH_FIELD_BIT(DST_PORT) | EFHW_MCDI_MATCH_FIELD_BIT(IP_PROTO),
+  /* IP match wild */
+  EFHW_MCDI_MATCH_FIELD_BIT(ETHER_TYPE) | EFHW_MCDI_MATCH_FIELD_BIT(DST_IP) |
+  EFHW_MCDI_MATCH_FIELD_BIT(DST_PORT) | EFHW_MCDI_MATCH_FIELD_BIT(IP_PROTO),
+  /* Non-TCP/UDP+VLAN */
+  EFHW_MCDI_MATCH_FIELD_BIT(ETHER_TYPE) | EFHW_MCDI_MATCH_FIELD_BIT(IP_PROTO) |
+  EFHW_MCDI_MATCH_FIELD_BIT(OUTER_VLAN),
+  /* Non-TCP/UDP */
+  EFHW_MCDI_MATCH_FIELD_BIT(ETHER_TYPE) | EFHW_MCDI_MATCH_FIELD_BIT(IP_PROTO),
+  /* MAC+Non-IP+VLAN */
+  EFHW_MCDI_MATCH_FIELD_BIT(DST_MAC) | EFHW_MCDI_MATCH_FIELD_BIT(ETHER_TYPE) |
+  EFHW_MCDI_MATCH_FIELD_BIT(OUTER_VLAN),
+  /* MAC+Non-IP */
+  EFHW_MCDI_MATCH_FIELD_BIT(DST_MAC) | EFHW_MCDI_MATCH_FIELD_BIT(ETHER_TYPE),
+  /* MACVLAN */
+  EFHW_MCDI_MATCH_FIELD_BIT(DST_MAC) | EFHW_MCDI_MATCH_FIELD_BIT(OUTER_VLAN),
+  /* MAC */
+  EFHW_MCDI_MATCH_FIELD_BIT(DST_MAC),
+  /* Non-IP+VLAN */
+  EFHW_MCDI_MATCH_FIELD_BIT(ETHER_TYPE) | EFHW_MCDI_MATCH_FIELD_BIT(OUTER_VLAN),
+  /* Non-IP */
+  EFHW_MCDI_MATCH_FIELD_BIT(ETHER_TYPE)
+};
+
+static bool check_match_fields(const uint32_t match_fields)
+{
+  int i;
+  for (i = 0; i < CI_ARRAY_SIZE(supported_filter_types); i++) {
+    if (match_fields == supported_filter_types[i])
+      return true;
+  }
+  return false;
+}
+
 
 static int efct_test_filter_op(struct efx_auxdev_client *handle,
                                struct efx_auxdev_rpc *rpc)
@@ -483,6 +521,8 @@ static int efct_test_filter_op(struct efx_auxdev_client *handle,
   uint32_t filter_handle = EFHW_MCDI_DWORD(rpc->inbuf, FILTER_OP_IN_HANDLE_LO);
   uint32_t filter_meta = EFHW_MCDI_DWORD(rpc->inbuf, FILTER_OP_IN_HANDLE_HI);
   uint32_t op = EFHW_MCDI_DWORD(rpc->inbuf, FILTER_OP_IN_OP);
+  uint32_t match_fields = EFHW_MCDI_DWORD(rpc->inbuf,
+                                          FILTER_OP_IN_MATCH_FIELDS);
   int rc;
 
   /* This is super dumb and does no validation or parsing. We just use a counter
@@ -491,9 +531,16 @@ static int efct_test_filter_op(struct efx_auxdev_client *handle,
   switch(op) {
    case MC_CMD_FILTER_OP_IN_OP_INSERT:
    case MC_CMD_FILTER_OP_IN_OP_SUBSCRIBE:
-    EFHW_MCDI_SET_DWORD(rpc->outbuf, FILTER_OP_IN_HANDLE_HI, op);
-    EFHW_MCDI_SET_DWORD(rpc->outbuf, FILTER_OP_IN_HANDLE_LO,
+    if (!check_match_fields(match_fields)) {
+      printk(KERN_ERR "%s: ERROR: filter requested unsupported match fields %x\n",
+             __func__, match_fields);
+      rc = -EINVAL;
+      break;
+    }
+    EFHW_MCDI_SET_DWORD(rpc->outbuf, FILTER_OP_OUT_OP, op);
+    EFHW_MCDI_SET_DWORD(rpc->outbuf, FILTER_OP_OUT_HANDLE_LO,
                         tdev->filter_handle++);
+    EFHW_MCDI_SET_DWORD(rpc->outbuf, FILTER_OP_OUT_HANDLE_HI, op);
     rc = 0;
     break;
    case MC_CMD_FILTER_OP_IN_OP_REMOVE:

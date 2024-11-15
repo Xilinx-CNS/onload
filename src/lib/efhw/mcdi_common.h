@@ -30,6 +30,15 @@ ci_inline void efhw_mcdi_writel(ci_uint32 data, char *addr)
         __efhw_mcdi_raw_writel(CI_BSWAP_LE32(data), (addr));
 }                      
 
+ci_inline void __efhw_mcdi_raw_write(ci_uint16 data, char *addr)
+{
+        *(ci_uint16*) addr = data;
+}
+ci_inline void efhw_mcdi_write(ci_uint16 data, char *addr)
+{
+        __efhw_mcdi_raw_write(CI_BSWAP_LE16(data), (addr));
+}
+
 ci_inline ci_uint32 __efhw_mcdi_raw_readl(char *addr) 
 {
         return *(ci_uint32*) addr;
@@ -115,6 +124,9 @@ ci_inline ci_uint16 efhw_mcdi_read(char *addr)
 
 #define EFHW_MCDI_BYTE(_buf, _field)					\
 	efhw_mcdi_read(EFHW_MCDI_PTR((_buf), _field))
+
+#define EFHW_MCDI_SET_WORD(_buf, _field, _value)			\
+	efhw_mcdi_write((_value), _EFHW_MCDI_WORD_FIELD((_buf), _field))
 
 #define EFHW_MCDI_SET_DWORD(_buf, _field, _value)			\
 	efhw_mcdi_writel((_value), _EFHW_MCDI_DWORD_FIELD((_buf), _field))
@@ -271,5 +283,9 @@ ci_inline ci_uint16 efhw_mcdi_read(char *addr)
 #define EFHW_MCDI_DWORD_FIELD(_buf, _name) \
   ((EFHW_MCDI_DWORD(_buf, _name) >> (MC_CMD_ ## _name ## _LBN)) \
    & ((1 << (MC_CMD_ ## _name ## _WIDTH)) - 1))
+
+
+#define EFHW_MCDI_MATCH_FIELD_BIT(type) \
+  (1 << MC_CMD_FILTER_OP_IN_MATCH_ ## type ## _LBN)
 
 #endif /* LIB_EFHW_MCDI_COMMMON_H */
