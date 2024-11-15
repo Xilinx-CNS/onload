@@ -263,7 +263,10 @@ typedef union {
 #define NIC_FILTER_FLAG_RX_ETHERTYPE 0x2000
 #define NIC_FILTER_FLAG_RX_MAC_IP4_PROTO 0x4000
 #define NIC_FILTER_FLAG_IPX_VLAN_HW 0x8000
+/* The SW filter flags indicate capabilities that are replicated in SW in the
+ * efhw layer rather than provided in HW by the NIC. */
 #define NIC_FILTER_FLAG_IPX_VLAN_SW 0x10000
+#define NIC_FILTER_FLAG_IP_FULL_SW 0x20000
 
 /* Reserved space in evq for a reasonable number of time sync events.
  * They arrive at a rate of 4 per second.  This allows app to get

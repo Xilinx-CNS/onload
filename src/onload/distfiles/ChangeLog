@@ -16,6 +16,7 @@ ON-16076: X3: don't restrict EF_SHARED_RXQ_NUM to first 8 queues.
 ON-16130: drop aux bus handle on device unplug, avoiding kernel crash
 ON-16132: rpm, deb: detect cplane user/group error and fail installation early
 ON-16144: fix race in VI allocation over aux bus, avoiding kernel crash
+ON-15106: correctly use SW full match IP filters on X3 onload
 
 
 onload-9.0.0.39
