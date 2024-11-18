@@ -1,6 +1,6 @@
 Solarflare 6.X Linux network driver
 ===================================
-Version:  v6_0_1_1000
+Version:  v6_0_2_1000
 
 
 Overview
@@ -58,7 +58,7 @@ kernel
 Installation of the driver can be confirmed by typing:
    modinfo sfc | grep version
 and checking for the line:
-   version: v6_0_1_1000
+   version: v6_0_2_1000
 
 All network interfaces available on the system can be found with:
   ifconfig -a
@@ -69,7 +69,7 @@ Linux distribution support for Solarflare Adapters
 
 This driver package is supported on:
  - RedHat Enterprise Linux                        8.6, 8.7, 8.8, 8.9, 8.10
- - RedHat Enterprise Linux                        9.2, 9.3, 9.4
+ - RedHat Enterprise Linux                        9.2, 9.3, 9.4, 9.5
  - Canonical Ubuntu Server LTS                    22.04, 24.04
  - Debian 12 "Bookworm"                           12.0
  - Kernel.org linux kernels                       4.18 to 6.6
@@ -91,6 +91,23 @@ Please contact your local AMD support representative or email
 
 Changelog
 ---------
+
+### v6_0_2_1000
+[General changes]
+~ Fixes for newer kernels
+~ Removal of kcompat for older kernels
+
+SWNETLINUX-5369
+~ Avoid crashing when adjusting ringsizes via ethtool whilst Onload module
+ is loaded.
+
+SWNETLINUX-5157
+~ Introduce devlink health diagnose, which allows users to retrieve the
+  NVLOG info from the NIC.
+
+SWNETLINUX-5399
+~ Implement support for AMD's SDCI (Smart Direct Cache Injection) relies
+  on TPH hints inside the TLP packets.
 
 ### v6_0_1_1000
 
