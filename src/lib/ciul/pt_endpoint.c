@@ -430,10 +430,10 @@ static enum ef_vi_flags get_vi_flags_from_env(void)
         tok_end = strchr(s, ',');
         if( ! tok_end )
             tok_end = s + strlen(s);
-        if( ef_tok_eq(s, tok_end - s, "tph_nost") )
+        if( ef_tok_eq(s, tok_end - s, "tph_enable") )
             new_flags |= EF_VI_ENABLE_TPH;
-        if( ef_tok_eq(s, tok_end - s, "tph_st") )
-            new_flags |= (EF_VI_ENABLE_TPH | EF_VI_TPH_TAG_MODE);
+        if( ef_tok_eq(s, tok_end - s, "tph_mode") )
+            new_flags |= EF_VI_TPH_TAG_MODE;
         s = tok_end + 1;
     } while( *tok_end != '\0' );
 
