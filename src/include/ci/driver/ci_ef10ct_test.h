@@ -11,6 +11,22 @@
 #define EFX_ONLOAD_DEVNAME	"onload"
 #endif
 #define EFX_LLCT_DEVNAME	"llct"
+/* Auxbus ABI major version. This is incremented whenever the ABI is changed
+ * such that it is not backwards compatible with the previous ABI version. For
+ * example, this is so when the offsets of fields in &struct efx_auxdev are
+ * changed.
+ */
+#define EFX_AUX_ABI_VERSION_MAJOR 1
+/* Auxbus ABI minor version. This is incremented when the ABI is changed such
+ * that it is backwards compatible with the previous ABI version. For example,
+ * this is so when fields in &struct efx_auxdev are added to the end of the
+ * struct.
+ */
+#define EFX_AUX_ABI_VERSION_MINOR 0
+#define EFX_AUX_ABI_VERSION ((EFX_AUX_ABI_VERSION_MAJOR << 16) | \
+			     EFX_AUX_ABI_VERSION_MINOR)
+#define EFX_AUX_ABI_VERSION_MAJOR_GET(ver) (ver >> 16)
+#define EFX_AUX_ABI_VERSION_MINOR_GET(ver) (ver & 0xffff)
 
 /* Driver API */
 /**
@@ -468,11 +484,13 @@ struct efx_auxdev_llct_ops {
  * struct efx_auxdev - Auxiliary device interface.
  *
  * @auxdev: The parent auxiliary bus device.
+ * @abi_version: ABI version of this auxbus interface. Offset may not change.
  * @onload_ops: Device API.
  * @llct_ops: LLCT device API.
  */
 struct efx_auxdev {
 	struct auxiliary_device auxdev;
+	u32 abi_version;
 	const struct efx_auxdev_onload_ops *onload_ops;
 	const struct efx_auxdev_llct_ops *llct_ops;
 };
@@ -520,5 +538,17 @@ struct efx_auxiliary_rxq_params {
         int  label;
         bool suppress_events;
 };
+
+static inline bool efx_aux_abi_version_is_compat(u32 abi_version)
+
+{
+	u32 major_ver = EFX_AUX_ABI_VERSION_MAJOR_GET(abi_version);
+	u32 minor_ver = EFX_AUX_ABI_VERSION_MINOR_GET(abi_version);
+	/* Majors must match. Provided minor must be newer or equal to the
+	 * client's.
+	 */
+	return major_ver == EFX_AUX_ABI_VERSION_MAJOR &&
+	       minor_ver >= EFX_AUX_ABI_VERSION_MINOR;
+}
 
 #endif /* CI_DRIVER_CI_EF10CT_TEST_H */

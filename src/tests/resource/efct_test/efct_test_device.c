@@ -65,6 +65,7 @@ struct efct_test_device* efct_test_add_test_dev(struct device* parent,
   }
   set_memory_uc((unsigned long)tdev->evq_window, EFCT_TEST_EVQS_N);
 
+  tdev->dev.abi_version = EFX_AUX_ABI_VERSION;
   tdev->dev.llct_ops = &test_devops;
   dev_hold(net_dev);
   tdev->net_dev = net_dev;
