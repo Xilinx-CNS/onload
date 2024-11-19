@@ -82,31 +82,41 @@ static void efct_test_close(struct efx_auxdev_client *handle)
   kfree(handle);
 }
 
-
-static int efct_test_ctpio_addr(struct efx_auxdev_client *handle,
-                                struct efx_auxiliary_io_addr *io)
+static int efct_test_evq_window_addr(struct efx_auxdev_client *handle,
+                                     struct efx_auxiliary_io_window *queue_io_wnd)
 {
   struct efct_test_device *tdev = handle->tdev;
-  int txq = io->qid_in;
+  int evq = queue_io_wnd->qid_in;
+
+  queue_io_wnd->base = virt_to_phys(tdev->evq_window + 0x1000 * evq);
+  queue_io_wnd->size = 0x1000;
+  return 0;
+}
+
+static int efct_test_ctpio_addr(struct efx_auxdev_client *handle,
+                                struct efx_auxiliary_io_window *queue_io_wnd)
+{
+  struct efct_test_device *tdev = handle->tdev;
+  int txq = queue_io_wnd->qid_in;
 
   printk(KERN_INFO "%s: txq %d evq %d\n", __func__, txq, tdev->txqs[txq].evq);
 
   if( tdev->txqs[txq].evq < 0 )
     return -EINVAL;
 
-  io->base = virt_to_phys(tdev->txqs[txq].ctpio);
-  io->size = 0x1000;
+  queue_io_wnd->base = virt_to_phys(tdev->txqs[txq].ctpio);
+  queue_io_wnd->size = 0x1000;
   return 0;
 }
 
 static int efct_test_buffer_post_addr(struct efx_auxdev_client *handle,
-                               struct efx_auxiliary_io_addr *io)
+                               struct efx_auxiliary_io_window *queue_io_wnd)
 {
   /* Give onload the address of the RX_POST_BUFFER register for this queue,
    * rather than forcing them to calculate the location based off an offset from
    * the BAR. */
   struct efct_test_device *tdev = handle->tdev;
-  int rxq = io->qid_in;
+  int rxq = queue_io_wnd->qid_in;
   
   /* FIXME EF10CT when we support multi-queue dynamic attach can re-instate
    * these checks. */
@@ -118,8 +128,8 @@ static int efct_test_buffer_post_addr(struct efx_auxdev_client *handle,
     return -EINVAL;
 #endif
 
-  io->base = virt_to_phys(tdev->rxqs[rxq].post_register);
-  io->size = 0x1000;
+  queue_io_wnd->base = virt_to_phys(tdev->rxqs[rxq].post_register);
+  queue_io_wnd->size = 0x1000;
 
   return 0;
 }
@@ -183,15 +193,13 @@ static int efct_test_get_param(struct efx_auxdev_client *handle,
     rc = 0;
     break;
    case EFX_AUXILIARY_EVQ_WINDOW:
-    arg->evq_window.base = virt_to_phys(handle->tdev->evq_window);
-    arg->evq_window.stride = 0x1000;
-    rc = 0;
+    rc = efct_test_evq_window_addr(handle, &arg->queue_io_wnd);
     break;
    case EFX_AUXILIARY_CTPIO_WINDOW:
-    rc = efct_test_ctpio_addr(handle, &arg->io_addr);
+    rc = efct_test_ctpio_addr(handle, &arg->queue_io_wnd);
     break;
-   case EFX_AUXILIARY_RXQ_POST:
-    rc = efct_test_buffer_post_addr(handle, &arg->io_addr);
+   case EFX_AUXILIARY_RXQ_WINDOW:
+    rc = efct_test_buffer_post_addr(handle, &arg->queue_io_wnd);
     break;
    case EFX_DESIGN_PARAM:
     efct_test_design_param(handle, arg->design_params);

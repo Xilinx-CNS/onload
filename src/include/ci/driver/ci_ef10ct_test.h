@@ -135,28 +135,17 @@ struct efx_design_params {
 	u32 rollover_zeros_pkt;
 };
 
-
-/**
- * Location of event queue control window.
- *
- * @base: physical address of base of the event queue window
- * @stride: size of each event queue's region within the window
- */
-struct efx_auxiliary_evq_window {
-        resource_size_t base;
-        size_t stride;
-};
-
-
 /** Location of an IO area associated with a queue.
- * @base: bus address of base of the region
- * @size: size of this queue's region
+ * @qid_in: Queue ID which the returned region is for.
+ * @base: bus address of base of the region.
+ * @size: size of this queue's region.
  */
-struct efx_auxiliary_io_addr {
+struct efx_auxiliary_io_window {
 	int qid_in;
-        resource_size_t base;
-        size_t size;
+	resource_size_t base;
+	size_t size;
 };
+
 
 /**
  * struct efx_auxdev_rpc - Remote Procedure Call to the firmware.
@@ -233,7 +222,7 @@ struct efx_auxdev_dl_vi_resources {
  *	Returned through @net_dev.
  * @EFX_MEMBASE: Kernel virtual address of the start of the memory BAR.
  *	Get only.
- *	Returned through @membase_addr.
+ *	Returned through @iomem_addr.
  * @EFX_MEMBAR: PCIe memory BAR index. Get only.
  *	Returned through @value to be interpreted as unsigned.
  * @EFX_USE_MSI: Hardware only has an MSI interrupt, no MSI-X.
@@ -266,19 +255,19 @@ struct efx_auxdev_dl_vi_resources {
  *      EFX_AUXILIARY_NIC_RESOURCES. The stride can be used to calculate the
  *      offset of each subsequent event queue from this base.
  *      Get only.
- *      Returned through @evq_window.
+ *      Returned through @queue_io_wnd.
  * @EFX_AUXILIARY_CTPIO_WINDOW: The bus address of the CTPIO region for a TXQ
  *      On successful return the provided addr will refer to the IO region, and
  *      size will provide the size of the region.
  *      The returned address should be IO mapped for access to the region.
  *	Get only.
- *	Return through @io_addr
- * @EFX_AUXILIARY_RXQ_POST: The bus address of the RX buffer post register
+ *	Return through @queue_io_wnd
+ * @EFX_AUXILIARY_RXQ_WINDOW: The bus address of the RX buffer post register
  *      On successful return the provided addr will refer to the register, and
  *      size will provide the size of the register.
  *      The returned address should be IO mapped for access to the region.
  *	Get only.
- *	Return through @io_addr
+ *	Return through @queue_io_wnd
  */
 enum efx_auxiliary_param {
 	EFX_NETDEV,
@@ -295,15 +284,16 @@ enum efx_auxiliary_param {
 	EFX_DRIVER_DATA,
 	EFX_PARAM_FILTER_BLOCK_KERNEL_UCAST,
 	EFX_PARAM_FILTER_BLOCK_KERNEL_MCAST,
+	EFX_AUXILIARY_INT_PRIME,
         EFX_AUXILIARY_EVQ_WINDOW,
         EFX_AUXILIARY_CTPIO_WINDOW,
-        EFX_AUXILIARY_RXQ_POST,
+        EFX_AUXILIARY_RXQ_WINDOW,
 };
 
 /** Possible values for device parameters */
 union efx_auxiliary_param_value {
 	struct net_device *net_dev;
-	void __iomem *membase_addr;
+	void __iomem *iomem_addr;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XARRAY)
 	struct xarray channels;
 #endif
@@ -312,9 +302,7 @@ union efx_auxiliary_param_value {
 	struct efx_design_params *design_params;
 	void *driver_data;
 	struct pci_dev *pci_dev;
-        struct efx_auxiliary_evq_window evq_window;
-	struct efx_auxiliary_io_addr io_addr;
-        void *ptr;
+	struct efx_auxiliary_io_window queue_io_wnd;
 };
 #endif
 

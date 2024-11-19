@@ -578,18 +578,18 @@ ef10ct_rx_buffer_post_register(struct efhw_nic* nic, int instance,
   struct device *dev;
   struct efx_auxdev* edev;
   struct efx_auxdev_client* cli;
-  union efx_auxiliary_param_value val = {.io_addr.qid_in = instance};
+  union efx_auxiliary_param_value val = {.queue_io_wnd.qid_in = instance};
 
   EFHW_WARN("%s: instance %d", __func__, instance);
 
   AUX_PRE(dev, edev, cli, nic, rc);
-  rc = edev->llct_ops->base_ops->get_param(cli, EFX_AUXILIARY_RXQ_POST, &val);
+  rc = edev->llct_ops->base_ops->get_param(cli, EFX_AUXILIARY_RXQ_WINDOW, &val);
   AUX_POST(dev, edev, cli, nic, rc);
 
   if( rc < 0 )
     return rc;
 
-  *addr_out = val.io_addr.base;
+  *addr_out = val.queue_io_wnd.base;
 
   return 0;
 }
@@ -1085,7 +1085,7 @@ ef10ct_vi_io_region(struct efhw_nic* nic, int instance, size_t* size_out,
   struct device *dev;
   struct efx_auxdev* edev;
   struct efx_auxdev_client* cli;
-  union efx_auxiliary_param_value val;
+  union efx_auxiliary_param_value val = {.queue_io_wnd.qid_in = instance};
   int rc = 0;
 
   AUX_PRE(dev, edev, cli, nic, rc)
@@ -1093,9 +1093,8 @@ ef10ct_vi_io_region(struct efhw_nic* nic, int instance, size_t* size_out,
                                            &val);
   AUX_POST(dev, edev, cli, nic, rc);
 
-  *size_out = val.evq_window.stride;
-  *addr_out = val.evq_window.base;
-  *addr_out += (instance - nic->vi_min) * val.evq_window.stride;
+  *size_out = val.queue_io_wnd.size;
+  *addr_out = val.queue_io_wnd.base;
 
   return rc;
 }
@@ -1171,18 +1170,18 @@ ef10ct_ctpio_addr(struct efhw_nic* nic, int instance, resource_size_t* addr)
   union efx_auxiliary_param_value val;
   int rc;
 
-  val.io_addr.qid_in = instance;
+  val.queue_io_wnd.qid_in = instance;
   AUX_PRE(dev, edev, cli, nic, rc);
   rc = edev->llct_ops->base_ops->get_param(cli, EFX_AUXILIARY_CTPIO_WINDOW,
                                            &val);
   AUX_POST(dev, edev, cli, nic, rc);
 
   /* Currently we assume throughout onload that we have a 4k region */
-  if( (rc == 0) && (val.io_addr.size != 0x1000) )
+  if( (rc == 0) && (val.queue_io_wnd.size != 0x1000) )
     return -EOPNOTSUPP;
 
   if( rc == 0 )
-    *addr = val.io_addr.base;
+    *addr = val.queue_io_wnd.base;
 
   return rc;
 }
