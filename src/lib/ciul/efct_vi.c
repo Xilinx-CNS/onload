@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
 /* X-SPDX-Copyright-Text: (c) Copyright 2021 Xilinx, Inc. */
 
+#include <linux/mman.h>
 #include "ef_vi_internal.h"
 #include "logging.h"
 #include <etherfabric/vi.h>
@@ -1481,7 +1482,8 @@ int efct_superbufs_reserve(ef_vi* vi, void* space)
      * we pay the price of doing the naive array lookups: we have an array of
      * pointers to superbufs. */
     space = mmap(NULL, sbuf_bytes_per_rxq * vi->efct_rxqs.max_qs, PROT_NONE,
-                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_HUGETLB,
+                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE |
+                 MAP_HUGETLB | MAP_HUGE_2MB,
                  -1, 0);
     if( space == MAP_FAILED )
       return -ENOMEM;
