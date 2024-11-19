@@ -10,6 +10,11 @@
 #include "net_driver.h"
 #include <linux/module.h>
 #include <linux/filter.h>
+#ifdef CONFIG_SFC_TPH
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_TPH)
+#include <linux/pci-tph.h>
+#endif
+#endif
 #include <xen/xen.h>
 #include "efx_channels.h"
 #include "efx.h"
@@ -711,6 +716,37 @@ static void efx_set_xps_queue(struct efx_channel *channel,
 			   channel->channel - channel->efx->tx_channel_offset);
 }
 
+static void efx_set_tph_hint(struct efx_channel *channel, unsigned int cpu)
+{
+#ifdef CONFIG_SFC_TPH
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCIE_TPH_GET_CPU_ST)
+	struct efx_nic *efx = channel->efx;
+	u16 tag;
+	int rc;
+
+	if (!efx->pci_dev->tph_enabled)
+		return;
+
+	rc = pcie_tph_get_cpu_st(efx->pci_dev, TPH_MEM_TYPE_VM, cpu, &tag);
+	if (rc) {
+		netif_err(efx, probe, efx->net_dev,
+			  "pcie_tph_get_cpu_st error(%d) channel %s, cpu %u\n",
+			  rc, efx->msi_context[channel->channel].name, cpu);
+		return;
+	}
+	netif_dbg(efx, probe, efx->net_dev,
+		  "ST hint %04x for channel %s and cpu %u\n",
+		  tag, efx->msi_context[channel->channel].name, cpu);
+
+	rc = efx_set_tlp_tph(efx, channel->channel, tag);
+	if (rc)
+		netif_info(efx, probe, efx->net_dev,
+			   "efx_set_tlp_tph error(%d) for channel %s, cpu %u\n",
+			   rc, efx->msi_context[channel->channel].name, cpu);
+#endif
+#endif
+}
+
 #if !defined(EFX_NOT_UPSTREAM)
 void efx_set_interrupt_affinity(struct efx_nic *efx)
 {
@@ -730,6 +766,8 @@ void efx_set_interrupt_affinity(struct efx_nic *efx)
 		irq_set_affinity_hint(channel->irq, cpumask_of(cpu));
 		channel->irq_mem_node = cpu_to_mem(cpu);
 		efx_set_xps_queue(channel, cpumask_of(cpu));
+
+		efx_set_tph_hint(channel, cpu);
 	}
 }
 
@@ -914,6 +952,8 @@ void efx_set_interrupt_affinity(struct efx_nic *efx)
 		++rss_cpu_usage[cpu];
 		efx_set_cpu_affinity(channel, cpu);
 		channel->irq_mem_node = cpu_to_mem(cpu);
+
+		efx_set_tph_hint(channel, cpu);
 	}
 
 	kfree(sets);
@@ -946,6 +986,8 @@ static void efx_irq_notify(struct irq_affinity_notify *this,
 						   irq_affinity.notifier);
 
 	efx_set_xps_queue(channel, mask);
+
+	efx_set_tph_hint(channel, cpumask_first(mask));
 }
 
 static void efx_set_affinity_notifier(struct efx_channel *channel)

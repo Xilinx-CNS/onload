@@ -738,7 +738,7 @@ static const struct efx_auxdev_ops aux_devops = {
 };
 
 static const struct efx_auxdev_onload_ops aux_onload_devops = {
-	.base_ops = aux_devops,
+	.base_ops = &aux_devops,
 	.create_rxfh_context = efx_auxbus_create_rxfh_context,
 	.modify_rxfh_context = efx_auxbus_modify_rxfh_context,
 	.remove_rxfh_context = efx_auxbus_remove_rxfh_context,
@@ -795,7 +795,7 @@ static void efx_auxbus_rxq_free(struct efx_auxdev_client *handle, int rxq_nr)
 }
 
 static const struct efx_auxdev_llct_ops aux_llct_devops = {
-	.base_ops = aux_devops,
+	.base_ops = &aux_devops,
 	.channel_alloc = efx_auxbus_channel_alloc,
 	.channel_free = efx_auxbus_channel_free,
 	.irq_alloc = efx_auxbus_irq_alloc,

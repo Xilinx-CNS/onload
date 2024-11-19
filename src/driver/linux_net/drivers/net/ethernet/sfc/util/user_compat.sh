@@ -40,7 +40,7 @@ function usage()
 function generate_compat_symbols() {
     echo "
 EFX_NEED_STRUCT_ETHTOOL_DUMP			nsymbol	ethtool_dump		include/linux/ethtool.h
-" | grep -E -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
+" | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
 
 ######################################################################
@@ -101,7 +101,7 @@ function test_symbol()
             fi
             [ -f "$base/$file" ] &&  \
                 strip_comments $base/$file | \
-                grep -E -w "$symbol" >/dev/null && \
+                egrep -w "$symbol" >/dev/null && \
                 return 0
         done
     done
@@ -132,7 +132,7 @@ fi
 
 # filter the available symbols
 if [ -n "$FILTER" ]; then
-    compat_symbols="$(echo "$compat_symbols" | grep -E "^($FILTER):")"
+    compat_symbols="$(echo "$compat_symbols" | egrep "^($FILTER):")"
 fi
 
 function do_one_symbol() {

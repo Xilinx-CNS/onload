@@ -19,7 +19,7 @@ Linux distribution support
  - Red Hat Enterprise Linux 9.2 - 9.5
  - Canonical Ubuntu Server LTS 22.04 and 24.04
  - Debian 12 "Bookworm"
- - Linux kernels 5.11 - 6.12
+ - Linux kernels 5.11 - 6.11
 
 Packaging changes
 -----------------
@@ -65,6 +65,30 @@ Packaging changes
 
 [^1]: To ingest directly in 2.2 < DKMS < 3.0.11, work around DKMS bug SC2157
       by replacing `dkms ldarchive ...` with `tar xf onload-*.tgz -C /usr/src`.
+
+
+Deprecation of tarball installation method (removal under consideration)
+------------------------------------------------------------------------
+
+A future feature release MAY drop the provision of an OS-independent
+'tarball' release package. In the meantime, the OS-specific packages (source
+RPM and source DEB) are recommended for the best installation experience.
+Docker images are also available via the Onload Operator v3.0 for Kubernetes.
+
+Operating System package formats and their tools provide the best integration
+for user systems and allow dependencies between Onload, related components
+(TCP Direct, the control plane, sfc net driver, sfptpd) and the Operating
+System itself to be resolved clearly and reliably. The OS-independent
+'tarball' method requires more attention to detailed preparatory instructions
+in the user guide.
+
+EnterpriseOnload has always been shipped only using OS packaging formats;
+OpenOnload initially shipped only in tarball form but in recent years has
+also been supplied in the form of OS source packages.
+
+Please contact your sales or support representative if you have any feedback
+on this proposed change in direction for packaging support.
+
 
 Onload-9.0.0.39
 ===============
@@ -275,8 +299,8 @@ experimental onload extensions hlrx API defined in extensions_zc_hlrx.h have
 been removed.
 
 
-Notice of potential future changes
-----------------------------------
+Notice of potential future change for DKMS
+------------------------------------------
 
  - In future releases, the DKMS RPM may not include the Onload userspace but
    only that which is necessary to build the onload kernel modules, requiring

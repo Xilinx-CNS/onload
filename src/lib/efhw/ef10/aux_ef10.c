@@ -130,17 +130,17 @@ static int init_resource_info(struct efx_auxdev *edev,
   union efx_auxiliary_param_value val;
   int rc;
 
-  rc = edev->onload_ops->base_ops.get_param(client, EFX_PCI_DEV, &val);
+  rc = edev->onload_ops->base_ops->get_param(client, EFX_PCI_DEV, &val);
   if( rc < 0 )
     return rc;
   rd->pci_dev = val.pci_dev;
 
-  rc = edev->onload_ops->base_ops.get_param(client, EFX_MEMBAR, &val);
+  rc = edev->onload_ops->base_ops->get_param(client, EFX_MEMBAR, &val);
   if( rc < 0 )
     return rc;
   rd->mem_bar = val.value;
 
-  rc = edev->onload_ops->base_ops.get_param(client, EFX_TIMER_QUANTUM_NS, &val);
+  rc = edev->onload_ops->base_ops->get_param(client, EFX_TIMER_QUANTUM_NS, &val);
   if( rc < 0 )
     return rc;
   *tq = val.value;
@@ -203,7 +203,8 @@ static void ef10_reset_resume(struct efx_auxdev_client * client,
                __func__, nic->vi_stride, vi_resources->vi_stride);
   }
 
-  rc = client->auxdev->onload_ops->base_ops.get_param(client, EFX_MEMBAR, &val);
+  rc = client->auxdev->onload_ops->base_ops->get_param(client, EFX_MEMBAR,
+                                                       &val);
   /* We never expect this to fail, if it does so treat it as the NIC never
    * coming back up. */
   if( rc < 0 ) {
@@ -257,8 +258,8 @@ static int ef10_handler(struct efx_auxdev_client *client,
   struct efhw_nic *nic;
   int rc;
 
-  rc = client->auxdev->onload_ops->base_ops.get_param(client, EFX_DRIVER_DATA,
-                                                      &val);
+  rc = client->auxdev->onload_ops->base_ops->get_param(client, EFX_DRIVER_DATA,
+                                                       &val);
   if (rc < 0 )
     return rc;
 
@@ -313,8 +314,8 @@ static int ef10_probe(struct auxiliary_device *auxdev,
     return -EPERM;
   }
 
-  client = edev->onload_ops->base_ops.open(auxdev, &ef10_handler,
-                                           EFX_AUXDEV_ALL_EVENTS);
+  client = edev->onload_ops->base_ops->open(auxdev, &ef10_handler,
+                                            EFX_AUXDEV_ALL_EVENTS);
 
   if( IS_ERR(client) ) {
     rc = PTR_ERR(client);
@@ -327,7 +328,7 @@ static int ef10_probe(struct auxiliary_device *auxdev,
     goto fail2;
   }
 
-  rc = edev->onload_ops->base_ops.get_param(client, EFX_NETDEV, &val);
+  rc = edev->onload_ops->base_ops->get_param(client, EFX_NETDEV, &val);
   if( rc < 0 )
     goto fail3;
   net_dev = val.net_dev;
@@ -371,7 +372,7 @@ static int ef10_probe(struct auxiliary_device *auxdev,
   ((struct ef10_aux_arch_extra*)nic->arch_extra)->dl_res = dl_res;
 
   val.driver_data = nic;
-  rc = edev->onload_ops->base_ops.set_param(client, EFX_DRIVER_DATA, &val);
+  rc = edev->onload_ops->base_ops->set_param(client, EFX_DRIVER_DATA, &val);
   /* The only reason this can fail is if we're using an invalid handle, which
    * we're not. */
   EFRM_ASSERT(rc == 0);
@@ -383,7 +384,7 @@ static int ef10_probe(struct auxiliary_device *auxdev,
  fail3:
   edev->onload_ops->dl_unpublish(client);
  fail2:
-  edev->onload_ops->base_ops.close(client);
+  edev->onload_ops->base_ops->close(client);
  fail1:
   return rc;
 }
@@ -431,7 +432,7 @@ void ef10_remove(struct auxiliary_device *auxdev)
   rtnl_unlock();
 
   edev->onload_ops->dl_unpublish(client);
-  edev->onload_ops->base_ops.close(client);
+  edev->onload_ops->base_ops->close(client);
 }
 
 

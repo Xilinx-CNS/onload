@@ -494,3 +494,21 @@ void efx_mcdi_client_free(struct efx_nic *efx, u32 client_id)
 		     inbuf, sizeof(inbuf), NULL, 0, NULL);
 }
 #endif
+
+#ifdef CONFIG_SFC_TPH
+int efx_set_tlp_tph(struct efx_nic *efx, u32 channel, u16 tag)
+{
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_LEN);
+
+	BUILD_BUG_ON(MC_CMD_SET_VI_TLP_PROCESSING_OUT_LEN != 0);
+	MCDI_SET_DWORD(inbuf, SET_VI_TLP_PROCESSING_V2_IN_INSTANCE, channel);
+
+	MCDI_POPULATE_DWORD_3(inbuf, SET_VI_TLP_PROCESSING_V2_IN_DATA,
+			SET_VI_TLP_PROCESSING_V2_IN_TPH_TAG1_RX, tag & 0xff,
+			SET_VI_TLP_PROCESSING_V2_IN_TPH_TAG2_EV, tag & 0xff,
+			SET_VI_TLP_PROCESSING_V2_IN_TPH_ON, 1);
+
+	return efx_mcdi_rpc(efx, MC_CMD_SET_VI_TLP_PROCESSING, inbuf,
+			    sizeof(inbuf), NULL, 0, NULL);
+}
+#endif

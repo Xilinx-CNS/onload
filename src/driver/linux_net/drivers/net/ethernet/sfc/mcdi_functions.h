@@ -35,4 +35,13 @@ int efx_mcdi_client_alloc(struct efx_nic *efx, u32 parent, u32 *client_id);
 void efx_mcdi_client_free(struct efx_nic *efx, u32 client_id);
 #endif
 
+#ifdef CONFIG_SFC_TPH
+int efx_set_tlp_tph(struct efx_nic *efx, u32 channel, u16 tag);
+#else
+static inline int efx_set_tlp_tph(struct efx_nic *efx, u32 channel, u16 tag)
+{
+	return 0;
+}
+#endif
+
 #endif

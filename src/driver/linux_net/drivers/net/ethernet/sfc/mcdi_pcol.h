@@ -1149,10 +1149,7 @@
 #define          TABLE_FIELD_ID_CRC_REFOUT 0x3f4
 /* enum: If set, invert every bit of the output value. */
 #define          TABLE_FIELD_ID_CRC_INVOUT 0x3f5
-/* enum: The CRC polynomial to use for checksumming, in normal form. See
- * https://en.wikipedia.org/wiki/Cyclic_redundancy_check#Specification for a
- * description of normal form.
- */
+/* enum: The CRC polynomial to use for checksumming, in normal form. */
 #define          TABLE_FIELD_ID_CRC_POLY 0x3f6
 /* enum: Operation for the checksum engine to perform - see DPU_CSUM_OP enum.
  */
@@ -5641,6 +5638,25 @@
 #define       MC_CMD_LOOPBACK_V2_MODE_LBN 0
 #define       MC_CMD_LOOPBACK_V2_MODE_WIDTH 32
 
+/* MC_CMD_FCNTL structuredef */
+#define    MC_CMD_FCNTL_LEN 4
+#define       MC_CMD_FCNTL_MASK_OFST 0
+#define       MC_CMD_FCNTL_MASK_LEN 4
+/* enum: Flow control is off. */
+#define          MC_CMD_FCNTL_OFF 0x0
+/* enum: Respond to flow control. */
+#define          MC_CMD_FCNTL_RESPOND 0x1
+/* enum: Respond to and Issue flow control. */
+#define          MC_CMD_FCNTL_BIDIR 0x2
+/* enum: Auto negotiate flow control. */
+#define          MC_CMD_FCNTL_AUTO 0x3
+/* enum: Priority flow control. This is only supported on KSB. */
+#define          MC_CMD_FCNTL_QBB 0x4
+/* enum: Issue flow control. */
+#define          MC_CMD_FCNTL_GENERATE 0x5
+#define       MC_CMD_FCNTL_MASK_LBN 0
+#define       MC_CMD_FCNTL_MASK_WIDTH 32
+
 /* MC_CMD_LINK_FLAGS structuredef */
 #define    MC_CMD_LINK_FLAGS_LEN 4
 /* The enums defined in this field are used as indices into the
@@ -5752,6 +5768,276 @@
 
 /* MC_CMD_LINK_CTRL_OUT msgresponse */
 #define    MC_CMD_LINK_CTRL_OUT_LEN 0
+
+
+/***********************************/
+/* MC_CMD_LINK_STATE
+ */
+#define MC_CMD_LINK_STATE 0x6c
+#undef MC_CMD_0x6c_PRIVILEGE_CTG
+
+#define MC_CMD_0x6c_PRIVILEGE_CTG SRIOV_CTG_LINK
+
+/* MC_CMD_LINK_STATE_IN msgrequest */
+#define    MC_CMD_LINK_STATE_IN_LEN 4
+/* Handle to the port to get link state for. */
+#define       MC_CMD_LINK_STATE_IN_PORT_HANDLE_OFST 0
+#define       MC_CMD_LINK_STATE_IN_PORT_HANDLE_LEN 4
+
+/* MC_CMD_LINK_STATE_OUT msgresponse */
+#define    MC_CMD_LINK_STATE_OUT_LEN 114
+/* Flags used to report the current configuration/state of the link. */
+#define       MC_CMD_LINK_STATE_OUT_STATUS_FLAGS_OFST 0
+#define       MC_CMD_LINK_STATE_OUT_STATUS_FLAGS_LEN 8
+#define       MC_CMD_LINK_STATE_OUT_STATUS_FLAGS_LO_OFST 0
+#define       MC_CMD_LINK_STATE_OUT_STATUS_FLAGS_LO_LEN 4
+#define       MC_CMD_LINK_STATE_OUT_STATUS_FLAGS_LO_LBN 0
+#define       MC_CMD_LINK_STATE_OUT_STATUS_FLAGS_LO_WIDTH 32
+#define       MC_CMD_LINK_STATE_OUT_STATUS_FLAGS_HI_OFST 4
+#define       MC_CMD_LINK_STATE_OUT_STATUS_FLAGS_HI_LEN 4
+#define       MC_CMD_LINK_STATE_OUT_STATUS_FLAGS_HI_LBN 32
+#define       MC_CMD_LINK_STATE_OUT_STATUS_FLAGS_HI_WIDTH 32
+/* enum property: value */
+/*            Enum values, see field(s): */
+/*               MC_CMD_LINK_STATUS_FLAGS/STATUS_FLAGS */
+/* Configured technology. If the specified value does not align with the values
+ * defined in the enum MC_CMD_ETH_TECH/TECH, it is considered invalid.
+ */
+#define       MC_CMD_LINK_STATE_OUT_LINK_TECHNOLOGY_OFST 8
+#define       MC_CMD_LINK_STATE_OUT_LINK_TECHNOLOGY_LEN 2
+/* enum property: value */
+/*            Enum values, see field(s): */
+/*               MC_CMD_ETH_TECH/TECH */
+/* Configured FEC mode */
+#define       MC_CMD_LINK_STATE_OUT_FEC_MODE_OFST 10
+#define       MC_CMD_LINK_STATE_OUT_FEC_MODE_LEN 1
+/* enum property: value */
+/*            Enum values, see field(s): */
+/*               FEC_TYPE/TYPE */
+/* Bitmask of auto-negotiated pause modes */
+#define       MC_CMD_LINK_STATE_OUT_PAUSE_MASK_OFST 11
+#define       MC_CMD_LINK_STATE_OUT_PAUSE_MASK_LEN 1
+/* enum property: bitshift */
+/*            Enum values, see field(s): */
+/*               MC_CMD_PAUSE_MODE/TYPE */
+/* Configured loopback mode */
+#define       MC_CMD_LINK_STATE_OUT_LOOPBACK_OFST 12
+#define       MC_CMD_LINK_STATE_OUT_LOOPBACK_LEN 1
+/* enum property: value */
+/*            Enum values, see field(s): */
+/*               MC_CMD_LOOPBACK_V2/MODE */
+/* Abilities requested by the driver to advertise during auto-negotiation */
+#define       MC_CMD_LINK_STATE_OUT_ADVERTISED_ABILITIES_OFST 16
+#define       MC_CMD_LINK_STATE_OUT_ADVERTISED_ABILITIES_LEN 32
+/* See structuredef: MC_CMD_ETH_AN_FIELDS */
+#define       MC_CMD_LINK_STATE_OUT_ADVERTISED_ABILITIES_TECH_MASK_OFST 16
+#define       MC_CMD_LINK_STATE_OUT_ADVERTISED_ABILITIES_TECH_MASK_LEN 16
+#define       MC_CMD_LINK_STATE_OUT_ADVERTISED_ABILITIES_FEC_MASK_OFST 32
+#define       MC_CMD_LINK_STATE_OUT_ADVERTISED_ABILITIES_FEC_MASK_LEN 4
+#define       MC_CMD_LINK_STATE_OUT_ADVERTISED_ABILITIES_FEC_REQ_OFST 36
+#define       MC_CMD_LINK_STATE_OUT_ADVERTISED_ABILITIES_FEC_REQ_LEN 4
+#define       MC_CMD_LINK_STATE_OUT_ADVERTISED_ABILITIES_PAUSE_MASK_OFST 40
+#define       MC_CMD_LINK_STATE_OUT_ADVERTISED_ABILITIES_PAUSE_MASK_LEN 1
+/* Abilities advertised by the link partner during auto-negotiation */
+#define       MC_CMD_LINK_STATE_OUT_LINK_PARTNER_ABILITIES_OFST 48
+#define       MC_CMD_LINK_STATE_OUT_LINK_PARTNER_ABILITIES_LEN 32
+/* See structuredef: MC_CMD_ETH_AN_FIELDS */
+#define       MC_CMD_LINK_STATE_OUT_LINK_PARTNER_ABILITIES_TECH_MASK_OFST 48
+#define       MC_CMD_LINK_STATE_OUT_LINK_PARTNER_ABILITIES_TECH_MASK_LEN 16
+#define       MC_CMD_LINK_STATE_OUT_LINK_PARTNER_ABILITIES_FEC_MASK_OFST 64
+#define       MC_CMD_LINK_STATE_OUT_LINK_PARTNER_ABILITIES_FEC_MASK_LEN 4
+#define       MC_CMD_LINK_STATE_OUT_LINK_PARTNER_ABILITIES_FEC_REQ_OFST 68
+#define       MC_CMD_LINK_STATE_OUT_LINK_PARTNER_ABILITIES_FEC_REQ_LEN 4
+#define       MC_CMD_LINK_STATE_OUT_LINK_PARTNER_ABILITIES_PAUSE_MASK_OFST 72
+#define       MC_CMD_LINK_STATE_OUT_LINK_PARTNER_ABILITIES_PAUSE_MASK_LEN 1
+/* Abilities supported by the local device (including cable abilities) For
+ * fixed local device capbilities see MC_CMD_GET_LOCAL_DEVICE_INFO
+ */
+#define       MC_CMD_LINK_STATE_OUT_SUPPORTED_ABILITIES_OFST 80
+#define       MC_CMD_LINK_STATE_OUT_SUPPORTED_ABILITIES_LEN 28
+/* See structuredef: MC_CMD_ETH_AN_FIELDS */
+#define       MC_CMD_LINK_STATE_OUT_SUPPORTED_ABILITIES_TECH_MASK_OFST 80
+#define       MC_CMD_LINK_STATE_OUT_SUPPORTED_ABILITIES_TECH_MASK_LEN 16
+#define       MC_CMD_LINK_STATE_OUT_SUPPORTED_ABILITIES_FEC_MASK_OFST 96
+#define       MC_CMD_LINK_STATE_OUT_SUPPORTED_ABILITIES_FEC_MASK_LEN 4
+#define       MC_CMD_LINK_STATE_OUT_SUPPORTED_ABILITIES_FEC_REQ_OFST 100
+#define       MC_CMD_LINK_STATE_OUT_SUPPORTED_ABILITIES_FEC_REQ_LEN 4
+#define       MC_CMD_LINK_STATE_OUT_SUPPORTED_ABILITIES_PAUSE_MASK_OFST 104
+#define       MC_CMD_LINK_STATE_OUT_SUPPORTED_ABILITIES_PAUSE_MASK_LEN 1
+/* Control flags */
+#define       MC_CMD_LINK_STATE_OUT_CONTROL_FLAGS_OFST 108
+#define       MC_CMD_LINK_STATE_OUT_CONTROL_FLAGS_LEN 4
+/* enum property: bitshift */
+/*            Enum values, see field(s): */
+/*               MC_CMD_LINK_FLAGS/MASK */
+/* Sequence number to synchronize link change events */
+#define       MC_CMD_LINK_STATE_OUT_PORT_LINKCHANGE_SEQ_NUM_OFST 112
+#define       MC_CMD_LINK_STATE_OUT_PORT_LINKCHANGE_SEQ_NUM_LEN 1
+/* Sequence number to synchronize module change events */
+#define       MC_CMD_LINK_STATE_OUT_PORT_MODULECHANGE_SEQ_NUM_OFST 113
+#define       MC_CMD_LINK_STATE_OUT_PORT_MODULECHANGE_SEQ_NUM_LEN 1
+
+/* MC_CMD_LINK_STATE_OUT_V2 msgresponse: Updated LINK_STATE_OUT with
+ * LOCAL_AN_SUPPORT
+ */
+#define    MC_CMD_LINK_STATE_OUT_V2_LEN 120
+/* Flags used to report the current configuration/state of the link. */
+#define       MC_CMD_LINK_STATE_OUT_V2_STATUS_FLAGS_OFST 0
+#define       MC_CMD_LINK_STATE_OUT_V2_STATUS_FLAGS_LEN 8
+#define       MC_CMD_LINK_STATE_OUT_V2_STATUS_FLAGS_LO_OFST 0
+#define       MC_CMD_LINK_STATE_OUT_V2_STATUS_FLAGS_LO_LEN 4
+#define       MC_CMD_LINK_STATE_OUT_V2_STATUS_FLAGS_LO_LBN 0
+#define       MC_CMD_LINK_STATE_OUT_V2_STATUS_FLAGS_LO_WIDTH 32
+#define       MC_CMD_LINK_STATE_OUT_V2_STATUS_FLAGS_HI_OFST 4
+#define       MC_CMD_LINK_STATE_OUT_V2_STATUS_FLAGS_HI_LEN 4
+#define       MC_CMD_LINK_STATE_OUT_V2_STATUS_FLAGS_HI_LBN 32
+#define       MC_CMD_LINK_STATE_OUT_V2_STATUS_FLAGS_HI_WIDTH 32
+/* enum property: value */
+/*            Enum values, see field(s): */
+/*               MC_CMD_LINK_STATUS_FLAGS/STATUS_FLAGS */
+/* Configured technology. If the specified value does not align with the values
+ * defined in the enum MC_CMD_ETH_TECH/TECH, it is considered invalid.
+ */
+#define       MC_CMD_LINK_STATE_OUT_V2_LINK_TECHNOLOGY_OFST 8
+#define       MC_CMD_LINK_STATE_OUT_V2_LINK_TECHNOLOGY_LEN 2
+/* enum property: value */
+/*            Enum values, see field(s): */
+/*               MC_CMD_ETH_TECH/TECH */
+/* Configured FEC mode */
+#define       MC_CMD_LINK_STATE_OUT_V2_FEC_MODE_OFST 10
+#define       MC_CMD_LINK_STATE_OUT_V2_FEC_MODE_LEN 1
+/* enum property: value */
+/*            Enum values, see field(s): */
+/*               FEC_TYPE/TYPE */
+/* Bitmask of auto-negotiated pause modes */
+#define       MC_CMD_LINK_STATE_OUT_V2_PAUSE_MASK_OFST 11
+#define       MC_CMD_LINK_STATE_OUT_V2_PAUSE_MASK_LEN 1
+/* enum property: bitshift */
+/*            Enum values, see field(s): */
+/*               MC_CMD_PAUSE_MODE/TYPE */
+/* Configured loopback mode */
+#define       MC_CMD_LINK_STATE_OUT_V2_LOOPBACK_OFST 12
+#define       MC_CMD_LINK_STATE_OUT_V2_LOOPBACK_LEN 1
+/* enum property: value */
+/*            Enum values, see field(s): */
+/*               MC_CMD_LOOPBACK_V2/MODE */
+/* Abilities requested by the driver to advertise during auto-negotiation */
+#define       MC_CMD_LINK_STATE_OUT_V2_ADVERTISED_ABILITIES_OFST 16
+#define       MC_CMD_LINK_STATE_OUT_V2_ADVERTISED_ABILITIES_LEN 32
+/* Abilities advertised by the link partner during auto-negotiation */
+#define       MC_CMD_LINK_STATE_OUT_V2_LINK_PARTNER_ABILITIES_OFST 48
+#define       MC_CMD_LINK_STATE_OUT_V2_LINK_PARTNER_ABILITIES_LEN 32
+/* Abilities supported by the local device (including cable abilities) For
+ * fixed local device capbilities see MC_CMD_GET_LOCAL_DEVICE_INFO
+ */
+#define       MC_CMD_LINK_STATE_OUT_V2_SUPPORTED_ABILITIES_OFST 80
+#define       MC_CMD_LINK_STATE_OUT_V2_SUPPORTED_ABILITIES_LEN 28
+/* Control flags */
+#define       MC_CMD_LINK_STATE_OUT_V2_CONTROL_FLAGS_OFST 108
+#define       MC_CMD_LINK_STATE_OUT_V2_CONTROL_FLAGS_LEN 4
+/* enum property: bitshift */
+/*            Enum values, see field(s): */
+/*               MC_CMD_LINK_FLAGS/MASK */
+/* Sequence number to synchronize link change events */
+#define       MC_CMD_LINK_STATE_OUT_V2_PORT_LINKCHANGE_SEQ_NUM_OFST 112
+#define       MC_CMD_LINK_STATE_OUT_V2_PORT_LINKCHANGE_SEQ_NUM_LEN 1
+/* Sequence number to synchronize module change events */
+#define       MC_CMD_LINK_STATE_OUT_V2_PORT_MODULECHANGE_SEQ_NUM_OFST 113
+#define       MC_CMD_LINK_STATE_OUT_V2_PORT_MODULECHANGE_SEQ_NUM_LEN 1
+/* Reports the auto-negotiation supported by the local device. This depends on
+ * the port and module properties.
+ */
+#define       MC_CMD_LINK_STATE_OUT_V2_LOCAL_AN_SUPPORT_OFST 116
+#define       MC_CMD_LINK_STATE_OUT_V2_LOCAL_AN_SUPPORT_LEN 4
+/*            Enum values, see field(s): */
+/*               AN_TYPE/TYPE */
+
+/* MC_CMD_LINK_STATE_OUT_V3 msgresponse: Updated LINK_STATE_OUT_V2 for explicit
+ * reporting of the link speed and duplex mode.
+ */
+#define    MC_CMD_LINK_STATE_OUT_V3_LEN 128
+/* Flags used to report the current configuration/state of the link. */
+#define       MC_CMD_LINK_STATE_OUT_V3_STATUS_FLAGS_OFST 0
+#define       MC_CMD_LINK_STATE_OUT_V3_STATUS_FLAGS_LEN 8
+#define       MC_CMD_LINK_STATE_OUT_V3_STATUS_FLAGS_LO_OFST 0
+#define       MC_CMD_LINK_STATE_OUT_V3_STATUS_FLAGS_LO_LEN 4
+#define       MC_CMD_LINK_STATE_OUT_V3_STATUS_FLAGS_LO_LBN 0
+#define       MC_CMD_LINK_STATE_OUT_V3_STATUS_FLAGS_LO_WIDTH 32
+#define       MC_CMD_LINK_STATE_OUT_V3_STATUS_FLAGS_HI_OFST 4
+#define       MC_CMD_LINK_STATE_OUT_V3_STATUS_FLAGS_HI_LEN 4
+#define       MC_CMD_LINK_STATE_OUT_V3_STATUS_FLAGS_HI_LBN 32
+#define       MC_CMD_LINK_STATE_OUT_V3_STATUS_FLAGS_HI_WIDTH 32
+/* enum property: value */
+/*            Enum values, see field(s): */
+/*               MC_CMD_LINK_STATUS_FLAGS/STATUS_FLAGS */
+/* Configured technology. If the specified value does not align with the values
+ * defined in the enum MC_CMD_ETH_TECH/TECH, it is considered invalid.
+ */
+#define       MC_CMD_LINK_STATE_OUT_V3_LINK_TECHNOLOGY_OFST 8
+#define       MC_CMD_LINK_STATE_OUT_V3_LINK_TECHNOLOGY_LEN 2
+/* enum property: value */
+/*            Enum values, see field(s): */
+/*               MC_CMD_ETH_TECH/TECH */
+/* Configured FEC mode */
+#define       MC_CMD_LINK_STATE_OUT_V3_FEC_MODE_OFST 10
+#define       MC_CMD_LINK_STATE_OUT_V3_FEC_MODE_LEN 1
+/* enum property: value */
+/*            Enum values, see field(s): */
+/*               FEC_TYPE/TYPE */
+/* Bitmask of auto-negotiated pause modes */
+#define       MC_CMD_LINK_STATE_OUT_V3_PAUSE_MASK_OFST 11
+#define       MC_CMD_LINK_STATE_OUT_V3_PAUSE_MASK_LEN 1
+/* enum property: bitshift */
+/*            Enum values, see field(s): */
+/*               MC_CMD_PAUSE_MODE/TYPE */
+/* Configured loopback mode */
+#define       MC_CMD_LINK_STATE_OUT_V3_LOOPBACK_OFST 12
+#define       MC_CMD_LINK_STATE_OUT_V3_LOOPBACK_LEN 1
+/* enum property: value */
+/*            Enum values, see field(s): */
+/*               MC_CMD_LOOPBACK_V2/MODE */
+/* Abilities requested by the driver to advertise during auto-negotiation */
+#define       MC_CMD_LINK_STATE_OUT_V3_ADVERTISED_ABILITIES_OFST 16
+#define       MC_CMD_LINK_STATE_OUT_V3_ADVERTISED_ABILITIES_LEN 32
+/* Abilities advertised by the link partner during auto-negotiation */
+#define       MC_CMD_LINK_STATE_OUT_V3_LINK_PARTNER_ABILITIES_OFST 48
+#define       MC_CMD_LINK_STATE_OUT_V3_LINK_PARTNER_ABILITIES_LEN 32
+/* Abilities supported by the local device (including cable abilities) For
+ * fixed local device capbilities see MC_CMD_GET_LOCAL_DEVICE_INFO
+ */
+#define       MC_CMD_LINK_STATE_OUT_V3_SUPPORTED_ABILITIES_OFST 80
+#define       MC_CMD_LINK_STATE_OUT_V3_SUPPORTED_ABILITIES_LEN 28
+/* Control flags */
+#define       MC_CMD_LINK_STATE_OUT_V3_CONTROL_FLAGS_OFST 108
+#define       MC_CMD_LINK_STATE_OUT_V3_CONTROL_FLAGS_LEN 4
+/* enum property: bitshift */
+/*            Enum values, see field(s): */
+/*               MC_CMD_LINK_FLAGS/MASK */
+/* Sequence number to synchronize link change events */
+#define       MC_CMD_LINK_STATE_OUT_V3_PORT_LINKCHANGE_SEQ_NUM_OFST 112
+#define       MC_CMD_LINK_STATE_OUT_V3_PORT_LINKCHANGE_SEQ_NUM_LEN 1
+/* Sequence number to synchronize module change events */
+#define       MC_CMD_LINK_STATE_OUT_V3_PORT_MODULECHANGE_SEQ_NUM_OFST 113
+#define       MC_CMD_LINK_STATE_OUT_V3_PORT_MODULECHANGE_SEQ_NUM_LEN 1
+/* Reports the auto-negotiation supported by the local device. This depends on
+ * the port and module properties.
+ */
+#define       MC_CMD_LINK_STATE_OUT_V3_LOCAL_AN_SUPPORT_OFST 116
+#define       MC_CMD_LINK_STATE_OUT_V3_LOCAL_AN_SUPPORT_LEN 4
+/*            Enum values, see field(s): */
+/*               AN_TYPE/TYPE */
+/* Autonegotiated speed in mbit/s. The link may still be down even if this
+ * reads non-zero. LINK_SPEED field is intended to be used by drivers without
+ * the most up-to-date MCDI definitions, unable to deduce the link speed from
+ * the reported LINK_TECHNOLOGY field.
+ */
+#define       MC_CMD_LINK_STATE_OUT_V3_LINK_SPEED_OFST 120
+#define       MC_CMD_LINK_STATE_OUT_V3_LINK_SPEED_LEN 4
+#define       MC_CMD_LINK_STATE_OUT_V3_FLAGS_OFST 124
+#define       MC_CMD_LINK_STATE_OUT_V3_FLAGS_LEN 4
+#define        MC_CMD_LINK_STATE_OUT_V3_FULL_DUPLEX_OFST 124
+#define        MC_CMD_LINK_STATE_OUT_V3_FULL_DUPLEX_LBN 0
+#define        MC_CMD_LINK_STATE_OUT_V3_FULL_DUPLEX_WIDTH 1
 
 
 /***********************************/
@@ -6246,17 +6532,17 @@
 #define       MC_CMD_SET_MAC_IN_FCNTL_OFST 20
 #define       MC_CMD_SET_MAC_IN_FCNTL_LEN 4
 /* enum: Flow control is off. */
-#define          MC_CMD_FCNTL_OFF 0x0
+/*               MC_CMD_FCNTL_OFF 0x0 */
 /* enum: Respond to flow control. */
-#define          MC_CMD_FCNTL_RESPOND 0x1
+/*               MC_CMD_FCNTL_RESPOND 0x1 */
 /* enum: Respond to and Issue flow control. */
-#define          MC_CMD_FCNTL_BIDIR 0x2
+/*               MC_CMD_FCNTL_BIDIR 0x2 */
 /* enum: Auto negotiate flow control. */
-#define          MC_CMD_FCNTL_AUTO 0x3
+/*               MC_CMD_FCNTL_AUTO 0x3 */
 /* enum: Priority flow control. This is only supported on KSB. */
-#define          MC_CMD_FCNTL_QBB 0x4
+/*               MC_CMD_FCNTL_QBB 0x4 */
 /* enum: Issue flow control. */
-#define          MC_CMD_FCNTL_GENERATE 0x5
+/*               MC_CMD_FCNTL_GENERATE 0x5 */
 #define       MC_CMD_SET_MAC_IN_FLAGS_OFST 24
 #define       MC_CMD_SET_MAC_IN_FLAGS_LEN 4
 #define        MC_CMD_SET_MAC_IN_FLAG_INCLUDE_FCS_OFST 24
@@ -8847,6 +9133,1097 @@
 #define       MC_CMD_DYNAMIC_SENSORS_GET_READINGS_OUT_VALUES_MINNUM 0
 #define       MC_CMD_DYNAMIC_SENSORS_GET_READINGS_OUT_VALUES_MAXNUM 21
 #define       MC_CMD_DYNAMIC_SENSORS_GET_READINGS_OUT_VALUES_MAXNUM_MCDI2 85
+
+/* MC_CMD_MAC_FLAGS structuredef */
+#define    MC_CMD_MAC_FLAGS_LEN 4
+/* The enums defined in this field are used as indices into the
+ * MC_CMD_MAC_FLAGS bitmask.
+ */
+#define       MC_CMD_MAC_FLAGS_MASK_OFST 0
+#define       MC_CMD_MAC_FLAGS_MASK_LEN 4
+/* enum property: bitshift */
+/* enum: Include the FCS in the packet data delivered to the host. Ignored if
+ * RX_INCLUDE_FCS not set in capabilities.
+ */
+#define          MC_CMD_MAC_FLAGS_FLAG_INCLUDE_FCS 0x0
+#define       MC_CMD_MAC_FLAGS_MASK_LBN 0
+#define       MC_CMD_MAC_FLAGS_MASK_WIDTH 32
+
+/* MC_CMD_TRANSMISSION_MODE structuredef */
+#define    MC_CMD_TRANSMISSION_MODE_LEN 4
+#define       MC_CMD_TRANSMISSION_MODE_MASK_OFST 0
+#define       MC_CMD_TRANSMISSION_MODE_MASK_LEN 4
+/* enum property: value */
+#define          MC_CMD_TRANSMISSION_MODE_PROMSC_MODE 0x0 /* enum */
+#define          MC_CMD_TRANSMISSION_MODE_UNCST_MODE 0x1 /* enum */
+#define          MC_CMD_TRANSMISSION_MODE_BRDCST_MODE 0x2 /* enum */
+#define       MC_CMD_TRANSMISSION_MODE_MASK_LBN 0
+#define       MC_CMD_TRANSMISSION_MODE_MASK_WIDTH 32
+
+/* MC_CMD_MAC_CONFIG_OPTIONS structuredef */
+#define    MC_CMD_MAC_CONFIG_OPTIONS_LEN 4
+#define       MC_CMD_MAC_CONFIG_OPTIONS_MASK_OFST 0
+#define       MC_CMD_MAC_CONFIG_OPTIONS_MASK_LEN 4
+/* enum property: bitmask */
+/* enum: Configure the MAC address. */
+#define          MC_CMD_MAC_CONFIG_OPTIONS_CFG_ADDR 0x0
+/* enum: Configure the maximum frame length. */
+#define          MC_CMD_MAC_CONFIG_OPTIONS_CFG_MAX_FRAME_LEN 0x1
+/* enum: Configure flow control. */
+#define          MC_CMD_MAC_CONFIG_OPTIONS_CFG_FCNTL 0x2
+/* enum: Configure the transmission mode. */
+#define          MC_CMD_MAC_CONFIG_OPTIONS_CFG_TRANSMISSION_MODE 0x3
+/* enum: Configure FCS. */
+#define          MC_CMD_MAC_CONFIG_OPTIONS_CFG_INCLUDE_FCS 0x4
+#define       MC_CMD_MAC_CONFIG_OPTIONS_MASK_LBN 0
+#define       MC_CMD_MAC_CONFIG_OPTIONS_MASK_WIDTH 32
+
+
+/***********************************/
+/* MC_CMD_MAC_CTRL
+ * Set MAC configuration. Return code: 0, EINVAL, ENOTSUP
+ */
+#define MC_CMD_MAC_CTRL 0x1df
+#undef MC_CMD_0x1df_PRIVILEGE_CTG
+
+#define MC_CMD_0x1df_PRIVILEGE_CTG SRIOV_CTG_LINK
+
+/* MC_CMD_MAC_CTRL_IN msgrequest */
+#define    MC_CMD_MAC_CTRL_IN_LEN 32
+/* Handle for selected network port. */
+#define       MC_CMD_MAC_CTRL_IN_PORT_HANDLE_OFST 0
+#define       MC_CMD_MAC_CTRL_IN_PORT_HANDLE_LEN 4
+/* Select which parameters to configure. A parameter will only be modified if
+ * the corresponding control flag is set.
+ */
+#define       MC_CMD_MAC_CTRL_IN_CONTROL_FLAGS_OFST 4
+#define       MC_CMD_MAC_CTRL_IN_CONTROL_FLAGS_LEN 4
+/* enum property: bitshift */
+/*            Enum values, see field(s): */
+/*               MC_CMD_MAC_CONFIG_OPTIONS/MASK */
+/* MAC address of the device. */
+#define       MC_CMD_MAC_CTRL_IN_ADDR_OFST 8
+#define       MC_CMD_MAC_CTRL_IN_ADDR_LEN 8
+#define       MC_CMD_MAC_CTRL_IN_ADDR_LO_OFST 8
+#define       MC_CMD_MAC_CTRL_IN_ADDR_LO_LEN 4
+#define       MC_CMD_MAC_CTRL_IN_ADDR_LO_LBN 64
+#define       MC_CMD_MAC_CTRL_IN_ADDR_LO_WIDTH 32
+#define       MC_CMD_MAC_CTRL_IN_ADDR_HI_OFST 12
+#define       MC_CMD_MAC_CTRL_IN_ADDR_HI_LEN 4
+#define       MC_CMD_MAC_CTRL_IN_ADDR_HI_LBN 96
+#define       MC_CMD_MAC_CTRL_IN_ADDR_HI_WIDTH 32
+/* Includes the ethernet header, optional VLAN tags, payload and FCS. */
+#define       MC_CMD_MAC_CTRL_IN_MAX_FRAME_LEN_OFST 16
+#define       MC_CMD_MAC_CTRL_IN_MAX_FRAME_LEN_LEN 4
+/* Settings for flow control. */
+#define       MC_CMD_MAC_CTRL_IN_FCNTL_OFST 20
+#define       MC_CMD_MAC_CTRL_IN_FCNTL_LEN 4
+/* enum property: value */
+/*            Enum values, see field(s): */
+/*               MC_CMD_FCNTL/MASK */
+/* Configure the MAC to transmit in one of promiscuous, unicast or broadcast
+ * mode.
+ */
+#define       MC_CMD_MAC_CTRL_IN_TRANSMISSION_MODE_OFST 24
+#define       MC_CMD_MAC_CTRL_IN_TRANSMISSION_MODE_LEN 4
+/* enum property: value */
+/*            Enum values, see field(s): */
+/*               MC_CMD_TRANSMISSION_MODE/MASK */
+/* Flags to control and expand the configuration of the MAC. */
+#define       MC_CMD_MAC_CTRL_IN_FLAGS_OFST 28
+#define       MC_CMD_MAC_CTRL_IN_FLAGS_LEN 4
+/* enum property: bitshift */
+/*            Enum values, see field(s): */
+/*               MC_CMD_MAC_FLAGS/MASK */
+
+/* MC_CMD_MAC_CTRL_IN_V2 msgrequest: Updated MAC_CTRL with QBB mask */
+#define    MC_CMD_MAC_CTRL_IN_V2_LEN 33
+/* Handle for selected network port. */
+#define       MC_CMD_MAC_CTRL_IN_V2_PORT_HANDLE_OFST 0
+#define       MC_CMD_MAC_CTRL_IN_V2_PORT_HANDLE_LEN 4
+/* Select which parameters to configure. A parameter will only be modified if
+ * the corresponding control flag is set.
+ */
+#define       MC_CMD_MAC_CTRL_IN_V2_CONTROL_FLAGS_OFST 4
+#define       MC_CMD_MAC_CTRL_IN_V2_CONTROL_FLAGS_LEN 4
+/* enum property: bitshift */
+/*            Enum values, see field(s): */
+/*               MC_CMD_MAC_CONFIG_OPTIONS/MASK */
+/* MAC address of the device. */
+#define       MC_CMD_MAC_CTRL_IN_V2_ADDR_OFST 8
+#define       MC_CMD_MAC_CTRL_IN_V2_ADDR_LEN 8
+#define       MC_CMD_MAC_CTRL_IN_V2_ADDR_LO_OFST 8
+#define       MC_CMD_MAC_CTRL_IN_V2_ADDR_LO_LEN 4
+#define       MC_CMD_MAC_CTRL_IN_V2_ADDR_LO_LBN 64
+#define       MC_CMD_MAC_CTRL_IN_V2_ADDR_LO_WIDTH 32
+#define       MC_CMD_MAC_CTRL_IN_V2_ADDR_HI_OFST 12
+#define       MC_CMD_MAC_CTRL_IN_V2_ADDR_HI_LEN 4
+#define       MC_CMD_MAC_CTRL_IN_V2_ADDR_HI_LBN 96
+#define       MC_CMD_MAC_CTRL_IN_V2_ADDR_HI_WIDTH 32
+/* Includes the ethernet header, optional VLAN tags, payload and FCS. */
+#define       MC_CMD_MAC_CTRL_IN_V2_MAX_FRAME_LEN_OFST 16
+#define       MC_CMD_MAC_CTRL_IN_V2_MAX_FRAME_LEN_LEN 4
+/* Settings for flow control. */
+#define       MC_CMD_MAC_CTRL_IN_V2_FCNTL_OFST 20
+#define       MC_CMD_MAC_CTRL_IN_V2_FCNTL_LEN 4
+/* enum property: value */
+/*            Enum values, see field(s): */
+/*               MC_CMD_FCNTL/MASK */
+/* Configure the MAC to transmit in one of promiscuous, unicast or broadcast
+ * mode.
+ */
+#define       MC_CMD_MAC_CTRL_IN_V2_TRANSMISSION_MODE_OFST 24
+#define       MC_CMD_MAC_CTRL_IN_V2_TRANSMISSION_MODE_LEN 4
+/* enum property: value */
+/*            Enum values, see field(s): */
+/*               MC_CMD_TRANSMISSION_MODE/MASK */
+/* Flags to control and expand the configuration of the MAC. */
+#define       MC_CMD_MAC_CTRL_IN_V2_FLAGS_OFST 28
+#define       MC_CMD_MAC_CTRL_IN_V2_FLAGS_LEN 4
+/* enum property: bitshift */
+/*            Enum values, see field(s): */
+/*               MC_CMD_MAC_FLAGS/MASK */
+/* Priority-based flow control mask (QBB). PRIO7 corresponds to the highest
+ * priority, and PRIO0 to the lowest. This field is only used when CFG_FCNTL is
+ * set and FCNTL is QBB
+ */
+#define       MC_CMD_MAC_CTRL_IN_V2_PRIO_FCNTL_MASK_OFST 32
+#define       MC_CMD_MAC_CTRL_IN_V2_PRIO_FCNTL_MASK_LEN 1
+/* enum property: bitmask */
+#define          MC_CMD_MAC_CTRL_IN_V2_QBB_PRIO0 0x0 /* enum */
+#define          MC_CMD_MAC_CTRL_IN_V2_QBB_PRIO1 0x1 /* enum */
+#define          MC_CMD_MAC_CTRL_IN_V2_QBB_PRIO2 0x2 /* enum */
+#define          MC_CMD_MAC_CTRL_IN_V2_QBB_PRIO3 0x3 /* enum */
+#define          MC_CMD_MAC_CTRL_IN_V2_QBB_PRIO4 0x4 /* enum */
+#define          MC_CMD_MAC_CTRL_IN_V2_QBB_PRIO5 0x5 /* enum */
+#define          MC_CMD_MAC_CTRL_IN_V2_QBB_PRIO6 0x6 /* enum */
+#define          MC_CMD_MAC_CTRL_IN_V2_QBB_PRIO7 0x7 /* enum */
+
+/* MC_CMD_MAC_CTRL_OUT msgresponse */
+#define    MC_CMD_MAC_CTRL_OUT_LEN 0
+
+
+/***********************************/
+/* MC_CMD_MAC_STATE
+ * Read the MAC state. Return code: 0, ETIME.
+ */
+#define MC_CMD_MAC_STATE 0x1e0
+#undef MC_CMD_0x1e0_PRIVILEGE_CTG
+
+#define MC_CMD_0x1e0_PRIVILEGE_CTG SRIOV_CTG_LINK
+
+/* MC_CMD_MAC_STATE_IN msgrequest */
+#define    MC_CMD_MAC_STATE_IN_LEN 4
+/* Handle for selected network port. */
+#define       MC_CMD_MAC_STATE_IN_PORT_HANDLE_OFST 0
+#define       MC_CMD_MAC_STATE_IN_PORT_HANDLE_LEN 4
+
+/* MC_CMD_MAC_STATE_OUT msgresponse */
+#define    MC_CMD_MAC_STATE_OUT_LEN 32
+/* The configured maximum frame length of the MAC. */
+#define       MC_CMD_MAC_STATE_OUT_MAX_FRAME_LEN_OFST 0
+#define       MC_CMD_MAC_STATE_OUT_MAX_FRAME_LEN_LEN 4
+/* This returns the negotiated flow control value. */
+#define       MC_CMD_MAC_STATE_OUT_FCNTL_OFST 4
+#define       MC_CMD_MAC_STATE_OUT_FCNTL_LEN 4
+/* enum property: value */
+/*            Enum values, see field(s): */
+/*               MC_CMD_FCNTL/MASK */
+/* MAC address of the device. */
+#define       MC_CMD_MAC_STATE_OUT_ADDR_OFST 8
+#define       MC_CMD_MAC_STATE_OUT_ADDR_LEN 8
+#define       MC_CMD_MAC_STATE_OUT_ADDR_LO_OFST 8
+#define       MC_CMD_MAC_STATE_OUT_ADDR_LO_LEN 4
+#define       MC_CMD_MAC_STATE_OUT_ADDR_LO_LBN 64
+#define       MC_CMD_MAC_STATE_OUT_ADDR_LO_WIDTH 32
+#define       MC_CMD_MAC_STATE_OUT_ADDR_HI_OFST 12
+#define       MC_CMD_MAC_STATE_OUT_ADDR_HI_LEN 4
+#define       MC_CMD_MAC_STATE_OUT_ADDR_HI_LBN 96
+#define       MC_CMD_MAC_STATE_OUT_ADDR_HI_WIDTH 32
+/* Flags indicating MAC faults. */
+#define       MC_CMD_MAC_STATE_OUT_MAC_FAULT_FLAGS_OFST 16
+#define       MC_CMD_MAC_STATE_OUT_MAC_FAULT_FLAGS_LEN 4
+/* enum property: bitshift */
+/* enum: Indicates a local MAC fault. */
+#define          MC_CMD_MAC_STATE_OUT_LOCAL 0x0
+/* enum: Indicates a remote MAC fault. */
+#define          MC_CMD_MAC_STATE_OUT_REMOTE 0x1
+/* enum: Indicates a pending reconfiguration of the MAC. */
+#define          MC_CMD_MAC_STATE_OUT_PENDING_RECONFIG 0x2
+/* The flags that were used to configure the MAC. This is a copy of the FLAGS
+ * field in the MC_CMD_MAC_CTRL_IN command.
+ */
+#define       MC_CMD_MAC_STATE_OUT_FLAGS_OFST 20
+#define       MC_CMD_MAC_STATE_OUT_FLAGS_LEN 4
+/* enum property: bitshift */
+/*            Enum values, see field(s): */
+/*               MC_CMD_MAC_FLAGS/MASK */
+/* The transmission mode that was used to configure the MAC. This is a copy of
+ * the TRANSMISSION_MODE field in the MC_CMD_MAC_CTRL_IN command.
+ */
+#define       MC_CMD_MAC_STATE_OUT_TRANSMISSION_MODE_OFST 24
+#define       MC_CMD_MAC_STATE_OUT_TRANSMISSION_MODE_LEN 4
+/* enum property: value */
+/*            Enum values, see field(s): */
+/*               MC_CMD_TRANSMISSION_MODE/MASK */
+/* The control flags that were used to configure the MAC. This is a copy of the
+ * CONTROL field in the MC_CMD_MAC_CTRL_IN command.
+ */
+#define       MC_CMD_MAC_STATE_OUT_CONTROL_FLAGS_OFST 28
+#define       MC_CMD_MAC_STATE_OUT_CONTROL_FLAGS_LEN 4
+/* enum property: bitshift */
+/*            Enum values, see field(s): */
+/*               MC_CMD_MAC_CONFIG_OPTIONS/MASK */
+
+
+/***********************************/
+/* MC_CMD_GET_ASSIGNED_PORT_HANDLE
+ * Obtain a handle that can be operated on to configure and query the status of
+ * the link. ENOENT is returned when no port is assigned to the client. Return
+ * code: 0, ENOENT
+ */
+#define MC_CMD_GET_ASSIGNED_PORT_HANDLE 0x1e2
+#undef MC_CMD_0x1e2_PRIVILEGE_CTG
+
+#define MC_CMD_0x1e2_PRIVILEGE_CTG SRIOV_CTG_GENERAL
+
+/* MC_CMD_GET_ASSIGNED_PORT_HANDLE_IN msgrequest */
+#define    MC_CMD_GET_ASSIGNED_PORT_HANDLE_IN_LEN 0
+
+/* MC_CMD_GET_ASSIGNED_PORT_HANDLE_OUT msgresponse */
+#define    MC_CMD_GET_ASSIGNED_PORT_HANDLE_OUT_LEN 4
+/* Handle for assigned port. */
+#define       MC_CMD_GET_ASSIGNED_PORT_HANDLE_OUT_PORT_HANDLE_OFST 0
+#define       MC_CMD_GET_ASSIGNED_PORT_HANDLE_OUT_PORT_HANDLE_LEN 4
+
+/* MC_CMD_STAT_ID structuredef */
+#define    MC_CMD_STAT_ID_LEN 4
+#define       MC_CMD_STAT_ID_SOURCE_ID_OFST 0
+#define       MC_CMD_STAT_ID_SOURCE_ID_LEN 2
+/* enum property: index */
+/* enum: Internal markers (generation start and end markers) */
+#define          MC_CMD_STAT_ID_MARKER 0x1
+/* enum: Network port MAC statistics. */
+#define          MC_CMD_STAT_ID_MAC 0x2
+/* enum: Network port PHY statistics. */
+#define          MC_CMD_STAT_ID_PHY 0x3
+#define       MC_CMD_STAT_ID_SOURCE_ID_LBN 0
+#define       MC_CMD_STAT_ID_SOURCE_ID_WIDTH 16
+#define       MC_CMD_STAT_ID_MARKER_STAT_ID_OFST 2
+#define       MC_CMD_STAT_ID_MARKER_STAT_ID_LEN 2
+/* enum property: index */
+/* enum: This value is used to mark the start of a generation of statistics for
+ * DMA synchronization. It is incremented whenever a new set of statistics is
+ * transferred. Always the first entry in the DMA buffer.
+ */
+#define          MC_CMD_STAT_ID_GENERATION_START 0x1
+/* enum: This value is used to mark the end of a generation of statistics for
+ * DMA synchronizaion. Always the last entry in the DMA buffer and set to the
+ * same value as GENERATION_START. The host driver must compare the
+ * GENERATION_START and GENERATION_END values to verify that the DMA buffer is
+ * consistent upon copying the the DMA buffer. If they do not match, it means
+ * that new DMA transfer has started while the host driver was copying the DMA
+ * buffer. In this case, the host driver must repeat the copy operation.
+ */
+#define          MC_CMD_STAT_ID_GENERATION_END 0x2
+#define       MC_CMD_STAT_ID_MARKER_STAT_ID_LBN 16
+#define       MC_CMD_STAT_ID_MARKER_STAT_ID_WIDTH 16
+#define       MC_CMD_STAT_ID_MAC_STAT_ID_OFST 2
+#define       MC_CMD_STAT_ID_MAC_STAT_ID_LEN 2
+/* enum property: index */
+/* enum: Total number of packets transmitted (includes pause frames). */
+#define          MC_CMD_STAT_ID_TX_PKTS 0x1
+/* enum: Pause frames transmitted. */
+#define          MC_CMD_STAT_ID_TX_PAUSE_PKTS 0x2
+/* enum: Control frames transmitted. */
+#define          MC_CMD_STAT_ID_TX_CONTROL_PKTS 0x3
+/* enum: Unicast packets transmitted (includes pause frames). */
+#define          MC_CMD_STAT_ID_TX_UNICAST_PKTS 0x4
+/* enum: Multicast packets transmitted (includes pause frames). */
+#define          MC_CMD_STAT_ID_TX_MULTICAST_PKTS 0x5
+/* enum: Broadcast packets transmitted (includes pause frames). */
+#define          MC_CMD_STAT_ID_TX_BROADCAST_PKTS 0x6
+/* enum: Bytes transmitted (includes pause frames). */
+#define          MC_CMD_STAT_ID_TX_BYTES 0x7
+/* enum: Bytes transmitted with bad CRC. */
+#define          MC_CMD_STAT_ID_TX_BAD_BYTES 0x8
+/* enum: Bytes transmitted with good CRC. */
+#define          MC_CMD_STAT_ID_TX_GOOD_BYTES 0x9
+/* enum: Packets transmitted with length less than 64 bytes. */
+#define          MC_CMD_STAT_ID_TX_LT64_PKTS 0xa
+/* enum: Packets transmitted with length equal to 64 bytes. */
+#define          MC_CMD_STAT_ID_TX_64_PKTS 0xb
+/* enum: Packets transmitted with length between 65 and 127 bytes. */
+#define          MC_CMD_STAT_ID_TX_65_TO_127_PKTS 0xc
+/* enum: Packets transmitted with length between 128 and 255 bytes. */
+#define          MC_CMD_STAT_ID_TX_128_TO_255_PKTS 0xd
+/* enum: Packets transmitted with length between 256 and 511 bytes. */
+#define          MC_CMD_STAT_ID_TX_256_TO_511_PKTS 0xe
+/* enum: Packets transmitted with length between 512 and 1023 bytes. */
+#define          MC_CMD_STAT_ID_TX_512_TO_1023_PKTS 0xf
+/* enum: Packets transmitted with length between 1024 and 1518 bytes. */
+#define          MC_CMD_STAT_ID_TX_1024_TO_15XX_PKTS 0x10
+/* enum: Packets transmitted with length between 1519 and 9216 bytes. */
+#define          MC_CMD_STAT_ID_TX_15XX_TO_JUMBO_PKTS 0x11
+/* enum: Packets transmitted with length greater than 9216 bytes. */
+#define          MC_CMD_STAT_ID_TX_GTJUMBO_PKTS 0x12
+/* enum: Packets transmitted with bad FCS. */
+#define          MC_CMD_STAT_ID_TX_BAD_FCS_PKTS 0x13
+/* enum: Packets transmitted with good FCS. */
+#define          MC_CMD_STAT_ID_TX_GOOD_FCS_PKTS 0x14
+/* enum: Packets received. */
+#define          MC_CMD_STAT_ID_RX_PKTS 0x15
+/* enum: Pause frames received. */
+#define          MC_CMD_STAT_ID_RX_PAUSE_PKTS 0x16
+/* enum: Total number of good packets received. */
+#define          MC_CMD_STAT_ID_RX_GOOD_PKTS 0x17
+/* enum: Total number of BAD packets received. */
+#define          MC_CMD_STAT_ID_RX_BAD_PKTS 0x18
+/* enum: Total number of control frames received. */
+#define          MC_CMD_STAT_ID_RX_CONTROL_PKTS 0x19
+/* enum: Total number of unicast packets received. */
+#define          MC_CMD_STAT_ID_RX_UNICAST_PKTS 0x1a
+/* enum: Total number of multicast packets received. */
+#define          MC_CMD_STAT_ID_RX_MULTICAST_PKTS 0x1b
+/* enum: Total number of broadcast packets received. */
+#define          MC_CMD_STAT_ID_RX_BROADCAST_PKTS 0x1c
+/* enum: Total number of bytes received. */
+#define          MC_CMD_STAT_ID_RX_BYTES 0x1d
+/* enum: Total number of bytes received with bad CRC. */
+#define          MC_CMD_STAT_ID_RX_BAD_BYTES 0x1e
+/* enum: Total number of bytes received with GOOD CRC. */
+#define          MC_CMD_STAT_ID_RX_GOOD_BYTES 0x1f
+/* enum: Packets received with length equal to 64 bytes. */
+#define          MC_CMD_STAT_ID_RX_64_PKTS 0x20
+/* enum: Packets received with length between 65 and 127 bytes. */
+#define          MC_CMD_STAT_ID_RX_65_TO_127_PKTS 0x21
+/* enum: Packets received with length between 128 and 255 bytes. */
+#define          MC_CMD_STAT_ID_RX_128_TO_255_PKTS 0x22
+/* enum: Packets received with length between 256 and 511 bytes. */
+#define          MC_CMD_STAT_ID_RX_256_TO_511_PKTS 0x23
+/* enum: Packets received with length between 512 and 1023 bytes. */
+#define          MC_CMD_STAT_ID_RX_512_TO_1023_PKTS 0x24
+/* enum: Packets received with length between 1024 and 1518 bytes. */
+#define          MC_CMD_STAT_ID_RX_1024_TO_15XX_PKTS 0x25
+/* enum: Packets received with length between 1519 and 9216 bytes. */
+#define          MC_CMD_STAT_ID_RX_15XX_TO_JUMBO_PKTS 0x26
+/* enum: Packets received with length greater than 9216 bytes. */
+#define          MC_CMD_STAT_ID_RX_GTJUMBO_PKTS 0x27
+/* enum: Packets received with length less than 64 bytes. */
+#define          MC_CMD_STAT_ID_RX_UNDERSIZE_PKTS 0x28
+/* enum: Packets received with bad FCS. */
+#define          MC_CMD_STAT_ID_RX_BAD_FCS_PKTS 0x29
+/* enum: Packets received with GOOD FCS. */
+#define          MC_CMD_STAT_ID_RX_GOOD_FCS_PKTS 0x2a
+/* enum: Packets received with overflow. */
+#define          MC_CMD_STAT_ID_RX_OVERFLOW_PKTS 0x2b
+/* enum: Packets received with symbol error. */
+#define          MC_CMD_STAT_ID_RX_SYMBOL_ERROR_PKTS 0x2c
+/* enum: Packets received with alignment error. */
+#define          MC_CMD_STAT_ID_RX_ALIGN_ERROR_PKTS 0x2d
+/* enum: Packets received with length error. */
+#define          MC_CMD_STAT_ID_RX_LENGTH_ERROR_PKTS 0x2e
+/* enum: Packets received with internal error. */
+#define          MC_CMD_STAT_ID_RX_INTERNAL_ERROR_PKTS 0x2f
+/* enum: Packets received with jabber. These packets are larger than the
+ * allowed maximum receive unit (MRU). This indicates that a packet either has
+ * a bad CRC or has an RX error.
+ */
+#define          MC_CMD_STAT_ID_RX_JABBER_PKTS 0x30
+/* enum: Packets dropped due to having no descriptor. This is a datapath stat
+ */
+#define          MC_CMD_STAT_ID_RX_NODESC_DROPS 0x31
+/* enum: Packets received with lanes 0 and 1 character error. */
+#define          MC_CMD_STAT_ID_RX_LANES01_CHAR_ERR 0x32
+/* enum: Packets received with lanes 2 and 3 character error. */
+#define          MC_CMD_STAT_ID_RX_LANES23_CHAR_ERR 0x33
+/* enum: Packets received with lanes 0 and 1 disparity error. */
+#define          MC_CMD_STAT_ID_RX_LANES01_DISP_ERR 0x34
+/* enum: Packets received with lanes 2 and 3 disparity error. */
+#define          MC_CMD_STAT_ID_RX_LANES23_DISP_ERR 0x35
+/* enum: Packets received with match fault. */
+#define          MC_CMD_STAT_ID_RX_MATCH_FAULT 0x36
+#define       MC_CMD_STAT_ID_MAC_STAT_ID_LBN 16
+#define       MC_CMD_STAT_ID_MAC_STAT_ID_WIDTH 16
+/* Include FEC stats. */
+#define       MC_CMD_STAT_ID_PHY_STAT_ID_OFST 2
+#define       MC_CMD_STAT_ID_PHY_STAT_ID_LEN 2
+/* enum property: index */
+/* enum: Number of uncorrected FEC codewords on link (RS-FEC only from Medford2
+ * onwards)
+ */
+#define          MC_CMD_STAT_ID_FEC_UNCORRECTED_ERRORS 0x1
+/* enum: Number of corrected FEC codewords on link (RS-FEC only from Medford2
+ * onwards)
+ */
+#define          MC_CMD_STAT_ID_FEC_CORRECTED_ERRORS 0x2
+/* enum: Number of corrected 10-bit symbol errors, lane 0 (RS-FEC only) */
+#define          MC_CMD_STAT_ID_FEC_CORRECTED_SYMBOLS_LANE0 0x3
+/* enum: Number of corrected 10-bit symbol errors, lane 1 (RS-FEC only) */
+#define          MC_CMD_STAT_ID_FEC_CORRECTED_SYMBOLS_LANE1 0x4
+/* enum: Number of corrected 10-bit symbol errors, lane 2 (RS-FEC only) */
+#define          MC_CMD_STAT_ID_FEC_CORRECTED_SYMBOLS_LANE2 0x5
+/* enum: Number of corrected 10-bit symbol errors, lane 3 (RS-FEC only) */
+#define          MC_CMD_STAT_ID_FEC_CORRECTED_SYMBOLS_LANE3 0x6
+#define       MC_CMD_STAT_ID_PHY_STAT_ID_LBN 16
+#define       MC_CMD_STAT_ID_PHY_STAT_ID_WIDTH 16
+
+/* MC_CMD_STAT_DESC structuredef: Structure describing the layout and size of
+ * the stats DMA buffer descriptor.
+ */
+#define    MC_CMD_STAT_DESC_LEN 8
+/* Unique identifier of the statistic. Formatted as MC_CMD_STAT_ID */
+#define       MC_CMD_STAT_DESC_STAT_ID_OFST 0
+#define       MC_CMD_STAT_DESC_STAT_ID_LEN 4
+#define       MC_CMD_STAT_DESC_STAT_ID_LBN 0
+#define       MC_CMD_STAT_DESC_STAT_ID_WIDTH 32
+/* See structuredef: MC_CMD_STAT_ID */
+#define       MC_CMD_STAT_DESC_STAT_ID_SOURCE_ID_OFST 0
+#define       MC_CMD_STAT_DESC_STAT_ID_SOURCE_ID_LEN 2
+#define       MC_CMD_STAT_DESC_STAT_ID_SOURCE_ID_LBN 0
+#define       MC_CMD_STAT_DESC_STAT_ID_SOURCE_ID_WIDTH 16
+#define       MC_CMD_STAT_DESC_STAT_ID_MARKER_STAT_ID_OFST 2
+#define       MC_CMD_STAT_DESC_STAT_ID_MARKER_STAT_ID_LEN 2
+#define       MC_CMD_STAT_DESC_STAT_ID_MARKER_STAT_ID_LBN 16
+#define       MC_CMD_STAT_DESC_STAT_ID_MARKER_STAT_ID_WIDTH 16
+#define       MC_CMD_STAT_DESC_STAT_ID_MAC_STAT_ID_OFST 2
+#define       MC_CMD_STAT_DESC_STAT_ID_MAC_STAT_ID_LEN 2
+#define       MC_CMD_STAT_DESC_STAT_ID_MAC_STAT_ID_LBN 16
+#define       MC_CMD_STAT_DESC_STAT_ID_MAC_STAT_ID_WIDTH 16
+#define       MC_CMD_STAT_DESC_STAT_ID_PHY_STAT_ID_OFST 2
+#define       MC_CMD_STAT_DESC_STAT_ID_PHY_STAT_ID_LEN 2
+#define       MC_CMD_STAT_DESC_STAT_ID_PHY_STAT_ID_LBN 16
+#define       MC_CMD_STAT_DESC_STAT_ID_PHY_STAT_ID_WIDTH 16
+/* Stat offset from start of DMA buffer (in bytes) */
+#define       MC_CMD_STAT_DESC_STAT_INDEX_OFST 4
+#define       MC_CMD_STAT_DESC_STAT_INDEX_LEN 2
+#define       MC_CMD_STAT_DESC_STAT_INDEX_LBN 32
+#define       MC_CMD_STAT_DESC_STAT_INDEX_WIDTH 16
+/* Reserved for future extension (e.g. flags field) - currently always 0. */
+#define       MC_CMD_STAT_DESC_RESERVED_OFST 6
+#define       MC_CMD_STAT_DESC_RESERVED_LEN 2
+#define       MC_CMD_STAT_DESC_RESERVED_LBN 48
+#define       MC_CMD_STAT_DESC_RESERVED_WIDTH 16
+
+
+/***********************************/
+/* MC_CMD_MAC_STATISTICS_DESCRIPTOR
+ * Get a list of descriptors that describe the layout and size of the stats
+ * buffer required for retrieving statistics for a given port. Each entry in
+ * the list is formatted as MC_CMD_STAT_DESC and provides the ID of each stat
+ * and its location and size in the buffer. It also gives the overall minimum
+ * size of the DMA buffer required when DMA mode is used. Note that the first
+ * and last entries in the list are reserved for the generation start
+ * (MC_CMD_MARKER_STAT_GENERATION_START) and end
+ * (MC_CMD_MARKER_STAT_GENERATION_END) markers respectively, to be used for DMA
+ * synchronisation as described in the documentation for the relevant enum
+ * entries. The entries are present in the buffer even if DMA mode is not used.
+ * Provisions are made (but currently unused) for extending the size of the
+ * descriptors, extending the size of the list beyond the maximum MCDI response
+ * size, as well as the dynamic runtime updates of the list. Returns: 0 on
+ * success, ENOENT on non-existent port handle
+ */
+#define MC_CMD_MAC_STATISTICS_DESCRIPTOR 0x1e3
+#undef MC_CMD_0x1e3_PRIVILEGE_CTG
+
+#define MC_CMD_0x1e3_PRIVILEGE_CTG SRIOV_CTG_GENERAL
+
+/* MC_CMD_MAC_STATISTICS_DESCRIPTOR_IN msgrequest */
+#define    MC_CMD_MAC_STATISTICS_DESCRIPTOR_IN_LEN 8
+/* Handle of port to get MAC statitstics descriptors for. */
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_IN_PORT_HANDLE_OFST 0
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_IN_PORT_HANDLE_LEN 4
+/* Offset of the first entry to return, for cases where not all entries fit in
+ * the MCDI response. Should be set to 0 on initial request, and on subsequent
+ * requests updated by the number of entries already returned, as long as the
+ * MORE_ENTRIES flag is set.
+ */
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_IN_OFFSET_OFST 4
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_IN_OFFSET_LEN 4
+
+/* MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT msgresponse */
+#define    MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_LENMIN 28
+#define    MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_LENMAX 252
+#define    MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_LENMAX_MCDI2 1020
+#define    MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_LEN(num) (20+8*(num))
+#define    MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_ENTRIES_NUM(len) (((len)-20)/8)
+/* Generation number of the stats buffer. This is incremented each time the
+ * buffer is updated, and is used to verify the consistency of the buffer
+ * contents. Reserved for future extension (dynamic list updates). Currently
+ * always set to 0.
+ */
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_GENERATION_OFST 0
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_GENERATION_LEN 4
+/* Minimum size of the DMA buffer required to retrieve all statistics for the
+ * port. This is the sum of the sizes of all the statistics, plus the size of
+ * the generation markers. Minimum buffer size in bytes required to fit all
+ * statistics. Drivers will typically round up this value to the granularity of
+ * the host DMA allocation units.
+ */
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_DMA_BUFFER_SIZE_OFST 4
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_DMA_BUFFER_SIZE_LEN 4
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_FLAGS_OFST 8
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_FLAGS_LEN 4
+#define        MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_MORE_ENTRIES_OFST 8
+#define        MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_MORE_ENTRIES_LBN 0
+#define        MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_MORE_ENTRIES_WIDTH 1
+/* Size of the individual descriptor entry in the list. Determines the entry
+ * stride in the list. Currently always set to size of MC_CMD_STAT_DESC, larger
+ * values can be used in the future for extending the descriptor, by appending
+ * new data to the end of the existing structure.
+ */
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_ENTRY_SIZE_OFST 12
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_ENTRY_SIZE_LEN 4
+/* Number of entries returned in the descriptor list. */
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_ENTRY_COUNT_OFST 16
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_ENTRY_COUNT_LEN 4
+/* List of descriptors. Each entry is formatted as MC_CMD_STAT_DESC and
+ * provides the ID of each stat and its location and size in the buffer. The
+ * first and last entries are reserved for the generation start and end markers
+ * respectively.
+ */
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_ENTRIES_OFST 20
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_ENTRIES_LEN 8
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_ENTRIES_LO_OFST 20
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_ENTRIES_LO_LEN 4
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_ENTRIES_LO_LBN 160
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_ENTRIES_LO_WIDTH 32
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_ENTRIES_HI_OFST 24
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_ENTRIES_HI_LEN 4
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_ENTRIES_HI_LBN 192
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_ENTRIES_HI_WIDTH 32
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_ENTRIES_MINNUM 1
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_ENTRIES_MAXNUM 29
+#define       MC_CMD_MAC_STATISTICS_DESCRIPTOR_OUT_ENTRIES_MAXNUM_MCDI2 125
+
+
+/***********************************/
+/* MC_CMD_MAC_STATISTICS
+ * Get generic MAC statistics. This call retrieves unified statistics managed
+ * by the MC. The MC will populate and provide all supported statistics in the
+ * format as returned by MC_CMD_MAC_STATISTICS_DESCRIPTOR. Refer to the
+ * aforementioned command for the format and contents of the stats DMA buffer.
+ * To ensure consistent and accurate results, it is essential for the driver to
+ * initialize the DMA buffer with zeros when DMA mode is used. Returns: 0 on
+ * success, ETIME if the DMA buffer is not ready, ENOENT on non-existent port
+ * handle, and EINVAL on invalid parameters (DMA buffer too small)
+ */
+#define MC_CMD_MAC_STATISTICS 0x1e4
+#undef MC_CMD_0x1e4_PRIVILEGE_CTG
+
+#define MC_CMD_0x1e4_PRIVILEGE_CTG SRIOV_CTG_GENERAL
+
+/* MC_CMD_MAC_STATISTICS_IN msgrequest */
+#define    MC_CMD_MAC_STATISTICS_IN_LEN 20
+/* Handle of port to get MAC statistics for. */
+#define       MC_CMD_MAC_STATISTICS_IN_PORT_HANDLE_OFST 0
+#define       MC_CMD_MAC_STATISTICS_IN_PORT_HANDLE_LEN 4
+/* Contains options for querying the MAC statistics. */
+#define       MC_CMD_MAC_STATISTICS_IN_CMD_OFST 4
+#define       MC_CMD_MAC_STATISTICS_IN_CMD_LEN 4
+#define        MC_CMD_MAC_STATISTICS_IN_DMA_OFST 4
+#define        MC_CMD_MAC_STATISTICS_IN_DMA_LBN 0
+#define        MC_CMD_MAC_STATISTICS_IN_DMA_WIDTH 1
+#define        MC_CMD_MAC_STATISTICS_IN_CLEAR_OFST 4
+#define        MC_CMD_MAC_STATISTICS_IN_CLEAR_LBN 1
+#define        MC_CMD_MAC_STATISTICS_IN_CLEAR_WIDTH 1
+#define        MC_CMD_MAC_STATISTICS_IN_PERIODIC_CHANGE_OFST 4
+#define        MC_CMD_MAC_STATISTICS_IN_PERIODIC_CHANGE_LBN 2
+#define        MC_CMD_MAC_STATISTICS_IN_PERIODIC_CHANGE_WIDTH 1
+#define        MC_CMD_MAC_STATISTICS_IN_PERIODIC_ENABLE_OFST 4
+#define        MC_CMD_MAC_STATISTICS_IN_PERIODIC_ENABLE_LBN 3
+#define        MC_CMD_MAC_STATISTICS_IN_PERIODIC_ENABLE_WIDTH 1
+#define        MC_CMD_MAC_STATISTICS_IN_PERIODIC_NOEVENT_OFST 4
+#define        MC_CMD_MAC_STATISTICS_IN_PERIODIC_NOEVENT_LBN 4
+#define        MC_CMD_MAC_STATISTICS_IN_PERIODIC_NOEVENT_WIDTH 1
+#define        MC_CMD_MAC_STATISTICS_IN_PERIOD_MS_OFST 4
+#define        MC_CMD_MAC_STATISTICS_IN_PERIOD_MS_LBN 16
+#define        MC_CMD_MAC_STATISTICS_IN_PERIOD_MS_WIDTH 16
+/* This is the address of the DMA buffer to use for transfer of the statistics.
+ * Only valid if the DMA flag is set to 1.
+ */
+#define       MC_CMD_MAC_STATISTICS_IN_DMA_ADDR_OFST 8
+#define       MC_CMD_MAC_STATISTICS_IN_DMA_ADDR_LEN 8
+#define       MC_CMD_MAC_STATISTICS_IN_DMA_ADDR_LO_OFST 8
+#define       MC_CMD_MAC_STATISTICS_IN_DMA_ADDR_LO_LEN 4
+#define       MC_CMD_MAC_STATISTICS_IN_DMA_ADDR_LO_LBN 64
+#define       MC_CMD_MAC_STATISTICS_IN_DMA_ADDR_LO_WIDTH 32
+#define       MC_CMD_MAC_STATISTICS_IN_DMA_ADDR_HI_OFST 12
+#define       MC_CMD_MAC_STATISTICS_IN_DMA_ADDR_HI_LEN 4
+#define       MC_CMD_MAC_STATISTICS_IN_DMA_ADDR_HI_LBN 96
+#define       MC_CMD_MAC_STATISTICS_IN_DMA_ADDR_HI_WIDTH 32
+/* This is the length of the DMA buffer to use for the transfer of the
+ * statistics. The buffer should be at least DMA_BUFFER_SIZE long, as returned
+ * by MC_CMD_MAC_STATISTICS_DESCRIPTOR. If the supplied buffer is too small,
+ * the command will fail with EINVAL. Only valid if the DMA flag is set to 1.
+ */
+#define       MC_CMD_MAC_STATISTICS_IN_DMA_LEN_OFST 16
+#define       MC_CMD_MAC_STATISTICS_IN_DMA_LEN_LEN 4
+
+/* MC_CMD_MAC_STATISTICS_OUT msgresponse */
+#define    MC_CMD_MAC_STATISTICS_OUT_LENMIN 5
+#define    MC_CMD_MAC_STATISTICS_OUT_LENMAX 252
+#define    MC_CMD_MAC_STATISTICS_OUT_LENMAX_MCDI2 1020
+#define    MC_CMD_MAC_STATISTICS_OUT_LEN(num) (4+1*(num))
+#define    MC_CMD_MAC_STATISTICS_OUT_DATA_NUM(len) (((len)-4)/1)
+/* length of the data in bytes */
+#define       MC_CMD_MAC_STATISTICS_OUT_DATALEN_OFST 0
+#define       MC_CMD_MAC_STATISTICS_OUT_DATALEN_LEN 4
+#define       MC_CMD_MAC_STATISTICS_OUT_DATA_OFST 4
+#define       MC_CMD_MAC_STATISTICS_OUT_DATA_LEN 1
+#define       MC_CMD_MAC_STATISTICS_OUT_DATA_MINNUM 1
+#define       MC_CMD_MAC_STATISTICS_OUT_DATA_MAXNUM 248
+#define       MC_CMD_MAC_STATISTICS_OUT_DATA_MAXNUM_MCDI2 1016
+
+/* NET_PORT_HANDLE_DESC structuredef: Network port descriptor containing a port
+ * handle and attributes used, for example, in MC_CMD_ENUM_PORTS.
+ */
+#define    NET_PORT_HANDLE_DESC_LEN 53
+/* The handle to identify the port */
+#define       NET_PORT_HANDLE_DESC_PORT_HANDLE_OFST 0
+#define       NET_PORT_HANDLE_DESC_PORT_HANDLE_LEN 4
+#define       NET_PORT_HANDLE_DESC_PORT_HANDLE_LBN 0
+#define       NET_PORT_HANDLE_DESC_PORT_HANDLE_WIDTH 32
+/* Includes the type of port e.g. physical, virtual or MAE MPORT and other
+ * properties relevant to the port.
+ */
+#define       NET_PORT_HANDLE_DESC_PORT_PROPERTIES_OFST 4
+#define       NET_PORT_HANDLE_DESC_PORT_PROPERTIES_LEN 8
+#define       NET_PORT_HANDLE_DESC_PORT_PROPERTIES_LO_OFST 4
+#define       NET_PORT_HANDLE_DESC_PORT_PROPERTIES_LO_LEN 4
+#define       NET_PORT_HANDLE_DESC_PORT_PROPERTIES_LO_LBN 32
+#define       NET_PORT_HANDLE_DESC_PORT_PROPERTIES_LO_WIDTH 32
+#define       NET_PORT_HANDLE_DESC_PORT_PROPERTIES_HI_OFST 8
+#define       NET_PORT_HANDLE_DESC_PORT_PROPERTIES_HI_LEN 4
+#define       NET_PORT_HANDLE_DESC_PORT_PROPERTIES_HI_LBN 64
+#define       NET_PORT_HANDLE_DESC_PORT_PROPERTIES_HI_WIDTH 32
+#define        NET_PORT_HANDLE_DESC_PORT_TYPE_OFST 4
+#define        NET_PORT_HANDLE_DESC_PORT_TYPE_LBN 0
+#define        NET_PORT_HANDLE_DESC_PORT_TYPE_WIDTH 3
+#define          NET_PORT_HANDLE_DESC_PHYSICAL 0x0 /* enum */
+#define          NET_PORT_HANDLE_DESC_VIRTUAL 0x1 /* enum */
+#define          NET_PORT_HANDLE_DESC_MPORT 0x2 /* enum */
+#define        NET_PORT_HANDLE_DESC_IS_ZOMBIE_OFST 4
+#define        NET_PORT_HANDLE_DESC_IS_ZOMBIE_LBN 8
+#define        NET_PORT_HANDLE_DESC_IS_ZOMBIE_WIDTH 1
+#define       NET_PORT_HANDLE_DESC_PORT_PROPERTIES_LBN 32
+#define       NET_PORT_HANDLE_DESC_PORT_PROPERTIES_WIDTH 64
+/* The dynamic change that led to the port enumeration */
+#define       NET_PORT_HANDLE_DESC_ENTRY_SRC_OFST 12
+#define       NET_PORT_HANDLE_DESC_ENTRY_SRC_LEN 1
+/* enum: Indicates that the ENTRY_SRC field has not been initialized. */
+#define          NET_PORT_HANDLE_DESC_UNKNOWN 0x0
+/* enum: The port was enumerated at start of day. */
+#define          NET_PORT_HANDLE_DESC_PRESENT 0x1
+/* enum: The port was dynamically added. */
+#define          NET_PORT_HANDLE_DESC_ADDED 0x2
+/* enum: The port was dynamically deleted. */
+#define          NET_PORT_HANDLE_DESC_DELETED 0x3
+#define       NET_PORT_HANDLE_DESC_ENTRY_SRC_LBN 96
+#define       NET_PORT_HANDLE_DESC_ENTRY_SRC_WIDTH 8
+/* This is an opaque 40 byte label exposed to users as a unique identifier of
+ * the port. It is represented as a zero-terminated ASCII string and assigned
+ * by the port administrator which is typically either the firmware for a
+ * physical port or the host software responsible for creating the virtual
+ * port. The label is conveyed to the driver after assignment, which, unlike
+ * the port administrator, does not need to know how to interpret the label.
+ */
+#define       NET_PORT_HANDLE_DESC_PORT_LABEL_OFST 13
+#define       NET_PORT_HANDLE_DESC_PORT_LABEL_LEN 40
+#define       NET_PORT_HANDLE_DESC_PORT_LABEL_LBN 104
+#define       NET_PORT_HANDLE_DESC_PORT_LABEL_WIDTH 320
+
+
+/***********************************/
+/* MC_CMD_ENUM_PORTS
+ * This command returns handles for all ports present in the system. The PCIe
+ * function type of each port (either physical or virtual) is also reported.
+ * After a start-of-day port enumeration, firmware keeps track of all available
+ * ports upon creation or deletion and updates the ports if there is a change.
+ * This command is cleared after a control interface reset (e.g. FLR,
+ * ENTITY_RESET), in which case it must be called again to reenumerate the
+ * ports. The command is also clear-on-read and repeated calls will drain the
+ * buffer.
+ */
+#define MC_CMD_ENUM_PORTS 0x1e5
+#undef MC_CMD_0x1e5_PRIVILEGE_CTG
+
+#define MC_CMD_0x1e5_PRIVILEGE_CTG SRIOV_CTG_LINK
+
+/* MC_CMD_ENUM_PORTS_IN msgrequest */
+#define    MC_CMD_ENUM_PORTS_IN_LEN 0
+
+/* MC_CMD_ENUM_PORTS_OUT msgresponse */
+#define    MC_CMD_ENUM_PORTS_OUT_LENMIN 12
+#define    MC_CMD_ENUM_PORTS_OUT_LENMAX 252
+#define    MC_CMD_ENUM_PORTS_OUT_LENMAX_MCDI2 1020
+#define    MC_CMD_ENUM_PORTS_OUT_LEN(num) (12+1*(num))
+#define    MC_CMD_ENUM_PORTS_OUT_PORT_HANDLES_NUM(len) (((len)-12)/1)
+/* Any unused flags are reserved and must be ignored. */
+#define       MC_CMD_ENUM_PORTS_OUT_FLAGS_OFST 0
+#define       MC_CMD_ENUM_PORTS_OUT_FLAGS_LEN 4
+#define        MC_CMD_ENUM_PORTS_OUT_MORE_OFST 0
+#define        MC_CMD_ENUM_PORTS_OUT_MORE_LBN 0
+#define        MC_CMD_ENUM_PORTS_OUT_MORE_WIDTH 1
+/* The number of NET_PORT_HANDLE_DESC structures in PORT_HANDLES. */
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_COUNT_OFST 4
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_COUNT_LEN 4
+#define       MC_CMD_ENUM_PORTS_OUT_SIZEOF_NET_PORT_HANDLE_DESC_OFST 8
+#define       MC_CMD_ENUM_PORTS_OUT_SIZEOF_NET_PORT_HANDLE_DESC_LEN 4
+/* Array of NET_PORT_HANDLE_DESC structures. Callers must use must use the
+ * SIZEOF_NET_PORT_HANDLE_DESC field field as the array stride between entries.
+ * This may also allow for tail padding for alignment. Fields beyond
+ * SIZEOF_NET_PORT_HANDLE_DESC are not present.
+ */
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_HANDLES_OFST 12
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_HANDLES_LEN 1
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_HANDLES_MINNUM 0
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_HANDLES_MAXNUM 240
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_HANDLES_MAXNUM_MCDI2 1008
+/* See structuredef: NET_PORT_HANDLE_DESC */
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_HANDLES_PORT_HANDLE_OFST 12
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_HANDLES_PORT_HANDLE_LEN 4
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_HANDLES_PORT_PROPERTIES_OFST 16
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_HANDLES_PORT_PROPERTIES_LEN 8
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_HANDLES_PORT_PROPERTIES_LO_OFST 16
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_HANDLES_PORT_PROPERTIES_LO_LEN 4
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_HANDLES_PORT_PROPERTIES_LO_LBN 128
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_HANDLES_PORT_PROPERTIES_LO_WIDTH 32
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_HANDLES_PORT_PROPERTIES_HI_OFST 20
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_HANDLES_PORT_PROPERTIES_HI_LEN 4
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_HANDLES_PORT_PROPERTIES_HI_LBN 160
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_HANDLES_PORT_PROPERTIES_HI_WIDTH 32
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_HANDLES_PORT_TYPE_LBN 128
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_HANDLES_PORT_TYPE_WIDTH 3
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_HANDLES_IS_ZOMBIE_LBN 136
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_HANDLES_IS_ZOMBIE_WIDTH 1
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_HANDLES_ENTRY_SRC_OFST 24
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_HANDLES_ENTRY_SRC_LEN 1
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_HANDLES_PORT_LABEL_OFST 25
+#define       MC_CMD_ENUM_PORTS_OUT_PORT_HANDLES_PORT_LABEL_LEN 40
+
+
+/***********************************/
+/* MC_CMD_GET_TRANSCEIVER_PROPERTIES
+ * Read properties of the transceiver associated with the port. Can be either
+ * for a fixed onboard transceiver or an inserted module. The returned data is
+ * interpreted from the transceiver hardware and may be fixed up by the
+ * firmware. Use MC_CMD_GET_MODULE_DATA to get raw undecoded data.
+ */
+#define MC_CMD_GET_TRANSCEIVER_PROPERTIES 0x1e6
+#undef MC_CMD_0x1e6_PRIVILEGE_CTG
+
+#define MC_CMD_0x1e6_PRIVILEGE_CTG SRIOV_CTG_LINK
+
+/* MC_CMD_GET_TRANSCEIVER_PROPERTIES_IN msgrequest */
+#define    MC_CMD_GET_TRANSCEIVER_PROPERTIES_IN_LEN 4
+/* Handle to port to get transceiver properties from. */
+#define       MC_CMD_GET_TRANSCEIVER_PROPERTIES_IN_PORT_HANDLE_OFST 0
+#define       MC_CMD_GET_TRANSCEIVER_PROPERTIES_IN_PORT_HANDLE_LEN 4
+
+/* MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT msgresponse */
+#define    MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_LEN 89
+/* Supported technology abilities. */
+#define       MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_TECH_ABILITIES_MASK_OFST 0
+#define       MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_TECH_ABILITIES_MASK_LEN 16
+/* enum property: bitshift */
+/*            Enum values, see field(s): */
+/*               MC_CMD_ETH_TECH/TECH */
+/* Reserved for future expansion to accommodate future Ethernet technology
+ * expansion.
+ */
+#define       MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_RESERVED_OFST 16
+#define       MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_RESERVED_LEN 16
+/* Preferred FEC modes. This is a function of the cable type and length. */
+#define       MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_PREFERRED_FEC_MASK_OFST 32
+#define       MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_PREFERRED_FEC_MASK_LEN 4
+/* enum property: bitshift */
+/*            Enum values, see field(s): */
+/*               FEC_TYPE/TYPE */
+/* SFF-8042 code reported by the module. */
+#define       MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_CODE_OFST 36
+#define       MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_CODE_LEN 2
+/* Medium. */
+#define       MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_MEDIUM_OFST 38
+#define       MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_MEDIUM_LEN 1
+/* enum property: value */
+#define          MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_UNKNOWN 0x0 /* enum */
+#define          MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_COPPER 0x1 /* enum */
+#define          MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_OPTICAL 0x2 /* enum */
+#define          MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_BACKPLANE 0x3 /* enum */
+/* Identifies the tech */
+#define       MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_MEDIA_SUBTYPE_OFST 39
+#define       MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_MEDIA_SUBTYPE_LEN 1
+/* enum property: value */
+/*               MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_UNKNOWN 0x0 */
+/* enum: Ethernet over twisted-pair copper cables for distances up to 100
+ * meters.
+ */
+#define          MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_BASET 0x1
+/* enum: Ethernet over twin-axial, balanced copper cable. */
+#define          MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_CR 0x2
+/* enum: Ethernet over backplane for connections on the same board. */
+#define          MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_KX 0x3
+/* enum: Ethernet over a single backplane lane for connections between
+ * different boards.
+ */
+#define          MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_KR 0x4
+/* enum: Ethernet over copper backplane. */
+#define          MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_KP 0x5
+/* enum: Ethernet over fiber optic. */
+#define          MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_BASEX 0x6
+/* enum: Short range ethernet over multimode fiber optic (See IEEE 802.3 Clause
+ * 49 and 52).
+ */
+#define          MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_SR 0x7
+/* enum: Long range, extended range or far reach ethernet used with single mode
+ * fiber optics.
+ */
+#define          MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_LR_ER_FR 0x8
+/* enum: Long reach multimode ethernet over multimode optical fiber. */
+#define          MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_LRM 0x9
+/* enum: Very short reach PAM4 ethernet over multimode optical fiber (see IEEE
+ * 802.3db).
+ */
+#define          MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_VR 0xa
+/* enum: BASE-R encoding and PAM4 over single-mode fiber with reach up to at
+ * least 500 meters (803.2 Clause 121 and 124)
+ */
+#define          MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_DR 0xb
+/* String of the vendor name as intepreted by NMC firmware. NMC firmware
+ * applies workarounds for known buggy transceivers. The vendor name is
+ * presented as 16 bytes of ASCII characters padded with spaces. It can also be
+ * represented as 16 bytes of zeros if the field is unspecified for the
+ * connected module. See SFF-8472/CMIS specifications for details.
+ */
+#define       MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_VENDOR_NAME_OFST 40
+#define       MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_VENDOR_NAME_LEN 1
+#define       MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_VENDOR_NAME_NUM 16
+/* The vendor part number as intepreted by NMC firmware. The field is presented
+ * as 16 bytes of ASCII chars padded with spaces. It can also be 16 bytes of
+ * zeros if the field is unspecified for the connected module.
+ */
+#define       MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_VENDOR_PN_OFST 56
+#define       MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_VENDOR_PN_LEN 1
+#define       MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_VENDOR_PN_NUM 16
+/* Serial number of the module presented as 16 bytes of ASCII characters padded
+ * with spaces. It can also be 16 bytes of zeros if the field is unspecified
+ * for the connected module. See SFF-8472/CMIS specifications for details.
+ */
+#define       MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_SERIAL_NUMBER_OFST 72
+#define       MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_SERIAL_NUMBER_LEN 1
+#define       MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_SERIAL_NUMBER_NUM 16
+/* This reports the number of module changes detected by the NMC firmware. */
+#define       MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_PORT_MODULECHANGE_SEQ_NUM_OFST 88
+#define       MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_PORT_MODULECHANGE_SEQ_NUM_LEN 1
+
+
+/***********************************/
+/* MC_CMD_GET_FIXED_PORT_PROPERTIES
+ */
+#define MC_CMD_GET_FIXED_PORT_PROPERTIES 0x1e7
+#undef MC_CMD_0x1e7_PRIVILEGE_CTG
+
+#define MC_CMD_0x1e7_PRIVILEGE_CTG SRIOV_CTG_LINK
+
+/* MC_CMD_GET_FIXED_PORT_PROPERTIES_IN msgrequest: In this context, the port
+ * consists of the MAC and the PHY, and excludes any modules inserted into the
+ * cage. This information is fixed for a given board but not for a given ASIC.
+ * This command reports properties for the port as it is currently configured,
+ * and not its hardware capabilities, which can be better than the current
+ * configuration.
+ */
+#define    MC_CMD_GET_FIXED_PORT_PROPERTIES_IN_LEN 4
+/* Handle to the port to from which to retreive properties */
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_IN_PORT_HANDLE_OFST 0
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_IN_PORT_HANDLE_LEN 4
+
+/* MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT msgresponse */
+#define    MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_LEN 36
+/* Supported capabilities of the port in its current configuration. */
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_ABILITIES_OFST 0
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_ABILITIES_LEN 25
+/* See structuredef: MC_CMD_ETH_AN_FIELDS */
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_ABILITIES_TECH_MASK_OFST 0
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_ABILITIES_TECH_MASK_LEN 16
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_ABILITIES_FEC_MASK_OFST 16
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_ABILITIES_FEC_MASK_LEN 4
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_ABILITIES_FEC_REQ_OFST 20
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_ABILITIES_FEC_REQ_LEN 4
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_ABILITIES_PAUSE_MASK_OFST 24
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_ABILITIES_PAUSE_MASK_LEN 1
+/* Number of lanes supported by the port in its current configuration. */
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_NUM_LANES_OFST 25
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_NUM_LANES_LEN 1
+/* Bitmask of supported loopback modes. Where the response to this command
+ * includes the LOOPBACK_MODES_MASK_V2 field, that field should be used in
+ * preference to ensure that all available loopback modes are seen.
+ */
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_LOOPBACK_MODES_MASK_OFST 26
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_LOOPBACK_MODES_MASK_LEN 1
+/* enum property: bitshift */
+/*            Enum values, see field(s): */
+/*               MC_CMD_LOOPBACK_V2/MODE */
+/* This field serves as a cage index that uniquely identifies the cage to which
+ * the module is connected. This is useful when splitter cables that have
+ * multiple ports on a single cage are used.
+ */
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_MDI_INDEX_OFST 27
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_MDI_INDEX_LEN 1
+/* This bitmask is used to specify the lanes within the cage identified by
+ * MDI_INDEX that are allocated to the port.
+ */
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_MDI_LANE_MASK_OFST 28
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_MDI_LANE_MASK_LEN 1
+/* Maximum frame length supported by the port in its current configuration. */
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_MAX_FRAME_LEN_OFST 32
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_MAX_FRAME_LEN_LEN 4
+
+/* MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_V2 msgresponse */
+#define    MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_V2_LEN 48
+/* Supported capabilities of the port in its current configuration. */
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_V2_ABILITIES_OFST 0
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_V2_ABILITIES_LEN 25
+/* Number of lanes supported by the port in its current configuration. */
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_V2_NUM_LANES_OFST 25
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_V2_NUM_LANES_LEN 1
+/* Bitmask of supported loopback modes. Where the response to this command
+ * includes the LOOPBACK_MODES_MASK_V2 field, that field should be used in
+ * preference to ensure that all available loopback modes are seen.
+ */
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_V2_LOOPBACK_MODES_MASK_OFST 26
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_V2_LOOPBACK_MODES_MASK_LEN 1
+/* enum property: bitshift */
+/*            Enum values, see field(s): */
+/*               MC_CMD_LOOPBACK_V2/MODE */
+/* This field serves as a cage index that uniquely identifies the cage to which
+ * the module is connected. This is useful when splitter cables that have
+ * multiple ports on a single cage are used.
+ */
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_V2_MDI_INDEX_OFST 27
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_V2_MDI_INDEX_LEN 1
+/* This bitmask is used to specify the lanes within the cage identified by
+ * MDI_INDEX that are allocated to the port.
+ */
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_V2_MDI_LANE_MASK_OFST 28
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_V2_MDI_LANE_MASK_LEN 1
+/* Maximum frame length supported by the port in its current configuration. */
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_V2_MAX_FRAME_LEN_OFST 32
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_V2_MAX_FRAME_LEN_LEN 4
+/* Bitmask of supported loopback modes. This field replaces the
+ * LOOPBACK_MODES_MASK field which is defined under version 1 of this command.
+ */
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_V2_LOOPBACK_MODES_MASK_V2_OFST 40
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_V2_LOOPBACK_MODES_MASK_V2_LEN 8
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_V2_LOOPBACK_MODES_MASK_V2_LO_OFST 40
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_V2_LOOPBACK_MODES_MASK_V2_LO_LEN 4
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_V2_LOOPBACK_MODES_MASK_V2_LO_LBN 320
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_V2_LOOPBACK_MODES_MASK_V2_LO_WIDTH 32
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_V2_LOOPBACK_MODES_MASK_V2_HI_OFST 44
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_V2_LOOPBACK_MODES_MASK_V2_HI_LEN 4
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_V2_LOOPBACK_MODES_MASK_V2_HI_LBN 352
+#define       MC_CMD_GET_FIXED_PORT_PROPERTIES_OUT_V2_LOOPBACK_MODES_MASK_V2_HI_WIDTH 32
+/* enum property: bitshift */
+/*            Enum values, see field(s): */
+/*               MC_CMD_LOOPBACK_V2/MODE */
+
+
+/***********************************/
+/* MC_CMD_GET_MODULE_DATA
+ * Read media-specific data from the PHY (e.g. SFP/SFP+ module ID information
+ * for SFP+ PHYs). This command returns raw data from the module's EEPROM and
+ * it is not interpreted by the MC. Use MC_CMD_GET_TRANSCEIVER_PROPERTIES to
+ * get interpreted data. Return code: 0, ENOENT
+ */
+#define MC_CMD_GET_MODULE_DATA 0x1e8
+#undef MC_CMD_0x1e8_PRIVILEGE_CTG
+
+#define MC_CMD_0x1e8_PRIVILEGE_CTG SRIOV_CTG_LINK
+
+/* MC_CMD_GET_MODULE_DATA_IN msgrequest */
+#define    MC_CMD_GET_MODULE_DATA_IN_LEN 16
+/* Handle to identify the port from which to request module properties. */
+#define       MC_CMD_GET_MODULE_DATA_IN_PORT_HANDLE_OFST 0
+#define       MC_CMD_GET_MODULE_DATA_IN_PORT_HANDLE_LEN 4
+/* 7 bit I2C address of the device. DEPRECATED: This field is replaced by
+ * MODULE_ADDR in V2. Use V2 of this command for proper alignment and easier
+ * access.
+ */
+#define       MC_CMD_GET_MODULE_DATA_IN_DEVADDR_LBN 32
+#define       MC_CMD_GET_MODULE_DATA_IN_DEVADDR_WIDTH 7
+/* 0 if the page does not support banked access, non-zero otherwise. Non-zero
+ * BANK is valid if OFFSET is in the range 80h - ffh, i.e. in the Upper Memory
+ * region.
+ */
+#define       MC_CMD_GET_MODULE_DATA_IN_BANK_OFST 6
+#define       MC_CMD_GET_MODULE_DATA_IN_BANK_LEN 2
+/* 0 if paged access is not supported, non-zero otherwise. Non-zero PAGE is
+ * valid if OFFSET is in the range 80h - ffh.
+ */
+#define       MC_CMD_GET_MODULE_DATA_IN_PAGE_OFST 8
+#define       MC_CMD_GET_MODULE_DATA_IN_PAGE_LEN 2
+/* Offset in the range 00h - 7fh to access lower memory. Offset in the range
+ * 80h - ffh to access upper memory
+ */
+#define       MC_CMD_GET_MODULE_DATA_IN_OFFSET_OFST 10
+#define       MC_CMD_GET_MODULE_DATA_IN_OFFSET_LEN 1
+#define       MC_CMD_GET_MODULE_DATA_IN_LENGTH_OFST 12
+#define       MC_CMD_GET_MODULE_DATA_IN_LENGTH_LEN 4
+
+/* MC_CMD_GET_MODULE_DATA_IN_V2 msgrequest: Updated MC_CMD_GET_MODULE_DATA with
+ * 8-bit wide ADDRESSING field. This new field provides a correctly aligned
+ * container for the 7-bit DEVADDR field from V1, now renamed MODULE_ADDR, to
+ * ensure proper alignment.
+ */
+#define    MC_CMD_GET_MODULE_DATA_IN_V2_LEN 16
+/* Handle to identify the port from which to request module properties. */
+#define       MC_CMD_GET_MODULE_DATA_IN_V2_PORT_HANDLE_OFST 0
+#define       MC_CMD_GET_MODULE_DATA_IN_V2_PORT_HANDLE_LEN 4
+/* 7 bit I2C address of the device. DEPRECATED: This field is replaced by
+ * MODULE_ADDR in V2. Use V2 of this command for proper alignment and easier
+ * access.
+ */
+#define       MC_CMD_GET_MODULE_DATA_IN_V2_DEVADDR_LBN 32
+#define       MC_CMD_GET_MODULE_DATA_IN_V2_DEVADDR_WIDTH 7
+/* 0 if the page does not support banked access, non-zero otherwise. Non-zero
+ * BANK is valid if OFFSET is in the range 80h - ffh, i.e. in the Upper Memory
+ * region.
+ */
+#define       MC_CMD_GET_MODULE_DATA_IN_V2_BANK_OFST 6
+#define       MC_CMD_GET_MODULE_DATA_IN_V2_BANK_LEN 2
+/* 0 if paged access is not supported, non-zero otherwise. Non-zero PAGE is
+ * valid if OFFSET is in the range 80h - ffh.
+ */
+#define       MC_CMD_GET_MODULE_DATA_IN_V2_PAGE_OFST 8
+#define       MC_CMD_GET_MODULE_DATA_IN_V2_PAGE_LEN 2
+/* Offset in the range 00h - 7fh to access lower memory. Offset in the range
+ * 80h - ffh to access upper memory
+ */
+#define       MC_CMD_GET_MODULE_DATA_IN_V2_OFFSET_OFST 10
+#define       MC_CMD_GET_MODULE_DATA_IN_V2_OFFSET_LEN 1
+#define       MC_CMD_GET_MODULE_DATA_IN_V2_LENGTH_OFST 12
+#define       MC_CMD_GET_MODULE_DATA_IN_V2_LENGTH_LEN 4
+/* Container for 7 bit I2C addresses. */
+#define       MC_CMD_GET_MODULE_DATA_IN_V2_ADDRESSING_OFST 4
+#define       MC_CMD_GET_MODULE_DATA_IN_V2_ADDRESSING_LEN 1
+#define        MC_CMD_GET_MODULE_DATA_IN_V2_MODULE_ADDR_OFST 4
+#define        MC_CMD_GET_MODULE_DATA_IN_V2_MODULE_ADDR_LBN 0
+#define        MC_CMD_GET_MODULE_DATA_IN_V2_MODULE_ADDR_WIDTH 7
+
+/* MC_CMD_GET_MODULE_DATA_OUT msgresponse */
+#define    MC_CMD_GET_MODULE_DATA_OUT_LENMIN 5
+#define    MC_CMD_GET_MODULE_DATA_OUT_LENMAX 252
+#define    MC_CMD_GET_MODULE_DATA_OUT_LENMAX_MCDI2 1020
+#define    MC_CMD_GET_MODULE_DATA_OUT_LEN(num) (4+1*(num))
+#define    MC_CMD_GET_MODULE_DATA_OUT_DATA_NUM(len) (((len)-4)/1)
+/* length of the data in bytes */
+#define       MC_CMD_GET_MODULE_DATA_OUT_DATALEN_OFST 0
+#define       MC_CMD_GET_MODULE_DATA_OUT_DATALEN_LEN 4
+#define       MC_CMD_GET_MODULE_DATA_OUT_DATA_OFST 4
+#define       MC_CMD_GET_MODULE_DATA_OUT_DATA_LEN 1
+#define       MC_CMD_GET_MODULE_DATA_OUT_DATA_MINNUM 1
+#define       MC_CMD_GET_MODULE_DATA_OUT_DATA_MAXNUM 248
+#define       MC_CMD_GET_MODULE_DATA_OUT_DATA_MAXNUM_MCDI2 1016
 
 /* EVB_PORT_ID structuredef */
 #define    EVB_PORT_ID_LEN 4
@@ -11770,6 +13147,110 @@
 
 /* MC_CMD_FREE_PIOBUF_OUT msgresponse */
 #define    MC_CMD_FREE_PIOBUF_OUT_LEN 0
+
+
+/***********************************/
+/* MC_CMD_GET_VI_TLP_PROCESSING
+ * Get TLP steering and ordering information for a VI. The caller must have the
+ * GRP_FUNC_DMA privilege and must be the currently-assigned user of this VI or
+ * an ancestor of the current user (see MC_CMD_SET_VI_USER).
+ */
+#define MC_CMD_GET_VI_TLP_PROCESSING 0xb0
+#undef MC_CMD_0xb0_PRIVILEGE_CTG
+
+#define MC_CMD_0xb0_PRIVILEGE_CTG SRIOV_CTG_GENERAL
+
+/* MC_CMD_GET_VI_TLP_PROCESSING_IN msgrequest */
+#define    MC_CMD_GET_VI_TLP_PROCESSING_IN_LEN 4
+/* Queue handle, encodes queue type and VI number to get information for. */
+#define       MC_CMD_GET_VI_TLP_PROCESSING_IN_INSTANCE_OFST 0
+#define       MC_CMD_GET_VI_TLP_PROCESSING_IN_INSTANCE_LEN 4
+
+/* MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT msgresponse: This message has the same
+ * layout as GET_VI_TLP_PROCESSING_OUT, but with corrected field ordering to
+ * simplify use in drivers
+ */
+#define    MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_LEN 4
+#define       MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_DATA_OFST 0
+#define       MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_DATA_LEN 4
+#define        MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_TPH_TAG1_RX_OFST 0
+#define        MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_TPH_TAG1_RX_LBN 0
+#define        MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_TPH_TAG1_RX_WIDTH 8
+#define        MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_TPH_TAG2_EV_OFST 0
+#define        MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_TPH_TAG2_EV_LBN 8
+#define        MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_TPH_TAG2_EV_WIDTH 8
+#define        MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_RELAXED_ORDERING_OFST 0
+#define        MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_RELAXED_ORDERING_LBN 16
+#define        MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_RELAXED_ORDERING_WIDTH 1
+#define        MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_RELAXED_ORDERING_PACKET_DATA_OFST 0
+#define        MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_RELAXED_ORDERING_PACKET_DATA_LBN 16
+#define        MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_RELAXED_ORDERING_PACKET_DATA_WIDTH 1
+#define        MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_ID_BASED_ORDERING_OFST 0
+#define        MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_ID_BASED_ORDERING_LBN 17
+#define        MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_ID_BASED_ORDERING_WIDTH 1
+#define        MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_NO_SNOOP_OFST 0
+#define        MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_NO_SNOOP_LBN 18
+#define        MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_NO_SNOOP_WIDTH 1
+#define        MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_TPH_ON_OFST 0
+#define        MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_TPH_ON_LBN 19
+#define        MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_TPH_ON_WIDTH 1
+#define        MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_RELAXED_ORDERING_SYNC_DATA_OFST 0
+#define        MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_RELAXED_ORDERING_SYNC_DATA_LBN 20
+#define        MC_CMD_GET_VI_TLP_PROCESSING_V2_OUT_RELAXED_ORDERING_SYNC_DATA_WIDTH 1
+
+
+/***********************************/
+/* MC_CMD_SET_VI_TLP_PROCESSING
+ * Set TLP steering and ordering information for a VI. The caller must have the
+ * GRP_FUNC_DMA privilege and must be the currently-assigned user of this VI or
+ * an ancestor of the current user (see MC_CMD_SET_VI_USER). Note that LL
+ * queues require this to be called after allocation but before initialisation
+ * of the queue. TLP options of a queue are fixed after queue is initialised,
+ * with the values set to current global value or they can be overriden using
+ * this command. At LL queue allocation, all overrides are cleared.
+ */
+#define MC_CMD_SET_VI_TLP_PROCESSING 0xb1
+#undef MC_CMD_0xb1_PRIVILEGE_CTG
+
+#define MC_CMD_0xb1_PRIVILEGE_CTG SRIOV_CTG_GENERAL
+
+/* MC_CMD_SET_VI_TLP_PROCESSING_V2_IN msgrequest: This message has the same
+ * layout as SET_VI_TLP_PROCESSING_OUT, but with corrected field ordering to
+ * simplify use in drivers.
+ */
+#define    MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_LEN 8
+/* Queue handle, encodes queue type and VI number to set information for. */
+#define       MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_INSTANCE_OFST 0
+#define       MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_INSTANCE_LEN 4
+#define       MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_DATA_OFST 4
+#define       MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_DATA_LEN 4
+#define        MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_TPH_TAG1_RX_OFST 4
+#define        MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_TPH_TAG1_RX_LBN 0
+#define        MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_TPH_TAG1_RX_WIDTH 8
+#define        MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_TPH_TAG2_EV_OFST 4
+#define        MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_TPH_TAG2_EV_LBN 8
+#define        MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_TPH_TAG2_EV_WIDTH 8
+#define        MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_RELAXED_ORDERING_OFST 4
+#define        MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_RELAXED_ORDERING_LBN 16
+#define        MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_RELAXED_ORDERING_WIDTH 1
+#define        MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_RELAXED_ORDERING_PACKET_DATA_OFST 4
+#define        MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_RELAXED_ORDERING_PACKET_DATA_LBN 16
+#define        MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_RELAXED_ORDERING_PACKET_DATA_WIDTH 1
+#define        MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_ID_BASED_ORDERING_OFST 4
+#define        MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_ID_BASED_ORDERING_LBN 17
+#define        MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_ID_BASED_ORDERING_WIDTH 1
+#define        MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_NO_SNOOP_OFST 4
+#define        MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_NO_SNOOP_LBN 18
+#define        MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_NO_SNOOP_WIDTH 1
+#define        MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_TPH_ON_OFST 4
+#define        MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_TPH_ON_LBN 19
+#define        MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_TPH_ON_WIDTH 1
+#define        MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_RELAXED_ORDERING_SYNC_DATA_OFST 4
+#define        MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_RELAXED_ORDERING_SYNC_DATA_LBN 20
+#define        MC_CMD_SET_VI_TLP_PROCESSING_V2_IN_RELAXED_ORDERING_SYNC_DATA_WIDTH 1
+
+/* MC_CMD_SET_VI_TLP_PROCESSING_OUT msgresponse */
+#define    MC_CMD_SET_VI_TLP_PROCESSING_OUT_LEN 0
 
 
 /***********************************/
@@ -14746,6 +16227,9 @@
 #define        MC_CMD_GET_CAPABILITIES_V7_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_OFST 148
 #define        MC_CMD_GET_CAPABILITIES_V7_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_LBN 16
 #define        MC_CMD_GET_CAPABILITIES_V7_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V7_OUT_CXL_CONFIG_ENABLE_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V7_OUT_CXL_CONFIG_ENABLE_LBN 17
+#define        MC_CMD_GET_CAPABILITIES_V7_OUT_CXL_CONFIG_ENABLE_WIDTH 1
 
 /* MC_CMD_GET_CAPABILITIES_V8_OUT msgresponse */
 #define    MC_CMD_GET_CAPABILITIES_V8_OUT_LEN 160
@@ -15259,6 +16743,9 @@
 #define        MC_CMD_GET_CAPABILITIES_V8_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_OFST 148
 #define        MC_CMD_GET_CAPABILITIES_V8_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_LBN 16
 #define        MC_CMD_GET_CAPABILITIES_V8_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V8_OUT_CXL_CONFIG_ENABLE_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V8_OUT_CXL_CONFIG_ENABLE_LBN 17
+#define        MC_CMD_GET_CAPABILITIES_V8_OUT_CXL_CONFIG_ENABLE_WIDTH 1
 /* These bits are reserved for communicating test-specific capabilities to
  * host-side test software. All production drivers should treat this field as
  * opaque.
@@ -15786,6 +17273,9 @@
 #define        MC_CMD_GET_CAPABILITIES_V9_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_OFST 148
 #define        MC_CMD_GET_CAPABILITIES_V9_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_LBN 16
 #define        MC_CMD_GET_CAPABILITIES_V9_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V9_OUT_CXL_CONFIG_ENABLE_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V9_OUT_CXL_CONFIG_ENABLE_LBN 17
+#define        MC_CMD_GET_CAPABILITIES_V9_OUT_CXL_CONFIG_ENABLE_WIDTH 1
 /* These bits are reserved for communicating test-specific capabilities to
  * host-side test software. All production drivers should treat this field as
  * opaque.
@@ -16348,6 +17838,9 @@
 #define        MC_CMD_GET_CAPABILITIES_V10_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_OFST 148
 #define        MC_CMD_GET_CAPABILITIES_V10_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_LBN 16
 #define        MC_CMD_GET_CAPABILITIES_V10_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V10_OUT_CXL_CONFIG_ENABLE_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V10_OUT_CXL_CONFIG_ENABLE_LBN 17
+#define        MC_CMD_GET_CAPABILITIES_V10_OUT_CXL_CONFIG_ENABLE_WIDTH 1
 /* These bits are reserved for communicating test-specific capabilities to
  * host-side test software. All production drivers should treat this field as
  * opaque.
@@ -16924,6 +18417,9 @@
 #define        MC_CMD_GET_CAPABILITIES_V11_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_OFST 148
 #define        MC_CMD_GET_CAPABILITIES_V11_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_LBN 16
 #define        MC_CMD_GET_CAPABILITIES_V11_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V11_OUT_CXL_CONFIG_ENABLE_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V11_OUT_CXL_CONFIG_ENABLE_LBN 17
+#define        MC_CMD_GET_CAPABILITIES_V11_OUT_CXL_CONFIG_ENABLE_WIDTH 1
 /* These bits are reserved for communicating test-specific capabilities to
  * host-side test software. All production drivers should treat this field as
  * opaque.
@@ -20025,7 +21521,8 @@
  * INTF=CALLER, PF=PF_NULL, VF=... to refer to a VF child of the calling PF or
  * a sibling VF of the calling VF. - INTF=CALLER, PF=..., VF=VF_NULL to refer
  * to a PF on the calling interface - INTF=CALLER, PF=..., VF=... to refer to a
- * VF on the calling interface - INTF=..., PF=..., VF=VF_NULL to refer to a PF
+ * VF on the calling interface - INTF=..., PF=PF_NULL, VF=VF_NULL to refer to
+ * the named interface itself - INTF=..., PF=..., VF=VF_NULL to refer to a PF
  * on a named interface - INTF=..., PF=..., VF=... to refer to a VF on a named
  * interface where ... refers to a small integer for the VF/PF fields, and to
  * values from the PCIE_INTERFACE enum for for the INTF field. It's only

@@ -222,7 +222,9 @@ static void oo_hwport_up(struct oo_nic* onic, int up)
   int replication_capable = efhw_nic->flags & NIC_FLAG_HW_MULTICAST_REPLICATION;
   int vlan_capable = efhw_nic->filter_flags &
                     (NIC_FILTER_FLAG_IPX_VLAN_HW | NIC_FILTER_FLAG_IPX_VLAN_SW);
-  int no5tuple = ~efhw_nic->filter_flags & NIC_FILTER_FLAG_RX_TYPE_IP_FULL;
+  int has5tuple = efhw_nic->filter_flags &
+                (NIC_FILTER_FLAG_RX_TYPE_IP_FULL | NIC_FILTER_FLAG_IP_FULL_SW);
+  int no5tuple = !has5tuple;
   oof_onload_hwport_up_down(&efab_tcp_driver, oo_nic_hwport(onic), up,
                             replication_capable, vlan_capable, no5tuple, 0);
   if( up )

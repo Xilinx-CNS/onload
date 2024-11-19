@@ -19,8 +19,9 @@ me=$(basename "$0")
 function generate_kompat_symbols() {
     echo "
 EFX_WANT_NDO_POLL_CONTROLLER		kver	<	4.19
-EFX_HAVE_GRO				custom
-EFX_HAVE_NAPI_GRO_RECEIVE_GR		symbol	napi_gro_receive_gr	include/linux/netdevice.h
+EFX_HAVE_PCI_TPH			file				include/linux/pci-tph.h
+EFX_HAVE_PCIE_ENABLE_TPH		symbol	pcie_enable_tph		include/linux/pci-tph.h
+EFX_HAVE_PCIE_TPH_GET_CPU_ST		symbol	pcie_tph_get_cpu_st	include/linux/pci-tph.h
 EFX_HAVE_NET_GRO_H			file				include/net/gro.h
 EFX_HAVE_CSUM_LEVEL			symbol	csum_level		include/linux/skbuff.h
 EFX_HAVE_SKB_SYSTSTAMP			member	struct_skb_shared_hwtstamps	syststamp	include/linux/skbuff.h
@@ -40,7 +41,6 @@ EFX_HAVE_ETHTOOL_GMODULEEEPROM		symbol	get_module_eeprom	include/linux/ethtool.h
 EFX_NEED_DMA_SET_MASK_AND_COHERENT		nsymbol	dma_set_mask_and_coherent	include/linux/dma-mapping.h
 EFX_NEED_BITMAP_ZALLOC			nsymbol	bitmap_zalloc		include/linux/bitmap.h
 EFX_HAVE_ASM_SYSTEM_H			file				asm/system.h
-EFX_HAVE_XEN_START_INFO			custom
 EFX_HAVE_EXPORTED_CPU_SIBLING_MAP	export	(per_cpu__)?cpu_sibling_map	include/asm/smp.h	arch/$SRCARCH/include/asm/smp.h	arch/$SRCARCH/kernel/smpboot.c	drivers/xen/core/smpboot.c
 EFX_HAVE_NDO_SIZE			member	struct_net_device_ops	ndo_size		include/linux/netdevice.h
 EFX_HAVE_NDO_SIZE_RH			member	struct_net_device_ops	ndo_size_rh		include/linux/netdevice.h
@@ -89,7 +89,7 @@ EFX_HAVE_IRQ_NOTIFIERS			symbol  irq_affinity_notify	include/linux/interrupt.h
 EFX_NEED_SET_TSO_MAX_SIZE		nsymbol netif_set_tso_max_size	include/linux/netdevice.h
 EFX_NEED_SET_TSO_MAX_SEGS		nsymbol netif_set_tso_max_segs	include/linux/netdevice.h
 EFX_NEED___BQL				nsymbol __netdev_tx_sent_queue	include/linux/netdevice.h
-EFX_NEED_KERNEL_ETHTOOL_TS_INFO		nsymbol	struct_kernel_ethtool_ts_info	include/linux/ethtool.h
+EFX_NEED_KERNEL_ETHTOOL_TS_INFO		nsymbol	kernel_ethtool_ts_info	include/linux/ethtool.h
 EFX_HAVE_OLD___VLAN_PUT_TAG		symtype	__vlan_put_tag		include/linux/if_vlan.h	struct sk_buff *(struct sk_buff *, u16)
 EFX_HAVE_VLAN_INSERT_TAG_SET_PROTO	symbol vlan_insert_tag_set_proto	include/linux/if_vlan.h
 EFX_NEED_NETDEV_NOTIFIER_INFO_TO_DEV	nsymbol	netdev_notifier_info_to_dev	include/linux/netdevice.h
@@ -138,13 +138,14 @@ EFX_HAVE_NDO_UDP_TUNNEL_ADD	member	struct_net_device_ops	ndo_udp_tunnel_add	incl
 EFX_HAVE_UDP_TUNNEL_NIC_INFO	symbol	udp_tunnel_nic_info	include/net/udp_tunnel.h
 EFX_HAVE_NEW_FLOW_KEYS		member	struct_flow_keys	basic		include/net/flow_dissector.h
 EFX_HAVE_NDO_ADD_GENEVE_PORT	member	struct_net_device_ops	ndo_add_geneve_port	include/linux/netdevice.h
-EFX_HAVE_NETDEV_LLTX		member	struct_net_device	lltx	include/linux/netdevice.h
+EFX_HAVE_NETDEV_LLTX		nsymbol	NETIF_F_LLTX	include/linux/netdev_features.h
 EFX_HAVE_NETDEV_MTU_LIMITS	member	struct_net_device	max_mtu	include/linux/netdevice.h
 EFX_NEED_BOOL_NAPI_COMPLETE_DONE	nsymtype	napi_complete_done	include/linux/netdevice.h	bool (struct napi_struct *, int)
 EFX_HAVE_XDP	symbol	netdev_bpf	include/linux/netdevice.h
 EFX_HAVE_XDP_OLD	symbol	netdev_xdp	include/linux/netdevice.h
 EFX_HAVE_XDP_TRACE	file	include/trace/events/xdp.h
 EFX_HAVE_XDP_HEAD	member	struct_xdp_buff	data_hard_start	include/linux/filter.h
+EFX_HAVE_XDP_PACKET_HEADROOM	symbol	XDP_PACKET_HEADROOM	include/uapi/linux/bpf.h
 EFX_HAVE_XDP_TX		symbol	XDP_TX		include/uapi/linux/bpf.h
 EFX_HAVE_XDP_TX_FLAGS	memtype	struct_net_device_ops	ndo_xdp_xmit	include/linux/netdevice.h	int (*)(struct net_device *, int, struct xdp_frame **, u32)
 EFX_HAVE_XDP_REDIR	symbol	XDP_REDIRECT	include/uapi/linux/bpf.h
@@ -228,6 +229,9 @@ EFX_NEED_DEVLINK_FLASH_UPDATE_TIMEOUT_NOTIFY	nsymbol	devlink_flash_update_timeou
 EFX_HAVE_DEVLINK_ALLOC_DEV		symtype	devlink_alloc		include/net/devlink.h	struct devlink *(const struct devlink_ops *, size_t, struct device *)
 EFX_HAVE_VOID_DEVLINK_REGISTER		symtype	devlink_register	include/net/devlink.h	void(struct devlink *)
 EFX_NEED_ETHTOOL_FLASH_DEVICE		nsymbol devlink_compat_flash_update	include/net/devlink.h
+EFX_HAVE_DEVLINK_HEALTH_REPORTER	symtype	devlink_health_reporter_create	include/net/devlink.h	struct devlink_health_reporter *(struct devlink *, const struct devlink_health_reporter_ops *, u64, void *)
+EFX_HAVE_VOID_DEVLINK_FMSG_STRING_PUT   symtype devlink_fmsg_string_put include/net/devlink.h void(struct devlink_fmsg *, const char *)
+EFX_HAVE_DEVLINK_HEALTH_REPORTER_OPS_EXTACK memtype struct_devlink_health_reporter_ops diagnose include/net/devlink.h int(*)(struct devlink_health_reporter *, struct devlink_fmsg *,	struct netlink_ext_ack *)
 EFX_HAVE_ETHTOOL_COALESCE_CQE		memtype	struct_ethtool_ops	get_coalesce	include/linux/ethtool.h	int (*)(struct net_device *, struct ethtool_coalesce *, struct kernel_ethtool_coalesce *, struct netlink_ext_ack *)
 EFX_HAVE_ETHTOOL_GET_RINGPARAM_EXTACK	memtype	struct_ethtool_ops	get_ringparam	include/linux/ethtool.h	void (*)(struct net_device *, struct ethtool_ringparam *, struct kernel_ethtool_ringparam *, struct netlink_ext_ack *)
 EFX_HAVE_ETHTOOL_SET_RINGPARAM_EXTACK	memtype	struct_ethtool_ops	set_ringparam	include/linux/ethtool.h	int (*)(struct net_device *, struct ethtool_ringparam *, struct kernel_ethtool_ringparam *, struct netlink_ext_ack *)
@@ -288,44 +292,12 @@ EFX_HAVE_XARRAY				symbol	xa_limit		include/linux/xarray.h
 EFX_HAVE_AUXILIARY_BUS			file	include/linux/auxiliary_bus.h
 EFX_HAVE_NET_RPS_H                     file       include/net/rps.h
 EFX_HAVE_IP_TUNNEL_FLAGS_TO_BE16	symbol	ip_tunnel_flags_to_be16	include/net/ip_tunnels.h
-" | grep -E -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
+EFX_NEED_TIME64_TO_TM			nsymbol	time64_to_tm		include/linux/time.h
+" | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
 
 ######################################################################
 # Implementation for more tricky types
-
-function do_EFX_HAVE_XEN_START_INFO()
-{
-    case $SRCARCH in
-	i386 | x86)
-	    test_export xen_start_info arch/$SRCARCH/xen/enlighten.c || return
-	    ;;
-	ia64)
-	    test_export xen_start_info arch/ia64/xen/hypervisor.c || return
-	    ;;
-	*)
-	    return 1
-	    ;;
-    esac
-
-    test_symbol xen_start_info \
-	include/asm/xen/hypervisor.h \
-	arch/$SRCARCH/include/asm/xen/hypervisor.h
-}
-
-function do_EFX_HAVE_GRO()
-{
-    # We check symbol types here because in Linux 2.6.29 and 2.6.30
-    # napi_gro_frags() took an extra parameter.  We don't bother to
-    # support GRO on those versions; no major distribution used them.
-    if test_symbol napi_gro_receive_gr include/linux/netdevice.h; then
-	true
-    elif test_symbol gro_result_t include/linux/netdevice.h; then
-	defer_test_symtype pos napi_gro_frags include/linux/netdevice.h "gro_result_t(struct napi_struct *)"
-    else
-	defer_test_symtype pos napi_gro_frags include/linux/netdevice.h "int(struct napi_struct *)"
-    fi
-}
 
 function do_EFX_NEED_SET_NORMALIZED_TIMESPEC
 {

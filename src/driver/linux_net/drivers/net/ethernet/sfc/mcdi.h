@@ -777,6 +777,7 @@ static inline int efx_mcdi_mon_probe(struct efx_nic *efx) { return 0; }
 static inline void efx_mcdi_mon_remove(struct efx_nic *efx) {}
 #endif
 
+#define EFX_MCDI_NVRAM_LEN_MAX 128
 int efx_mcdi_nvram_update_start(struct efx_nic *efx, unsigned int type);
 int efx_mcdi_nvram_read(struct efx_nic *efx, unsigned int type,
 			loff_t offset, u8 *buffer, size_t length);
