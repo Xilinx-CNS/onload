@@ -174,7 +174,6 @@ efrm_pd_vport_alloc(struct efrm_pd *, int vlan_id);
  * Out: dma_addrs, user_addrs. */
 extern int efrm_pd_dma_map(struct efrm_pd *, int n_pages, int nic_order,
 			   void **addrs, dma_addr_t *dma_addrs,
-			   dma_addr_t *free_addrs,
 			   uint64_t *user_addrs, int user_addrs_stride,
 			   void (*user_addr_put)(uint64_t, uint64_t *),
 			   struct efrm_bt_collection *, int reset_pending,
@@ -198,7 +197,7 @@ extern void efrm_pd_dma_unmap(struct efrm_pd *, int n_pages, int nic_order,
  * -errno - error; the mapping is invalidated; user should kill himself.
  */
 extern int efrm_pd_dma_remap_bt(struct efrm_pd *pd, int n_pages, int nic_order,
-				dma_addr_t *dma_addrs, dma_addr_t *free_addrs,
+				dma_addr_t *dma_addrs,
 				uint64_t *user_addrs, int user_addrs_stride,
 				void (*user_addr_put)(uint64_t, uint64_t *),
                                 struct efrm_bt_collection *bt_alloc);

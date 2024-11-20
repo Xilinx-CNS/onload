@@ -16,7 +16,6 @@ struct efch_memreg_area_params {
   int                                 n_addrs;
   bool                                mapped;
   dma_addr_t                         *dma_addrs;
-  dma_addr_t                         *free_addrs;
 };
 
 struct efch_memreg {
@@ -37,9 +36,8 @@ static void efch_memreg_free(struct efch_memreg *mr)
 
   if (mr->area.mapped) {
     efrm_pd_dma_unmap(mr->pd, mr->area.n_addrs, mr->nic_order,
-                      mr->area.free_addrs, &mr->area.bt_alloc, 0);
+                      mr->area.dma_addrs, &mr->area.bt_alloc, 0);
     vfree(mr->area.dma_addrs);
-    vfree(mr->area.free_addrs);
     mr->area.mapped = false;
   }
 
@@ -92,20 +90,11 @@ static int efch_dma_map(struct efrm_pd *pd,
   if (ar->dma_addrs == NULL)
     return -ENOMEM;
 
-  ar->free_addrs = vmalloc(ar->n_addrs *
-                           sizeof(ar->dma_addrs[0]));
-  if (ar->free_addrs == NULL) {
-    vfree(ar->dma_addrs);
-    return -ENOMEM;
-  }
-
-  rc = efrm_pd_dma_map(pd, ar->n_addrs, nic_order,
-                       addrs, ar->dma_addrs, ar->free_addrs,
+  rc = efrm_pd_dma_map(pd, ar->n_addrs, nic_order, addrs, ar->dma_addrs,
                        *user_addrs, user_addrs_stride,
                        user_addr_put, &ar->bt_alloc, 0, NULL);
   if (rc < 0) {
     EFCH_ERR("%s: ERROR: efrm_pd_dma_map failed (%d)", __FUNCTION__, rc);
-    vfree(ar->free_addrs);
     vfree(ar->dma_addrs);
     return rc;
   }

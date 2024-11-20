@@ -814,15 +814,6 @@ static int efct_flush_rx_dma_channel(struct efhw_nic *nic, uint dmaq)
 }
 
 
-static int efct_translate_dma_addrs(struct efhw_nic* nic,
-                                    const dma_addr_t *src, dma_addr_t *dst,
-                                    int n)
-{
-  /* All efct NICs have 1:1 mappings */
-  memmove(dst, src, n * sizeof(src[0]));
-  return 0;
-}
-
 /*--------------------------------------------------------------------
  *
  * Buffer table - API
@@ -1070,7 +1061,6 @@ struct efhw_func_ops efct_char_functional_units = {
   .dmaq_rx_q_init = efct_dmaq_rx_q_init,
   .flush_tx_dma_channel = efct_flush_tx_dma_channel,
   .flush_rx_dma_channel = efct_flush_rx_dma_channel,
-  .translate_dma_addrs = efct_translate_dma_addrs,
   .buffer_table_orders = efct_nic_buffer_table_orders,
   .buffer_table_orders_num = CI_ARRAY_SIZE(efct_nic_buffer_table_orders),
   .filter_insert = efct_nic_filter_insert,

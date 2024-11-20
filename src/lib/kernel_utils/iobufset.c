@@ -299,8 +299,7 @@ void oo_iobufset_resource_release(struct oo_iobufset *rs, int reset_pending)
   efrm_pd_dma_unmap(rs->pd, rs->pages->n_bufs,
                     EFHW_GFP_ORDER_TO_NIC_ORDER(
                                     compound_order(rs->pages->pages[0])),
-                    rs->free_addrs,
-                    &rs->buf_tbl_alloc, reset_pending);
+                    rs->dma_addrs, &rs->buf_tbl_alloc, reset_pending);
 
   if (rs->pd != NULL)
     efrm_pd_release(rs->pd);
@@ -330,15 +329,11 @@ oo_iobufset_resource_alloc(struct oo_buffer_pages * pages, struct efrm_pd *pd,
   EFRM_ASSERT(iobrs_out);
   EFRM_ASSERT(pd);
 
-  /* Request space for two arrays of n_bufs, then treat the first as
-   * iobrs->dma_addrs and the second as iobrs->free_addrs. */
   iobrs = alloc_array_and_header(sizeof(struct oo_iobufset),
-                                 2 * pages->n_bufs * sizeof(dma_addr_t),
-                                 gfp_flag,
+                                 pages->n_bufs * sizeof(dma_addr_t), gfp_flag,
                                  offsetof(struct oo_iobufset, dma_addrs));
   if( ! iobrs )
     return -ENOMEM;
-  iobrs->free_addrs = iobrs->dma_addrs + pages->n_bufs;
 
   iobrs->pd = pd;
   iobrs->pages = pages;
@@ -356,11 +351,10 @@ oo_iobufset_resource_alloc(struct oo_buffer_pages * pages, struct efrm_pd *pd,
     addrs[i] = page_address(pages->pages[i]);
   }
 
-  rc = efrm_pd_dma_map(iobrs->pd, pages->n_bufs,
-                       nic_order,
-                       addrs, iobrs->dma_addrs, iobrs->free_addrs,
-                       hw_addrs, sizeof(hw_addrs[0]),
-                       put_user_fake, &iobrs->buf_tbl_alloc, reset_pending, page_order);
+  rc = efrm_pd_dma_map(iobrs->pd, pages->n_bufs, nic_order, addrs,
+                       iobrs->dma_addrs, hw_addrs, sizeof(hw_addrs[0]),
+                       put_user_fake, &iobrs->buf_tbl_alloc, reset_pending,
+                       page_order);
   kfree(addrs);
 
   if( rc < 0 )
@@ -382,9 +376,7 @@ int oo_iobufset_resource_remap_bt(struct oo_iobufset *iobrs, uint64_t *hw_addrs)
 {
   return efrm_pd_dma_remap_bt(iobrs->pd, iobrs->pages->n_bufs,
                               compound_order(iobrs->pages->pages[0]),
-                              iobrs->dma_addrs, iobrs->free_addrs,
-                              hw_addrs, sizeof(hw_addrs[0]),
-                              put_user_fake,
-                              &iobrs->buf_tbl_alloc);
+                              iobrs->dma_addrs, hw_addrs, sizeof(hw_addrs[0]),
+                              put_user_fake, &iobrs->buf_tbl_alloc);
 }
 EXPORT_SYMBOL(oo_iobufset_resource_remap_bt);

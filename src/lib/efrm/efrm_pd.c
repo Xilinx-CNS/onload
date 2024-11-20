@@ -535,8 +535,7 @@ static void efrm_pd_dma_unmap_nic(struct efrm_pd *pd,
 
 static int efrm_pd_dma_map_nic(struct efrm_pd *pd,
 			       int n_pages, int nic_order,
-			       void **addrs, dma_addr_t *pci_addrs,
-			       dma_addr_t *free_addrs)
+			       void **addrs, dma_addr_t *dma_addrs)
 {
 	struct efhw_nic* nic = efrm_client_get_nic(pd->rs.rs_client);
 	struct pci_dev* pci_dev;
@@ -547,13 +546,8 @@ static int efrm_pd_dma_map_nic(struct efrm_pd *pd,
 		pci_dev = efhw_nic_get_pci_dev(nic);
 		if( pci_dev ) {
 			rc = efrm_pd_dma_map_pci(&pci_dev->dev, n_pages,
-						 nic_order, addrs, free_addrs);
+						 nic_order, addrs, dma_addrs);
 			pci_dev_put(pci_dev);
-			if (rc == 0)
-				rc = efhw_nic_translate_dma_addrs(nic,
-								  free_addrs,
-								  pci_addrs,
-								  n_pages);
 		}
 		break;
 	case EFHW_ARCH_EF10CT:
@@ -565,15 +559,13 @@ static int efrm_pd_dma_map_nic(struct efrm_pd *pd,
 		 * expects the "dma" addresses to be of the same type (virtual
 		 * or physical) for all nics. */
 		for (i = 0; i < n_pages; i++) {
-			free_addrs[i] = virt_to_phys(addrs[i]);
+			dma_addrs[i] = virt_to_phys(addrs[i]);
 		}
-		rc = efhw_nic_translate_dma_addrs(nic, free_addrs, pci_addrs,
-		                                  n_pages);
+		rc = 0;
 		break;
 	case EFHW_ARCH_EFCT:
 		rc = efrm_pd_dma_map_nonpci(n_pages, nic_order, addrs,
-					    pci_addrs);
-		memcpy(free_addrs, pci_addrs, n_pages * sizeof(pci_addrs[0]));
+					    dma_addrs);
 		break;
 	};
 
@@ -1004,21 +996,16 @@ static void efrm_pd_copy_user_addrs(struct efrm_pd *pd,
 
 
 int efrm_pd_dma_remap_bt(struct efrm_pd *pd, int n_pages, int nic_order,
-			 dma_addr_t *pci_addrs, dma_addr_t *free_addrs,
+			 dma_addr_t *dma_addrs,
 			 uint64_t *user_addrs, int user_addrs_stride,
 			 void (*user_addr_put)(uint64_t, uint64_t *),
 			 struct efrm_bt_collection *bt_alloc)
 {
-	struct efhw_nic* nic = efrm_client_get_nic(pd->rs.rs_client);
 	int rc, rc1 = 0;
 	int bt_num;
 
 	if (pd->owner_id == OWNER_ID_PHYS_MODE)
 		return -ENOSYS;
-
-	rc = efhw_nic_translate_dma_addrs(nic, free_addrs, pci_addrs, n_pages);
-	if (rc)
-		return rc;
 
 	mutex_lock(&pd->remap_lock);
 
@@ -1037,8 +1024,8 @@ int efrm_pd_dma_remap_bt(struct efrm_pd *pd, int n_pages, int nic_order,
 	}
         rc = rc1;
 	if (rc == 0)
-		rc = efrm_pd_bt_map(pd, nic_order, pci_addrs,
-				    user_addrs, user_addrs_stride, user_addr_put,
+		rc = efrm_pd_bt_map(pd, nic_order, dma_addrs, user_addrs,
+				    user_addrs_stride, user_addr_put,
 				    bt_alloc, 0);
         mutex_unlock(&pd->remap_lock);
         return rc;
@@ -1047,8 +1034,7 @@ EXPORT_SYMBOL(efrm_pd_dma_remap_bt);
 
 
 int efrm_pd_dma_map(struct efrm_pd *pd, int n_pages, int nic_order,
-		    void **addrs, dma_addr_t *pci_addrs,
-		    dma_addr_t *free_addrs,
+		    void **addrs, dma_addr_t *dma_addrs,
 		    uint64_t *user_addrs, int user_addrs_stride,
 		    void (*user_addr_put)(uint64_t, uint64_t *),
 		    struct efrm_bt_collection *bt_alloc, int reset_pending,
@@ -1067,13 +1053,12 @@ int efrm_pd_dma_map(struct efrm_pd *pd, int n_pages, int nic_order,
 		return -EPROTO;
 	}
 
-	rc = efrm_pd_dma_map_nic(pd, n_pages, nic_order,
-				 addrs, pci_addrs, free_addrs);
+	rc = efrm_pd_dma_map_nic(pd, n_pages, nic_order, addrs, dma_addrs);
 	if (rc < 0)
 		goto fail1;
 
 	if (pd->owner_id != OWNER_ID_PHYS_MODE) {
-		rc = efrm_pd_dma_map_bt(pd, n_pages, nic_order, pci_addrs,
+		rc = efrm_pd_dma_map_bt(pd, n_pages, nic_order, dma_addrs,
 					user_addrs, user_addrs_stride,
 					user_addr_put, bt_alloc, reset_pending,
 					page_order);
@@ -1081,10 +1066,10 @@ int efrm_pd_dma_map(struct efrm_pd *pd, int n_pages, int nic_order,
 			goto fail2;
 	} else {
 		rc = efrm_pd_check_pci_addr_alignment(
-			pd, addrs[0], pci_addrs, n_pages, page_order);
+			pd, addrs[0], dma_addrs, n_pages, page_order);
 		if (rc < 0)
 			goto fail2;
-		efrm_pd_copy_user_addrs(pd, n_pages, nic_order, pci_addrs,
+		efrm_pd_copy_user_addrs(pd, n_pages, nic_order, dma_addrs,
 					user_addrs, user_addrs_stride,
 					user_addr_put);
 	}
@@ -1092,7 +1077,7 @@ int efrm_pd_dma_map(struct efrm_pd *pd, int n_pages, int nic_order,
 
 
 fail2:
-		efrm_pd_dma_unmap_nic(pd, n_pages, nic_order, free_addrs);
+		efrm_pd_dma_unmap_nic(pd, n_pages, nic_order, dma_addrs);
 fail1:
 	return rc;
 }
@@ -1100,14 +1085,13 @@ EXPORT_SYMBOL(efrm_pd_dma_map);
 
 
 void efrm_pd_dma_unmap(struct efrm_pd *pd, int n_pages, int nic_order,
-		       dma_addr_t *free_addrs,
+		       dma_addr_t *dma_addrs,
 		       struct efrm_bt_collection *bt_alloc, int reset_pending)
 {
 	if (pd->owner_id != OWNER_ID_PHYS_MODE)
 		efrm_pd_dma_unmap_bt(pd, bt_alloc, reset_pending);
 
-	efrm_pd_dma_unmap_nic(pd, n_pages, nic_order,
-			      free_addrs);
+	efrm_pd_dma_unmap_nic(pd, n_pages, nic_order, dma_addrs);
 }
 EXPORT_SYMBOL(efrm_pd_dma_unmap);
 

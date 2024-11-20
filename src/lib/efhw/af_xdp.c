@@ -1177,14 +1177,6 @@ static int af_xdp_flush_rx_dma_channel(struct efhw_nic *nic, uint dmaq)
 }
 
 
-static int af_xdp_translate_dma_addrs(struct efhw_nic* nic,
-				      const dma_addr_t *src, dma_addr_t *dst,
-				      int n)
-{
-	memmove(dst, src, n * sizeof(src[0]));
-	return 0;
-}
-
 /*--------------------------------------------------------------------
  *
  * Buffer table - API
@@ -1477,7 +1469,6 @@ struct efhw_func_ops af_xdp_char_functional_units = {
 	.dmaq_rx_q_init = af_xdp_dmaq_rx_q_init,
 	.flush_tx_dma_channel = af_xdp_flush_tx_dma_channel,
 	.flush_rx_dma_channel = af_xdp_flush_rx_dma_channel,
-	.translate_dma_addrs = af_xdp_translate_dma_addrs,
 	.buffer_table_orders = af_xdp_nic_buffer_table_orders,
 	.buffer_table_orders_num = CI_ARRAY_SIZE(af_xdp_nic_buffer_table_orders),
 	.buffer_table_alloc = efhw_sw_bt_alloc,

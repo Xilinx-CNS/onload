@@ -332,8 +332,6 @@ struct efhw_func_ops {
 	/*! Flush a given RX DMA channel */
 	int (*flush_rx_dma_channel) (struct efhw_nic *nic, uint dmaq);
 
-	int (*translate_dma_addrs)(struct efhw_nic* nic, const dma_addr_t *src,
-				   dma_addr_t *dst, int n);
 
   /*-------------- Buffer table Support ------------ */
 	/*! Find all page orders available on this NIC.

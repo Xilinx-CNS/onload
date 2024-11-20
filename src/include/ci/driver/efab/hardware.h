@@ -125,9 +125,6 @@
 #define efhw_nic_flush_rx_dma_channel(nic, dmaq) \
 	((nic)->efhw_func->flush_rx_dma_channel(nic, dmaq))
 
-#define efhw_nic_translate_dma_addrs(nic, src, dst, n) \
-	((nic))->efhw_func->translate_dma_addrs((nic), (src), (dst), (n)) \
-
 #define efhw_nic_max_shared_rxqs(nic) \
 	((nic)->efhw_func->max_shared_rxqs ? \
 	 (nic)->efhw_func->max_shared_rxqs((nic)) : 0)

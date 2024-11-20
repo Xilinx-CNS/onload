@@ -66,7 +66,7 @@ efhw_iopages_alloc_phys_cont(struct device *dev, struct efhw_iopages *p,
 		base_dma_addr = virt_to_phys(p->ptr);
 	}
 	for (i = 0; i < p->n_pages; ++i)
-		p->free_addrs[i] = base_dma_addr + (i << PAGE_SHIFT);
+		p->dma_addrs[i] = base_dma_addr + (i << PAGE_SHIFT);
 
 	return 0;
 
@@ -90,17 +90,17 @@ efhw_iopages_alloc_kernel_cont(struct device *dev, struct efhw_iopages *p,
 		page = vmalloc_to_page(p->ptr + (i << PAGE_SHIFT));
 
 		if( dev ) {
-			p->free_addrs[i] = dma_map_page(dev, page, 0, PAGE_SIZE,
+			p->dma_addrs[i] = dma_map_page(dev, page, 0, PAGE_SIZE,
 						       DMA_BIDIRECTIONAL);
 
-			if (dma_mapping_error(dev, p->free_addrs[i])) {
+			if (dma_mapping_error(dev, p->dma_addrs[i])) {
 				EFHW_ERR("%s: ERROR dma_map_page failed",
 					 __FUNCTION__);
 				goto fail2;
 			}
 		}
 		else {
-			p->free_addrs[i] = page_to_phys(page);
+			p->dma_addrs[i] = page_to_phys(page);
 		}
 	}
 
@@ -108,7 +108,7 @@ efhw_iopages_alloc_kernel_cont(struct device *dev, struct efhw_iopages *p,
 
 fail2:
 	while (i-- > 0) {
-		dma_unmap_page(dev, p->free_addrs[i],
+		dma_unmap_page(dev, p->dma_addrs[i],
 			       PAGE_SIZE, DMA_BIDIRECTIONAL);
 	}
 fail1:
@@ -133,16 +133,10 @@ efhw_iopages_alloc(struct efhw_nic *nic, struct efhw_iopages *p,
 	int gfp_flag = __GFP_COMP | GFP_KERNEL;
 
 	p->n_pages = 1 << order;
-	p->free_addrs = kmalloc(p->n_pages * sizeof(p->free_addrs[0]), GFP_KERNEL);
-	if (p->free_addrs == NULL) {
-		rc = -ENOMEM;
-		goto fail1;
-	}
-
 	p->dma_addrs = kmalloc(p->n_pages * sizeof(p->dma_addrs[0]), GFP_KERNEL);
 	if (p->dma_addrs == NULL) {
 		rc = -ENOMEM;
-		goto fail2;
+		goto fail1;
 	}
 
 	/* __GFP_NOWARN is necessary in case when we handle high-order page
@@ -152,7 +146,7 @@ efhw_iopages_alloc(struct efhw_nic *nic, struct efhw_iopages *p,
 	rc = efhw_iopages_alloc_phys_cont(dev, p, order, gfp_flag);
 	if (rc) {
 		if (phys_cont_only || order == 0)
-			goto fail3;
+			goto fail2;
 	}
 
 	/* If allocation of contiguous physical memory failed or we never tried
@@ -163,20 +157,13 @@ efhw_iopages_alloc(struct efhw_nic *nic, struct efhw_iopages *p,
 		EFRM_ASSERT(!phys_cont_only);
 		rc = efhw_iopages_alloc_kernel_cont(dev, p, order);
 		if (rc != 0)
-			goto fail3;
+			goto fail2;
 	}
-
-	rc = efhw_nic_translate_dma_addrs(nic, p->free_addrs, p->dma_addrs,
-	                                  p->n_pages);
-	if (rc != 0)
-		goto fail3;
 
 	return 0;
 
-fail3:
-	kfree(p->dma_addrs);
 fail2:
-	kfree(p->free_addrs);
+	kfree(p->dma_addrs);
 fail1:
 	if (pci_dev)
 		pci_dev_put(pci_dev);
@@ -191,7 +178,7 @@ void efhw_iopages_free(struct efhw_nic *nic, struct efhw_iopages *p)
 		int i;
 		if( pci_dev ) {
 			for (i = 0; i < p->n_pages; ++i)
-				dma_unmap_page(&pci_dev->dev, p->free_addrs[i],
+				dma_unmap_page(&pci_dev->dev, p->dma_addrs[i],
 					       PAGE_SIZE, DMA_BIDIRECTIONAL);
 		}
 #ifdef CONFIG_SUSE_KERNEL
@@ -202,14 +189,13 @@ void efhw_iopages_free(struct efhw_nic *nic, struct efhw_iopages *p)
 	} else {
 		unsigned order = __ffs64(p->n_pages);
 		if( pci_dev ) {
-			dma_unmap_page(&pci_dev->dev, p->free_addrs[0],
+			dma_unmap_page(&pci_dev->dev, p->dma_addrs[0],
 				       PAGE_SIZE << order, DMA_BIDIRECTIONAL);
 		}
 
 		free_pages((unsigned long)p->ptr, order);
 	}
 	kfree(p->dma_addrs);
-	kfree(p->free_addrs);
 	if (pci_dev)
 		pci_dev_put(pci_dev);
 }
