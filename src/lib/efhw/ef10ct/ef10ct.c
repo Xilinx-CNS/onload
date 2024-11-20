@@ -49,7 +49,7 @@ int ef10ct_fw_rpc(struct efhw_nic *nic, struct efx_auxdev_rpc *cmd)
 
   /* FIXME need to handle reset stuff here */
   AUX_PRE(dev, edev, cli, nic, rc);
-  rc = edev->llct_ops->base_ops.fw_rpc(cli, cmd);
+  rc = edev->llct_ops->base_ops->fw_rpc(cli, cmd);
   AUX_POST(dev, edev, cli, nic, rc);
 
   return rc;
@@ -551,7 +551,7 @@ ef10ct_rx_buffer_post_register(struct efhw_nic* nic, int instance,
   EFHW_WARN("%s: instance %d", __func__, instance);
 
   AUX_PRE(dev, edev, cli, nic, rc);
-  rc = edev->llct_ops->base_ops.get_param(cli, EFX_AUXILIARY_RXQ_POST, &val);
+  rc = edev->llct_ops->base_ops->get_param(cli, EFX_AUXILIARY_RXQ_POST, &val);
   AUX_POST(dev, edev, cli, nic, rc);
 
   if( rc < 0 )
@@ -1046,7 +1046,8 @@ ef10ct_vi_io_region(struct efhw_nic* nic, int instance, size_t* size_out,
   int rc = 0;
 
   AUX_PRE(dev, edev, cli, nic, rc)
-  rc = edev->llct_ops->base_ops.get_param(cli, EFX_AUXILIARY_EVQ_WINDOW, &val);
+  rc = edev->llct_ops->base_ops->get_param(cli, EFX_AUXILIARY_EVQ_WINDOW,
+                                           &val);
   AUX_POST(dev, edev, cli, nic, rc);
 
   *size_out = val.evq_window.stride;
@@ -1069,7 +1070,7 @@ ef10ct_design_parameters(struct efhw_nic *nic,
 
   val.design_params = &params;
   AUX_PRE(dev, edev, cli, nic, rc)
-  rc = edev->llct_ops->base_ops.get_param(cli, EFX_DESIGN_PARAM, &val);
+  rc = edev->llct_ops->base_ops->get_param(cli, EFX_DESIGN_PARAM, &val);
   AUX_POST(dev, edev, cli, nic, rc);
 
   if( rc < 0 )
@@ -1129,7 +1130,8 @@ ef10ct_ctpio_addr(struct efhw_nic* nic, int instance, resource_size_t* addr)
 
   val.io_addr.qid_in = instance;
   AUX_PRE(dev, edev, cli, nic, rc);
-  rc = edev->llct_ops->base_ops.get_param(cli, EFX_AUXILIARY_CTPIO_WINDOW, &val);
+  rc = edev->llct_ops->base_ops->get_param(cli, EFX_AUXILIARY_CTPIO_WINDOW,
+                                           &val);
   AUX_POST(dev, edev, cli, nic, rc);
 
   /* Currently we assume throughout onload that we have a 4k region */

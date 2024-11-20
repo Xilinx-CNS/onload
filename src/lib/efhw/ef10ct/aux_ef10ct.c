@@ -28,7 +28,7 @@ static int ef10ct_devtype_init(struct efx_auxdev *edev,
   union efx_auxiliary_param_value val;
   int rc;
 
-  rc = edev->llct_ops->base_ops.get_param(client, EFX_PCI_DEV_DEVICE, &val);
+  rc = edev->llct_ops->base_ops->get_param(client, EFX_PCI_DEV_DEVICE, &val);
   if( rc < 0 )
     return rc;
   switch( val.value ) {
@@ -53,7 +53,7 @@ static int ef10ct_devtype_init(struct efx_auxdev *edev,
     return -ENOTSUPP;
   };
 
-  rc = edev->llct_ops->base_ops.get_param(client, EFX_DEVICE_REVISION, &val);
+  rc = edev->llct_ops->base_ops->get_param(client, EFX_DEVICE_REVISION, &val);
   if( rc < 0 )
     return rc;
   dev_type->revision = val.value;
@@ -75,7 +75,7 @@ static int ef10ct_resource_init(struct efx_auxdev *edev,
   int i;
 
   val.design_params = &dp;
-  rc = edev->llct_ops->base_ops.get_param(client, EFX_DESIGN_PARAM, &val);
+  rc = edev->llct_ops->base_ops->get_param(client, EFX_DESIGN_PARAM, &val);
   if( rc < 0 )
     return rc;
 
@@ -109,7 +109,8 @@ static int ef10ct_resource_init(struct efx_auxdev *edev,
 
   res_dim->irq_n_ranges = 0;
 #if 0
-  rc = edev->llct_ops->base_ops.get_param(client, EFX_AUXILIARY_IRQ_RESOURCES, &val);
+  rc = edev->llct_ops->base_ops->get_param(client, EFX_AUXILIARY_IRQ_RESOURCES,
+                                           &val);
   if( rc < 0 )
     return rc;
 
@@ -278,8 +279,8 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
     return -ENOMEM;
   ef10ct->edev = edev;
 
-  client = edev->llct_ops->base_ops.open(auxdev, &ef10ct_handler,
-                                         EFX_AUXDEV_ALL_EVENTS);
+  client = edev->llct_ops->base_ops->open(auxdev, &ef10ct_handler,
+                                          EFX_AUXDEV_ALL_EVENTS);
 
   EFRM_NOTICE("%s name %s", __func__, id->name);
 
@@ -288,7 +289,7 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
     goto fail1;
   }
 
-  rc = edev->llct_ops->base_ops.get_param(client, EFX_NETDEV, &val);
+  rc = edev->llct_ops->base_ops->get_param(client, EFX_NETDEV, &val);
   if( rc < 0 )
     goto fail2;
 
@@ -339,7 +340,7 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
  fail3:
   ef10ct_vi_allocator_dtor(ef10ct);
  fail2:
-  edev->llct_ops->base_ops.close(client);
+  edev->llct_ops->base_ops->close(client);
  fail1:
   vfree(ef10ct);
   EFRM_ERR("%s rc %d", __func__, rc);
@@ -395,7 +396,7 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
   /* mind we might still expect callbacks from close() context
    * TODO: rethink where to call close and how to synchronise with
    * the rest. */
-  edev->llct_ops->base_ops.close(client);
+  edev->llct_ops->base_ops->close(client);
 
   efct_filter_state_free(&ef10ct->filter_state);
 
