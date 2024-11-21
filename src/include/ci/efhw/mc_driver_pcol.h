@@ -14071,6 +14071,12 @@
  * rules inserted by MC_CMD_VNIC_ENCAP_RULE_ADD. (ef100 and later)
  */
 #define          MC_CMD_GET_PARSER_DISP_INFO_IN_OP_GET_SUPPORTED_VNIC_ENCAP_MATCHES 0x5
+/* enum: read the supported encapsulation types for the VNIC */
+#define          MC_CMD_GET_PARSER_DISP_INFO_IN_OP_GET_SUPPORTED_VNIC_ENCAP_TYPES 0x6
+/* enum: read the supported RX filter matches for low-latency queues (as
+ * allocated by MC_CMD_ALLOC_LL_QUEUES)
+ */
+#define          MC_CMD_GET_PARSER_DISP_INFO_IN_OP_GET_SUPPORTED_LL_RX_MATCHES 0x7
 
 /* MC_CMD_GET_PARSER_DISP_INFO_OUT msgresponse */
 #define    MC_CMD_GET_PARSER_DISP_INFO_OUT_LENMIN 8
