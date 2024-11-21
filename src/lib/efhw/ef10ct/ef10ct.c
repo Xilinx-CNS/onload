@@ -86,6 +86,45 @@ ef10ct_nic_tweak_hardware(struct efhw_nic *nic)
 {
 }
 
+static uint64_t
+ef10ct_nic_supported_filter_flags(struct efhw_nic *nic)
+{
+  int rc;
+  int num_matches;
+  EFHW_MCDI_DECLARE_BUF(in, MC_CMD_GET_PARSER_DISP_INFO_IN_LEN);
+  EFHW_MCDI_DECLARE_BUF(out, MC_CMD_GET_PARSER_DISP_INFO_OUT_LENMAX);
+  struct efx_auxdev_rpc rpc = {
+    .cmd = MC_CMD_GET_PARSER_DISP_INFO,
+    .inlen = sizeof(in),
+    .inbuf = (void *)in,
+    .outlen = sizeof(out),
+    .outbuf = (void *)out,
+  };
+
+  EFHW_MCDI_INITIALISE_BUF(in);
+  EFHW_MCDI_INITIALISE_BUF(out);
+
+  EFHW_MCDI_SET_DWORD(in, GET_PARSER_DISP_INFO_IN_OP,
+                 MC_CMD_GET_PARSER_DISP_INFO_IN_OP_GET_SUPPORTED_LL_RX_MATCHES);
+
+  rc = ef10ct_fw_rpc(nic, &rpc);
+
+  if( rc < 0 ) {
+    EFHW_ERR("%s: failed rc=%d", __FUNCTION__, rc);
+    return 0;
+  }
+  else if ( rpc.outlen_actual < MC_CMD_GET_PARSER_DISP_INFO_OUT_LENMIN ) {
+    EFHW_ERR("%s: failed, expected response min len %d, got %zd", __FUNCTION__,
+             MC_CMD_GET_PARSER_DISP_INFO_OUT_LENMIN, rpc.outlen_actual);
+    return 0;
+  }
+
+  num_matches = EFHW_MCDI_VAR_ARRAY_LEN(rpc.outlen_actual,
+                                    GET_PARSER_DISP_INFO_OUT_SUPPORTED_MATCHES);
+
+  return mcdi_parser_info_to_filter_flags(out, num_matches);
+}
+
 
 static int
 ef10ct_nic_init_hardware(struct efhw_nic *nic,
@@ -103,14 +142,7 @@ ef10ct_nic_init_hardware(struct efhw_nic *nic,
              | NIC_FLAG_EVQ_IRQ
              | NIC_FLAG_LLCT
              ;
-  nic->filter_flags |= NIC_FILTER_FLAG_RX_TYPE_IP_LOCAL
-                    | NIC_FILTER_FLAG_RX_TYPE_IP_FULL
-                    | NIC_FILTER_FLAG_IPX_VLAN_HW
-                    | NIC_FILTER_FLAG_RX_ETHERTYPE
-                    /* TODO: This will need to be updated to check for nic capabilities. */
-                    | NIC_FILTER_FLAG_RX_TYPE_ETH_LOCAL
-                    | NIC_FILTER_FLAG_RX_TYPE_ETH_LOCAL_VLAN
-                    ;
+  nic->filter_flags |= ef10ct_nic_supported_filter_flags(nic);
 
   nic->sw_bts = kzalloc(EFHW_MAX_SW_BTS * sizeof(struct efhw_sw_bt),
                         GFP_KERNEL);

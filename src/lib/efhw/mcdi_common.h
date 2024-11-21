@@ -139,6 +139,13 @@ ci_inline ci_uint16 efhw_mcdi_read(char *addr)
 			_EFHW_MCDI_DWORD_FIELD((_buf), _field ## _HI ));\
 	} while (0)
 
+#define EFHW_MCDI_SET_ARRAY_DWORD(_buf, _field, _index, _value)		\
+	do {								\
+		efhw_mcdi_writel(((u32)(_value)), 			\
+			(u8 *)_EFHW_MCDI_ARRAY_DWORD(			\
+				(_buf), _field, (_index)));	\
+        } while (0)
+
 #define EFHW_MCDI_SET_ARRAY_QWORD(_buf, _field, _index, _value)		\
 	do {								\
 		efhw_mcdi_writel(((u32)(_value)), 			\

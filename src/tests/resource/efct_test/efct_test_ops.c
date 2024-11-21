@@ -503,10 +503,12 @@ static const uint32_t supported_filter_types[] = {
   EFHW_MCDI_MATCH_FIELD_BIT(ETHER_TYPE)
 };
 
+static const uint32_t num_filter_types = CI_ARRAY_SIZE(supported_filter_types);
+
 static bool check_match_fields(const uint32_t match_fields)
 {
   int i;
-  for (i = 0; i < CI_ARRAY_SIZE(supported_filter_types); i++) {
+  for (i = 0; i < num_filter_types; i++) {
     if (match_fields == supported_filter_types[i])
       return true;
   }
@@ -570,6 +572,38 @@ static int efct_test_filter_op(struct efx_auxdev_client *handle,
   return rc;
 }
 
+static int efct_test_get_supported_filters(struct efx_auxdev_client *handle,
+                                           struct efx_auxdev_rpc *rpc)
+{
+  int i;
+  int op;
+
+  if(WARN_ON( rpc->inbuf == NULL || rpc->outbuf == NULL ||
+              rpc->inlen != MC_CMD_GET_PARSER_DISP_INFO_IN_LEN ))
+    return -EINVAL;
+
+  op = EFHW_MCDI_DWORD(rpc->inbuf, GET_PARSER_DISP_INFO_IN_OP);
+  if( op != MC_CMD_GET_PARSER_DISP_INFO_IN_OP_GET_SUPPORTED_LL_RX_MATCHES )
+    return -EINVAL;
+
+  if( rpc->outlen < MC_CMD_GET_PARSER_DISP_INFO_OUT_LEN(num_filter_types) )
+    return -ENOSPC;
+
+  EFHW_MCDI_SET_DWORD(rpc->outbuf, GET_PARSER_DISP_INFO_OUT_OP, op);
+  EFHW_MCDI_SET_DWORD(rpc->outbuf,
+                      GET_PARSER_DISP_INFO_OUT_NUM_SUPPORTED_MATCHES,
+                      num_filter_types);
+  for( i = 0; i < num_filter_types; i++) {
+    EFHW_MCDI_SET_ARRAY_DWORD(rpc->outbuf,
+                              GET_PARSER_DISP_INFO_OUT_SUPPORTED_MATCHES,
+                              i, supported_filter_types[i]);
+  }
+
+  rpc->outlen_actual = MC_CMD_GET_PARSER_DISP_INFO_OUT_LEN(num_filter_types);
+
+  return 0;
+}
+
 
 static int efct_test_fw_rpc(struct efx_auxdev_client *handle,
                             struct efx_auxdev_rpc *rpc)
@@ -599,6 +633,9 @@ static int efct_test_fw_rpc(struct efx_auxdev_client *handle,
     break;
    case MC_CMD_FILTER_OP:
      rc = efct_test_filter_op(handle, rpc);
+     break;
+   case MC_CMD_GET_PARSER_DISP_INFO:
+     rc = efct_test_get_supported_filters(handle, rpc);
      break;
    default:
     rc = -ENOSYS;
