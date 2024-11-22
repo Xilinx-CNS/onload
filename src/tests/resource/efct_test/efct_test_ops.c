@@ -374,6 +374,8 @@ static int efct_test_init_rxq(struct efx_auxdev_client *handle,
   struct efct_test_device *tdev = handle->tdev;
   struct efct_test_rxq *rxq;
   int rxq_idx, evq;
+  void *rxq_window;
+  int rc;
 
   if(WARN_ON( rpc->cmd != MC_CMD_INIT_RXQ ||
               rpc->inbuf == NULL ||
@@ -382,8 +384,6 @@ static int efct_test_init_rxq(struct efx_auxdev_client *handle,
 
   rxq_idx = EFHW_MCDI_DWORD(rpc->inbuf, INIT_RXQ_V4_IN_INSTANCE);
   evq = EFHW_MCDI_DWORD(rpc->inbuf, INIT_RXQ_V4_IN_TARGET_EVQ);
-  void *rxq_window;
-  int rc;
 
   printk(KERN_INFO "%s: evq %d\n", __func__, evq);
 
