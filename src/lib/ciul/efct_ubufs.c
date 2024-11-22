@@ -271,6 +271,8 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd, unsigned n_superb
   struct efct_ubufs* ubufs = get_ubufs(vi);
   struct efct_ubufs_rxq* rxq;
   ci_resource_alloc_t ra;
+  unsigned n_hugepages = (n_superbufs + CI_EFCT_SUPERBUFS_PER_PAGE - 1) /
+                          CI_EFCT_SUPERBUFS_PER_PAGE;
 
   int flags = (fd < 0 ? MAP_PRIVATE | MAP_ANONYMOUS : MAP_SHARED);
 
@@ -288,6 +290,7 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd, unsigned n_superb
   ra.u.rxq.in_qid = qid;
   ra.u.rxq.in_shm_ix = -1;
   ra.u.rxq.in_vi_rs_id = efch_make_resource_id(vi->vi_resource_id);
+  ra.u.rxq.in_n_hugepages = n_hugepages;
   ra.u.rxq.in_timestamp_req = true;
   rc = ci_resource_alloc(vi->dh, &ra);
   if( rc < 0 ) {
