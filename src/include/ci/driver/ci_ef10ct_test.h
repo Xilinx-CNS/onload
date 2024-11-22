@@ -363,7 +363,7 @@ struct efx_auxdev_ops {
  * @remove_rxfh_context: Free an RSS context.
  */
 struct efx_auxdev_onload_ops {
-	struct efx_auxdev_ops *base_ops;
+	const struct efx_auxdev_ops *base_ops;
 
 	int (*create_rxfh_context)(struct efx_auxdev_client *handle,
 				   struct ethtool_rxfh_param *ctx,
@@ -460,7 +460,7 @@ struct efx_auxdev_irq {
  * @rxq_free: Release an RXQ.
  */
 struct efx_auxdev_llct_ops {
-	struct efx_auxdev_ops *base_ops;
+	const struct efx_auxdev_ops *base_ops;
 
 	int (*channel_alloc)(struct efx_auxdev_client *handle);
 	void (*channel_free)(struct efx_auxdev_client *handle, int channel_nr);

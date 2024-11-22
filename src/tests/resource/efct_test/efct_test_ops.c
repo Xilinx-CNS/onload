@@ -622,7 +622,7 @@ const struct efx_auxdev_ops test_base_devops = {
 };
 
 const struct efx_auxdev_llct_ops test_devops = {
-  .base_ops = test_base_devops,
+  .base_ops = &test_base_devops,
   .channel_alloc = efct_test_channel_alloc,
   .channel_free = efct_test_channel_free,
   .irq_alloc = efct_test_irq_alloc,
