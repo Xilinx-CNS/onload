@@ -36,6 +36,7 @@ struct efhw_nic_ef10ct_evq {
 struct efhw_nic_ef10ct_rxq {
   int evq;
   int ref_count;
+  struct mutex bind_lock; /* Lock to serialise concurrent binds/unbinds */
   uint64_t *post_buffer_addr;
 };
 

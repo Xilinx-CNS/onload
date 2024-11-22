@@ -839,19 +839,13 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
   EFHW_WARN("%s: evq 0x%x, rxq 0x%x", __func__, params->wakeup_instance,
             params->qid);
 
+  mutex_lock(&ef10ct->rxq[rxq_num].bind_lock);
 
-  /* FIXME EF10CT basic ref counting to avoid breaking shared queues while
-   * this is properly dealt with. At a minimum we need to ensure this is
-   * concurrency safe, but the details of lifecycle management need more
-   * consideration in general. */
   if( ef10ct->rxq[rxq_num].ref_count > 0 ) {
-    /* This queue is already bound, so all that's needed is to inc the refs. */
-    ef10ct->rxq[rxq_num].ref_count++;
-
     /* Already bound, so should have an associated evq */
     EFHW_ASSERT(ef10ct->rxq[rxq_num].evq >= 0);
 
-    return 0;
+    goto out_good;
   }
 
   rxq_handle = ef10ct_reconstruct_queue_handle(rxq_num,
@@ -901,13 +895,14 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
   rc = ef10ct_fw_rpc(nic, &rpc);
   if( rc < 0 ) {
     EFHW_ERR("%s ef10ct_fw_rpc failed. rc = %d\n", __FUNCTION__, rc);
-    return rc;
+    goto out_locked;
   }
 
   if( rxq_num < 0 || rxq_num >= ef10ct->rxq_n ) {
     EFHW_ERR(KERN_INFO "%s rxq outside of expected range. rxq = %d",
              __func__, rxq_num);
-    return -EINVAL;
+    rc = -EINVAL;
+    goto out_locked;
   }
 
   post_buffer_addr = (void **)&ef10ct->rxq[rxq_num].post_buffer_addr;
@@ -915,16 +910,19 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
   if (rc < 0) {
     ef10ct_fini_rxq(nic, rxq_num);
     EFHW_ERR("%s Failed to iomap rx post register. rc = %d", __func__, rc);
-    return rc;
+    goto out_locked;
   }
 
   flush_delayed_work(&ef10ct->evq[ef10ct_get_queue_num(evq)].check_flushes);
+
   EFHW_ASSERT(ef10ct->rxq[rxq_num].evq == -1);
-
-  ef10ct->rxq[rxq_num].ref_count++;
   ef10ct->rxq[rxq_num].evq = evq;
-  params->rxq->qid = rxq_num;
 
+out_good:
+  ef10ct->rxq[rxq_num].ref_count++;
+  params->rxq->qid = rxq_num;
+out_locked:
+  mutex_unlock(&ef10ct->rxq[rxq_num].bind_lock);
   return rc;
 }
 
@@ -940,16 +938,21 @@ ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
    * HW RXQ flush and free. */
   freer(rxq);
 
-  /* FIXME EF10CT proper refcounting */
+  mutex_lock(&ef10ct->rxq[rxq_num].bind_lock);
   EFHW_ASSERT(ef10ct->rxq[rxq_num].ref_count > 0);
   ef10ct->rxq[rxq_num].ref_count--;
 
-  if( ef10ct->rxq[rxq_num].ref_count > 0 )
+  if( ef10ct->rxq[rxq_num].ref_count > 0 ) {
+    mutex_unlock(&ef10ct->rxq[rxq_num].bind_lock);
     return;
+  }
 
   rc = ef10ct_fini_rxq(nic, rxq_num);
-  if( rc < 0 )
+  if( rc < 0 ) {
     EFHW_ERR("%s: Failed to fini rxq %d rc = %d", __func__, rxq_num, rc);
+    mutex_unlock(&ef10ct->rxq[rxq_num].bind_lock);
+    return;
+  }
 
   /* ef10ct->rxq[dmaq].q_id is updated in check_flushes. */
   if ( ! ((nic->devtype.arch == EFHW_ARCH_EF10CT) &&
@@ -959,6 +962,8 @@ ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
   }
   ef10ct->rxq[rxq_num].evq = -1;
   ef10ct->rxq[rxq_num].post_buffer_addr = NULL;
+
+  mutex_unlock(&ef10ct->rxq[rxq_num].bind_lock);
 }
 
 static int
@@ -1087,7 +1092,6 @@ static int get_rxq_from_mask(struct efhw_nic *nic,
    * that we need to make decisions such as whether to enable RX event
    * generation and the target EVQ. The flush and release happen on queue
    * detach. There are outstanding bugs to track related work:
-   * - ref counting users of the queue
    * - permission handling for additional shared users of the queue
    * - resource re-allocation post reset
    */
