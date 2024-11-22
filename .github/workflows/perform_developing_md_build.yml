@@ -33,6 +33,8 @@ jobs:
           mmakebuildtree --user
 
       - name: build NDEBUG driver
+        env:
+          BUILD_EFCT_TEST: 1
         run: |
           make -C "$(mmaketool --toppath)" -j $(nproc) NDEBUG=1
 
@@ -49,6 +51,7 @@ jobs:
       - name: build DEBUG driver (cloud)
         env:
           TRANSPORT_CONFIG_OPT_HDR: ci/internal/transport_config_opt_cloud.h
+          BUILD_EFCT_TEST: 1
         run: |
           make -C "$(mmaketool --toppath)" -j $(nproc)
 
