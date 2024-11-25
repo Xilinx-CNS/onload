@@ -374,7 +374,7 @@ mkdir -p "$i_prefix/etc/depmod.d"
   %{?debug:--debug} %{?setuid:--setuid} %{?moddir:--moddir=%moddir} \
   %{?with_user: --userfiles --modprobe --modulesloadd --udev} \
   %{?with_kmod: --kernelfiles --kernelver "%{kernel}"} \
-  %{?with_devel: --headers}
+  %{?with_devel: --headers} %{?_sysusersdir:--adduser}
 %endif
 %if %{with user}
 # Removing these files is fine since they would only ever be generated on a build machine.
