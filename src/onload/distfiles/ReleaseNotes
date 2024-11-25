@@ -45,6 +45,16 @@ Additional packaging options
         debuild -i -uc -us --build-profiles=pkg.onload.nosource # DEB
 
 
+Notice of future change to DKMS RPM
+-----------------------------------
+
+From the next feature release, the DKMS RPM will not install the Onload
+userspace if it is absent but only install the onload kernel modules,
+requiring the Onload userspace to be installed via the usual onload userspace
+RPM as is done when the kmod RPMs are used. This will follow the pattern
+used by the new Debian DKMS packaging.
+
+
 Deprecation of tarball installation method (removal under consideration)
 ------------------------------------------------------------------------
 

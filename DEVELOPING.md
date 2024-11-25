@@ -98,8 +98,6 @@ in place of the current working tree.
 Distributing as DKMS
 ====================
 
-Since onload-9.0.0, the Onload mkdist tarball is now also the DKMS tarball.
-
 Configuration file `dkms.conf` is now embedded in the Onload mkdist tarball,
 enabling the `dkms` system to ingest it directly.[^1] This has simplified the
 build flow, obsoleting the separate `onload_mkdkms` script along with its
