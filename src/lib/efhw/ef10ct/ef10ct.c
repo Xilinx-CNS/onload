@@ -767,6 +767,16 @@ ef10ct_flush_rx_dma_channel(struct efhw_nic *nic, uint dmaq)
   return -EALREADY;
 }
 
+static enum efhw_page_map_type
+ef10ct_queue_map_type(struct efhw_nic *nic)
+{
+  /* The test driver doesn't support DMA mapping, so fallback to phys addrs
+   * in that case. */
+  if( nic->devtype.variant == 'L' )
+    return EFHW_PAGE_MAP_PHYS;
+  else
+    return EFHW_PAGE_MAP_DMA;
+}
 
 /*--------------------------------------------------------------------
  *
@@ -779,6 +789,17 @@ ef10ct_flush_rx_dma_channel(struct efhw_nic *nic, uint dmaq)
 static const int ef10ct_nic_buffer_table_orders[] = {9};
 
 /* Func op implementations are provided by efhw_sw_bt */
+
+static enum efhw_page_map_type
+ef10ct_buffer_map_type(struct efhw_nic *nic)
+{
+  /* The test driver doesn't support DMA mapping, so fallback to phys addrs
+   * in that case. */
+  if( nic->devtype.variant == 'L' )
+    return EFHW_PAGE_MAP_PHYS;
+  else
+    return EFHW_PAGE_MAP_DMA;
+}
 
 /*--------------------------------------------------------------------
  *
@@ -1201,12 +1222,14 @@ struct efhw_func_ops ef10ct_char_functional_units = {
   .dmaq_rx_q_init = ef10ct_dmaq_rx_q_init,
   .flush_tx_dma_channel = ef10ct_flush_tx_dma_channel,
   .flush_rx_dma_channel = ef10ct_flush_rx_dma_channel,
+  .queue_map_type = ef10ct_queue_map_type,
   .buffer_table_orders = ef10ct_nic_buffer_table_orders,
   .buffer_table_orders_num = CI_ARRAY_SIZE(ef10ct_nic_buffer_table_orders),
   .buffer_table_alloc = efhw_sw_bt_alloc,
   .buffer_table_free = efhw_sw_bt_free,
   .buffer_table_set = efhw_sw_bt_set,
   .buffer_table_clear = efhw_sw_bt_clear,
+  .buffer_map_type = ef10ct_buffer_map_type,
   .filter_insert = ef10ct_filter_insert,
   .filter_remove = ef10ct_filter_remove,
   .filter_redirect = ef10ct_filter_redirect,

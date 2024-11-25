@@ -129,6 +129,10 @@
 	((nic)->efhw_func->max_shared_rxqs ? \
 	 (nic)->efhw_func->max_shared_rxqs((nic)) : 0)
 
+#define efhw_nic_queue_map_type(nic) \
+	((nic)->efhw_func->queue_map_type ? \
+	 (nic)->efhw_func->queue_map_type((nic)) : EFHW_PAGE_MAP_DMA)
+
 /* xdp specific */
 #define efhw_nic_dmaq_kick(nic,instance) \
 	((nic)->efhw_func->dmaq_kick ? \
@@ -174,6 +178,10 @@
 	((nic)->efhw_func->buffer_table_clear ? \
 	 (nic)->efhw_func->buffer_table_clear(nic, block, first_entry,  \
 					      n_entries) : (void) 0)
+#define efhw_nic_buffer_map_type(nic) \
+	((nic)->efhw_func->buffer_map_type ? \
+	 (nic)->efhw_func->buffer_map_type((nic)) : EFHW_PAGE_MAP_DMA)
+
 /*-------------- Sniff ------------ */
 #define efhw_nic_set_port_sniff(nic, instance, enable, promiscuous, handle) \
 	((nic)->efhw_func->set_port_sniff ? \

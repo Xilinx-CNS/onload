@@ -1177,6 +1177,12 @@ static int af_xdp_flush_rx_dma_channel(struct efhw_nic *nic, uint dmaq)
 }
 
 
+static enum efhw_page_map_type
+af_xdp_queue_map_type(struct efhw_nic *nic)
+{
+	return EFHW_PAGE_MAP_PHYS;
+}
+
 /*--------------------------------------------------------------------
  *
  * Buffer table - API
@@ -1186,6 +1192,11 @@ static int af_xdp_flush_rx_dma_channel(struct efhw_nic *nic, uint dmaq)
 static const int af_xdp_nic_buffer_table_orders[] = {0,1,2,3,4,5,6,7,8,9,10};
 
 /* Func op implementations are provided by efhw_sw_bt */
+
+static enum efhw_page_map_type af_xdp_buffer_map_type(struct efhw_nic *nic)
+{
+  return EFHW_PAGE_MAP_PHYS;
+}
 
 /*--------------------------------------------------------------------
  *
@@ -1469,12 +1480,14 @@ struct efhw_func_ops af_xdp_char_functional_units = {
 	.dmaq_rx_q_init = af_xdp_dmaq_rx_q_init,
 	.flush_tx_dma_channel = af_xdp_flush_tx_dma_channel,
 	.flush_rx_dma_channel = af_xdp_flush_rx_dma_channel,
+	.queue_map_type = af_xdp_queue_map_type,
 	.buffer_table_orders = af_xdp_nic_buffer_table_orders,
 	.buffer_table_orders_num = CI_ARRAY_SIZE(af_xdp_nic_buffer_table_orders),
 	.buffer_table_alloc = efhw_sw_bt_alloc,
 	.buffer_table_free = efhw_sw_bt_free,
 	.buffer_table_set = efhw_sw_bt_set,
 	.buffer_table_clear = efhw_sw_bt_clear,
+	.buffer_map_type = af_xdp_buffer_map_type,
 	.rss_alloc = af_xdp_rss_alloc,
 	.rss_free = af_xdp_rss_free,
 	.filter_insert = af_xdp_filter_insert,

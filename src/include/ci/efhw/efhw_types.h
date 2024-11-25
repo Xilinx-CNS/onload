@@ -196,6 +196,13 @@ struct vi_resource_dimensions {
 	void __iomem *irq_prime_reg;;
 };
 
+/* The translation to apply when preparing addresses for use by the NIC */
+enum efhw_page_map_type {
+  EFHW_PAGE_MAP_DMA,
+  EFHW_PAGE_MAP_PHYS,
+  EFHW_PAGE_MAP_NONE,
+};
+
 
 /**********************************************************************
  * Portable HW interface. ***************************************
@@ -332,6 +339,8 @@ struct efhw_func_ops {
 	/*! Flush a given RX DMA channel */
 	int (*flush_rx_dma_channel) (struct efhw_nic *nic, uint dmaq);
 
+	/*! Get mapping to apply to addresses used for queue memory */
+	enum efhw_page_map_type (*queue_map_type) (struct efhw_nic *nic);
 
   /*-------------- Buffer table Support ------------ */
 	/*! Find all page orders available on this NIC.
@@ -369,6 +378,9 @@ struct efhw_func_ops {
 	void (*buffer_table_clear) (struct efhw_nic *nic,
 				    struct efhw_buffer_table_block *block,
 				    int first_entry, int n_entries);
+
+	/*! Get mapping to apply to addresses used for buffer memory */
+	enum efhw_page_map_type (*buffer_map_type) (struct efhw_nic *nic);
 
   /*-------------- Sniff Support ------------ */
 	/*! Enable or disable port sniff.

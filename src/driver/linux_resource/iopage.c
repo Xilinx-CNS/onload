@@ -39,34 +39,74 @@
 #include <ci/efrm/debug.h>
 
 
+static int
+efhw_iopages_map_page(struct efhw_nic *nic, struct device *dev,
+		      struct efhw_iopages *p, struct page *page, int page_i,
+		      size_t size)
+{
+	dma_addr_t addr;
+
+	switch( efhw_nic_queue_map_type(nic) ) {
+	case EFHW_PAGE_MAP_DMA:
+		if( !dev ) {
+			EFHW_ERR("%s: ERROR nic %d: no device for dma map",
+				 __FUNCTION__, nic->index);
+			return -ENODEV;
+		}
+		addr = dma_map_page(dev, page, 0, size, DMA_BIDIRECTIONAL);
+		if (dma_mapping_error(dev, addr)) {
+			EFHW_ERR("%s: ERROR dma_map_page failed",
+				 __FUNCTION__);
+			return -ENOMEM;
+		}
+		p->dma_addrs[page_i] = addr;
+		break;
+	case EFHW_PAGE_MAP_PHYS:
+		p->dma_addrs[page_i] = virt_to_phys(page_address(page));
+		break;
+	default:
+		/* All known NIC types use DMA or PHYS mapping for queues */
+		EFRM_ASSERT(false);
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
+static void
+efhw_iopages_unmap_page(struct efhw_nic *nic, struct device *dev,
+			dma_addr_t addr, size_t size)
+{
+	if( efhw_nic_queue_map_type(nic) == EFHW_PAGE_MAP_DMA ) {
+		if( !dev )
+			EFHW_ERR("%s: ERROR nic %d: no device for dma ummap",
+				 __FUNCTION__, nic->index);
+		else
+			dma_unmap_page(dev, addr, size, DMA_BIDIRECTIONAL);
+	}
+}
+
 
 static int
-efhw_iopages_alloc_phys_cont(struct device *dev, struct efhw_iopages *p,
-			     unsigned order, int gfp_flag)
+efhw_iopages_alloc_phys_cont(struct efhw_nic *nic, struct device *dev,
+			     struct efhw_iopages *p, unsigned order,
+			     int gfp_flag)
 {
 	int i = 0;
-	dma_addr_t base_dma_addr;
+	int rc;
 	struct page *page;
 
 	page = alloc_pages_node(numa_node_id(), gfp_flag, order);
 	if (page == NULL)
 		goto fail1;
-
 	p->ptr = page_address(page);
-	if( dev ) {
-		base_dma_addr = dma_map_page(dev, page, 0, PAGE_SIZE << order,
-					     DMA_BIDIRECTIONAL);
-		if (dma_mapping_error(dev, base_dma_addr)) {
-			EFHW_ERR("%s: ERROR dma_map_page failed",
-				 __FUNCTION__);
-			goto fail2;
-		}
-	}
-	else {
-		base_dma_addr = virt_to_phys(p->ptr);
-	}
-	for (i = 0; i < p->n_pages; ++i)
-		p->dma_addrs[i] = base_dma_addr + (i << PAGE_SHIFT);
+
+	rc = efhw_iopages_map_page(nic, dev, p, page, 0, PAGE_SIZE << order);
+	if( rc < 0 )
+		goto fail2;
+
+	for (i = 1; i < p->n_pages; ++i)
+		p->dma_addrs[i] = p->dma_addrs[0] + (i << PAGE_SHIFT);
 
 	return 0;
 
@@ -77,10 +117,11 @@ fail1:
 }
 
 static int
-efhw_iopages_alloc_kernel_cont(struct device *dev, struct efhw_iopages *p,
-			       unsigned order)
+efhw_iopages_alloc_kernel_cont(struct efhw_nic *nic, struct device *dev,
+			       struct efhw_iopages *p, unsigned order)
 {
 	int i = 0;
+	int rc;
 
 	p->ptr = vmalloc_node(p->n_pages << PAGE_SHIFT, -1);
 	if (p->ptr == NULL)
@@ -89,28 +130,16 @@ efhw_iopages_alloc_kernel_cont(struct device *dev, struct efhw_iopages *p,
 		struct page *page;
 		page = vmalloc_to_page(p->ptr + (i << PAGE_SHIFT));
 
-		if( dev ) {
-			p->dma_addrs[i] = dma_map_page(dev, page, 0, PAGE_SIZE,
-						       DMA_BIDIRECTIONAL);
-
-			if (dma_mapping_error(dev, p->dma_addrs[i])) {
-				EFHW_ERR("%s: ERROR dma_map_page failed",
-					 __FUNCTION__);
-				goto fail2;
-			}
-		}
-		else {
-			p->dma_addrs[i] = page_to_phys(page);
-		}
+		rc = efhw_iopages_map_page(nic, dev, p, page, i, PAGE_SIZE);
+		if( rc < 0 )
+			goto fail2;
 	}
 
 	return 0;
 
 fail2:
-	while (i-- > 0) {
-		dma_unmap_page(dev, p->dma_addrs[i],
-			       PAGE_SIZE, DMA_BIDIRECTIONAL);
-	}
+	while (i-- > 0)
+		efhw_iopages_unmap_page(nic, dev, p->dma_addrs[i], PAGE_SIZE);
 fail1:
 	return -ENOMEM;
 }
@@ -143,7 +172,7 @@ efhw_iopages_alloc(struct efhw_nic *nic, struct efhw_iopages *p,
 	 * allocation failure by allocating pages one-by-one. */
 	if (!phys_cont_only && order > 0)
 		gfp_flag |= __GFP_NOWARN;
-	rc = efhw_iopages_alloc_phys_cont(dev, p, order, gfp_flag);
+	rc = efhw_iopages_alloc_phys_cont(nic, dev, p, order, gfp_flag);
 	if (rc) {
 		if (phys_cont_only || order == 0)
 			goto fail2;
@@ -155,7 +184,7 @@ efhw_iopages_alloc(struct efhw_nic *nic, struct efhw_iopages *p,
 	 */
 	if (rc < 0) {
 		EFRM_ASSERT(!phys_cont_only);
-		rc = efhw_iopages_alloc_kernel_cont(dev, p, order);
+		rc = efhw_iopages_alloc_kernel_cont(nic, dev, p, order);
 		if (rc != 0)
 			goto fail2;
 	}
@@ -173,14 +202,13 @@ fail1:
 void efhw_iopages_free(struct efhw_nic *nic, struct efhw_iopages *p)
 {
 	struct pci_dev *pci_dev = efhw_nic_get_pci_dev(nic);
+	struct device *dev = pci_dev ? &pci_dev->dev : NULL;
 
 	if (is_vmalloc_addr(p->ptr)) {
 		int i;
-		if( pci_dev ) {
-			for (i = 0; i < p->n_pages; ++i)
-				dma_unmap_page(&pci_dev->dev, p->dma_addrs[i],
-					       PAGE_SIZE, DMA_BIDIRECTIONAL);
-		}
+		for (i = 0; i < p->n_pages; ++i)
+			efhw_iopages_unmap_page(nic, dev, p->dma_addrs[i],
+						PAGE_SIZE);
 #ifdef CONFIG_SUSE_KERNEL
 		/* bug 56168 */
 		schedule();
@@ -188,10 +216,8 @@ void efhw_iopages_free(struct efhw_nic *nic, struct efhw_iopages *p)
 		vfree(p->ptr);
 	} else {
 		unsigned order = __ffs64(p->n_pages);
-		if( pci_dev ) {
-			dma_unmap_page(&pci_dev->dev, p->dma_addrs[0],
-				       PAGE_SIZE << order, DMA_BIDIRECTIONAL);
-		}
+		efhw_iopages_unmap_page(nic, dev, p->dma_addrs[0],
+					PAGE_SIZE << order);
 
 		free_pages((unsigned long)p->ptr, order);
 	}

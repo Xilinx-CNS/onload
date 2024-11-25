@@ -814,6 +814,11 @@ static int efct_flush_rx_dma_channel(struct efhw_nic *nic, uint dmaq)
 }
 
 
+static enum efhw_page_map_type efct_queue_map_type(struct efhw_nic *nic)
+{
+  return EFHW_PAGE_MAP_PHYS;
+}
+
 /*--------------------------------------------------------------------
  *
  * Buffer table - API
@@ -821,6 +826,12 @@ static int efct_flush_rx_dma_channel(struct efhw_nic *nic, uint dmaq)
  *--------------------------------------------------------------------*/
 
 static const int efct_nic_buffer_table_orders[] = {};
+
+
+static enum efhw_page_map_type efct_buffer_map_type(struct efhw_nic *nic)
+{
+  return EFHW_PAGE_MAP_NONE;
+}
 
 
 /*--------------------------------------------------------------------
@@ -1061,8 +1072,10 @@ struct efhw_func_ops efct_char_functional_units = {
   .dmaq_rx_q_init = efct_dmaq_rx_q_init,
   .flush_tx_dma_channel = efct_flush_tx_dma_channel,
   .flush_rx_dma_channel = efct_flush_rx_dma_channel,
+  .queue_map_type = efct_queue_map_type,
   .buffer_table_orders = efct_nic_buffer_table_orders,
   .buffer_table_orders_num = CI_ARRAY_SIZE(efct_nic_buffer_table_orders),
+  .buffer_map_type = efct_buffer_map_type,
   .filter_insert = efct_nic_filter_insert,
   .filter_remove = efct_nic_filter_remove,
   .filter_query = efct_nic_filter_query,

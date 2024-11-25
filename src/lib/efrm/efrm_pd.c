@@ -516,8 +516,8 @@ static void efrm_pd_dma_unmap_nic(struct efrm_pd *pd,
 {
 	struct efhw_nic* nic = efrm_client_get_nic(pd->rs.rs_client);
 	struct pci_dev* pci_dev;
-	switch (nic->devtype.arch) {
-	case EFHW_ARCH_EF10:
+	switch (efhw_nic_buffer_map_type(nic)) {
+	case EFHW_PAGE_MAP_DMA:
 		pci_dev = efhw_nic_get_pci_dev(nic);
 		if (pci_dev) {
 			efrm_pd_dma_unmap_pci(&pci_dev->dev, n_pages,
@@ -525,9 +525,8 @@ static void efrm_pd_dma_unmap_nic(struct efrm_pd *pd,
 			pci_dev_put(pci_dev);
 		}
 		break;
-	case EFHW_ARCH_EFCT:
-	case EFHW_ARCH_EF10CT:
-	case EFHW_ARCH_AF_XDP:
+	case EFHW_PAGE_MAP_PHYS:
+	case EFHW_PAGE_MAP_NONE:
 		break;
 	};
 }
@@ -541,8 +540,8 @@ static int efrm_pd_dma_map_nic(struct efrm_pd *pd,
 	struct pci_dev* pci_dev;
 	int rc = -ENODEV;
 	int i;
-	switch (nic->devtype.arch) {
-	case EFHW_ARCH_EF10:
+	switch (efhw_nic_buffer_map_type(nic)) {
+	case EFHW_PAGE_MAP_DMA:
 		pci_dev = efhw_nic_get_pci_dev(nic);
 		if( pci_dev ) {
 			rc = efrm_pd_dma_map_pci(&pci_dev->dev, n_pages,
@@ -550,8 +549,7 @@ static int efrm_pd_dma_map_nic(struct efrm_pd *pd,
 			pci_dev_put(pci_dev);
 		}
 		break;
-	case EFHW_ARCH_EF10CT:
-	case EFHW_ARCH_AF_XDP:
+	case EFHW_PAGE_MAP_PHYS:
 		/* Translate the virtual addresses into physical ones. Physical
 		 * addresses are needed for ef10ct when in physical addressing
 		 * mode and posting superbufs from userspace. AF_XDP is included
@@ -563,7 +561,7 @@ static int efrm_pd_dma_map_nic(struct efrm_pd *pd,
 		}
 		rc = 0;
 		break;
-	case EFHW_ARCH_EFCT:
+	case EFHW_PAGE_MAP_NONE:
 		rc = efrm_pd_dma_map_nonpci(n_pages, nic_order, addrs,
 					    dma_addrs);
 		break;
