@@ -1034,7 +1034,20 @@ ef10ct_unicast_block(struct efhw_nic *nic, bool block)
 static struct pci_dev*
 ef10ct_get_pci_dev(struct efhw_nic* nic)
 {
-  return NULL;
+  struct device *dev;
+  struct efx_auxdev* edev;
+  struct efx_auxdev_client* cli;
+  union efx_auxiliary_param_value val;
+  int rc = 0;
+
+  AUX_PRE(dev, edev, cli, nic, rc)
+  rc = edev->llct_ops->base_ops->get_param(cli, EFX_PCI_DEV, &val);
+  AUX_POST(dev, edev, cli, nic, rc);
+
+  if( rc < 0 )
+    return NULL;
+  else
+    return val.pci_dev;
 }
 
 

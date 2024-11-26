@@ -170,6 +170,10 @@ static int efct_test_get_param(struct efx_auxdev_client *handle,
     arg->net_dev = handle->net_dev;
     rc = 0;
     break;
+   case EFX_PCI_DEV:
+    arg->pci_dev = NULL;
+    rc = 0;
+    break;
    case EFX_PCI_DEV_DEVICE:
     arg->value = 0xffff;
     rc = 0;
