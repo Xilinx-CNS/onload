@@ -413,7 +413,7 @@ ln -s $(ls %{buildroot}/%{_usrsrc}/akmods/) %{buildroot}/%{_usrsrc}/akmods/%{nam
 %endif
 %if %{with dkms}
 echo "MAKE[0]+=\"%{?debug: --debug}%{?build_profile: --build-profile %build_profile}%{?moddir: --moddir=%moddir}\"" > dkms_overrides.conf
-%{!?with_user:echo "which onload_uninstall >/dev/null 2>&1 || MAKE[0]+=\" --userfiles --modprobe --modulesloadd --udev%{?setuid: --setuid}\"" >> dkms_overrides.conf}
+%{!?with_user:echo "which onload_uninstall >/dev/null 2>&1 || MAKE[0]+=\" --userfiles --modprobe --modulesloadd --udev --adduser%{?setuid: --setuid}\"" >> dkms_overrides.conf}
 install -D -m 644 dkms_overrides.conf %{buildroot}%{_sysconfdir}/dkms/%{name}.conf
 mkdir -p %{buildroot}%{_usrsrc}
 tar xf %{SOURCE0} -C %{buildroot}%{_usrsrc}
