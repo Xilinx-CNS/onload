@@ -950,7 +950,8 @@ efct_nic_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
   }
 
   rc = efct_filter_insert(&efct->filter_state, spec, &hw_filter, rxq,
-                          pd_excl_token, flags, filter_insert_op, &params);
+                          pd_excl_token, flags, filter_insert_op, &params,
+                          nic->filter_flags);
 
   /* If we are returning successfully having requested an exclusive queue, that
    * queue should not be shared with the net driver. */

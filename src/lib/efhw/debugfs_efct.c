@@ -30,9 +30,9 @@ static int efct_debugfs_read_hw_filters(struct seq_file *file,
       seq_printf(file, "%03x: ref: %d\tid: %d/%llu\trxq: %d\t%s:%pI4:%d "
                        "%pM %d\n", i,
                  filter->refcount, filter->hw_id, filter->drv_id, filter->rxq,
-                 filter->proto == IPPROTO_UDP ? "udp" :
-                 filter->proto == IPPROTO_TCP ? "tcp" : "unknown",
-                 &filter->ip, ntohs(filter->port), &filter->loc_mac,
+                 filter->ip_proto == IPPROTO_UDP ? "udp" :
+                 filter->ip_proto == IPPROTO_TCP ? "tcp" : "unknown",
+                 &filter->local_ip, ntohs(filter->local_port), &filter->loc_mac,
                  filter->outer_vlan < 0 ? -1 :
                  ntohs(filter->outer_vlan & 0xffff));
   }

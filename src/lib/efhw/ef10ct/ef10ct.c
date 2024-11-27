@@ -982,7 +982,7 @@ ef10ct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
   flags |= EFHW_FILTER_F_USE_HW;
   return efct_filter_insert(&ef10ct->filter_state, spec, &hw_filter, rxq,
                             pd_excl_token, flags, ef10ct_filter_insert_op,
-                            &params);
+                            &params, nic->filter_flags);
 }
 
 

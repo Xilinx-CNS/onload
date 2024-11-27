@@ -22,7 +22,8 @@ extern int
 efct_filter_insert(struct efct_filter_state *state, struct efx_filter_spec *spec,
                    struct ethtool_rx_flow_spec *hw_filter,
                    int *rxq, unsigned pd_excl_token, unsigned flags,
-                   drv_filter_insert insert_op, void *insert_data);
+                   drv_filter_insert insert_op, void *insert_data,
+                   uint64_t filter_flags);
 extern bool
 efct_filter_remove(struct efct_filter_state *state, int filter_id,
                    uint64_t *drv_id_out, bool *is_multicast);
