@@ -156,12 +156,13 @@ static void efct_test_design_param(struct efx_auxdev_client *handle,
   dp->unsol_credit_seq_mask = 0x7f;
   dp->l4_csum_proto = 0;
   dp->max_runt = 60;
+  dp->ev_queues = EFCT_TEST_EVQS_N;
   dp->evq_sizes = 0x7f;
-  dp->evqs = EFCT_TEST_EVQS_N;
-  dp->num_filter = 8192;
+  dp->evq_stride = 0x1000;
+  dp->num_filters = 8192;
   dp->user_bits_width = 0;
   dp->timestamp_set_sync = 1;
-  dp->label_width = 8;
+  dp->ev_label_width = 8;
   dp->meta_location = 1;
   dp->rollover_zeros_pkt = 1;
 }

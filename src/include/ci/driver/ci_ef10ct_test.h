@@ -117,9 +117,15 @@ struct efx_auxdev;
  *	register.
  * @l4_csum_proto: L4 csum fields.
  * @max_runt: Max length of frame data when LEN_ERR indicates runt.
+ * @ev_queues: Maximum Ev queues available.
  * @evq_sizes: Event queue sizes.
- * @evqs: Number of event queues available.
- * @num_filter: Number of filters.
+ * @evq_stride: Stride between entries in evq window.
+ * @num_filters: Number of filters.
+ * @user_bits_width: Width of USER in RX meta.
+ * @timestamp_set_sync: Timestamp contains clock status.
+ * @ev_label_width: Width of LABEL in event.
+ * @meta_location: Meta is at start of current packet.
+ * @rollover_zeros_pkt: Rollover meta delivers zeroes.
  */
 struct efx_design_params {
 	u32 rx_stride;
@@ -136,18 +142,14 @@ struct efx_design_params {
 	u32 unsol_credit_seq_mask;
 	u32 l4_csum_proto;
 	u32 max_runt;
+	u32 ev_queues;
 	u32 evq_sizes;
-	u32 evqs;
-	u32 num_filter;
-	/* Width of USER in RX meta */
+	u32 evq_stride;
+	u32 num_filters;
 	u32 user_bits_width;
-	/* Timestamp contains clock status */
 	u32 timestamp_set_sync;
-	/* Width of LABEL in event */
-	u32 label_width;
-	/* Meta is at start of current packet */
+	u32 ev_label_width;
 	u32 meta_location;
-	/* Rollover meta delivers zeroes */
 	u32 rollover_zeros_pkt;
 };
 

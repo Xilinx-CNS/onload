@@ -79,12 +79,12 @@ static int ef10ct_resource_init(struct efx_auxdev *edev,
   if( rc < 0 )
     return rc;
 
-  rc = efct_filter_state_init(&ef10ct->filter_state, dp.num_filter,
+  rc = efct_filter_state_init(&ef10ct->filter_state, dp.num_filters,
                               dp.rx_queues);
 
   res_dim->efhw_ops = &ef10ct_char_functional_units;
 
-  ef10ct->evq_n = dp.evqs;
+  ef10ct->evq_n = dp.ev_queues;
   ef10ct->evq = vzalloc(sizeof(*ef10ct->evq) * ef10ct->evq_n);
   if( ! ef10ct->evq ) {
     rc = -ENOMEM;
