@@ -230,6 +230,7 @@ Requires:         akmods %{base_build_requires} %{user_build_requires} %{?efct_b
 Conflicts:        kernel-module-sfc-RHEL%{maindist}
 Provides:         openonload-kmod = %{version}-%{release}
 Provides:         sfc-kmod-symvers = %{version}-%{release}
+BuildArch:        noarch
 
 %description akmod
 OpenOnload is a high performance user-level network stack.  Please see
@@ -377,9 +378,9 @@ mkdir -p "$i_prefix/etc/depmod.d"
 ./scripts/onload_install --packaged \
   %{?build_profile:--build-profile %build_profile} \
   %{?debug:--debug} %{?setuid:--setuid} %{?moddir:--moddir=%moddir} \
-  %{?with_user: --userfiles --modprobe --modulesloadd --udev} \
+  %{?with_user: --userfiles --modprobe --modulesloadd --udev %{?_sysusersdir:--adduser}} \
   %{?with_kmod: --kernelfiles --kernelver "%{kernel}"} \
-  %{?with_devel: --headers} %{?_sysusersdir:--adduser}
+  %{?with_devel: --headers}
 %endif
 %if %{with user}
 # Removing these files is fine since they would only ever be generated on a build machine.
