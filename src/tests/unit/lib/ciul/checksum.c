@@ -7,7 +7,7 @@
 /* Test infrastructure */
 #include "unit_test.h"
 
-static void test_ef_tcp_checksum_ffff(void)
+static void test_ef_tcp_checksum_0000(void)
 {
   /* A real IPv4 packet grabbed from interface. */
   char ipdata[] = {
@@ -38,12 +38,12 @@ static void test_ef_tcp_checksum_ffff(void)
   tcp->check = 0;
   CHECK_TRUE(ef_tcp_checksum_is_correct(ip, tcp, NULL, 0));
 
-  /* Check that we compute the checksum of the above packet as 0xffff. */
-  CHECK(ef_tcp_checksum(ip, tcp, NULL, 0), ==, 0xffff);
+  /* Check that we compute the checksum of the above packet as 0x0000. */
+  CHECK(ef_tcp_checksum(ip, tcp, NULL, 0), ==, 0x0000);
 }
 
 int main(void)
 {
-  TEST_RUN(test_ef_tcp_checksum_ffff);
+  TEST_RUN(test_ef_tcp_checksum_0000);
   TEST_END();
 }
