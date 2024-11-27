@@ -28,6 +28,7 @@ LOAD_CONFIG=false
 PROBE_CP_SERVER_PATH=true
 LINUX_NET="sfc"
 USER_NET="xilinx_efct"
+WANT_NET=true
 
 
 usage () {
@@ -73,6 +74,7 @@ usage () {
   err "  -noct           - don't support close trampolines"
   err "  -nosspanic      - don't crash if shared state is corrupted"
   err "  -noipp          - turn off ICMP/IGMP net->onload passing"
+  err "  -onloadonly     - don't load a net driver when loading onload"
   err
   err "net driver specific options:"
   err "  -netdebug       - Specify the NET driver debug level"
@@ -164,7 +166,7 @@ get_cp_server_path() {
 ######################################################################
 
 dores () {
-  donet
+  $WANT_NET && donet
   startcmd res && return 0
 
   # linux may load alien sfc_resource for PCI VFs
@@ -651,6 +653,7 @@ while [ $# -gt 0 ]; do
 		CONFIG_OWNER="/dev/null"; CONFIG_DRIVER="$CONFIG_DISABLE";;
     -myconfig)	CONFIG_OWNER="$2"; shift;;
     -onloadcfg)	CMD_EFABCFG="$2"; shift;;
+    -onloadonly)WANT_NET=false;;
     -oo_bits)   ONLOAD_OPT="$ONLOAD_OPT oo_debug_bits=$2"; shift;;
     -noct)      ONLOAD_OPT="$ONLOAD_OPT no_ct=1";;
     -nosspanic) ONLOAD_OPT="$ONLOAD_OPT no_shared_state_panic=1" ;;
