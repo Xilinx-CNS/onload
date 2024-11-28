@@ -36,9 +36,6 @@ extern int
 efct_unicast_block(struct efct_filter_state *state, bool block);
 
 extern int
-sanitise_ethtool_flow(struct ethtool_rx_flow_spec *dst);
-
-extern int
 efct_filter_state_init(struct efct_filter_state *state, int num_filter,
                        int rx_queues);
 extern void
