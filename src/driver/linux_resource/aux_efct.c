@@ -313,6 +313,8 @@ static int efct_resource_init(struct xlnx_efct_device *edev,
                               val.design_params.rx_queues);
   if( rc < 0 )
     return rc;
+  /* The Net driver owns queue 0 */
+  efct_filter_state_reserve_rxq(&efct->filter_state, 0);
 
   efct->rxq_n = val.design_params.rx_queues;
   efct->rxq = vzalloc(sizeof(*efct->rxq) * efct->rxq_n);

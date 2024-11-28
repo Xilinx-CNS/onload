@@ -80,6 +80,18 @@ void efct_filter_state_free(struct efct_filter_state *state)
 }
 
 
+void efct_filter_state_reserve_rxq(struct efct_filter_state *state, int rxq)
+{
+  state->exclusive_rxq_mapping[rxq] = EFHW_PD_NON_EXC_TOKEN;
+  /* Create a dummy hw_filter entry that says it is on the specified rxq, this
+   * will stop remove_exclusive_rxq_ownership from clearing the ownership of the
+   * queue when the last onload installed filter on the queue is removed. */
+  EFHW_ASSERT(state->hw_filters_n > rxq);
+  state->hw_filters[rxq].rxq = 0;
+  state->hw_filters[rxq].refcount = 1;
+}
+
+
 static bool
 hw_filters_are_equal(const struct efct_filter_node *node,
                      const struct efct_hw_filter *hw_filter,
@@ -414,13 +426,16 @@ efct_filter_insert(struct efct_filter_state *state, struct efx_filter_spec *spec
   /* Step 2 of 2: Insert efct_filter_node in to the correct hash table */
   mutex_lock(&state->driver_filters_mtx);
 
-  if ( *rxq > 0 ) {
+  if ( *rxq >= 0 ) {
     q_excl_token = state->exclusive_rxq_mapping[*rxq];
 
     /* If the q excl tokens are 0, we are in a fresh state and can claim it.
-    *  If both the pd and q are EFHW_PD_NON_EXC_TOKEN, we are in a non-exclusive queue.
-    *  If the q one is set, but the pd one does not match, than the pd is overstepping on another rxq.
-    *  The q state is owned and managed by the driver and persists external to the application. */
+     * If both the pd and q are EFHW_PD_NON_EXC_TOKEN, we are in a non-exclusive
+     * queue.
+     * If the q one is set, but the pd one does not match, then the pd is
+     * overstepping on another rxq.
+     * The q state is owned and managed by the driver and persists external to
+     * the application. */
     if ( ( q_excl_token > 0 ) && ( q_excl_token != pd_excl_token ) ) {
       mutex_unlock(&state->driver_filters_mtx);
       return -EPERM;
@@ -443,8 +458,7 @@ efct_filter_insert(struct efct_filter_state *state, struct efx_filter_spec *spec
             return -EEXIST;
           }
 
-          if ( state->hw_filters[i].rxq > 0 &&
-               pd_excl_token !=
+          if ( pd_excl_token !=
                state->exclusive_rxq_mapping[state->hw_filters[i].rxq] ) {
             /* Trying to attach onto an rxq owned by someone else. */
             mutex_unlock(&state->driver_filters_mtx);
@@ -531,8 +545,7 @@ efct_filter_insert(struct efct_filter_state *state, struct efx_filter_spec *spec
         state->hw_filters[node.hw_filter].hw_id = op_out.filter_handle;
       }
       *rxq = state->hw_filters[node.hw_filter].rxq;
-      if ( *rxq > 0 )
-        state->exclusive_rxq_mapping[*rxq] = pd_excl_token;
+      state->exclusive_rxq_mapping[*rxq] = pd_excl_token;
     }
     else {
       *rxq = 0;
@@ -551,9 +564,6 @@ remove_exclusive_rxq_ownership(struct efct_filter_state *state, int hw_filter)
   int rxq = state->hw_filters[hw_filter].rxq;
 
   if( state->exclusive_rxq_mapping[rxq] ) {
-    /* We should never have claimed rxq 0 as exclusive as this is always shared
-     * with the net driver. */
-    EFHW_ASSERT(rxq > 0);
 
     /* Only bother worrying about exclusive mapping iff the filter has an exclusive entry */
     for( i = 0; i < state->hw_filters_n; ++i ) {

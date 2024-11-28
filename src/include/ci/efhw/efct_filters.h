@@ -40,6 +40,7 @@ efct_filter_state_init(struct efct_filter_state *state, int num_filter,
                        int rx_queues);
 extern void
 efct_filter_state_free(struct efct_filter_state *state);
-
+extern void
+efct_filter_state_reserve_rxq(struct efct_filter_state *state, int rxq);
 #endif
 
