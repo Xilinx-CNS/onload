@@ -31,7 +31,7 @@ struct efhw_nic_ef10ct_rxq {
 };
 
 struct ef10ct_shared_kernel_evq {
-  int vi;
+  int evq_id;
   struct efhw_nic_ef10ct_evq *evq;
   struct page *page;
   /* Some kind of interrupt stuff? */

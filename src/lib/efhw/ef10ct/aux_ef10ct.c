@@ -176,17 +176,17 @@ static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid)
   dma_addr_t dma_addr;
   dma_addr_t *dma_addrs;
   struct efhw_evq_params params = {};
-  int vi, rc;
+  int evq_id, rc;
   struct ef10ct_shared_kernel_evq *shared_evq = &ef10ct->shared[qid];
 
-  vi = ef10ct_alloc_evq(nic);
-  if(vi < 0) {
-    rc = vi;
+  evq_id = ef10ct_alloc_evq(nic);
+  if(evq_id < 0) {
+    rc = evq_id;
     goto fail1;
   }
-  EFHW_ASSERT(vi <= ef10ct->evq_n);
+  EFHW_ASSERT(evq_id <= ef10ct->evq_n);
 
-  ef10ct_evq = &ef10ct->evq[vi];
+  ef10ct_evq = &ef10ct->evq[evq_id];
 
   /* TODO: We may want to use alloc_pages_node to get memory on a specific numa
    * node. */
@@ -207,7 +207,7 @@ static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid)
   EFHW_ASSERT(n_pages == 1);
   dma_addrs = &dma_addr;
 
-  params.evq = vi;
+  params.evq = evq_id;
   params.evq_size = (n_pages << PAGE_SHIFT) / sizeof(efhw_event_t);
   params.dma_addrs = dma_addrs;
   params.n_pages = n_pages;
@@ -218,8 +218,8 @@ static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid)
   if( rc < 0 )
     goto fail3;
 
-  shared_evq->vi = vi;
-  shared_evq->evq = &ef10ct->evq[vi];
+  shared_evq->evq_id = evq_id;
+  shared_evq->evq = &ef10ct->evq[evq_id];
   shared_evq->page = page;
 
   return 0;
@@ -227,7 +227,7 @@ static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid)
 fail3:
   put_page(page);
 fail2:
-  ef10ct_free_evq(nic, vi);
+  ef10ct_free_evq(nic, evq_id);
 fail1:
   return rc;
 }
@@ -242,9 +242,9 @@ static void ef10ct_nic_free_shared_evq(struct efhw_nic *nic, int qid)
   shared_evq = &ef10ct->shared[qid];
 
   /* Neither client_id nor time_sync_events_enabled are used for ef10ct */
-  efhw_nic_event_queue_disable(nic, shared_evq->vi, 0);
+  efhw_nic_event_queue_disable(nic, shared_evq->evq_id, 0);
 
-  ef10ct_free_evq(nic, shared_evq->vi);
+  ef10ct_free_evq(nic, shared_evq->evq_id);
   put_page(shared_evq->page);
 
   /* Just to be safe */

@@ -599,7 +599,7 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
    * start supporting onload with interrupts we'll need to be able to alloc
    * and attach to an evq. */
   EFHW_ASSERT(ef10ct->shared_n >= 1 );
-  evq = ef10ct->shared[0].vi;
+  evq = ef10ct->shared[0].evq_id;
   EFHW_WARN("%s: Using shared evq %d", __func__, evq);
 
   EFHW_MCDI_INITIALISE_BUF(in);
