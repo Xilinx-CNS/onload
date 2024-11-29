@@ -56,4 +56,7 @@ struct efhw_nic_ef10ct {
   struct dentry* debug_dir;
 };
 
+int ef10ct_alloc_evq(struct efhw_nic *nic);
+void ef10ct_free_evq(struct efhw_nic *nic, int evq);
+
 #endif /* CI_EFHW_EF10CT_H */

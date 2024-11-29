@@ -322,7 +322,7 @@ ef10ct_nic_wakeup_request(struct efhw_nic *nic, volatile void __iomem* io_page,
 {
 }
 
-static int ef10ct_alloc_evq(struct efhw_nic *nic)
+int ef10ct_alloc_evq(struct efhw_nic *nic)
 {
   struct efx_auxdev_client* cli;
   struct efx_auxdev* edev;
@@ -336,7 +336,7 @@ static int ef10ct_alloc_evq(struct efhw_nic *nic)
   return evq;
 }
 
-static void ef10ct_free_evq(struct efhw_nic *nic, int evq)
+void ef10ct_free_evq(struct efhw_nic *nic, int evq)
 {
   struct efx_auxdev_client* cli;
   struct efx_auxdev* edev;

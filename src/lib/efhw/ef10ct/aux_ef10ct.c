@@ -178,13 +178,8 @@ static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid)
   struct efhw_evq_params params = {};
   int vi, rc;
   struct ef10ct_shared_kernel_evq *shared_evq = &ef10ct->shared[qid];
-  struct efhw_vi_constraints evc = {
-    .want_txq = true, /* Setting `want_txq` will give us a real evq/vi */
-    /* Other fields are ignored for ef10ct */
-  };
 
-  /* FIXME EF10CT check assumption here about qid */
-  vi = efhw_nic_vi_alloc(nic, &evc, 1);
+  vi = ef10ct_alloc_evq(nic);
   if(vi < 0) {
     rc = vi;
     goto fail1;
@@ -232,7 +227,7 @@ static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid)
 fail3:
   put_page(page);
 fail2:
-  efhw_nic_vi_free(nic, vi, 1);
+  ef10ct_free_evq(nic, vi);
 fail1:
   return rc;
 }
@@ -249,7 +244,7 @@ static void ef10ct_nic_free_shared_evq(struct efhw_nic *nic, int qid)
   /* Neither client_id nor time_sync_events_enabled are used for ef10ct */
   efhw_nic_event_queue_disable(nic, shared_evq->vi, 0);
 
-  efhw_nic_vi_free(nic, shared_evq->vi, 1);
+  ef10ct_free_evq(nic, shared_evq->vi);
   put_page(shared_evq->page);
 
   /* Just to be safe */
