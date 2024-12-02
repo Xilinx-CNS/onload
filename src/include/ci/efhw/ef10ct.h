@@ -65,6 +65,8 @@ struct efhw_nic_ef10ct_rxq {
   struct mutex bind_lock; /* Lock to serialise concurrent binds/unbinds */
   enum efhw_nic_ef10ct_rxq_state state;
   uint64_t *post_buffer_addr;
+  struct oo_hugetlb_page *buffer_pages;
+  size_t n_buffer_pages;
 };
 
 struct ef10ct_shared_kernel_evq {

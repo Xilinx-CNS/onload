@@ -20,6 +20,7 @@
 #include <ci/efhw/mc_driver_pcol.h>
 
 #include <linux/ethtool.h>
+#include <linux/mman.h>
 
 #include "etherfabric/internal/internal.h"
 
@@ -933,6 +934,31 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
     goto out_locked;
   }
 
+  if( params->hugetlb_alloc != NULL && params->n_hugepages != 0 ) {
+    int i;
+    struct oo_hugetlb_page* pages =
+      kzalloc(params->n_hugepages * sizeof(struct oo_hugetlb_page), GFP_KERNEL);
+
+    if( pages == NULL ) {
+      EFHW_ERR("%s Failed to allocate buffer page table\n", __FUNCTION__);
+      return -ENOMEM;
+    }
+
+    for( i = 0; i < params->n_hugepages; ++i ) {
+      rc = oo_hugetlb_page_alloc(params->hugetlb_alloc, &pages[i]);
+      if( rc < 0 ) {
+        EFHW_ERR("%s Failed to allocate buffer page. rc = %d\n", __FUNCTION__, rc);
+        while( i > 0 )
+          oo_hugetlb_page_free(&pages[--i], false);
+        kfree(pages);
+        return rc;
+      }
+    }
+
+    ef10ct->rxq[rxq_num].buffer_pages = pages;
+    ef10ct->rxq[rxq_num].n_buffer_pages = params->n_hugepages;
+  }
+
   flush_delayed_work(&ef10ct->evq[ef10ct_get_queue_num(evq)].check_flushes);
 
   EFHW_ASSERT(ef10ct->rxq[rxq_num].evq == -1);
@@ -973,6 +999,13 @@ ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
   EFHW_ASSERT(ef10ct->rxq[rxq_num].state == EF10CT_RXQ_STATE_INITIALISED);
   ef10ct->rxq[rxq_num].state = EF10CT_RXQ_STATE_FREEING;
 
+  if( ef10ct->rxq[rxq_num].buffer_pages != NULL ) {
+    int i;
+    for( i = 0; i < ef10ct->rxq[rxq_num].n_buffer_pages; ++i )
+      oo_hugetlb_page_free(&ef10ct->rxq[rxq_num].buffer_pages[i], false);
+    kfree(ef10ct->rxq[rxq_num].buffer_pages);
+  }
+
   rc = ef10ct_fini_rxq(nic, rxq_num);
   if( rc < 0 ) {
     EFHW_ERR("%s: Failed to fini rxq %d rc = %d", __func__, rxq_num, rc);
@@ -989,6 +1022,52 @@ ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
   ef10ct->rxq[rxq_num].post_buffer_addr = NULL;
 
   mutex_unlock(&ef10ct->rxq[rxq_num].bind_lock);
+}
+
+static int
+ef10ct_nic_shared_rxq_refresh(struct efhw_nic *nic, int hwqid,
+                              unsigned long superbufs,
+                              uint64_t __user *user_current,
+                              unsigned max_superbufs)
+{
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  struct efhw_nic_ef10ct_rxq *rxq = &ef10ct->rxq[hwqid];
+  size_t i, n_bufs = rxq->n_buffer_pages * CI_EFCT_SUPERBUFS_PER_PAGE;
+
+  if( max_superbufs < n_bufs ) {
+    EFHW_TRACE("max_superbufs: %u passed in by user less than kernel's: %u.",
+               max_superbufs, n_bufs);
+  }
+
+  for( i = 0; i < rxq->n_buffer_pages; ++i, superbufs += CI_HUGEPAGE_SIZE ) {
+    struct oo_hugetlb_page *hpage = &rxq->buffer_pages[i];
+    unsigned long rc;
+
+    rc = vm_mmap(hpage->filp, superbufs, CI_HUGEPAGE_SIZE, PROT_READ,
+                 MAP_FIXED | MAP_SHARED | MAP_POPULATE | MAP_HUGETLB | MAP_HUGE_2MB,
+                 oo_hugetlb_page_offset(hpage->page));
+    if( IS_ERR((void*)rc) )
+      return PTR_ERR((void*)rc);
+  }
+
+  return 0;
+}
+
+static int
+ef10ct_nic_shared_rxq_refresh_kernel(struct efhw_nic *nic, int hwqid,
+                                     const char** superbufs)
+{
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  struct efhw_nic_ef10ct_rxq *rxq = &ef10ct->rxq[hwqid];
+  size_t i, n_bufs = rxq->n_buffer_pages * CI_EFCT_SUPERBUFS_PER_PAGE;
+
+  for( i = 0; i < n_bufs; ++i ) {
+    struct page *page = rxq->buffer_pages[i / CI_EFCT_SUPERBUFS_PER_PAGE].page;
+    superbufs[i] = page_to_virt(page) +
+                   EFCT_RX_SUPERBUF_BYTES * (i % CI_EFCT_SUPERBUFS_PER_PAGE);
+  }
+
+  return 0;
 }
 
 static int
@@ -1590,6 +1669,8 @@ struct efhw_func_ops ef10ct_char_functional_units = {
   .max_shared_rxqs = ef10ct_max_shared_rxqs,
   .shared_rxq_bind = ef10ct_shared_rxq_bind,
   .shared_rxq_unbind = ef10ct_shared_rxq_unbind,
+  .shared_rxq_refresh = ef10ct_nic_shared_rxq_refresh,
+  .shared_rxq_refresh_kernel = ef10ct_nic_shared_rxq_refresh_kernel,
 };
 
 #endif
