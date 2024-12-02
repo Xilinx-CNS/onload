@@ -5,7 +5,7 @@ Updated sfc net driver to v6.0.2.1000
 
 Add support for:
  - Red Hat Enterprise Linux 9.5
- - kernel.org Linux kernels up to 6.11
+ - kernel.org Linux kernels up to 6.12
 
 Changes:
 

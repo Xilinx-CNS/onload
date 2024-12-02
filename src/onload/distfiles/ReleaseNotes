@@ -16,7 +16,7 @@ Linux distribution support
  - Red Hat Enterprise Linux 9.2 - 9.5
  - Canonical Ubuntu Server LTS 22.04 and 24.04
  - Debian 12 "Bookworm"
- - Linux kernels 5.11 - 6.11
+ - Linux kernels 5.11 - 6.12
 
 
 Additional packaging options
