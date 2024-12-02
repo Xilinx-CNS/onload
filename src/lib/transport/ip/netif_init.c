@@ -2413,7 +2413,7 @@ static void init_resource_alloc(ci_resource_onload_alloc_t* ra,
     char mfd_name[CI_CFG_STACK_NAME_LEN + 8];
     snprintf(mfd_name, sizeof(mfd_name), "efct/%s", name);
     ra->in_efct_memfd = syscall(__NR_memfd_create, mfd_name,
-                                MFD_CLOEXEC | MFD_HUGETLB);
+                                MFD_CLOEXEC | MFD_HUGETLB | MFD_HUGE_2MB);
     if( ra->in_efct_memfd < 0 && errno != ENOSYS )
       LOG_S(ci_log("%s: memfd_create failed %d", __FUNCTION__, errno));
   }
@@ -2422,7 +2422,7 @@ static void init_resource_alloc(ci_resource_onload_alloc_t* ra,
     char mfd_name[CI_CFG_STACK_NAME_LEN + 8];
     snprintf(mfd_name, sizeof(mfd_name), "pktbuf/%s", name);
     ra->in_pktbuf_memfd = syscall(__NR_memfd_create, mfd_name,
-                                  MFD_CLOEXEC | MFD_HUGETLB);
+                                  MFD_CLOEXEC | MFD_HUGETLB | MFD_HUGE_2MB);
     if( ra->in_pktbuf_memfd < 0 && errno != ENOSYS )
       LOG_S(ci_log("%s: memfd_create failed %d", __FUNCTION__, errno));
   }

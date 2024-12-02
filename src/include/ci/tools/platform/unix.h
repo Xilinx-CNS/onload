@@ -101,6 +101,7 @@ typedef struct iovec ci_iovec;
  * the macro redefinition is silently ignored. */
 #define MFD_CLOEXEC 1U
 #define MFD_HUGETLB 4U
+#define MFD_HUGE_2MB (21 << 26)
 #if defined __x86_64__
 #define __NR_memfd_create 319
 #elif defined __aarch64__

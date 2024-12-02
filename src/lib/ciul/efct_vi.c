@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <syscall.h>
 #include <sys/mman.h>
+#include <linux/mman.h>
 #include "driver_access.h"
 #include <ci/efch/op_types.h>
 #endif
@@ -1204,7 +1205,8 @@ int efct_vi_mmap_init_internal(ef_vi* vi,
    * we pay the price of doing the naive array lookups: we have an array of
    * pointers to superbufs. */
   space = mmap(NULL, vi->max_efct_rxq * bytes_per_rxq, PROT_NONE,
-               MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_HUGETLB,
+               MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE |
+               MAP_HUGETLB | MAP_HUGE_2MB,
                -1, 0);
   if( space == MAP_FAILED ) {
     free(mappings);
@@ -1289,7 +1291,8 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
   {
     char name[32];
     snprintf(name, sizeof(name), "ef_vi:%d", qid);
-    mfd = syscall(__NR_memfd_create, name, MFD_CLOEXEC | MFD_HUGETLB);
+    mfd = syscall(__NR_memfd_create, name,
+                  MFD_CLOEXEC | MFD_HUGETLB | MFD_HUGE_2MB);
     if( mfd < 0 && errno != ENOSYS && errno != EINVAL ) {
       rc = -errno;
       LOGVV(ef_log("%s: memfd_create failed %d", __FUNCTION__, rc));
