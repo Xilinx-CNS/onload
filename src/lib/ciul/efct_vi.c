@@ -1118,6 +1118,20 @@ static void efct_ef_eventq_timer_zero(ef_vi* vi)
   /* TODO X3 */
 }
 
+static bool efct_vi_sb_has_been_filled(ef_vi *vi, uint32_t sbid,
+                                      bool sb_sentinel, uint32_t superbuf_pkts,
+                                      int ix, int qid)
+{
+  EF_VI_DEBUG(ef_vi_efct_rxq_ptr *rxq_ptr);
+  EF_VI_DEBUG(rxq_ptr = &vi->ep_state->rxq.rxq_ptr[ix]);
+  EF_VI_ASSERT(rxq_ptr->meta_offset == 0);
+
+  const ci_oword_t *header = (void *)((char *)efct_superbuf_access(vi, qid, sbid)
+                             + (superbuf_pkts - 1) * EFCT_PKT_STRIDE);
+  bool pkt_sentinel = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL);
+  return pkt_sentinel == sb_sentinel;
+}
+
 int efct_vi_find_free_rxq(ef_vi* vi, int qid)
 {
   int ix;
@@ -1143,6 +1157,63 @@ void efct_vi_start_rxq(ef_vi* vi, int ix, int qid)
   rxq_ptr->meta_offset = vi->efct_rxqs.meta_offset;
 
   EF_VI_ASSERT(rxq_ptr->superbuf_pkts > 0);
+}
+
+int efct_vi_sync_rxq(ef_vi *vi, int ix, int qid)
+{
+  int rc;
+  ef_vi_efct_rxq *rxq;
+  ef_vi_efct_rxq_ptr *rxq_ptr;
+  struct efct_rx_descriptor *desc;
+  ci_oword_t *header;
+  bool sentinel;
+  bool pkt_sentinel;
+  unsigned sbseq;
+  uint32_t meta_pkt;
+  uint16_t pkt_index;
+
+  rxq = &vi->efct_rxqs.q[ix];
+  rxq_ptr = &vi->ep_state->rxq.rxq_ptr[ix];
+
+  rxq->qid = qid;
+  rxq->config_generation = *rxq->live.config_generation;
+  rxq_ptr->superbuf_pkts = *rxq->live.superbuf_pkts;
+  rxq_ptr->meta_offset = 0;
+
+  rc = vi->efct_rxqs.ops->next(vi, qid, &sentinel, &sbseq);
+  if ( rc < 0 )
+    return rc;
+
+  while ( efct_vi_sb_has_been_filled(vi, rc, sentinel, rxq_ptr->superbuf_pkts, ix, qid) )
+  {
+    vi->efct_rxqs.ops->free(vi, qid, rc);
+    rc = vi->efct_rxqs.ops->next(vi, qid, &sentinel, &sbseq);
+    if (rc < 0)
+      return rc;
+  }
+
+  meta_pkt = (qid * CI_EFCT_MAX_SUPERBUFS + rc) << PKT_ID_PKT_BITS;
+  header = (void *)((char *)efct_superbuf_access(vi, qid, rc));
+  for ( pkt_index = 0; pkt_index < rxq_ptr->superbuf_pkts;
+        header += EFCT_PKT_STRIDE / sizeof(*header), pkt_index++ )
+  {
+    pkt_sentinel = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL);
+    if ( pkt_sentinel != sentinel )
+    {
+      meta_pkt += pkt_index;
+      break;
+    }
+  }
+
+  rxq_ptr->meta_pkt = ((uint64_t)sbseq << 32) | ((uint64_t)sentinel << 31) | meta_pkt;
+  rxq_ptr->data_pkt = meta_pkt;
+  EF_VI_ASSERT(rxq_ptr->superbuf_pkts > 0);
+
+  desc = efct_rx_desc(vi, meta_pkt);
+  desc->refcnt = rxq_ptr->superbuf_pkts - pkt_index;
+  desc->superbuf_pkts = rxq_ptr->superbuf_pkts;
+
+  return 0;
 }
 
 static int

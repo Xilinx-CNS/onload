@@ -40,6 +40,12 @@ static ef_shrub_buffer_id set_buffer_id(ef_shrub_buffer_id id, bool sentinel) {
   return buffer_id.u32[0];
 }
 
+static uint32_t get_buffer_id(ef_shrub_buffer_id id) {
+  ci_dword_t id2;
+  id2.u32[0] = id;
+  return CI_DWORD_FIELD(id2, EF_SHRUB_BUFFER_ID);
+}
+
 struct ef_shrub_connection {
   struct ef_shrub_connection* next;
   int qid;
@@ -58,9 +64,11 @@ struct ef_shrub_queue {
   int fifo_index;
   int fifo_size;
   int connection_count;
+  int ix;
 
   ef_shrub_buffer_id* fifo;
   unsigned* buffer_refs;
+  int* buffer_fifo_indices;
 
   struct ef_shrub_connection* connections;
   struct ef_shrub_connection* closed_connections;
@@ -192,6 +200,9 @@ static void unix_server_fini(struct ef_shrub_server* server)
 static int server_connection_opened(struct ef_shrub_server* server);
 static int server_request_received(struct ef_shrub_server* server, int socket);
 static int server_connection_closed(struct ef_shrub_server* server, void *data);
+static void server_buffer_cleanup(struct ef_vi* vi,
+                                  struct ef_shrub_queue* queue,
+                                  ef_shrub_buffer_id buffer);
 
 static int unix_server_poll(struct ef_shrub_server* server)
 {
@@ -254,6 +265,17 @@ static int queue_alloc_refs(struct ef_shrub_queue* queue)
   return 0;
 }
 
+static int queue_alloc_buffer_fifo_indices(struct ef_shrub_queue* queue)
+{
+  int i;
+  queue->buffer_fifo_indices = malloc(queue->buffer_count * sizeof(int));
+  if ( queue->buffer_fifo_indices == NULL )
+    return -ENOMEM;
+
+  for (i = 0; i < queue->buffer_count; i++)
+    queue->buffer_fifo_indices[i] = -1;
+  return 0;
+}
 
 static int queue_alloc_shared(struct ef_shrub_queue* queue)
 {
@@ -305,7 +327,7 @@ static int queue_map_fifo(struct ef_shrub_queue* queue)
 }
 
 static void poll_fifo(struct ef_vi* vi, struct ef_shrub_queue* queue,
-                      struct ef_shrub_connection* connection, int qid)
+                      struct ef_shrub_connection* connection)
 {
   int i = connection->fifo_index;
 
@@ -316,15 +338,14 @@ static void poll_fifo(struct ef_vi* vi, struct ef_shrub_queue* queue,
 
   connection->fifo[i] = EF_SHRUB_INVALID_BUFFER;
   connection->fifo_index = i == queue->fifo_size - 1 ? 0 : i + 1;
-  if( --queue->buffer_refs[buffer] == 0 )
-    vi->efct_rxqs.ops->free(vi, qid, buffer);
+  server_buffer_cleanup(vi, queue, buffer);
 }
 
-static void poll_fifos(struct ef_vi* vi, struct ef_shrub_queue* queue, int qid)
+static void poll_fifos(struct ef_vi* vi, struct ef_shrub_queue* queue)
 {
   struct ef_shrub_connection* c;
   for( c = queue->connections; c != NULL; c = c->next )
-    poll_fifo(vi, queue, c, qid);
+    poll_fifo(vi, queue, c);
 }
 
 static struct ef_shrub_connection*
@@ -369,12 +390,32 @@ fail_fifo:
   return NULL;
 }
 
+static struct ef_shrub_client_state* get_client_state(struct ef_shrub_queue* queue,
+                                                      struct ef_shrub_connection* connection)
+{
+  return (void*)((char*)connection->fifo + fifo_bytes(queue));
+}
+
 static int connection_send_metrics(struct ef_shrub_queue* queue,
                                    struct ef_shrub_connection* connection)
 {
   int rc;
-  struct ef_shrub_client_state* state =
-    (void*)((char*)connection->fifo + fifo_bytes(queue));
+  struct ef_shrub_client_state* state = get_client_state(queue, connection);
+
+  //TODO: re-evaluate this if-check startup state case on completion of ON-16190
+  if ( queue->connection_count > 0 ) {
+    /* Function to scan backwards in the FIFO until it finds the first invalid buffer.
+     * The index afterwards is the first valid buffer that we wish to sync upon. */
+    int queue_index = queue->fifo_index == 0 ? queue->fifo_size - 1 : queue->fifo_index - 1;
+    assert(queue->fifo[queue_index] != EF_SHRUB_INVALID_BUFFER);
+    while ( queue->fifo[queue_index] != EF_SHRUB_INVALID_BUFFER ) {
+      queue_index--;
+      if ( queue_index < 0 )
+        queue_index = queue->fifo_size - 1;
+    }
+    state->server_fifo_index = ( queue_index == queue->fifo_size - 1 ? 0 : queue_index + 1 );
+  }
+
   struct ef_shrub_shared_metrics* metrics = &state->metrics;
   struct iovec iov = {
     .iov_base = metrics,
@@ -431,6 +472,10 @@ static int ef_shrub_queue_open(struct ef_vi* vi,
   if( rc < 0 )
     goto fail_refs;
 
+  rc = queue_alloc_buffer_fifo_indices(queue);
+  if ( rc < 0 )
+    goto fail_indices;
+
   rc = queue_alloc_shared(queue);
   if( rc < 0 )
     goto fail_shared;
@@ -446,7 +491,8 @@ static int ef_shrub_queue_open(struct ef_vi* vi,
                                  false);
   if (rc < 0)
     goto fail_queue_attach;
-
+  
+  queue->ix = rc;
   *queue_out = queue;
   return 0;
 
@@ -456,6 +502,8 @@ fail_fifo:
   for( i = 0; i < EF_SHRUB_FD_COUNT; ++i )
     close(queue->shared_fds[i]);
 fail_shared:
+  free(queue->buffer_fifo_indices);
+fail_indices:
   free(queue->buffer_refs);
 fail_refs:
   free(queue);
@@ -470,20 +518,21 @@ static void ef_shrub_queue_close(struct ef_shrub_queue* queue)
   munmap(queue->fifo, fifo_bytes(queue));
   for( i = 0; i < EF_SHRUB_FD_COUNT; ++i )
     close(queue->shared_fds[i]);
+  free(queue->buffer_fifo_indices);
   free(queue->buffer_refs);
   free(queue);
 }
 
-static void ef_shrub_queue_poll(struct ef_vi* vi, struct ef_shrub_queue* queue, int qid)
+static void ef_shrub_queue_poll(struct ef_vi* vi, struct ef_shrub_queue* queue)
 {
   bool sentinel;
   unsigned sbseq;
   ef_vi_efct_rxq_ops* ops;
   ops = vi->efct_rxqs.ops;
 
-  poll_fifos(vi, queue, qid);
+  poll_fifos(vi, queue);
   while( fifo_has_space(queue) ) {
-    int next_buffer = ops->next(vi, qid, &sentinel, &sbseq);
+    int next_buffer = ops->next(vi, queue->ix, &sentinel, &sbseq);
     if ( next_buffer < 0 ) {
       break;
     }
@@ -491,6 +540,7 @@ static void ef_shrub_queue_poll(struct ef_vi* vi, struct ef_shrub_queue* queue, 
     queue->fifo[i] = set_buffer_id(next_buffer, sentinel);
     assert(queue->buffer_refs[next_buffer] == 0);
     queue->buffer_refs[next_buffer] = queue->connection_count;
+    queue->buffer_fifo_indices[next_buffer] = i;
     queue->fifo_index = i == queue->fifo_size - 1 ? 0 : i + 1;
   }
 }
@@ -513,8 +563,10 @@ static int server_request_received(struct ef_shrub_server* server, int socket)
   struct ef_shrub_connection* connection;
   struct ef_shrub_queue_request req;
   struct ef_shrub_queue* queue;
+  struct ef_shrub_client_state* state;
   epoll_data_t epoll_data;
   int rc;
+  int i;
 
   rc = recv(socket, &req, sizeof(req), 0);
   if( rc < 0 ) {
@@ -552,10 +604,21 @@ static int server_request_received(struct ef_shrub_server* server, int socket)
   rc = unix_server_epoll_mod(server, socket, epoll_data);
   if( rc < 0 )
     goto fail2;
-  /* TODO synchronise */
   connection->next = queue->connections;
   connection->qid = req.qid;
   queue->connections = connection;
+
+  if ( queue->connection_count > 0 ) {
+    state = (void*)((char*)connection->fifo + fifo_bytes(queue));
+    i = state->server_fifo_index;
+    while ( i != queue->fifo_index ) {
+      ef_shrub_buffer_id buffer = queue->fifo[i];
+      assert(buffer != EF_SHRUB_INVALID_BUFFER);
+      queue->buffer_refs[get_buffer_id(buffer)]++; 
+      i = (i == queue->fifo_size - 1 ? 0: i + 1);
+    } 
+  }
+
   queue->connection_count++;
   return 0;
 
@@ -584,11 +647,24 @@ static int server_connection_opened(struct ef_shrub_server* server)
   return rc;
 }
 
+static void server_buffer_cleanup(struct ef_vi* vi,
+                                  struct ef_shrub_queue* queue,
+                                  ef_shrub_buffer_id buffer) {
+  assert(buffer != EF_SHRUB_INVALID_BUFFER);
+  if ( --queue->buffer_refs[buffer] == 0 ) {
+    int buffer_fifo_index = queue->buffer_fifo_indices[buffer];
+    queue->fifo[buffer_fifo_index] = EF_SHRUB_INVALID_BUFFER;
+    queue->buffer_fifo_indices[buffer] = -1;
+    vi->efct_rxqs.ops->free(vi, queue->ix, buffer);
+  }
+}
+
 static int server_connection_closed(struct ef_shrub_server* server, void *data)
 {
+  int i;
+  struct ef_shrub_client_state* state;
   struct ef_shrub_connection* connection = data;
   struct ef_shrub_queue* queue = server->shrub_queues[connection->qid];
-  /* TODO release buffers owned by this connection */
   close(connection->socket);
 
   /* TBD would a doubly linked list or something be better? */
@@ -607,6 +683,16 @@ static int server_connection_closed(struct ef_shrub_server* server, void *data)
 
   connection->next = queue->closed_connections;
   queue->closed_connections = connection;
+  state = get_client_state(queue, connection);
+
+  i = state->server_fifo_index;
+  while ( i != queue->fifo_index ) {
+    ef_shrub_buffer_id buffer = queue->fifo[i];
+    assert(buffer != EF_SHRUB_INVALID_BUFFER);
+    server_buffer_cleanup(server->vi, queue, get_buffer_id(buffer));
+    i = (i == queue->fifo_size - 1 ? 0: i + 1);
+  }
+
   queue->connection_count--;
   return 0;
 }
@@ -657,7 +743,7 @@ void ef_shrub_server_poll(struct ef_shrub_server* server)
                       server->vi->efct_rxqs.max_qs) {
     int qid = server->vi->efct_rxqs.q[ix].qid;
     ef_shrub_queue_poll(server->vi,
-                        server->shrub_queues[qid], ix);
+                        server->shrub_queues[qid]);
   }
 }
 

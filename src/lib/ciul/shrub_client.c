@@ -150,8 +150,6 @@ static int client_recv_metrics(struct ef_shrub_client* client, void* buffers)
     close(shared_fds[i]);
   if( rc < 0 )
     return rc;
-
-  /* TODO synchronise with server */
   return 0;
 }
 

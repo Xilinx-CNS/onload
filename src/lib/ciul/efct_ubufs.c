@@ -350,7 +350,7 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd, unsigned n_superb
   efct_vi_start_rxq(vi, ix, qid);
   post_buffers(vi, rxq, ix);
 
-  return 0;
+  return ix;
 #endif
 }
 
@@ -387,16 +387,20 @@ static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd, unsigned n_s
   rc = ef_shrub_client_open(&rxq->shrub_client,
                             (void*)vi->efct_rxqs.q[ix].superbuf,
                             EF_SHRUB_CONTROLLER_PATH, qid);
-  if ( rc != 0 ) {
+  if ( rc < 0 ) {
     LOG(ef_log("%s: ERROR initializing shrub client! rc=%d", __FUNCTION__, rc));
-    return -rc;
+    return rc;
   }
   rxq->superbuf_pkts = rxq->shrub_client.state->metrics.buffer_bytes / EFCT_PKT_STRIDE;
 
   ubufs->active_qs |= 1 << ix;
-  efct_vi_start_rxq(vi, ix, qid);
   
-  return 0;
+  rc = efct_vi_sync_rxq(vi, ix, qid);
+  if ( rc < 0 ) {
+    LOG(ef_log("%s: ERROR syncing shrub_client to rxq! rc=%d", __FUNCTION__, rc));
+    return rc;
+  }
+  return ix;
 }
 
 static int efct_ubufs_attach(ef_vi* vi,

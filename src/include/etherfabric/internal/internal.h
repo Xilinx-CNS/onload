@@ -114,6 +114,7 @@ extern int efct_kbufs_init_internal(ef_vi* vi,
                                     void* buffer_space);
 int efct_vi_find_free_rxq(ef_vi* vi, int qid);
 void efct_vi_start_rxq(ef_vi* vi, int ix, int qid);
+int efct_vi_sync_rxq(ef_vi* vi, int ix, int qid);
 int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len);
 int efct_vi_get_wakeup_params(ef_vi* vi, int qid, unsigned* sbseq,
                               unsigned* pktix);
