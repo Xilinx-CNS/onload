@@ -17,6 +17,13 @@
 /* Test infrastructure */
 #include "unit_test.h"
 
+/* Default rx metadata values */
+static uint64_t rx_len = 42;
+static uint64_t rx_flt = 7;
+static uint64_t rx_usr = 66;
+static uint16_t PKTS_PER_SB = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
+
+
 /* Dependencies */
 static int test_filter_is_block_only;
 int ef_vi_filter_is_block_only(const struct ef_filter_cookie* cookie)
@@ -29,9 +36,18 @@ struct efct_mock_rxq {
   uint32_t superbuf_pkts;
   unsigned config_generation;
   uint64_t time_sync;
+  bool shared_mode;
 
+  int* shared_sbids;
+  int shared_index;
+  int shared_size;
+  int shared_sbid_to_free;
+
+  bool* shared_sentinels;
+
+  /* The below are used for local rxq*/
   int next_sbid;
-  int next_sentinel;
+  bool next_sentinel;
   int next_seq;
 
   char* next_pkt;
@@ -89,20 +105,60 @@ static struct efct_mock_ops* mock_ops(ef_vi* vi)
   return CI_CONTAINER(struct efct_mock_ops, ops, vi->efct_rxqs.ops);
 }
 
+static int peek_sbid(struct efct_mock_rxq* q) {
+  if ( q->shared_mode ) {
+    if ( q->shared_index >= q->shared_size )
+      return -EAGAIN;
+    return q->shared_sbids[q->shared_index];
+  }
+  return q->next_sbid;
+}
+
+static int get_sbid(struct efct_mock_rxq* q) {
+  int curr_active_sbid = peek_sbid(q);
+  if ( q->shared_mode ) {
+    q->shared_sbid_to_free = curr_active_sbid;
+    q->shared_index++;
+  }
+  return curr_active_sbid;
+}
+
+static int peek_sentinel(struct efct_mock_rxq* q, int sbid) {
+  if ( q->shared_mode ) {
+    if ( sbid >= q->shared_size )
+      return !q->shared_sentinels[q->shared_size - 1];
+    return q->shared_sentinels[sbid];
+  }
+  return q->next_sentinel;
+}
+
+static void init_shared_state(struct efct_mock_rxq* q, int sbid_size) {
+  q->shared_size = sbid_size;
+  q->shared_sbids = calloc(sbid_size, sizeof(int));
+  q->shared_index = 0;
+  q->shared_sentinels = calloc(sbid_size, sizeof(bool));
+  int i;
+  for (i = 0; i < sbid_size; i++)
+    q->shared_sentinels[i] = (i % 2 != 0);
+}
+
 static bool efct_mock_available(const ef_vi* vi, int qid)
 {
   struct efct_mock_ops* ops = mock_ops((ef_vi*)vi);
+
   ops->anything_called += 1;
   ops->available_called += 1;
   ops->available_qid = qid;
-  return ops->rxqs->q[qid].next_sbid >= 0;
+
+  return peek_sbid(&ops->rxqs->q[qid]) >= 0;
 }
 
 static int efct_mock_next(ef_vi* vi, int qid, bool* sentinel, unsigned* seq)
 {
   struct efct_mock_ops* ops = mock_ops(vi);
   struct efct_mock_rxq* rxq = &ops->rxqs->q[qid];
-  int sbid = rxq->next_sbid;
+  int sbid = get_sbid(rxq);
+
   char* p;
 
   ops->anything_called += 1;
@@ -110,7 +166,7 @@ static int efct_mock_next(ef_vi* vi, int qid, bool* sentinel, unsigned* seq)
   ops->next_qid = qid;
 
   if( sbid >= 0 ) {
-    *sentinel = rxq->next_sentinel;
+    *sentinel = peek_sentinel(rxq, sbid);
     *seq = rxq->next_seq++;
 
     rxq->superbuf = ops->rxqs->superbuf +
@@ -138,10 +194,15 @@ static int efct_mock_next(ef_vi* vi, int qid, bool* sentinel, unsigned* seq)
 static void efct_mock_free(ef_vi* vi, int qid, int sbid)
 {
   struct efct_mock_ops* ops = mock_ops(vi);
+  CHECK(sbid, >=, 0);
+  CHECK(qid, >=, 0);
   ops->anything_called += 1;
   ops->free_called += 1;
   ops->free_qid = qid;
   ops->free_sbid = sbid;
+
+  if ( ops->rxqs->q[qid].shared_mode )
+    STATE_CHECK(ops, free_sbid, ops->rxqs->q[qid].shared_sbid_to_free);
 }
 
 static int efct_mock_attach(ef_vi* vi, int qid, int buf_fd, unsigned n_superbufs, bool shared_mode)
@@ -155,15 +216,20 @@ static int efct_mock_attach(ef_vi* vi, int qid, int buf_fd, unsigned n_superbufs
 
   if( qid < 0 || qid >= ops->rxqs->q_max )
     return -EINVAL;
-  if( ops->rxqs->active_qs & (1 << qid) )
+  if( !shared_mode && ops->rxqs->active_qs & (1 << qid) )
     return -EALREADY;
 
   ops->rxqs->active_qs |= (1 << qid);
   ops->rxqs->q[qid].superbuf_pkts = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
-  ops->rxqs->q[qid].next_sbid = -EAGAIN;
+  
+  if ( !shared_mode )
+    ops->rxqs->q[qid].next_sbid = -EAGAIN;
 
-  efct_vi_start_rxq(vi, qid, qid);
-
+  if ( shared_mode ) {
+    efct_vi_sync_rxq(vi, qid, qid);
+  } else {
+    efct_vi_start_rxq(vi, qid, qid);
+  }
   return 0;
 }
 
@@ -193,13 +259,9 @@ static void efct_mock_cleanup(ef_vi* vi)
   /* This is not called from within efct_vi so nothing to test */
 }
 
-/* Default rx metadata values */
-static uint64_t rx_len = 42;
-static uint64_t rx_flt = 7;
-static uint64_t rx_usr = 66;
 
 /* Helper functions */
-static struct efct_test* efct_test_init_rx(int q_max)
+static struct efct_test* efct_test_init_rx_default(int q_max, int arch, int nic_flags)
 {
   int i;
 
@@ -208,8 +270,8 @@ static struct efct_test* efct_test_init_rx(int q_max)
   STATE_ALLOC(struct efct_mock_ops, mock_ops);
 
   vi->ep_state = &t->ep_state;
-  vi->nic_type.arch = EF_VI_ARCH_EFCT;
-  vi->nic_type.nic_flags = EFHW_VI_NIC_CTPIO_ONLY;
+  vi->nic_type.arch = arch;
+  vi->nic_type.nic_flags = nic_flags;
   efct_vi_init(vi);
 
   mock_ops->rxqs = &t->mock_rxqs;
@@ -231,13 +293,14 @@ static struct efct_test* efct_test_init_rx(int q_max)
 
   for( i = 0; i < q_max; ++i ) {
     ef_vi_efct_rxq* q = &vi->efct_rxqs.q[i];
+    q->qid = i;
     q->live.superbuf_pkts = &t->mock_rxqs.q[i].superbuf_pkts;
     q->live.config_generation = &t->mock_rxqs.q[i].config_generation;
     q->live.time_sync = &t->mock_rxqs.q[i].time_sync;
-    q->qid = i;
     q->superbuf = t->mock_rxqs.superbuf +
       (size_t)i * CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES;
   }
+
 
   vi->vi_rxq.mask =
     (size_t)CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE - 1;
@@ -253,9 +316,26 @@ static struct efct_test* efct_test_init_rx(int q_max)
   return t;
 }
 
+static struct efct_test* efct_test_init_rx_x3(int q_max) {
+  return efct_test_init_rx_default(q_max, EF_VI_ARCH_EFCT, EFHW_VI_NIC_CTPIO_ONLY);
+}
+
+static struct efct_test* efct_test_init_rx_x4(int q_max, bool shared_mode) {
+  int nic_flags = EFHW_VI_NIC_CTPIO_ONLY;
+  if ( shared_mode )
+    nic_flags |= NIC_FLAG_RX_SHARED;
+  return efct_test_init_rx_default(q_max, EF_VI_ARCH_EF10CT, nic_flags);
+}
+
 static void efct_test_cleanup(struct efct_test* t)
 {
   free(t->vi->vi_rxq.descriptors);
+
+  if ( t->mock_rxqs.q->shared_size > 0 ) {
+    free(t->mock_rxqs.q->shared_sbids);
+    free(t->mock_rxqs.q->shared_sentinels);
+  }
+
   free(t->mock_rxqs.q);
   free(t->mock_rxqs.superbuf);
   STATE_FREE(t->mock_ops);
@@ -318,10 +398,18 @@ efct_test_rollover(struct efct_test* t, int qid, int sbid, int sentinel)
   efct_test_poll_idle(t);
 }
 
-static void efct_test_attach_only(struct efct_test* t, int qid)
+static void efct_test_attach_only(struct efct_test* t, int qid, bool shared_mode,
+                                  int exp_next_calls, int exp_free_calls)
 {
-  CHECK(t->vi->internal_ops.post_filter_add(t->vi, NULL, NULL, qid, false), ==, 0);
-  STATE_CHECK(t->mock_ops, anything_called, 1);
+  CHECK(t->vi->internal_ops.post_filter_add(t->vi, NULL, NULL, qid, shared_mode), ==, 0);
+  int exp_anything_called = 1;
+  if (shared_mode) {
+    exp_anything_called += exp_next_calls + exp_free_calls;
+    STATE_CHECK(t->mock_ops, next_called, exp_next_calls);
+    STATE_CHECK(t->mock_ops, free_called, exp_free_calls);
+  }
+
+  STATE_CHECK(t->mock_ops, anything_called, exp_anything_called);
   STATE_CHECK(t->mock_ops, attach_called, 1);
   STATE_CHECK(t->mock_ops, attach_qid, qid);
   STATE_CHECK(t->mock_ops, attach_superbufs, CI_EFCT_MAX_SUPERBUFS);
@@ -329,7 +417,7 @@ static void efct_test_attach_only(struct efct_test* t, int qid)
 
 static void efct_test_attach(struct efct_test* t, int qid)
 {
-  efct_test_attach_only(t, qid);
+  efct_test_attach_only(t, qid, false, 0, 0);
   efct_test_rollover(t, qid, 0, 1);
 }
 
@@ -357,21 +445,22 @@ static void efct_test_rx_meta(struct efct_test* t, int qid)
 /* Test cases */
 static void test_efct_idle(void)
 {
-  struct efct_test* t = efct_test_init_rx(3);
+  struct efct_test* t = efct_test_init_rx_x3(3);
   efct_test_poll_idle(t);
   efct_test_cleanup(t);
 }
 
-static void test_efct_attach(void)
+static void test_efct_attach_local(void)
 {
-  struct efct_test* t = efct_test_init_rx(3);
+  struct efct_test* t = efct_test_init_rx_x3(3);
+  bool test_shared_mode = false;
 
   test_filter_is_block_only = true;
-  CHECK(t->vi->internal_ops.post_filter_add(t->vi, NULL, NULL, 1, false), ==, 0);
+  CHECK(t->vi->internal_ops.post_filter_add(t->vi, NULL, NULL, 1, test_shared_mode), ==, 0);
   STATE_CHECK(t->mock_ops, anything_called, 0);
   test_filter_is_block_only = false;
 
-  CHECK(t->vi->internal_ops.post_filter_add(t->vi, NULL, NULL, 3, false), ==, -EINVAL);
+  CHECK(t->vi->internal_ops.post_filter_add(t->vi, NULL, NULL, 3, test_shared_mode), ==, -EINVAL);
   STATE_CHECK(t->mock_ops, anything_called, 1);
   STATE_CHECK(t->mock_ops, attach_called, 1);
   STATE_CHECK(t->mock_ops, attach_qid, 3);
@@ -381,17 +470,139 @@ static void test_efct_attach(void)
   efct_test_attach(t, 2);
   efct_test_attach(t, 0);
 
-  efct_test_attach_only(t, 1); /* Duplicates are silently accepted */
+  efct_test_attach_only(t, 1, test_shared_mode, 0, 0); /* Duplicates are silently accepted */
   efct_test_poll_idle(t);
 
   efct_test_cleanup(t);
 }
 
+static void fill_superbuf(char* superbuf, char* superbuf_end, int pkts_to_fill, bool sb_sentinel, uint64_t timestamp)
+{
+  char* p;
+  int i = 0;
+  for( p=superbuf; p != superbuf_end; p+=EFCT_PKT_STRIDE, i++ ) {
+    uint64_t* dest = (uint64_t*)(p);
+    int sent = (i <= pkts_to_fill ? sb_sentinel: !sb_sentinel);
+
+    dest[1] = timestamp;
+    dest[0] = 0 | rx_len |
+              (1 << EFCT_RX_HEADER_NEXT_FRAME_LOC_LBN) | /* fixed in current hardware */
+              ((uint64_t)sent << EFCT_RX_HEADER_SENTINEL_LBN) |
+              (rx_flt << EFCT_RX_HEADER_FILTER_LBN) |
+              (rx_usr << EFCT_RX_HEADER_USER_LBN);
+  }
+}
+
+static void test_efct_attach_shared_helper(int sbids, int pkts)
+{
+  struct efct_test* t = efct_test_init_rx_x4(3, true);
+  bool test_shared_mode = true;
+
+  /* Preserved shrub_client compatablity behavior. */
+  test_filter_is_block_only = true;
+  CHECK(t->vi->internal_ops.post_filter_add(t->vi, NULL, NULL, 1, test_shared_mode), ==, 0);
+  STATE_CHECK(t->mock_ops, anything_called, 0);
+  test_filter_is_block_only = false;
+
+  CHECK(t->vi->internal_ops.post_filter_add(t->vi, NULL, NULL, 3, test_shared_mode), ==, -EINVAL);
+  STATE_CHECK(t->mock_ops, anything_called, 1);
+  STATE_CHECK(t->mock_ops, attach_called, 1);
+  STATE_CHECK(t->mock_ops, attach_qid, 3);
+  STATE_CHECK(t->mock_ops, attach_superbufs, CI_EFCT_MAX_SUPERBUFS);
+
+  /* test_setup */
+  int qid = 1;
+  struct efct_mock_ops* ops = mock_ops(t->vi);
+  struct efct_mock_rxq* rxq = &ops->rxqs->q[qid];
+  rxq->shared_mode = test_shared_mode;
+
+  int exp_pkts_to_fill = pkts % PKTS_PER_SB;
+  int exp_filled_sbs = pkts / PKTS_PER_SB;
+
+  /* Code required for testing efct_vi_sync_rxq */
+  init_shared_state(rxq, sbids);
+  int sbid_index;
+  for ( sbid_index = 0; sbid_index < rxq->shared_size; sbid_index++, pkts -= PKTS_PER_SB ) {
+    rxq->shared_sbids[sbid_index] = sbid_index;
+    rxq->superbuf = ops->rxqs->superbuf +
+                    (size_t)(qid * CI_EFCT_MAX_SUPERBUFS + sbid_index) * EFCT_RX_SUPERBUF_BYTES;
+    rxq->superbuf_end = rxq->superbuf + EFCT_RX_SUPERBUF_BYTES;
+
+    int pkts_to_fill;
+    if ( pkts >= 512 ) {
+      pkts_to_fill = 512;
+    } else if ( pkts <= 0 ) {
+      pkts_to_fill = -1;
+    } else {
+      pkts_to_fill = pkts % PKTS_PER_SB;
+    }
+
+    fill_superbuf(rxq->superbuf, rxq->superbuf_end,
+                  pkts_to_fill, peek_sentinel(rxq, sbid_index), 0);
+  }
+
+  int expected_next_calls = exp_filled_sbs + 1;
+  int expected_free_calls = expected_next_calls - 1;
+
+  efct_test_attach_only(t, qid, test_shared_mode, expected_next_calls, expected_free_calls);
+
+  int exp_data_pkts = t->vi->ep_state->rxq.rxq_ptr[qid].data_pkt % PKTS_PER_SB;
+
+  STATE_CHECK(t->mock_ops, next_qid, qid);
+  if ( expected_free_calls > 0 )
+    STATE_CHECK(t->mock_ops, free_qid, qid);
+
+  CHECK(exp_data_pkts, ==, (exp_pkts_to_fill > 0 ? exp_pkts_to_fill + 1 : 0));
+
+  efct_test_cleanup(t);
+}
+
+static void test_efct_attach_first_partially_filled_sb(void)
+{
+  test_efct_attach_shared_helper(3, 100);
+}
+
+ static void test_efct_attach_first_fully_filled_sb(void)
+{
+  test_efct_attach_shared_helper(3, 1 * PKTS_PER_SB);
+}
+
+static void test_efct_attach_middle_partially_filled_sb(void)
+{
+  test_efct_attach_shared_helper(3, 1 * PKTS_PER_SB + 100);
+}
+
+static void test_efct_attach_middle_fully_filled_sb(void)
+{
+  test_efct_attach_shared_helper(3, 1 * PKTS_PER_SB);
+}
+
+static void test_efct_attach_end_partially_filled_sb(void)
+{
+  test_efct_attach_shared_helper(3, 2 * PKTS_PER_SB + 100);
+}
+
+static void test_efct_attach_end_fully_filled_sb(void)
+{
+  test_efct_attach_shared_helper(3, 3 * PKTS_PER_SB);
+}
+
+static void test_efct_attach_shared(void)
+{
+  TEST_RUN(test_efct_attach_first_partially_filled_sb);
+  TEST_RUN(test_efct_attach_first_fully_filled_sb);
+  TEST_RUN(test_efct_attach_middle_partially_filled_sb);
+  TEST_RUN(test_efct_attach_middle_fully_filled_sb);
+  TEST_RUN(test_efct_attach_end_partially_filled_sb);
+  TEST_RUN(test_efct_attach_end_fully_filled_sb);
+}
+
+
 static void test_efct_refresh(void)
 {
   int i, q;
   ef_event evs[1];
-  struct efct_test* t = efct_test_init_rx(3);
+  struct efct_test* t = efct_test_init_rx_x3(3);
 
   for( q = 0; q < 3; ++q )
     efct_test_attach(t, q);
@@ -466,7 +677,7 @@ static void efct_test_rx_poll(struct efct_test* t, int qid,
 static void test_efct_rx(void)
 {
   int q, i;
-  struct efct_test* t = efct_test_init_rx(3);
+  struct efct_test* t = efct_test_init_rx_x3(3);
 
   for( q = 0; q < 3; ++q )
     efct_test_attach(t, q);
@@ -497,7 +708,7 @@ static void test_efct_rx(void)
 
 static void test_efct_rx_discard(void)
 {
-  struct efct_test* t = efct_test_init_rx(1);
+  struct efct_test* t = efct_test_init_rx_x3(1);
   efct_test_attach(t, 0);
 
   /* class/status bitfield values */
@@ -599,7 +810,7 @@ static void test_efct_rx_discard(void)
 static void test_efct_natural_rollover(void)
 {
   int q, sb, i;
-  struct efct_test* t = efct_test_init_rx(3);
+  struct efct_test* t = efct_test_init_rx_x3(3);
 
   for( q = 0; q < 3; ++q )
     efct_test_attach(t, q);
@@ -636,7 +847,7 @@ static void test_efct_natural_rollover(void)
 static void test_efct_forced_rollover_none(void)
 {
   int q, i;
-  struct efct_test* t = efct_test_init_rx(3);
+  struct efct_test* t = efct_test_init_rx_x3(3);
 
   for( q = 0; q < 3; ++q )
     efct_test_attach(t, q);
@@ -672,7 +883,7 @@ static void test_efct_forced_rollover_some(void)
 {
   int q, i;
   ef_event evs[16];
-  struct efct_test* t = efct_test_init_rx(3);
+  struct efct_test* t = efct_test_init_rx_x3(3);
 
   for( q = 0; q < 3; ++q )
     efct_test_attach(t, q);
@@ -722,7 +933,7 @@ static void test_efct_forced_rollover_all(void)
 {
   int q, i;
   ef_event evs[16];
-  struct efct_test* t = efct_test_init_rx(3);
+  struct efct_test* t = efct_test_init_rx_x3(3);
 
   for( q = 0; q < 3; ++q )
     efct_test_attach(t, q);
@@ -801,8 +1012,9 @@ static void test_efct_future(void)
 {
   int i;
   ef_event evs[16];
-  struct efct_test* t = efct_test_init_rx(2);
+  struct efct_test* t = efct_test_init_rx_x3(2);
   struct efct_mock_rxq *q0, *q1;
+
 
   efct_test_attach(t, 0);
   efct_test_attach(t, 1);
@@ -905,7 +1117,8 @@ int main(void)
 {
   for( meta_offset = 0; meta_offset < 2; ++meta_offset ) {
     TEST_RUN(test_efct_idle);
-    TEST_RUN(test_efct_attach);
+    TEST_RUN(test_efct_attach_local);
+    TEST_RUN(test_efct_attach_shared);
     TEST_RUN(test_efct_refresh);
     TEST_RUN(test_efct_rx);
     TEST_RUN(test_efct_rx_discard);
