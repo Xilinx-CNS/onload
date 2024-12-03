@@ -404,7 +404,8 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
 
 
 static const struct auxiliary_device_id ef10ct_id_table[] = {
-  { .name = "sfc." EFX_LLCT_DEVNAME, },
+  /* TODO: uncomment the below when we are ready to probe ef10ct devices */
+  /* { .name = "sfc." EFX_LLCT_DEVNAME, }, */
   { .name = "efct_test." EFX_LLCT_DEVNAME ".test", },
   {},
 };
