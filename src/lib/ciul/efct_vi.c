@@ -1235,7 +1235,8 @@ static int efct_post_filter_add(struct ef_vi* vi,
 
 const void* efct_vi_rxpkt_get(ef_vi* vi, uint32_t pkt_id)
 {
-  EF_VI_ASSERT(ef_vi_get_real_arch(vi) == EF_VI_ARCH_EFCT);
+  EF_VI_ASSERT(ef_vi_get_real_arch(vi) == EF_VI_ARCH_EFCT ||
+               ef_vi_get_real_arch(vi) == EF_VI_ARCH_EF10CT);
 
   /* assume DP_FRAME_OFFSET_FIXED (correct for initial hardware) */
   return (char*)efct_rx_header(vi, pkt_id) + EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
@@ -1249,7 +1250,8 @@ static uint32_t efct_vi_rxpkt_get_pkt_id(ef_vi* vi, const void* pkt)
   uint32_t pkt_id = 0;
   size_t delta;
 
-  EF_VI_ASSERT(ef_vi_get_real_arch(vi) == EF_VI_ARCH_EFCT);
+  EF_VI_ASSERT(ef_vi_get_real_arch(vi) == EF_VI_ARCH_EFCT ||
+               ef_vi_get_real_arch(vi) == EF_VI_ARCH_EF10CT);
 
   /* In userspace, we have a contiguous chunk of memory for packets, so we can
    * calculate the location of a packet as below:
@@ -1390,7 +1392,8 @@ static int efct_ef_vi_receive_get_timestamp(struct ef_vi* vi, const void* pkt,
 {
   uint32_t pkt_id;
 
-  EF_VI_ASSERT(ef_vi_get_real_arch(vi) == EF_VI_ARCH_EFCT);
+  EF_VI_ASSERT(ef_vi_get_real_arch(vi) == EF_VI_ARCH_EFCT ||
+               ef_vi_get_real_arch(vi) == EF_VI_ARCH_EF10CT);
 
   pkt_id = efct_vi_rxpkt_get_pkt_id(vi, pkt);
 
@@ -1428,7 +1431,8 @@ void efct_vi_start_transmit_warm(ef_vi* vi)
   ci_qword_t qword;
   qword.u64[0] = vi->vi_txq.efct_fixed_header;
 
-  EF_VI_ASSERT(ef_vi_get_real_arch(vi) == EF_VI_ARCH_EFCT);
+  EF_VI_ASSERT(ef_vi_get_real_arch(vi) == EF_VI_ARCH_EFCT ||
+               ef_vi_get_real_arch(vi) == EF_VI_ARCH_EF10CT);
   EF_VI_ASSERT(CI_QWORD_FIELD(qword, EFCT_TX_HEADER_WARM_FLAG) == 0);
 
   CI_SET_QWORD_FIELD(qword, EFCT_TX_HEADER_WARM_FLAG, 1);
@@ -1440,7 +1444,8 @@ void efct_vi_stop_transmit_warm(ef_vi* vi)
   ci_qword_t qword;
   qword.u64[0] = vi->vi_txq.efct_fixed_header;
 
-  EF_VI_ASSERT(ef_vi_get_real_arch(vi) == EF_VI_ARCH_EFCT);
+  EF_VI_ASSERT(ef_vi_get_real_arch(vi) == EF_VI_ARCH_EFCT ||
+               ef_vi_get_real_arch(vi) == EF_VI_ARCH_EF10CT);
   EF_VI_ASSERT(CI_QWORD_FIELD(qword, EFCT_TX_HEADER_WARM_FLAG) == 1);
 
   CI_SET_QWORD_FIELD(qword, EFCT_TX_HEADER_WARM_FLAG, 0);
