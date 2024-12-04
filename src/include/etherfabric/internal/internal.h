@@ -150,7 +150,7 @@ struct efct_rx_descriptor
   uint16_t refcnt;
   uint16_t superbuf_pkts;
   int16_t  sbid_next; /* id of next buffer in a linked list, or -1 */
-  uint8_t  padding_[1];
+  uint8_t  sentinel;
   uint8_t  final_ts_status;
   uint64_t final_timestamp;
 };

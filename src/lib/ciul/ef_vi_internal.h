@@ -244,9 +244,9 @@ extern void efct_superbufs_cleanup(ef_vi* vi);
 struct efct_rx_descriptor* efct_rx_desc_for_sb(ef_vi* vi, uint32_t qid, uint32_t sbid);
 static inline void efct_rx_sb_free_push(ef_vi* vi, uint32_t qid, uint32_t sbid)
 {
-  int16_t* head = &vi->ep_state->rxq.sb_desc_free_head[qid];
-  efct_rx_desc_for_sb(vi, qid, sbid)->sbid_next = *head;
-  *head = sbid;
+  ef_vi_efct_rxq_state* state = &vi->ep_state->rxq.efct_state[qid];
+  efct_rx_desc_for_sb(vi, qid, sbid)->sbid_next = state->free_head;
+  state->free_head = sbid;
 }
 
 static inline const void* efct_superbuf_access(const ef_vi* vi, int qid, size_t sbid)

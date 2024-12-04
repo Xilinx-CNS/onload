@@ -138,8 +138,10 @@ static ef_vi* alloc_vi(void)
   STATE_ALLOC(ef_vi, vi);
   STATE_ALLOC(ef_vi_state, state);
   vi->ep_state = state;
-  for( i = 0; i < EF_VI_MAX_EFCT_RXQS; ++i )
-    state->rxq.sb_desc_free_head[i] = -1;
+  for( i = 0; i < EF_VI_MAX_EFCT_RXQS; ++i ) {
+    ef_vi_efct_rxq_state* qs = &state->rxq.efct_state[i];
+    qs->free_head = qs->fifo_tail_hw = qs->fifo_tail_sw = qs->fifo_head = -1;
+  }
   CHECK(efct_ubufs_init(vi, NULL, 0), ==, 0);
   STATE_STASH(vi);
   STATE_STASH(state);
@@ -150,6 +152,14 @@ static ef_vi* alloc_vi(void)
 
 static void free_vi(ef_vi* vi)
 {
+  int i;
+
+  /* Ignore changes to queue state during these tests.
+   * FIXME: it might be nice to check that ununsed queues didn't change state.
+   */
+  for( i = 0; i < EF_VI_MAX_EFCT_RXQS; ++i )
+    STATE_ACCEPT(vi->ep_state, rxq.efct_state[i]);
+
   vi->efct_rxqs.ops->cleanup(vi);
   STATE_FREE(vi->ep_state);
   STATE_FREE(vi);

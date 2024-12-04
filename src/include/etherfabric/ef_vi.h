@@ -704,7 +704,7 @@ typedef struct {
   uint16_t  ts_flags;
 } ef_vi_txq_state;
 
-/*! \brief State of efct receive queue
+/*! \brief Critical state of efct receive queue needed for polling
 **
 ** Users should not access this structure.
 */
@@ -734,6 +734,29 @@ typedef struct {
   uint64_t meta_pkt;
 } ef_vi_efct_rxq_ptr;
 
+/*! \brief Less critical state of efct receive queue for buffer management etc.
+**
+** Users should not access this structure.
+*/
+typedef struct {
+  /** Head of the list of free buffers */
+  int16_t free_head;
+
+  /** Buffer most recently posted to the NIC queue */
+  int16_t fifo_head;
+  /** Oldest buffer which might still be in the NIC queue */
+  int16_t fifo_tail_hw;
+  /** Next buffer to be polled in software */
+  int16_t fifo_tail_sw;
+  /** Number of buffers in [fifo_tail_hw,fifo_head) */
+  int16_t fifo_count_hw;
+  /** Number of buffers in [fifo_tail_sw,fifo_head) */
+  int16_t fifo_count_sw;
+
+  /** Sequential counter of buffers posted to the NIC queue */
+  uint32_t sbseq;
+} ef_vi_efct_rxq_state;
+
 /*! \brief State of RX descriptor ring
 **
 ** Users should not access this structure.
@@ -754,7 +777,7 @@ typedef struct {
   /** Credit for packed stream handling (7000-series only) */
   uint16_t  rx_ps_credit_avail;                 /* ef10 only */
   ef_vi_efct_rxq_ptr rxq_ptr[EF_VI_MAX_EFCT_RXQS]; /* efct only */
-  int16_t sb_desc_free_head[EF_VI_MAX_EFCT_RXQS]; /* efct only */
+  ef_vi_efct_rxq_state efct_state[EF_VI_MAX_EFCT_RXQS]; /* efct only */
 } ef_vi_rxq_state;
 
 /*! \brief State of event queue

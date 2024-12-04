@@ -123,6 +123,11 @@
     free(NAME); \
   } while (0)
 
+/* Update the stashed value to the current live value without checking */
+#define STATE_ACCEPT(NAME, FIELD) \
+  do { \
+    (NAME + 1)->FIELD = NAME->FIELD; \
+  } while (0)
 
 /* Implementation details. Functions are usually called via macros */
 static int checks_total;

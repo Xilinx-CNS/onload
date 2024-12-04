@@ -18,25 +18,10 @@
  * dependencies on it */
 #include <etherfabric/internal/efct_uk_api.h>
 
-struct efct_ubufs_desc
-{
-  unsigned id : 31;
-  unsigned sentinel : 1;
-};
-
-/* FIFO to record local buffers posted to the NIC. */
-struct efct_ubufs_rxq_fifo
-{
-  unsigned added, filled, removed;
-  struct efct_ubufs_desc buffers[CI_EFCT_MAX_SUPERBUFS];
-};
-
 struct efct_ubufs_rxq
 {
   uint32_t superbuf_pkts;
-  struct efct_ubufs_rxq_fifo* fifo;
   struct ef_shrub_client shrub_client;
-  unsigned sbseq; // TODO will need to be in shared state for Onload
 
   /* Buffer memory region */
   ef_memreg memreg;
@@ -70,32 +55,43 @@ static const struct efct_ubufs* const_ubufs(const ef_vi* vi)
 
 static bool rxq_is_local(const ef_vi* vi, int qid)
 {
-  return const_ubufs(vi)->q[qid].fifo;
+  return const_ubufs(vi)->q[qid].shrub_client.buffers == NULL;
 }
 
-static void update_filled(ef_vi* vi, struct efct_ubufs_rxq_fifo* fifo, int qid)
+static void update_filled(ef_vi* vi, int qid)
 {
-  while( fifo->added - fifo->filled > 1 ) {
-    const ci_qword_t* header;
-    struct efct_ubufs_desc desc;
+  ef_vi_efct_rxq_state* state = &vi->ep_state->rxq.efct_state[qid];
 
-    /* We consider a buffer to be filled once the first metadata in the
-     * following buffer has been written.
+  while( state->fifo_count_hw != 0 ) {
+    const char* buffer;
+    const ci_qword_t* header;
+    const struct efct_rx_descriptor* desc;
+
+    /* We consider a buffer to be filled once the final metadata in the
+     * buffer has been written. This is correct for X4 (metadata located with
+     * the packet) but wrong for X3 (metadata in the following packet).
      *
-     * For both X3 (metadata in the following packet) and X4 (metadata located
-     * with the packet) this indicates that the final packet in the current
-     * buffer has been written and the buffer removed from the hardware
-     * FIFO, so we may post a new buffer to replace it.
+     * For simplicity, assume that the metadata is located with the packet.
+     * In the unlikely event that we will want to use this system with X3,
+     * more work would be required to look in the right place for that
+     * architecture.
      *
-     * For X4, we could instead check the final sentinel of the current
-     * buffer and perhaps post a new buffer slightly earlier, but I don't
-     * think the extra complexity is justified.
+     * (I was initially tempted to look in the following buffer for both
+     * architectures; however that caused problems when a buffer was freed and
+     * reused before advancing the hardware tail beyond it.)
      */
-    desc = fifo->buffers[(fifo->filled + 1) % CI_EFCT_MAX_SUPERBUFS];
-    header = efct_superbuf_access(vi, qid, desc.id);
-    if( CI_QWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL) != desc.sentinel )
+    EF_VI_ASSERT(vi->efct_rxqs.meta_offset == 0);
+
+    EF_VI_ASSERT(state->fifo_tail_hw != -1 ); /* implied by count_hw > 0 */
+    desc = efct_rx_desc_for_sb(vi, qid, state->fifo_tail_hw);
+    buffer = efct_superbuf_access(vi, qid, state->fifo_tail_hw);
+    header = (const ci_qword_t*)(buffer + EFCT_RX_SUPERBUF_BYTES - EFCT_PKT_STRIDE);
+
+    if( CI_QWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL) != desc->sentinel )
       break;
-    ++fifo->filled;
+
+    state->fifo_tail_hw = desc->sbid_next;
+    state->fifo_count_hw--;
   }
 }
 
@@ -114,65 +110,75 @@ static void poison_superbuf(char *sbuf)
   wmb();
 }
 
-static void post_buffers(ef_vi* vi, struct efct_ubufs_rxq_fifo* fifo, int qid)
+static void post_buffers(ef_vi* vi, int qid)
 {
-  int16_t* head = &vi->ep_state->rxq.sb_desc_free_head[qid];
+  ef_vi_efct_rxq_state* state = &vi->ep_state->rxq.efct_state[qid];
   unsigned limit = get_ubufs(vi)->nic_fifo_limit;
 
-  while( *head != -1 && fifo->added - fifo->filled < limit ) {
-    const ci_qword_t* header;
-    struct efct_ubufs_desc desc;
+  while( state->free_head != -1 && state->fifo_count_hw < limit ) {
+    int16_t id = state->free_head;
+    const ci_qword_t* header = efct_superbuf_access(vi, qid, id);
+    struct efct_rx_descriptor* desc = efct_rx_desc_for_sb(vi, qid, id);
 
-    ef_shrub_buffer_id id = *head;
-    *head = efct_rx_desc_for_sb(vi, qid, id)->sbid_next;
+    state->free_head = desc->sbid_next;
+    desc->sbid_next = -1;
 
     /* We assume that the first sentinel value applies to the whole superbuf.
      * TBD: will we ever need to deal with manual rollover?
      */
-    header = efct_superbuf_access(vi, qid, id);
+    desc->sentinel = ! CI_QWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL);
     poison_superbuf((char *)header);
 
-    desc.id = id;
-    desc.sentinel = ! CI_QWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL);
+    if( state->fifo_count_hw == 0 )
+      state->fifo_tail_hw = id;
 
-    EF_VI_ASSERT(fifo->added - fifo->removed < CI_EFCT_MAX_SUPERBUFS);
-    fifo->buffers[fifo->added++ % CI_EFCT_MAX_SUPERBUFS] = desc;
+    if( state->fifo_count_sw == 0 )
+      state->fifo_tail_sw = id;
 
-    vi->efct_rxqs.ops->post(vi, qid, id, desc.sentinel);
+    if( state->fifo_head != -1 )
+      efct_rx_desc_for_sb(vi, qid, state->fifo_head)->sbid_next = id;
+
+    state->fifo_head = id;
+    state->fifo_count_hw++;
+    state->fifo_count_sw++;
+
+    vi->efct_rxqs.ops->post(vi, qid, id, desc->sentinel);
   }
 }
 
 static int efct_ubufs_next_shared(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq)
 {
   struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[qid];
+  ef_vi_efct_rxq_state* state = &vi->ep_state->rxq.efct_state[qid];
 
   ef_shrub_buffer_id id;
   int rc = ef_shrub_client_acquire_buffer(&rxq->shrub_client, &id, sentinel);
   if ( rc < 0 ) {
     return rc;
   }
-  *sbseq = rxq->sbseq++;
+  *sbseq = state->sbseq++;
   return id;
 }
 
 static int efct_ubufs_next_local(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq)
 {
-  struct efct_ubufs_rxq_fifo* fifo = get_ubufs(vi)->q[qid].fifo;
-  struct efct_ubufs_desc desc;
-  unsigned seq;
+  ef_vi_efct_rxq_state* state = &vi->ep_state->rxq.efct_state[qid];
+  struct efct_rx_descriptor* desc;
+  int id;
 
-  update_filled(vi, fifo, qid);
-  post_buffers(vi, fifo, qid);
+  update_filled(vi, qid);
+  post_buffers(vi, qid);
 
-  if( fifo->added == fifo->removed )
+  if( state->fifo_count_sw == 0 )
     return -EAGAIN;
 
-  seq = fifo->removed++;
-  desc = fifo->buffers[seq % CI_EFCT_MAX_SUPERBUFS];
-
-  *sentinel = desc.sentinel;
-  *sbseq = seq;
-  return desc.id;
+  id = state->fifo_tail_sw;
+  desc = efct_rx_desc_for_sb(vi, qid, id);
+  state->fifo_tail_sw = desc->sbid_next;
+  state->fifo_count_sw--;
+  *sbseq = state->sbseq++;
+  *sentinel = desc->sentinel;
+  return id;
 }
 
 static int efct_ubufs_next(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq)
@@ -185,11 +191,11 @@ static int efct_ubufs_next(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq)
 
 static void efct_ubufs_free_local(ef_vi* vi, int qid, int sbid)
 {
-  struct efct_ubufs_rxq_fifo* fifo = get_ubufs(vi)->q[qid].fifo;
-
+  /* Order is important: make sure the hardware tail is advanced beyond this
+   * buffer before freeing it; free it before attempting to post more. */
+  update_filled(vi, qid);
   efct_rx_sb_free_push(vi, qid, sbid);
-  update_filled(vi, fifo, qid);
-  post_buffers(vi, fifo, qid);
+  post_buffers(vi, qid);
 }
 
 static void efct_ubufs_free_shared(ef_vi* vi, int qid, int sbid)
@@ -208,8 +214,7 @@ static void efct_ubufs_free(ef_vi* vi, int qid, int sbid)
 
 static bool efct_ubufs_local_available(const ef_vi* vi, int qid)
 {
-  const struct efct_ubufs_rxq_fifo* fifo = const_ubufs(vi)->q[qid].fifo;
-  return fifo->added != fifo->removed;
+  return vi->ep_state->rxq.efct_state[qid].fifo_count_sw != 0;
 }
 
 static bool efct_ubufs_shared_available(const ef_vi* vi, int qid)
@@ -334,12 +339,6 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
 
   rxq = &ubufs->q[ix];
 
-  rxq->fifo = calloc(1, sizeof(struct efct_ubufs_rxq_fifo));
-  if( rxq->fifo == NULL ) {
-    munmap(map, map_bytes);
-    return -ENOMEM;
-  }
-
   for( id = 0; id < n_superbufs; ++id )
     efct_rx_sb_free_push(vi, qid, id);
 
@@ -348,7 +347,6 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
   rc = ef_memreg_alloc_flags(&rxq->memreg, vi->dh, ubufs->pd, ubufs->pd_dh,
                              map, map_bytes, 0);
   if( rc < 0 ) {
-    free(rxq->fifo);
     munmap(map, map_bytes);
     return rc;
   }
@@ -368,7 +366,7 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
 
   ubufs->active_qs |= 1 << ix;
   efct_vi_start_rxq(vi, ix, qid);
-  post_buffers(vi, rxq->fifo, ix);
+  post_buffers(vi, ix);
 
   return ix;
 #endif
@@ -410,7 +408,6 @@ static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd,
     return rc;
   }
 
-  rxq->fifo = NULL;
   rxq->superbuf_pkts = rxq->shrub_client.state->metrics.buffer_bytes / EFCT_PKT_STRIDE;
 
   ubufs->active_qs |= 1 << ix;
@@ -464,7 +461,6 @@ static void efct_ubufs_cleanup(ef_vi* vi)
     ef_memreg_free(&rxq->memreg, vi->dh);
     ci_resource_munmap(vi->dh, (void *)rxq->rx_post_buffer_reg,
                        CI_ROUND_UP(sizeof(uint64_t), CI_PAGE_SIZE));
-    free(rxq->fifo);
   }
   free(ubufs);
 #endif

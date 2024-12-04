@@ -1656,10 +1656,14 @@ void efct_vi_init(ef_vi* vi)
 
   vi->vi_txq.efct_fixed_header =
       efct_tx_header(0, 0, (vi->vi_flags & EF_VI_TX_TIMESTAMPS) ? 1 : 0, 0, 0);
-  for( i = 0; i < CI_ARRAY_SIZE(vi->ep_state->rxq.sb_desc_free_head); i++ )
-    vi->ep_state->rxq.sb_desc_free_head[i] = -1;
-
   vi->efct_rxqs.active_qs = &vi->efct_rxqs.max_qs;
-  for( i = 0; i < EF_VI_MAX_EFCT_RXQS; ++i )
-    vi->efct_rxqs.q[i].live.superbuf_pkts = &vi->efct_rxqs.q[i].config_generation;
+
+  for( i = 0; i < EF_VI_MAX_EFCT_RXQS; ++i ) {
+    ef_vi_efct_rxq* q = &vi->efct_rxqs.q[i];
+    ef_vi_efct_rxq_state* qs = &vi->ep_state->rxq.efct_state[i];
+
+    qs->free_head = qs->fifo_head = qs->fifo_tail_hw = qs->fifo_tail_sw = -1;
+    q->live.superbuf_pkts = &q->config_generation;
+  }
 }
+

@@ -102,6 +102,7 @@ static int efct_kbufs_next(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq)
 static void efct_kbufs_free(ef_vi* vi, int qid, int sbid)
 {
   struct efab_efct_rxq_uk_shm_q* shm = &get_kbufs(vi)->shm->q[qid];
+  ef_vi_efct_rxq_state* state = &vi->ep_state->rxq.efct_state[qid];
   uint32_t added, removed, freeq_size;
 
   added = shm->freeq.added;
@@ -113,7 +114,7 @@ static void efct_kbufs_free(ef_vi* vi, int qid, int sbid)
     shm->freeq.q[added++ & (CI_ARRAY_SIZE(shm->freeq.q) - 1)] = sbid;
     /* See if we can free any remaining sbufs in the descriptor free
      * list. */
-    for( sbid_cur = vi->ep_state->rxq.sb_desc_free_head[qid];
+    for( sbid_cur = state->free_head;
          sbid_cur != -1 && added - removed < CI_ARRAY_SIZE(shm->freeq.q);
          added++ ) {
       shm->freeq.q[added & (CI_ARRAY_SIZE(shm->freeq.q) - 1)] = sbid_cur;
@@ -121,7 +122,7 @@ static void efct_kbufs_free(ef_vi* vi, int qid, int sbid)
     }
     ci_wmb();
     OO_ACCESS_ONCE(shm->freeq.added) = added;
-    vi->ep_state->rxq.sb_desc_free_head[qid] = sbid_cur;
+    state->free_head = sbid_cur;
   }
   else {
     /* No space in the freeq add to descriptor free list */
