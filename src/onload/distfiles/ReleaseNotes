@@ -1,8 +1,8 @@
 This is not a supported release version of Onload
 =================================================
 
-Onload-9.0.1
-============
+Onload-9.0.1.86
+===============
 
  This is an update release of Onload to fix various bugs in
  OpenOnload-9.0.0.39, add a new version of the sfc net driver,
@@ -19,26 +19,11 @@ Linux distribution support
  - Red Hat Enterprise Linux 9.2 - 9.5
  - Canonical Ubuntu Server LTS 22.04 and 24.04
  - Debian 12 "Bookworm"
- - Linux kernels 5.11 - 6.11
+ - Linux kernels 5.11 - 6.12
 
-Packaging changes
------------------
 
- - Onload mkdist tarball is now also the DKMS tarball
-
-   Configuration file `dkms.conf` is now embedded in the Onload mkdist tarball,
-   enabling the `dkms` system to ingest it directly.[^1] This has simplified the
-   build flow, obsoleting the separate `onload_mkdkms` script along with its
-   RPM SPEC file. Instead, the DKMS RPM is now a sub-package of the main SPEC.
-
- - Optional sub-packages
-
-   When building RPM or DEB packages, all sub-packages are built by default.
-   It is now possible to choose outputs. For example, to build only userland
-   and DKMS sub-packages:
-
-        rpmbuild -tb --without kmod --without akmod onload-*.tgz # RPM
-        debuild -i -uc -us --build-profiles=pkg.onload.nosource # DEB
+Additional packaging options
+----------------------------
 
  - Akmods RPM sub-package as alternative to DKMS
 
@@ -53,18 +38,24 @@ Packaging changes
         yum install -y onload-user onload-akmod
         /usr/sbin/akmods # Optionally, build immediately
 
- - New combined script `./scripts/onload_mkpackage`
+ - Optional sub-packages
 
-   This script provides backwards-compatible support for `onload_mkdkms` and
-   `onload-make-official-srpm` as part of its more complete feature set for
-   package delivery. It can build source and/or binary RPM and DEB packages
-   from working tree or release tarball. It can filter any combination of DKMS,
-   Akmod, kmod, devel, and userland packages, and variants such as debug. It can
-   then install and load on local host for end-to-end testing and deployment or
-   build within Red Hat Mock for deployment elsewhere.
+   When building RPM or DEB packages, all sub-packages are built by default.
+   It is now possible to choose outputs. For example, to build only userland
+   and DKMS sub-packages:
 
-[^1]: To ingest directly in 2.2 < DKMS < 3.0.11, work around DKMS bug SC2157
-      by replacing `dkms ldarchive ...` with `tar xf onload-*.tgz -C /usr/src`.
+        rpmbuild -tb --without kmod --without akmod onload-*.tgz # RPM
+        debuild -i -uc -us --build-profiles=pkg.onload.nosource # DEB
+
+
+Notice of future change to DKMS RPM
+-----------------------------------
+
+From the next feature release, the DKMS RPM will not install the Onload
+userspace if it is absent but only install the onload kernel modules,
+requiring the Onload userspace to be installed via the usual onload userspace
+RPM as is done when the kmod RPMs are used. This will follow the pattern
+used by the new Debian DKMS packaging.
 
 
 Deprecation of tarball installation method (removal under consideration)

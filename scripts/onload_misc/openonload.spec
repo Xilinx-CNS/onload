@@ -230,6 +230,7 @@ Requires:         akmods %{base_build_requires} %{user_build_requires} %{?efct_b
 Conflicts:        kernel-module-sfc-RHEL%{maindist}
 Provides:         openonload-kmod = %{version}-%{release}
 Provides:         sfc-kmod-symvers = %{version}-%{release}
+BuildArch:        noarch
 
 %description akmod
 OpenOnload is a high performance user-level network stack.  Please see
@@ -279,10 +280,15 @@ This package comprises development headers for the components of OpenOnload.
 Summary:          OpenOnload kernel modules as DKMS source
 Group:            System Environment/Kernel
 Requires:         dkms >= 2.6
-Requires:         openonload = %{version}-%{release}
 Provides:         openonload-kmod = %{version}-%{release}
 Provides:         sfc-kmod-symvers = %{version}-%{release}
 BuildArch:        noarch
+
+%if %{with user}
+Requires:         openonload = %{version}-%{release}
+%else
+Provides:         openonload = %{version}-%{release}
+%endif
 
 %description dkms
 OpenOnload is a high performance user-level network stack.  Please see
@@ -372,7 +378,7 @@ mkdir -p "$i_prefix/etc/depmod.d"
 ./scripts/onload_install --packaged \
   %{?build_profile:--build-profile %build_profile} \
   %{?debug:--debug} %{?setuid:--setuid} %{?moddir:--moddir=%moddir} \
-  %{?with_user: --userfiles --modprobe --modulesloadd --udev} \
+  %{?with_user: --userfiles --modprobe --modulesloadd --udev %{?_sysusersdir:--adduser}} \
   %{?with_kmod: --kernelfiles --kernelver "%{kernel}"} \
   %{?with_devel: --headers}
 %endif
@@ -407,7 +413,8 @@ rpmbuild \
 ln -s $(ls %{buildroot}/%{_usrsrc}/akmods/) %{buildroot}/%{_usrsrc}/akmods/%{name}-kmod.latest
 %endif
 %if %{with dkms}
-echo "ONLOAD_INSTALL_ARGS=\"%{?debug:--debug}%{?build_profile: --build-profile %build_profile}%{?moddir: --moddir=%moddir}\"" > dkms_overrides.conf
+echo "MAKE[0]+=\"%{?debug: --debug}%{?build_profile: --build-profile %build_profile}%{?moddir: --moddir=%moddir}\"" > dkms_overrides.conf
+%{!?with_user:echo "which onload_uninstall >/dev/null 2>&1 || MAKE[0]+=\" --userfiles --modprobe --modulesloadd --udev --adduser%{?setuid: --setuid}\"" >> dkms_overrides.conf}
 install -D -m 644 dkms_overrides.conf %{buildroot}%{_sysconfdir}/dkms/%{name}.conf
 mkdir -p %{buildroot}%{_usrsrc}
 tar xf %{SOURCE0} -C %{buildroot}%{_usrsrc}
