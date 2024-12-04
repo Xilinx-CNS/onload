@@ -941,6 +941,8 @@ static inline int ci_tcp_recvmsg_impl(const ci_tcp_recvmsg_args* a,
 #ifndef __KERNEL__
   if( rinf.rc >= 0 )
     a->msg->msg_flags = rinf.msg_flags;
+  else
+    a->msg->msg_controllen = rinf.controllen;
 #endif
   return rinf.rc;
 }
