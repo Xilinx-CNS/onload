@@ -703,6 +703,10 @@ ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
   struct efhw_nic_ef10ct_evq *ef10ct_evq;
   int dmaq = rxq->qid;
 
+  /* This releases the SW RXQ resource, so is independent of the underlying
+   * HW RXQ flush and free. */
+  freer(rxq);
+
   /* FIXME EF10CT proper refcounting */
   EFHW_ASSERT(ef10ct->rxq[dmaq].ref_count > 0);
   ef10ct->rxq[dmaq].ref_count--;
@@ -731,10 +735,6 @@ ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
   /* ef10ct->rxq[dmaq].q_id is updated in check_flushes. */
   ef10ct->rxq[dmaq].evq = -1;
   ef10ct->rxq[dmaq].post_buffer_addr = 0;
-
-  /* This releases the SW RXQ resource, so is independent of the underlying
-   * HW RXQ flush and free. */
-  freer(rxq);
 }
 
 static int
