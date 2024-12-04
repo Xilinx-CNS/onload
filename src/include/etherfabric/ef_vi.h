@@ -1234,7 +1234,13 @@ struct ef_vi_compat_data {
   /** The underlying architecture used by this VI */
   enum ef_vi_arch underlying_arch;
   /** The underlying architecture-specific operations */
+#ifdef __cplusplus
+  /* Because TCPDirect is built with C++, the ops struct is namespaced to ef_vi
+   * but it isn't worth the churn (for blame and documentation) to move it. */
+  struct ef_vi::ops underlying_ops;
+#else
   struct ops underlying_ops;
+#endif
   /** Storage for data required to pretend to be a given arch, only data which
    * corresponds to the emulated architecture should be used */
   union {

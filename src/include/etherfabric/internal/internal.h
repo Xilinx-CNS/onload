@@ -260,8 +260,11 @@ ef_vi_inline bool ef_vi_is_compat_vi(ef_vi* vi, enum ef_vi_arch compat_arch)
  * will see through the architecture exposed by the compatibility layer. */
 ef_vi_inline enum ef_vi_arch ef_vi_get_real_arch(ef_vi* vi)
 {
+  /* `vi->nic_type.arch` is actually defined as `unsigned char`, but is always
+   * assigned with values from `enum ef_vi_arch`, so we cast it here to
+   * satisfy the compiler. */
   return vi->compat_data ? vi->compat_data->underlying_arch
-                         : vi->nic_type.arch;
+                         : (enum ef_vi_arch)vi->nic_type.arch;
 }
 
 
