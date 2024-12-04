@@ -117,7 +117,7 @@ static void efct_kbufs_free(ef_vi* vi, int qid, int sbid)
          sbid_cur != -1 && added - removed < CI_ARRAY_SIZE(shm->freeq.q);
          added++ ) {
       shm->freeq.q[added & (CI_ARRAY_SIZE(shm->freeq.q) - 1)] = sbid_cur;
-      sbid_cur = efct_rx_sb_free_next(vi, qid, sbid_cur);
+      sbid_cur = efct_rx_desc_for_sb(vi, qid, sbid_cur)->sbid_next;
     }
     ci_wmb();
     OO_ACCESS_ONCE(shm->freeq.added) = added;

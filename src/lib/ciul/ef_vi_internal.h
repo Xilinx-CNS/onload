@@ -237,11 +237,17 @@ extern long efxdp_vi_mmap_bytes(ef_vi*);
 extern void efct_vi_init(ef_vi*) EF_VI_HF;
 extern int efct_kbufs_init(ef_vi* vi) EF_VI_HF;
 extern int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh) EF_VI_HF;
-void efct_rx_sb_free_push(ef_vi* vi, uint32_t qid, uint32_t sbid);
-int16_t efct_rx_sb_free_next(ef_vi* vi, uint32_t qid, uint32_t sbid);
 
 extern int efct_superbufs_reserve(ef_vi* vi, void* space);
 extern void efct_superbufs_cleanup(ef_vi* vi);
+
+struct efct_rx_descriptor* efct_rx_desc_for_sb(ef_vi* vi, uint32_t qid, uint32_t sbid);
+static inline void efct_rx_sb_free_push(ef_vi* vi, uint32_t qid, uint32_t sbid)
+{
+  int16_t* head = &vi->ep_state->rxq.sb_desc_free_head[qid];
+  efct_rx_desc_for_sb(vi, qid, sbid)->sbid_next = *head;
+  *head = sbid;
+}
 
 static inline const void* efct_superbuf_access(const ef_vi* vi, int qid, size_t sbid)
 {

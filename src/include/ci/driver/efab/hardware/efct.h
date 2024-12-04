@@ -197,17 +197,11 @@
 /* size of a transmit header in bytes */
 #define EFCT_TX_HEADER_BYTES 8
 
-/* size of a transmit descriptor in bytes */
-#define EFCT_TX_DESCRIPTOR_BYTES 2
-
 /* alignment requirement for tx packets written to the aperture */
 #define EFCT_TX_ALIGNMENT 64
 
 /* magic value of ct_thresh to disable cut-through */
 #define EFCT_TX_CT_DISABLE 0xff
-
-/* size of a transmit descriptor in bytes */
-#define EFCT_RX_DESCRIPTOR_BYTES 16
 
 /* size of each receive buffer posted to RX_BUFFER_POST (DP_RX_BUFFER_SIZE) */
 #define EFCT_RX_SUPERBUF_BYTES  1048576

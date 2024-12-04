@@ -137,6 +137,26 @@ ef_vi_inline unsigned ef_vi_next_rx_rq_id(ef_vi* vi)
 
 unsigned efct_vi_next_rx_rq_id(ef_vi* vi, int qid);
 
+/* efct tx packet descriptor, stored in the ring until completion */
+struct efct_tx_descriptor
+{
+  /* total length including header and padding, in bytes */
+  uint16_t len;
+};
+
+/* efct rx packet descriptor, one for each buffer assigned to a queue */
+struct efct_rx_descriptor
+{
+  uint16_t refcnt;
+  uint16_t superbuf_pkts;
+  int16_t  sbid_next; /* id of next buffer in a linked list, or -1 */
+  uint8_t  padding_[1];
+  uint8_t  final_ts_status;
+  uint64_t final_timestamp;
+};
+
+#define EFCT_TX_DESCRIPTOR_BYTES sizeof(struct efct_tx_descriptor)
+#define EFCT_RX_DESCRIPTOR_BYTES sizeof(struct efct_rx_descriptor)
 
 #ifndef __KERNEL__
 #include <sys/uio.h>

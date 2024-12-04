@@ -45,17 +45,6 @@ static int efct_ef_eventq_has_many_events(const ef_vi* vi, int n_events)
 #define M(FIELD) M_(EFCT_RX_HEADER_ ## FIELD)
 #define CHECK_FIELDS (M(L2_STATUS) | M(L3_STATUS) | M(L4_STATUS) | M(ROLLOVER))
 
-struct efct_rx_descriptor
-{
-  uint16_t refcnt;
-  uint16_t superbuf_pkts;
-  /* Points to the next descriptor in the descriptor buf -1 if NONE*/
-  int16_t  sbid_next;
-  uint8_t  padding_[1];
-  uint8_t  final_ts_status;
-  uint64_t final_timestamp;
-};
-
 /* pkt_ids are:
  *  bits 0..15 packet index in superbuf
  *  bits 16..26 superbuf index
@@ -121,22 +110,12 @@ static int pkt_id_to_rxq_ix(uint32_t pkt_id)
   return pkt_id_to_global_superbuf_ix(pkt_id) / CI_EFCT_MAX_SUPERBUFS;
 }
 
-static struct efct_rx_descriptor* efct_rx_desc_for_sb(ef_vi* vi, uint32_t qid, uint32_t sbid) {
+struct efct_rx_descriptor*
+efct_rx_desc_for_sb(ef_vi* vi, uint32_t qid, uint32_t sbid)
+{
   ef_vi_rxq* q = &vi->vi_rxq;
   struct efct_rx_descriptor* desc = q->descriptors;
   return desc + ((qid * CI_EFCT_MAX_SUPERBUFS) | sbid);
-}
-
-void efct_rx_sb_free_push(ef_vi* vi, uint32_t qid, uint32_t sbid)
-{
-  int16_t* head = &vi->ep_state->rxq.sb_desc_free_head[qid];
-  efct_rx_desc_for_sb(vi, qid, sbid)->sbid_next = *head;
-  *head = sbid;
-}
-
-int16_t efct_rx_sb_free_next(ef_vi* vi, uint32_t qid, uint32_t sbid)
-{
-  return efct_rx_desc_for_sb(vi, qid, sbid)->sbid_next;
 }
 
 static bool efct_rxq_is_active(const ef_vi_efct_rxq* rxq)
@@ -238,14 +217,6 @@ static bool efct_rx_check_event(const ef_vi* vi)
       return true;
   return false;
 }
-
-/* tx packet descriptor, stored in the ring until completion */
-/* TODO fix the size of this, and update tx_desc_bytes in vi_init.c */
-struct efct_tx_descriptor
-{
-  /* total length including header and padding, in bytes */
-  uint16_t len;
-};
 
 /* state of a partially-completed tx operation */
 struct efct_tx_state
@@ -1671,10 +1642,6 @@ static void efct_vi_initialise_ops(ef_vi* vi)
 void efct_vi_init(ef_vi* vi)
 {
   int i;
-  EF_VI_BUILD_ASSERT(sizeof(struct efct_tx_descriptor) ==
-                     EFCT_TX_DESCRIPTOR_BYTES);
-  EF_VI_BUILD_ASSERT(sizeof(struct efct_rx_descriptor) ==
-                     EFCT_RX_DESCRIPTOR_BYTES);
   EF_VI_ASSERT( vi->nic_type.nic_flags & EFHW_VI_NIC_CTPIO_ONLY );
 
   efct_vi_initialise_ops(vi);

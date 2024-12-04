@@ -124,7 +124,7 @@ static void post_buffers(ef_vi* vi, struct efct_ubufs_rxq_fifo* fifo, int qid)
     struct efct_ubufs_desc desc;
 
     ef_shrub_buffer_id id = *head;
-    *head = efct_rx_sb_free_next(vi, qid, id);
+    *head = efct_rx_desc_for_sb(vi, qid, id)->sbid_next;
 
     /* We assume that the first sentinel value applies to the whole superbuf.
      * TBD: will we ever need to deal with manual rollover?

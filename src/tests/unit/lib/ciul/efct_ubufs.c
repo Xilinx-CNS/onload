@@ -78,25 +78,12 @@ int ef_memreg_free(ef_memreg* mr, ef_driver_handle mr_dh)
 }
 
 #define SUPERBUF_COUNT 16
-static int sb_free_next[EF_VI_MAX_EFCT_RXQS][SUPERBUF_COUNT];
+static struct efct_rx_descriptor rx_descs[EF_VI_MAX_EFCT_RXQS][SUPERBUF_COUNT];
 
-void efct_rx_sb_free_push(ef_vi* vi, uint32_t qid, uint32_t sbid)
+struct efct_rx_descriptor*
+efct_rx_desc_for_sb(ef_vi* vi, uint32_t qid, uint32_t sbid)
 {
-  int16_t* head;
-
-  assert(qid < EF_VI_MAX_EFCT_RXQS);
-  assert(sbid < SUPERBUF_COUNT);
-
-  head = &vi->ep_state->rxq.sb_desc_free_head[qid];
-  sb_free_next[qid][sbid] = *head;
-  *head = sbid;
-}
-
-int16_t efct_rx_sb_free_next(ef_vi* vi, uint32_t qid, uint32_t sbid)
-{
-  assert(qid < EF_VI_MAX_EFCT_RXQS);
-  assert(sbid < SUPERBUF_COUNT);
-  return sb_free_next[qid][sbid];
+  return &rx_descs[qid][sbid];
 }
 
 static const void* get_superbuf(ef_vi* vi, int qid, int sbid)
