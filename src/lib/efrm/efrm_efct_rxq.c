@@ -338,8 +338,7 @@ int efrm_rxq_refresh(struct efrm_efct_rxq *rxq, unsigned long superbufs,
 		           n_hugepages * CI_EFCT_SUPERBUFS_PER_PAGE);
 	}
 
-	pages = kmalloc_array(sizeof(pages[0]), CI_EFCT_MAX_HUGEPAGES,
-	                      GFP_KERNEL);
+	pages = kmalloc_array(CI_EFCT_MAX_HUGEPAGES, sizeof(pages[0]), GFP_KERNEL);
 	if (!pages)
 		return -ENOMEM;
 
@@ -427,7 +426,7 @@ int efrm_rxq_refresh_kernel(struct efhw_nic *nic, int hwqid,
 	size_t i;
 	int rc = 0;
 
-	pages = kmalloc_array(sizeof(pages[0]), CI_EFCT_MAX_HUGEPAGES, GFP_KERNEL);
+	pages = kmalloc_array(CI_EFCT_MAX_HUGEPAGES, sizeof(pages[0]), GFP_KERNEL);
 	if (!pages)
 		return -ENOMEM;
 
