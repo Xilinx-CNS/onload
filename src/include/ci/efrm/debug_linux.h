@@ -78,7 +78,7 @@
 #if !defined(NDEBUG)
 #define EFRM_TRACE(fmt, ...) EFRM_PRINTK(KERN_DEBUG, fmt, __VA_ARGS__)
 #else
-#define EFRM_TRACE(fmt, ...)
+#define EFRM_TRACE(fmt, ...) do {} while(0)
 #endif
 
 #define EFRM_WARN_ONCE(fmt, ...) do {                        \
@@ -107,8 +107,8 @@
 #define EFRM_DO_DEBUG(expr) expr
 #define EFRM_VERIFY_EQ(expr, val) EFRM_ASSERT((expr) == (val))
 #else
-#define EFRM_ASSERT(cond)
-#define EFRM_DO_DEBUG(expr)
+#define EFRM_ASSERT(cond) do {} while(0)
+#define EFRM_DO_DEBUG(expr) do {} while(0)
 #define EFRM_VERIFY_EQ(expr, val) expr
 #endif
 

@@ -239,7 +239,7 @@ efrm_bt_manager_realloc(struct efhw_nic *nic,
 		else
 			EFRM_ASSERT(a->bta_first_entry_offset + a->bta_size
 				    <= EFHW_BUFFER_TABLE_BLOCK_SIZE);
-	)
+	);
 
 	spin_lock_bh(&manager->btm_lock);
 	if (manager->btm_block != NULL)
@@ -317,7 +317,7 @@ efrm_bt_nic_set(struct efhw_nic *nic, struct efrm_buffer_table_allocation *a,
 		else
 			EFRM_ASSERT(a->bta_first_entry_offset + a->bta_size
 				    <= EFHW_BUFFER_TABLE_BLOCK_SIZE);
-	)
+	);
 
 	do {
 		rc = efhw_nic_buffer_table_set(nic, block,

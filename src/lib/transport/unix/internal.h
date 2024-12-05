@@ -682,8 +682,8 @@ extern citp_fdinfo_p citp_fdtable_busy_wait(unsigned fd, int fdt_locked) CI_HF;
 #define CITP_FDTABLE_UNLOCK()	__CITP_UNLOCK(&citp_ul_lock)
 #define CITP_FDTABLE_UNLOCK_RD() __CITP_UNLOCK_RD(&citp_ul_lock)
 
-#define CITP_FDTABLE_ASSERT_LOCKED(fdt_locked)
-#define CITP_FDTABLE_ASSERT_LOCKED_RD
+#define CITP_FDTABLE_ASSERT_LOCKED(fdt_locked) do {} while(0)
+#define CITP_FDTABLE_ASSERT_LOCKED_RD do {} while(0)
 
 #else
 
