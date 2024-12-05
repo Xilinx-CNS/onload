@@ -1970,4 +1970,8 @@ static inline void hwtstamp_config_from_kernel(struct hwtstamp_config *cfg,
 }
 #endif
 
+#ifdef EFX_NEED_SKB_GRO_MAY_PULL
+#define skb_gro_may_pull(_s, _l) skb_gro_header_hard(_s, _l)
+#endif
+
 #endif /* EFX_KERNEL_COMPAT_H */

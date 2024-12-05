@@ -48,7 +48,11 @@ TRACE_EVENT(sfc_receive,
 	),
 
 	TP_fast_assign(
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ASSIGN_STR_NO_SRC_ARG)
+		__assign_str(dev_name);
+#else
 		__assign_str(dev_name, skb->dev->name);
+#endif
 #ifdef CONFIG_NET_LL_RX_POLL
 		__entry->napi_id = skb->napi_id;
 #else
@@ -81,7 +85,7 @@ TRACE_EVENT(sfc_receive,
 
 			off = skb_gro_offset(skb);
 			hlen = off + sizeof(*eth);
-			eth = skb_gro_header_hard((struct sk_buff *) skb, hlen) ?
+			eth = skb_gro_may_pull((struct sk_buff *) skb, hlen) ?
 			      skb_gro_header_slow((struct sk_buff *) skb, hlen, off) :
 			      skb_gro_header_fast((struct sk_buff *) skb, off);
 			__entry->protocol = gro && eth ?
@@ -147,7 +151,11 @@ TRACE_EVENT(sfc_transmit,
 	),
 
 	TP_fast_assign(
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ASSIGN_STR_NO_SRC_ARG)
+		__assign_str(dev_name);
+#else
 		__assign_str(dev_name, net_dev->name);
+#endif
 		__entry->queue_mapping = skb->queue_mapping;
 		__entry->skbaddr = skb;
 		__entry->vlan_tagged = skb_vlan_tag_present(skb);
