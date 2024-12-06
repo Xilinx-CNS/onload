@@ -161,7 +161,7 @@ efct_nic_shared_rxq_refresh(struct efhw_nic *nic, int hwqid,
                n_hugepages * CI_EFCT_SUPERBUFS_PER_PAGE);
   }
 
-  pages = kmalloc_array(ci_efct_max_hugepages, sizeof(pages[0]), gfp_kernel);
+  pages = kmalloc_array(CI_EFCT_MAX_HUGEPAGES, sizeof(pages[0]), GFP_KERNEL);
   if (!pages)
     return -ENOMEM;
 
