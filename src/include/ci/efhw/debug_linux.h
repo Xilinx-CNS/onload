@@ -80,8 +80,8 @@
 #define EFHW_ASSERT(cond)  BUG_ON((cond) == 0)
 #define EFHW_DO_DEBUG(expr) expr
 #else
-#define EFHW_ASSERT(cond)
-#define EFHW_DO_DEBUG(expr)
+#define EFHW_ASSERT(cond) do {} while(0)
+#define EFHW_DO_DEBUG(expr) do {} while(0)
 #endif
 
 #define EFHW_TEST(expr)			\
