@@ -1122,14 +1122,14 @@ static bool efct_vi_sb_has_been_filled(ef_vi *vi, uint32_t sbid,
                                       bool sb_sentinel, uint32_t superbuf_pkts,
                                       int ix, int qid)
 {
+  const ci_oword_t *header;
   EF_VI_DEBUG(ef_vi_efct_rxq_ptr *rxq_ptr);
   EF_VI_DEBUG(rxq_ptr = &vi->ep_state->rxq.rxq_ptr[ix]);
   EF_VI_ASSERT(rxq_ptr->meta_offset == 0);
 
-  const ci_oword_t *header = (void *)((char *)efct_superbuf_access(vi, qid, sbid)
-                             + (superbuf_pkts - 1) * EFCT_PKT_STRIDE);
-  bool pkt_sentinel = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL);
-  return pkt_sentinel == sb_sentinel;
+  header = (void *)((char *)efct_superbuf_access(vi, qid, sbid)
+                            + (superbuf_pkts - 1) * EFCT_PKT_STRIDE);
+  return CI_OWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL) == sb_sentinel;
 }
 
 int efct_vi_find_free_rxq(ef_vi* vi, int qid)
