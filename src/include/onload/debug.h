@@ -65,7 +65,7 @@ extern int oo_debug_bits;
   do{ if( oo_debug_bits & (bits) )  { foo; } }while(0)
 
 #ifdef NDEBUG
-# define OO_DYNAMIC_DEBUG(bits, foo)
+# define OO_DYNAMIC_DEBUG(bits, foo) do {} while(0)
 #else
 # define OO_DYNAMIC_DEBUG(bits, foo)  OO_DYNAMIC_LOG((bits), foo)
 #endif
