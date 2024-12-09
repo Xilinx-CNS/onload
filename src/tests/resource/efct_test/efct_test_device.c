@@ -119,6 +119,10 @@ void efct_test_remove_test_dev(struct efct_test_device* tdev)
   auxiliary_device_uninit(adev);
 
   set_memory_wb((unsigned long)tdev->evq_window, EFCT_TEST_EVQS_N);
+
+  printk(KERN_INFO "%s Free evq mask = %llx\n", __func__, tdev->free_evqs);
+  printk(KERN_INFO "%s Free txq mask = %llx\n", __func__, tdev->free_txqs);
+  printk(KERN_INFO "%s Free rxq mask = %llx\n", __func__, tdev->free_rxqs);
   kfree(tdev->evq_window);
 }
 

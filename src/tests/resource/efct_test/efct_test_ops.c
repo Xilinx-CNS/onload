@@ -730,6 +730,9 @@ static void efct_test_queue_free(uint64_t *free, int channel_nr,
            __func__, efct_test_queue_name(type), channel_nr, *free);
 
   *free |= 1 << channel_nr;
+
+  printk(KERN_INFO "%s: freed %u qid %d, free mask now %llx\n",
+         __func__, type, channel_nr, *free);
 }
 
 static int efct_test_channel_alloc(struct efx_auxdev_client *handle)
