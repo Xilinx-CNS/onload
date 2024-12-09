@@ -458,6 +458,44 @@ static int efct_test_init_rxq(struct efx_auxdev_client *handle,
   return 0;
 }
 
+static int efct_test_fini_rxq(struct efx_auxdev_client *handle, int rxq_idx)
+{
+  struct efct_test_device *tdev = handle->tdev;
+  struct efct_test_rxq *rxq;
+  int evq;
+
+  rxq_idx = ef10ct_get_queue_num(rxq_idx);
+
+  if ( (1 << rxq_idx) & handle->tdev->free_rxqs ) {
+    printk(KERN_INFO "%s Requested de-init of rxq %d, but it is already freed."
+           " Free mask = %llx\n", __func__, rxq_idx, handle->tdev->free_rxqs);
+    return 0;
+  }
+
+  rxq = &tdev->rxqs[rxq_idx];
+  evq = rxq->evq;
+
+  printk(KERN_INFO "%s: rxq %d\n", __func__, rxq_idx);
+  if (evq < 0) {
+    printk(KERN_INFO "%s rxq %d already finished\n", __func__, rxq_idx);
+    return 0;
+  }
+
+  atomic_set(&rxq->timer_running, 0);
+  cancel_delayed_work_sync(&rxq->timer);
+
+  hrtimer_cancel(&rxq->rx_tick);
+
+
+  tdev->evqs[evq].rxqs &= ~(1 << rxq_idx);
+  kfree(rxq->post_register);
+  set_memory_wb((unsigned long)rxq->post_register, 1);
+
+  memset(rxq, 0, sizeof(*rxq));
+  rxq->evq = -1;
+
+  return 0;
+}
 
 static int efct_test_free_rxq(struct efx_auxdev_client *handle,
                               struct efx_auxdev_rpc *rpc)
@@ -477,23 +515,8 @@ static int efct_test_free_rxq(struct efx_auxdev_client *handle,
   evq = rxq->evq;
 
   printk(KERN_INFO "%s: rxq %d\n", __func__, rxq_idx);
-  WARN(evq < 0,
-       "%s: Error: freeing q %d, but not bound to evq\n", __func__, rxq_idx);
-
-  atomic_set(&rxq->timer_running, 0);
-  cancel_delayed_work_sync(&rxq->timer);
-
-  hrtimer_cancel(&rxq->rx_tick);
-
+  efct_test_fini_rxq(handle, rxq_idx);
   evq_push_rx_flush_complete(&tdev->evqs[evq], rxq_idx);
-
-  tdev->evqs[evq].rxqs &= ~(1 << rxq_idx);
-  kfree(rxq->post_register);
-  set_memory_wb((unsigned long)rxq->post_register, 1);
-
-  memset(rxq, 0, sizeof(*rxq));
-  rxq->evq = -1;
-
   return 0;
 }
 
@@ -752,6 +775,8 @@ static int efct_test_rxq_alloc(struct efx_auxdev_client *handle)
 
 static void efct_test_rxq_free(struct efx_auxdev_client *handle, int rxq_nr)
 {
+  printk(KERN_INFO "%s freeing rxq = %d\n", __func__, rxq_nr);
+  efct_test_fini_rxq(handle, rxq_nr);
   efct_test_queue_free(&handle->tdev->free_rxqs, rxq_nr,
                        EF10CT_QUEUE_HANDLE_TYPE_RXQ);
 }
