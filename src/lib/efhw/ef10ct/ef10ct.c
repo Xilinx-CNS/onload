@@ -167,15 +167,24 @@ ef10ct_nic_release_hardware(struct efhw_nic *nic)
 static void ef10ct_free_rxq(struct efhw_nic *nic, int qid)
 {
   int rc = 0;
+  int rxq_num;
   struct device *dev;
   struct efx_auxdev* edev;
   struct efx_auxdev_client* cli;
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
 
   EFHW_WARN("%s", __func__);
+
+  rxq_num = ef10ct_get_queue_num(qid);
+  mutex_lock(&ef10ct->rxq[rxq_num].bind_lock);
+  EFHW_ASSERT(ef10ct->rxq[rxq_num].state == EF10CT_RXQ_STATE_FREEING);
 
   AUX_PRE(dev, edev, cli, nic, rc);
   edev->llct_ops->rxq_free(cli, qid);
   AUX_POST(dev, edev, cli, nic, rc);
+
+  ef10ct->rxq[rxq_num].state = EF10CT_RXQ_STATE_FREE;
+  mutex_unlock(&ef10ct->rxq[rxq_num].bind_lock);
 }
 
 static void ef10ct_check_for_flushes(struct work_struct *work)
@@ -841,10 +850,18 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
 
   mutex_lock(&ef10ct->rxq[rxq_num].bind_lock);
 
+  if( ef10ct->rxq[rxq_num].state == EF10CT_RXQ_STATE_FREEING ||
+      ef10ct->rxq[rxq_num].state == EF10CT_RXQ_STATE_FREE ) {
+    EFHW_WARN("%s Tried to bind to rxq %d, but it is being freed. Aborting.",
+             __func__, rxq_num);
+    rc = -EAGAIN;
+    goto out_locked;
+  }
+
   if( ef10ct->rxq[rxq_num].ref_count > 0 ) {
     /* Already bound, so should have an associated evq */
     EFHW_ASSERT(ef10ct->rxq[rxq_num].evq >= 0);
-
+    EFHW_ASSERT(ef10ct->rxq[rxq_num].state == EF10CT_RXQ_STATE_INITIALISED);
     goto out_good;
   }
 
@@ -918,6 +935,9 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
   EFHW_ASSERT(ef10ct->rxq[rxq_num].evq == -1);
   ef10ct->rxq[rxq_num].evq = evq;
 
+  EFHW_ASSERT(ef10ct->rxq[rxq_num].state == EF10CT_RXQ_STATE_ALLOCATED);
+  ef10ct->rxq[rxq_num].state = EF10CT_RXQ_STATE_INITIALISED;
+
 out_good:
   ef10ct->rxq[rxq_num].ref_count++;
   params->rxq->qid = rxq_num;
@@ -947,6 +967,9 @@ ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
     return;
   }
 
+  EFHW_ASSERT(ef10ct->rxq[rxq_num].state == EF10CT_RXQ_STATE_INITIALISED);
+  ef10ct->rxq[rxq_num].state = EF10CT_RXQ_STATE_FREEING;
+
   rc = ef10ct_fini_rxq(nic, rxq_num);
   if( rc < 0 ) {
     EFHW_ERR("%s: Failed to fini rxq %d rc = %d", __func__, rxq_num, rc);
@@ -954,7 +977,6 @@ ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
     return;
   }
 
-  /* ef10ct->rxq[dmaq].q_id is updated in check_flushes. */
   if ( ! ((nic->devtype.arch == EFHW_ARCH_EF10CT) &&
           (nic->devtype.variant == 'L')) )
   {
@@ -1095,6 +1117,24 @@ static int get_rxq_from_mask(struct efhw_nic *nic,
    * - permission handling for additional shared users of the queue
    * - resource re-allocation post reset
    */
+
+  /* Update efhw's understanding of the state of this rxq */
+  if( rc >= 0 ) {
+    struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+    int rxq_num = ef10ct_get_queue_num(rc);
+
+    mutex_lock(&ef10ct->rxq[rxq_num].bind_lock);
+
+    if( rxq_num < ef10ct->rxq_n ) {
+      if( ef10ct->rxq[rxq_num].state == EF10CT_RXQ_STATE_FREE )
+        ef10ct->rxq[rxq_num].state = EF10CT_RXQ_STATE_ALLOCATED;
+      else
+        EFHW_WARN("%s Allocated rxq %d but it was not in the FREE state."
+                  " state = %u", __func__, rxq_num, ef10ct->rxq[rxq_num].state);
+    }
+
+    mutex_unlock(&ef10ct->rxq[rxq_num].bind_lock);
+  }
 
   return rc;
 }

@@ -33,10 +33,37 @@ struct efhw_nic_ef10ct_evq {
   struct efhw_nic_ef10ct_msi_context *msi_context;
 };
 
+/** enum_nic_ef10ct_rxq_state - Current state of the rxq.
+ * @EF10CT_RXQ_STATE_FREE: rxq is neither allocated nor inited.
+ *                         Transitions to EF10CT_RXQ_STATE_ALLOCATED.
+ * @EF10CT_RXQ_STATE_ALLOCATED: rxq has been allocated via mcdi, but not inited.
+ *                              Transitions to EF10CT_RXQ_STATE_INITIALISED.
+ * @EF10CT_RXQ_STATE_INITIALISED: rxq has been allocated and inited.
+ *                                Transitions to EF10CT_RXQ_STATE_FREEING.
+ * @EF10CT_RXQ_STATE_FREEING: rxq in the process of being freed. Don't attach.
+ *                            Transitions to EF10CT_RXQ_STATE_FREE.
+ *
+ * Used to keep track of the current state of the rxq. The first three states
+ * FREE, ALLOCATED and INITIALISED all represent the actual state of the queue
+ * as it would be understood from firmware/hardware. The FREEING state is
+ * introduced as this is the only process that happens asynchronously. Therefore
+ * to prevent any bugs that would occur from concurrent users trying to use the
+ * queue as if it were initialised, even though it is currently being freed, we
+ * state that the queue is no longer in the INITIALISED state after the FINI
+ * request has been made.
+ */
+enum efhw_nic_ef10ct_rxq_state {
+  EF10CT_RXQ_STATE_FREE = 0,
+  EF10CT_RXQ_STATE_ALLOCATED,
+  EF10CT_RXQ_STATE_INITIALISED,
+  EF10CT_RXQ_STATE_FREEING,
+};
+
 struct efhw_nic_ef10ct_rxq {
   int evq;
   int ref_count;
   struct mutex bind_lock; /* Lock to serialise concurrent binds/unbinds */
+  enum efhw_nic_ef10ct_rxq_state state;
   uint64_t *post_buffer_addr;
 };
 
