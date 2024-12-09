@@ -257,32 +257,13 @@ static void efct_ubufs_post_kernel(ef_vi* vi, int qid, int sbid, bool sentinel)
   ci_resource_op(vi->dh, &op);
 }
 
-static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd, unsigned n_superbufs)
+static int efct_ubufs_init_rxq_resource(ef_vi *vi, int qid,
+                                        unsigned n_superbufs)
 {
-#ifdef __KERNEL__
-  // TODO
-  BUG();
-  return -EOPNOTSUPP;
-#else
-  int ix, rc;
-  ef_shrub_buffer_id id;
-  void* map;
-  size_t map_bytes;
-  struct efct_ubufs* ubufs = get_ubufs(vi);
-  struct efct_ubufs_rxq* rxq;
+  int rc;
   ci_resource_alloc_t ra;
   unsigned n_hugepages = (n_superbufs + CI_EFCT_SUPERBUFS_PER_PAGE - 1) /
                           CI_EFCT_SUPERBUFS_PER_PAGE;
-
-  int flags = (fd < 0 ? MAP_PRIVATE | MAP_ANONYMOUS : MAP_SHARED);
-
-  if( n_superbufs > CI_EFCT_MAX_SUPERBUFS )
-    return -EINVAL;
-
-  ix = efct_vi_find_free_rxq(vi, qid);
-  if( ix < 0 )
-    return ix;
-  rxq = &ubufs->q[ix];
 
   ef_vi_init_resource_alloc(&ra, EFRM_RESOURCE_EFCT_RXQ);
   ra.u.rxq.in_abi_version = CI_EFCT_SWRXQ_ABI_VERSION;
@@ -297,7 +278,40 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd, unsigned n_superb
     LOGVV(ef_log("%s: ci_resource_alloc rxq %d", __FUNCTION__, rc));
     return rc;
   }
-  rxq->resource_id = ra.out_id.index;
+  return ra.out_id.index;
+}
+
+static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
+                                   unsigned n_superbufs)
+{
+#ifdef __KERNEL__
+  // TODO
+  BUG();
+  return -EOPNOTSUPP;
+#else
+  int ix, rc;
+  ef_shrub_buffer_id id;
+  void* map;
+  size_t map_bytes;
+  struct efct_ubufs* ubufs = get_ubufs(vi);
+  struct efct_ubufs_rxq* rxq;
+
+  int flags = (fd < 0 ? MAP_PRIVATE | MAP_ANONYMOUS : MAP_SHARED);
+
+  if( n_superbufs > CI_EFCT_MAX_SUPERBUFS )
+    return -EINVAL;
+
+  ix = efct_vi_find_free_rxq(vi, qid);
+  if( ix < 0 )
+    return ix;
+  rxq = &ubufs->q[ix];
+
+  rc = efct_ubufs_init_rxq_resource(vi, qid, n_superbufs);
+  if( rc < 0 ) {
+    LOGVV(ef_log("%s: efct_ubufs_init_rxq_resource rxq %d", __FUNCTION__, rc));
+    return rc;
+  }
+  rxq->resource_id = rc;
   /* FIXME SCJ cleanup on failure */
 
   map_bytes = CI_ROUND_UP((size_t)n_superbufs * EFCT_RX_SUPERBUF_BYTES,
@@ -354,12 +368,12 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd, unsigned n_superb
 #endif
 }
 
-static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd, unsigned n_superbufs)
+static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd,
+                                    unsigned n_superbufs)
 {
   int ix;
   struct efct_ubufs* ubufs = get_ubufs(vi);
   struct efct_ubufs_rxq* rxq;
-  ci_resource_alloc_t ra;
   int rc;
 
   EF_VI_ASSERT(qid < vi->efct_rxqs.max_qs);
@@ -369,19 +383,12 @@ static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd, unsigned n_s
     return ix;
   rxq = &ubufs->q[ix];
 
-  ef_vi_init_resource_alloc(&ra, EFRM_RESOURCE_EFCT_RXQ);
-  ra.u.rxq.in_abi_version = CI_EFCT_SWRXQ_ABI_VERSION;
-  ra.u.rxq.in_flags = EFCH_EFCT_RXQ_FLAG_UBUF;
-  ra.u.rxq.in_qid = qid;
-  ra.u.rxq.in_shm_ix = -1;
-  ra.u.rxq.in_vi_rs_id = efch_make_resource_id(vi->vi_resource_id);
-  ra.u.rxq.in_timestamp_req = true;
-  rc = ci_resource_alloc(vi->dh, &ra);
+  rc = efct_ubufs_init_rxq_resource(vi, qid, n_superbufs);
   if( rc < 0 ) {
-    LOGVV(ef_log("%s: ci_resource_alloc rxq %d", __FUNCTION__, rc));
+    LOGVV(ef_log("%s: efct_ubufs_init_rxq_resource rxq %d", __FUNCTION__, rc));
     return rc;
   }
-  rxq->resource_id = ra.out_id.index;
+  rxq->resource_id = rc;
   /* FIXME SCJ cleanup on failure */
 
   rc = ef_shrub_client_open(&rxq->shrub_client,
