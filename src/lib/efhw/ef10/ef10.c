@@ -1724,7 +1724,7 @@ ef10_dmaq_rx_q_init(struct efhw_nic *nic, struct efhw_dmaq_params *params)
   rc = ef10_mcdi_rpc(nic, MC_CMD_INIT_RXQ, MC_CMD_INIT_RXQ_V4_IN_LEN,
                      MC_CMD_INIT_RXQ_V4_OUT_LEN, &outlen, in, NULL);
 
-  if( rc == 0 ) {
+  if( rc == 0 && flag_enable_tph ) {
     uint16_t tag = 0;
     if( flag_tph_tag_mode != 0 ) {
       /* TODO verify that raw_smp_processor_id() returns the right value */
