@@ -1226,6 +1226,8 @@ int efct_vi_sync_rxq(ef_vi *vi, int ix, int qid)
 static int
 efct_design_parameters(struct ef_vi* vi, struct efab_nic_design_parameters* dp)
 {
+  uint32_t ct_fifo_bytes;
+
 #define GET(PARAM) EFAB_NIC_DP_GET(*dp, PARAM)
 
   /* Some values which are used on the critical path which we don't expect to
@@ -1238,7 +1240,15 @@ efct_design_parameters(struct ef_vi* vi, struct efab_nic_design_parameters* dp)
   if( GET(rx_superbuf_bytes) != EFCT_RX_SUPERBUF_BYTES ) {
     LOG(ef_log("%s: unsupported rx_superbuf_bytes, %ld != %d", __FUNCTION__,
                (long)GET(rx_superbuf_bytes), EFCT_RX_SUPERBUF_BYTES));
-    return -EOPNOTSUPP;
+    /* FIXME EF10CT: Firmware reports that the size of a superbuf is 0 bytes.
+     *               As a temporary measure if the reported size is 0, then just
+     *               treat it as if it were EFCT_RX_SUPERBUF_BYTES */
+    if( GET(rx_superbuf_bytes) == 0 ) {
+      LOG(ef_log("%s: rx_superbuf_bytes = %ld = 0, treating it as it were the standard value", __FUNCTION__,
+                 (long)GET(rx_superbuf_bytes)));
+    } else {
+      return -EOPNOTSUPP;
+    }
   }
 
   /* If the frame offset changes or is no longer fixed, we will need to
@@ -1262,10 +1272,22 @@ efct_design_parameters(struct ef_vi* vi, struct efab_nic_design_parameters* dp)
   }
   vi->vi_txq.efct_aperture_mask = (GET(tx_aperture_bytes) - 1) >> 3;
 
+  /* FIXME EF10CT: We need proper handling of configurable size ctpio windows */
+  /* On EF10CT nics the size of the memory backing the CTPIO window is
+   * configurable. This means that it is no longer sufficient to use the size
+   * reported by the design parameters as the size for the actual queue. On
+   * EF10CT nics the value reported by the design is the maximum size possible
+   * for a CTPIO window.
+   * To calculate the size of the CTPIO fifo for this vi,
+   * take the minimum of the sizes as reported by the design parameters and the
+   * value received after vi allocation. This ensures that the size used is
+   * bounded by the nic's limits. */
+  ct_fifo_bytes = CI_MIN((uint32_t)GET(tx_fifo_bytes),
+                         (uint32_t)(EFCT_TX_ALIGNMENT * (vi->vi_txq.mask + 1)));
   /* FIFO size, reduced by 8 bytes for the TX header. Hardware reduces this
    * by one cache line to make their overflow tracking easier */
-  vi->vi_txq.ct_fifo_bytes = GET(tx_fifo_bytes) -
-                             EFCT_TX_ALIGNMENT - EFCT_TX_HEADER_BYTES;
+  vi->vi_txq.ct_fifo_bytes = ct_fifo_bytes - EFCT_TX_ALIGNMENT -
+                                             EFCT_TX_HEADER_BYTES;
   vi->ts_subnano_bits = GET(timestamp_subnano_bits);
   EF_VI_ASSERT(EF_VI_TX_TS_FRAC_NS_BITS >= vi->ts_subnano_bits);
   vi->unsol_credit_seq_mask = GET(unsol_credit_seq_mask);
