@@ -875,6 +875,10 @@ OO_STAT("Number of packets received that contained IP options.",
 OO_STAT("Number of packets received via discard that subsequently passed sw "
         "csum checking.",
         ci_uint32, rx_sw_csum_pass, count)
+OO_STAT("Number of efct packets dropped due to lack of RX buffers",
+        ci_uint32, efct_rx_no_rx_pkts, count)
+OO_STAT("Number of efct packets dropped due to lack of buffers",
+        ci_uint32, efct_rx_no_pkts, count)
 
 OO_STAT("Number of times an onload stack posted a superbuf via a kernel ioctl.",
         ci_uint32, superbuf_ioctl_posts, count)
