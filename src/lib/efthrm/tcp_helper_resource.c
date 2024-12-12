@@ -1009,7 +1009,15 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
         ci_log("%s: ERROR: efrm_rxq_alloc failed (%d)", __func__, rc);
       return rc;
     }
-    efct_vi_start_rxq(vi, qix, rxq);
+
+    /* FIXME make this less clumsy */
+    if( vi->nic_type.arch == EF_VI_ARCH_EF10CT ) {
+      efrm_rxq_refresh_kernel(vi->dh, rxq, vi->efct_rxqs.q[qix].superbufs);
+      efct_ubufs_attach_internal(vi, qix, rxq, hugepages * CI_EFCT_SUPERBUFS_PER_PAGE);
+    }
+    else {
+      efct_vi_start_rxq(vi, qix, rxq);
+    }
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
     if( NI_OPTS(&trs->netif).int_driven ) {
@@ -1584,6 +1592,12 @@ static int tcp_helper_superbuf_config_refresh(ef_vi* vi, int qid)
   return efrm_rxq_refresh_kernel(vi->dh, rxq->qid, rxq->superbufs);
 }
 
+static void tcp_helper_post_superbuf(ef_vi* vi, int qid, int sbid, bool sentinel)
+{
+  resource_size_t addr = (resource_size_t)vi->efct_rxqs.q[qid].superbufs[sbid];
+  efhw_nic_post_superbuf(vi->dh, qid, addr, sentinel, false, -1);
+  // FIXME should we check/handle errors?
+}
 
 static int initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
                          struct efrm_vi_mappings* vm, void* vi_state,
@@ -1634,8 +1648,8 @@ static int initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
                                     0, NULL);
     } else if( NI_OPTS(ni).multiarch_rx_datapath != EF_MULTIARCH_DATAPATH_FF &&
                nic->devtype.arch == EFHW_ARCH_EF10CT ) {
-      /* TODO: ef10ct ubufs */
-      rc = -EOPNOTSUPP;
+      rc = efct_ubufs_init_internal(vi);
+      vi->efct_rxqs.ops->post = tcp_helper_post_superbuf;
     }
     if( rc < 0 )
       return rc;

@@ -724,7 +724,8 @@ void ci_netif_rx_post(ci_netif* netif, int intf_i)
   int bufset_id = NI_PKT_SET(netif);
   int ask_for_more_packets = 0;
 
-  if( vi->nic_type.arch == EF_VI_ARCH_EFCT )
+  if( vi->nic_type.arch == EF_VI_ARCH_EFCT ||
+      vi->nic_type.arch == EF_VI_ARCH_EF10CT )
     return;
 
   if( ! ef_vi_receive_capacity(vi) )

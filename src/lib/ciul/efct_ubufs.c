@@ -299,7 +299,6 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
   return -EOPNOTSUPP;
 #else
   int ix, rc;
-  ef_shrub_buffer_id id;
   void* map;
   size_t map_bytes;
   struct efct_ubufs* ubufs = get_ubufs(vi);
@@ -337,13 +336,6 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
     return -ENOMEM;
   }
 
-  rxq = &ubufs->q[ix];
-
-  for( id = 0; id < n_superbufs; ++id )
-    efct_rx_sb_free_push(vi, qid, id);
-
-  rxq->superbuf_pkts = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
-
   rc = ef_memreg_alloc_flags(&rxq->memreg, vi->dh, ubufs->pd, ubufs->pd_dh,
                              map, map_bytes, 0);
   if( rc < 0 ) {
@@ -364,12 +356,23 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
     rxq->rx_post_buffer_reg = (volatile uint64_t *)p;
   }
 
+  efct_ubufs_attach_internal(vi, ix, qid, n_superbufs);
+  return ix;
+#endif
+}
+
+void efct_ubufs_attach_internal(ef_vi* vi, int ix, int qid, unsigned n_superbufs)
+{
+  unsigned id;
+  struct efct_ubufs* ubufs = get_ubufs(vi);
+
+  for( id = 0; id < n_superbufs; ++id )
+    efct_rx_sb_free_push(vi, ix, id);
+
+  ubufs->q[ix].superbuf_pkts = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
   ubufs->active_qs |= 1 << ix;
   efct_vi_start_rxq(vi, ix, qid);
   post_buffers(vi, ix);
-
-  return ix;
-#endif
 }
 
 static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd,
@@ -511,9 +514,7 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
   ubufs->ops.prime = efct_ubufs_prime;
   ubufs->ops.cleanup = efct_ubufs_cleanup;
 
-#ifdef __KERNEL__
-  // TODO
-#else
+#ifndef __KERNEL__
   if( vi->vi_flags & EF_VI_RX_PHYS_ADDR )
     ubufs->ops.post = efct_ubufs_post_direct;
   else
@@ -524,5 +525,10 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
   vi->efct_rxqs.ops = &ubufs->ops;
 
   return 0;
+}
+
+int efct_ubufs_init_internal(ef_vi* vi)
+{
+  return efct_ubufs_init(vi, NULL, 0);
 }
 

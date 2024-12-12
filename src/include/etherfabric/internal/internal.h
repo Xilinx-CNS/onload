@@ -114,6 +114,8 @@ extern int efct_kbufs_init_internal(ef_vi* vi,
                                     int (*refresh)(ef_vi* vi, int qid),
                                     uintptr_t refresh_user,
                                     void* buffer_space);
+extern int efct_ubufs_init_internal(ef_vi* vi);
+extern void efct_ubufs_attach_internal(ef_vi* vi, int ix, int qid, unsigned bufs);
 int efct_vi_find_free_rxq(ef_vi* vi, int qid);
 void efct_vi_start_rxq(ef_vi* vi, int ix, int qid);
 int efct_vi_sync_rxq(ef_vi* vi, int ix, int qid);

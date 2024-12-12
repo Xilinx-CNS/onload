@@ -1084,9 +1084,9 @@ ef10ct_max_shared_rxqs(struct efhw_nic *nic)
 {
   /* FIXME EF10CT this needs to mean exactly one of "needs packet shm"
    * (efct_only) or "attaches to shared rxq resource" (efct and ef10ct). I
-   * think at the moment the former is what we want, but this should be
+   * think at the moment the latter is what we want, but this should be
    * revisited once we've built up more of the RX stuff. */
-  return 0;
+  return 1;
 }
 
 
@@ -1598,10 +1598,13 @@ static int ef10ct_rxq_post_superbuf(struct efhw_nic *nic, int instance,
   if( reg == NULL )
     return -EINVAL;
 
-  phys_addr = translate_dma_address(nic, dma_addr, owner_id) >> CI_PAGE_SHIFT;
+  if( owner_id == -1 )
+    phys_addr = virt_to_phys((void*)dma_addr);
+  else
+    phys_addr = translate_dma_address(nic, dma_addr, owner_id);
 
   CI_POPULATE_QWORD_3(qword,
-                      EFCT_TEST_PAGE_ADDRESS, phys_addr,
+                      EFCT_TEST_PAGE_ADDRESS, phys_addr >> CI_PAGE_SHIFT,
                       EFCT_TEST_SENTINEL_VALUE, sentinel,
                       EFCT_TEST_ROLLOVER, rollover);
 

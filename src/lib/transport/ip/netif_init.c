@@ -1993,8 +1993,7 @@ static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
                         oo_efct_superbuf_config_refresh, nic_i, NULL);
     } else if( NI_OPTS(ni).multiarch_rx_datapath != EF_MULTIARCH_DATAPATH_FF &&
                nsn->vi_arch == EFHW_ARCH_EF10CT ) {
-      /* TODO: ef10ct ubufs */
-      rc = -EOPNOTSUPP;
+      rc = efct_ubufs_init_internal(vi);
     }
     if( rc < 0 )
       return rc;
