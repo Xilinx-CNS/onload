@@ -92,7 +92,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.0.2.1000"
+#define EFX_DRIVER_VERSION	"6.0.2.1001"
 #endif
 
 #ifdef DEBUG
@@ -1887,6 +1887,11 @@ struct efx_nic {
 #endif
 };
 
+#ifdef EFX_NOT_UPSTREAM
+/* Defined in efx_ll.c */
+struct efx_ll;
+#endif
+
 /**
  * struct efx_probe_data - State after hardware probe
  * @efx: Efx NIC details
@@ -1896,6 +1901,10 @@ struct efx_probe_data {
 	struct efx_nic efx;
 	struct pci_dev *pci_dev;
 #ifdef EFX_NOT_UPSTREAM
+	/**
+	 * @efx_ll: Probe data for the LL datapath.
+	 */
+	struct efx_ll *efx_ll;
 #if !defined(EFX_USE_KCOMPAT) || defined (EFX_HAVE_XARRAY)
 	/**
 	 * @client_type: Data for each type of client. Non-NULL if a

@@ -23,6 +23,11 @@ efx_next_guaranteed_ringsize(struct efx_nic *efx, unsigned long entries,
 			     bool fallback_to_supported);
 int efx_init_io(struct efx_nic *efx, int bar, dma_addr_t dma_mask, unsigned int mem_map_size);
 void efx_fini_io(struct efx_nic *efx);
+int efx_pci_map_bar(struct efx_nic *efx, int bar, unsigned int mem_map_size,
+		    resource_size_t *membase_phys_out,
+		    void __iomem **membase_out);
+void efx_pci_unmap_bar(struct efx_nic *efx, int bar,
+		       resource_size_t membase_phys, void __iomem *membase);
 int efx_init_probe_data(struct pci_dev *pci_dev,
 			const struct efx_nic_type *nic_type,
 			struct efx_probe_data **pd);
@@ -155,6 +160,41 @@ int efx_hwtstamp_set(struct net_device *net_dev,
 int efx_hwtstamp_get(struct net_device *net_dev,
 		     struct kernel_hwtstamp_config *config);
 #endif
+
+enum efx_tlv_state_machine {
+	EFX_TLV_TYPE,
+	EFX_TLV_TYPE_CONT,
+	EFX_TLV_LENGTH,
+	EFX_TLV_VALUE
+};
+
+struct efx_tlv_state {
+	enum efx_tlv_state_machine state;
+	u64 value;
+	u32 value_offset;
+	u16 type;
+	u8 len;
+};
+
+typedef int efx_design_param_processor(struct efx_nic *efx,
+				       const struct efx_tlv_state *reader);
+typedef void efx_readd_fn(struct efx_nic *efx, efx_dword_t *value,
+			  unsigned int reg);
+
+/** efx_check_design_params - Read and parse the nic's design parameters.
+ *
+ * @efx: NIC to check the design parameters for.
+ * @processor: Function to process the parsed design parameters.
+ * @tlv_len_off: Offset in the NIC's BAR for PARAMS_TLV_LEN.
+ * @tlv_off: Offset in the NIC's BAR for PARAMS_TLV.
+ * @readd: Function to read a dword at a given offset in the NIC's BAR.
+ *
+ * Return: a negative error code, or 0 on success.
+ */
+int efx_check_design_params(struct efx_nic *efx,
+			    efx_design_param_processor *processor,
+			    int tlv_len_off, int tlv_off, size_t bar_size,
+			    efx_readd_fn *readd);
 
 #endif
 

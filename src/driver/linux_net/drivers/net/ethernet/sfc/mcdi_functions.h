@@ -10,6 +10,14 @@
 #ifndef EFX_MCDI_FUNCTIONS_H
 #define EFX_MCDI_FUNCTIONS_H
 
+#ifdef EFX_NOT_UPSTREAM
+enum efx_ll_queue_type {
+	EFX_LL_QUEUE_TXQ,
+	EFX_LL_QUEUE_RXQ,
+	EFX_LL_QUEUE_EVQ,
+};
+#endif
+
 int efx_mcdi_alloc_vis(struct efx_nic *efx,
                        unsigned int min_vis, unsigned int max_vis,
                        unsigned int *vi_base, unsigned int *vi_shift,
@@ -31,6 +39,8 @@ int efx_mcdi_window_mode_to_stride(struct efx_nic *efx, u8 vi_window_mode);
 int efx_get_fn_info(struct efx_nic *efx, unsigned int *pf_index,
 		    unsigned int *vf_index);
 #ifdef EFX_NOT_UPSTREAM
+int efx_mcdi_alloc_ll_queue(struct efx_nic *efx, enum efx_ll_queue_type type);
+int efx_mcdi_free_ll_queue(struct efx_nic *efx, u32 queue);
 int efx_mcdi_client_alloc(struct efx_nic *efx, u32 parent, u32 *client_id);
 void efx_mcdi_client_free(struct efx_nic *efx, u32 client_id);
 #endif

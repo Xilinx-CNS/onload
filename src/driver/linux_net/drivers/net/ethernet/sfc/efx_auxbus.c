@@ -11,8 +11,11 @@
 #include <linux/sfc/efx_auxbus.h>
 #include "nic.h"
 #include "efx_client.h"
+#include "efx_ll.h"
+#include "llct_regs.h"
 #include "rx_common.h"
 #include "efx_auxbus_internal.h"
+#include "mcdi_functions.h"
 
 /* Numbers for auxiliary bus devices need to be unique in the host. */
 static DEFINE_IDA(efx_auxbus_ida);
@@ -66,10 +69,17 @@ static bool client_supports_vports(struct efx_auxdev_client *cdev)
 	return cdev_to_client_type(cdev) != EFX_CLIENT_LLCT;
 }
 
+static void efx_auxbus_init_queues(struct efx_auxdev_client *cdev)
+{
+	xa_init(&cdev->txqs);
+	xa_init(&cdev->rxqs);
+	xa_init(&cdev->evqs);
+}
+
 static
-struct efx_auxdev_client *efx_auxbus_open(struct auxiliary_device *auxdev,
-					  efx_auxdev_event_handler func,
-					  unsigned int events_requested)
+struct efx_auxdev_client *efx_auxbus_open_common(struct auxiliary_device *auxdev,
+						 efx_auxdev_event_handler func,
+						 unsigned int events_requested)
 {
 	struct efx_client_type_data *client_type;
 	struct efx_auxdev_client *cdev;
@@ -95,12 +105,66 @@ struct efx_auxdev_client *efx_auxbus_open(struct auxiliary_device *auxdev,
 	cdev->net_dev = pd->efx.net_dev;
 	cdev->auxdev = adev;
 	cdev->events_requested = events_requested;
+	efx_auxbus_init_queues(cdev);
+	return cdev;
+}
+
+static void efx_auxdev_enable_event_handling(struct efx_auxdev_client *cdev,
+					     efx_auxdev_event_handler func)
+{
 	/* Assign the event handler last. This enables event delivery from
 	 * efx_auxbus_send_events().
 	 */
 	smp_wmb();
 	cdev->event_handler = func;
+}
+
+static
+struct efx_auxdev_client *efx_auxbus_open(struct auxiliary_device *auxdev,
+					  efx_auxdev_event_handler func,
+					  unsigned int events_requested)
+{
+	struct efx_auxdev_client *cdev;
+
+	cdev = efx_auxbus_open_common(auxdev, func, events_requested);
+	if (IS_ERR(cdev))
+		return cdev;
+	efx_auxdev_enable_event_handling(cdev, func);
 	return cdev;
+}
+
+static void efx_auxbus_close(struct efx_auxdev_client *cdev);
+
+static
+struct efx_auxdev_client *efx_auxbus_llct_open(struct auxiliary_device *auxdev,
+					       efx_auxdev_event_handler func,
+					       unsigned int events_requested)
+{
+	struct efx_auxdev_client *cdev;
+	struct efx_probe_data *pd;
+	int rc;
+
+	cdev = efx_auxbus_open_common(auxdev, func, events_requested);
+	if (IS_ERR(cdev))
+		return cdev;
+	/* Remap LL bar before any event handling is enabled */
+	pd = cdev_to_probe_data(cdev);
+	if (!efx_ll_is_enabled(&pd->efx)) {
+		rc = -ENODEV;
+		goto fail_remap_bar;
+	}
+	if (!efx_ll_is_bar_remapped(&pd->efx)) {
+		rc = efx_ll_remap_bar(&pd->efx);
+		if (rc)
+			goto fail_remap_bar;
+	}
+
+	efx_auxdev_enable_event_handling(cdev, func);
+	return cdev;
+
+fail_remap_bar:
+	efx_auxbus_close(cdev);
+	return ERR_PTR(rc);
 }
 
 static void _efx_auxbus_dl_unpublish(struct efx_auxdev_client *handle,
@@ -137,6 +201,41 @@ static void efx_auxbus_dl_unpublish(struct efx_auxdev_client *handle)
 	_efx_auxbus_dl_unpublish(handle, false);
 }
 
+static int efx_auxbus_free_queue(struct efx_auxdev_client *handle, int q_nr)
+{
+	struct efx_probe_data *pd;
+
+	if (!handle)
+		return -EINVAL;
+
+	pd = cdev_to_probe_data(handle);
+	if (!pd)
+		return -ENODEV;
+
+	return efx_mcdi_free_ll_queue(&pd->efx, q_nr);
+}
+
+static void efx_auxbus_free_queues(struct efx_auxdev_client *cdev,
+				   struct xarray *queues)
+{
+	unsigned long i;
+	void *queue;
+
+	xa_for_each(queues, i, queue)
+		if (queue)
+			efx_auxbus_free_queue(cdev, xa_to_value(queue));
+}
+
+static void efx_auxbus_destroy_queues(struct efx_auxdev_client *cdev)
+{
+	efx_auxbus_free_queues(cdev, &cdev->txqs);
+	efx_auxbus_free_queues(cdev, &cdev->rxqs);
+	efx_auxbus_free_queues(cdev, &cdev->evqs);
+	xa_destroy(&cdev->txqs);
+	xa_destroy(&cdev->rxqs);
+	xa_destroy(&cdev->evqs);
+}
+
 static void efx_auxbus_close(struct efx_auxdev_client *cdev)
 {
 	struct efx_client_type_data *client_type;
@@ -153,6 +252,7 @@ static void efx_auxbus_close(struct efx_auxdev_client *cdev)
 	client_type = client->client_type;
 	efx_auxbus_wait_for_event_callbacks(client_type);
 
+	efx_auxbus_destroy_queues(cdev);
 	cdev->net_dev = NULL;
 	cdev->client_id = 0;
 	/* If @dl_publish has been called, @dl_unpublish must have been called
@@ -450,7 +550,7 @@ static int efx_auxbus_get_param(struct efx_auxdev_client *handle,
 		arg->net_dev = handle->net_dev;
 		break;
 	case EFX_MEMBASE:
-		arg->membase_addr = efx->membase;
+		arg->iomem_addr = efx->membase;
 		break;
 	case EFX_MEMBAR:
 		arg->value = efx->type->mem_bar(efx);
@@ -500,6 +600,127 @@ static int efx_auxbus_get_param(struct efx_auxdev_client *handle,
 		rc = efx_auxbus_filter_get_block(efx,
 						 EFX_FILTER_BLOCK_KERNEL_MCAST,
 						 &arg->b);
+		break;
+	default:
+		rc = -EOPNOTSUPP;
+		break;
+	}
+
+	return rc;
+}
+
+static u32 efx_get_queue_num(u32 queue_handle)
+{
+	efx_dword_t data;
+
+	EFX_POPULATE_DWORD_1(data, EFX_DWORD_0, queue_handle);
+	return MCDI_FIELD(&data, QUEUE_HANDLE, QUEUE_NUM);
+}
+
+static u32 efx_get_queue_type(u32 queue_handle)
+{
+	efx_dword_t data;
+
+	EFX_POPULATE_DWORD_1(data, EFX_DWORD_0, queue_handle);
+	return MCDI_FIELD(&data, QUEUE_HANDLE, QUEUE_TYPE);
+}
+
+static
+int efx_populate_queue_io_window(struct efx_probe_data *pd, u32 offset,
+				 u32 stride, u32 max_queues, u32 expected_queue_type,
+				 struct efx_auxiliary_io_window *queue_io_wnd)
+{
+	u32 queue_type = efx_get_queue_type(queue_io_wnd->qid_in);
+	u32 queue_num = efx_get_queue_num(queue_io_wnd->qid_in);
+
+	if (queue_num >= max_queues || queue_type != expected_queue_type)
+		return -EINVAL;
+
+	queue_io_wnd->size = stride;
+	queue_io_wnd->base = efx_llct_mem_phys(pd, offset) + stride * queue_num;
+	return 0;
+}
+
+static int efx_auxbus_get_param_llct(struct efx_auxdev_client *handle,
+				     enum efx_auxiliary_param p,
+				     union efx_auxiliary_param_value *arg)
+{
+	struct efx_design_params *dp;
+	struct efx_probe_data *pd;
+	struct efx_nic *efx;
+	int rc = 0;
+
+	if (!handle || !arg)
+		return -EINVAL;
+
+	pd = cdev_to_probe_data(handle);
+	if (!pd)
+		return -ENODEV;
+
+	efx = &pd->efx;
+	switch (p) {
+	case EFX_NETDEV:
+		arg->net_dev = handle->net_dev;
+		break;
+	case EFX_PCI_DEV:
+		arg->pci_dev = efx->pci_dev;
+		break;
+	case EFX_PCI_DEV_DEVICE:
+		arg->value = efx->pci_dev->device;
+		break;
+	case EFX_DEVICE_REVISION:
+		arg->value = efx->pci_dev->revision;
+		break;
+	case EFX_TIMER_QUANTUM_NS:
+		arg->value = efx->timer_quantum_ns;
+		break;
+	case EFX_DRIVER_DATA:
+		arg->driver_data = handle->driver_data;
+		break;
+	case EFX_DESIGN_PARAM:
+		if (!arg->design_params)
+			return -EINVAL;
+		dp = efx_llct_get_design_parameters(efx);
+		if (IS_ERR(dp))
+			return PTR_ERR(dp);
+
+		BUILD_BUG_ON(sizeof(*arg->design_params) != sizeof(*dp));
+		memcpy(arg->design_params, dp, sizeof(*dp));
+		break;
+	case EFX_AUXILIARY_INT_PRIME:
+		arg->iomem_addr = efx_llct_mem(pd, ER_IZ_LLCT_EVQ_INT_PRIME);
+		break;
+	case EFX_AUXILIARY_EVQ_WINDOW:
+		dp = efx_llct_get_design_parameters(efx);
+		if (IS_ERR(dp))
+			return PTR_ERR(dp);
+
+		rc = efx_populate_queue_io_window(pd,
+						  ER_IZ_LLCT_EVQ_UNSOL_CREDIT_GRANT,
+						  dp->evq_stride, dp->ev_queues,
+						  MC_CMD_QUEUE_HANDLE_QUEUE_TYPE_LL_EVQ,
+						  &arg->queue_io_wnd);
+		break;
+	case EFX_AUXILIARY_CTPIO_WINDOW:
+		dp = efx_llct_get_design_parameters(efx);
+		if (IS_ERR(dp))
+			return PTR_ERR(dp);
+
+		rc = efx_populate_queue_io_window(pd, ER_IZ_LLCT_CTPIO_REGION,
+						  dp->tx_aperture_size,
+						  dp->tx_apertures,
+						  MC_CMD_QUEUE_HANDLE_QUEUE_TYPE_LL_TXQ,
+						  &arg->queue_io_wnd);
+		break;
+	case EFX_AUXILIARY_RXQ_WINDOW:
+		dp = efx_llct_get_design_parameters(efx);
+		if (IS_ERR(dp))
+			return PTR_ERR(dp);
+
+		rc = efx_populate_queue_io_window(pd, ER_IZ_LLCT_RX_BUFFER_POST,
+						  dp->rx_stride, dp->rx_queues,
+						  MC_CMD_QUEUE_HANDLE_QUEUE_TYPE_LL_RXQ,
+						  &arg->queue_io_wnd);
 		break;
 	default:
 		rc = -EOPNOTSUPP;
@@ -559,6 +780,45 @@ static int efx_auxbus_set_param(struct efx_auxdev_client *handle,
 		rc = efx_auxbus_filter_set_block(efx,
 						 EFX_FILTER_BLOCK_KERNEL_MCAST,
 						 arg->b);
+		break;
+	default:
+		rc = -EOPNOTSUPP;
+		break;
+	}
+
+	return rc;
+}
+
+static int efx_auxbus_set_param_llct(struct efx_auxdev_client *handle,
+				     enum efx_auxiliary_param p,
+				     union efx_auxiliary_param_value *arg)
+{
+	struct efx_probe_data *pd;
+	int rc = 0;
+
+	if (!handle || !arg)
+		return -EINVAL;
+
+	pd = cdev_to_probe_data(handle);
+	if (!pd)
+		return -ENODEV;
+
+	switch (p) {
+	case EFX_NETDEV:
+	case EFX_DESIGN_PARAM:
+	case EFX_PCI_DEV:
+	case EFX_PCI_DEV_DEVICE:
+	case EFX_DEVICE_REVISION:
+	case EFX_TIMER_QUANTUM_NS:
+	case EFX_AUXILIARY_INT_PRIME:
+	case EFX_AUXILIARY_EVQ_WINDOW:
+	case EFX_AUXILIARY_CTPIO_WINDOW:
+	case EFX_AUXILIARY_RXQ_WINDOW:
+		/* These parameters are _get_ only! */
+		rc = -EINVAL;
+		break;
+	case EFX_DRIVER_DATA:
+		handle->driver_data = arg->driver_data;
 		break;
 	default:
 		rc = -EOPNOTSUPP;
@@ -737,6 +997,16 @@ static const struct efx_auxdev_ops aux_devops = {
 #endif
 };
 
+static const struct efx_auxdev_ops aux_devops_llct = {
+	.open = efx_auxbus_llct_open,
+	.close = efx_auxbus_close,
+	.fw_rpc = efx_auxbus_fw_rpc,
+#ifdef EFX_NOT_UPSTREAM
+	.get_param = efx_auxbus_get_param_llct,
+	.set_param = efx_auxbus_set_param_llct,
+#endif
+};
+
 static const struct efx_auxdev_onload_ops aux_onload_devops = {
 	.base_ops = &aux_devops,
 	.create_rxfh_context = efx_auxbus_create_rxfh_context,
@@ -755,6 +1025,107 @@ static const struct efx_auxdev_onload_ops aux_onload_devops = {
 	.vport_id_get = efx_auxbus_vport_id_get,
 };
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XARRAY)
+static struct xarray *efx_get_allocated_queues(struct efx_auxdev_client *handle,
+					       enum efx_ll_queue_type type)
+{
+	switch (type) {
+	case EFX_LL_QUEUE_TXQ:
+		return &handle->txqs;
+	case EFX_LL_QUEUE_RXQ:
+		return &handle->rxqs;
+	case EFX_LL_QUEUE_EVQ:
+		return &handle->evqs;
+	}
+	WARN_ON(1);
+	return NULL;
+}
+
+static int efx_auxbus_ll_queue_alloc(struct efx_auxdev_client *handle,
+				     enum efx_ll_queue_type type)
+{
+	struct xarray *allocated_qs;
+	struct efx_probe_data *pd;
+	int queue;
+	int rc;
+
+	if (!handle)
+		return -EINVAL;
+
+	pd = cdev_to_probe_data(handle);
+	if (!pd)
+		return -ENODEV;
+
+	allocated_qs = efx_get_allocated_queues(handle, type);
+	queue = efx_mcdi_alloc_ll_queue(&pd->efx, type);
+	if (queue < 0)
+		return queue;
+
+	rc = xa_insert(allocated_qs, efx_get_queue_num(queue),
+		       xa_mk_value(queue), GFP_KERNEL);
+
+	if (rc < 0) {
+		if (rc == -EBUSY) {
+			dev_err(&handle->auxdev->auxdev.dev,
+				"Queue type: %#x, nr: %#x has already been allocated. Resetting due to invalid state",
+				efx_get_queue_type(queue), efx_get_queue_num(queue));
+			goto fail_reset;
+		}
+		goto fail_free;
+	}
+
+	return queue;
+
+fail_free:
+	if (!efx_mcdi_free_ll_queue(&pd->efx, queue))
+		return rc;
+
+fail_reset:
+	efx_schedule_reset(&pd->efx, RESET_TYPE_ALL);
+	return -EIO;
+}
+
+static int efx_auxbus_channel_alloc(struct efx_auxdev_client *handle)
+{
+	return efx_auxbus_ll_queue_alloc(handle, EFX_LL_QUEUE_EVQ);
+}
+
+static
+void efx_auxbus_channel_free(struct efx_auxdev_client *handle, int channel_nr)
+{
+	if (!handle)
+		return;
+	xa_erase(&handle->evqs, efx_get_queue_num(channel_nr));
+	efx_auxbus_free_queue(handle, channel_nr);
+}
+
+static int efx_auxbus_txq_alloc(struct efx_auxdev_client *handle)
+{
+	return efx_auxbus_ll_queue_alloc(handle, EFX_LL_QUEUE_TXQ);
+}
+
+static void efx_auxbus_txq_free(struct efx_auxdev_client *handle, int txq_nr)
+{
+	if (!handle)
+		return;
+	xa_erase(&handle->txqs, efx_get_queue_num(txq_nr));
+	efx_auxbus_free_queue(handle, txq_nr);
+}
+
+static int efx_auxbus_rxq_alloc(struct efx_auxdev_client *handle)
+{
+	return efx_auxbus_ll_queue_alloc(handle, EFX_LL_QUEUE_RXQ);
+}
+
+static void efx_auxbus_rxq_free(struct efx_auxdev_client *handle, int rxq_nr)
+{
+	if (!handle)
+		return;
+	xa_erase(&handle->rxqs, efx_get_queue_num(rxq_nr));
+	efx_auxbus_free_queue(handle, rxq_nr);
+}
+#else
+
 static int efx_auxbus_channel_alloc(struct efx_auxdev_client *handle)
 {
 	return -EOPNOTSUPP;
@@ -762,17 +1133,6 @@ static int efx_auxbus_channel_alloc(struct efx_auxdev_client *handle)
 
 static
 void efx_auxbus_channel_free(struct efx_auxdev_client *handle, int channel_nr)
-{
-}
-
-static
-struct efx_auxdev_irq *efx_auxbus_irq_alloc(struct efx_auxdev_client *handle)
-{
-	return ERR_PTR(-EOPNOTSUPP);
-}
-
-static void efx_auxbus_irq_free(struct efx_auxdev_client *handle,
-				struct efx_auxdev_irq *irq)
 {
 }
 
@@ -793,9 +1153,21 @@ static int efx_auxbus_rxq_alloc(struct efx_auxdev_client *handle)
 static void efx_auxbus_rxq_free(struct efx_auxdev_client *handle, int rxq_nr)
 {
 }
+#endif
+
+static
+struct efx_auxdev_irq *efx_auxbus_irq_alloc(struct efx_auxdev_client *handle)
+{
+	return ERR_PTR(-EOPNOTSUPP);
+}
+
+static void efx_auxbus_irq_free(struct efx_auxdev_client *handle,
+				struct efx_auxdev_irq *irq)
+{
+}
 
 static const struct efx_auxdev_llct_ops aux_llct_devops = {
-	.base_ops = &aux_devops,
+	.base_ops = &aux_devops_llct,
 	.channel_alloc = efx_auxbus_channel_alloc,
 	.channel_free = efx_auxbus_channel_free,
 	.irq_alloc = efx_auxbus_irq_alloc,
@@ -941,6 +1313,7 @@ int efx_auxbus_add_dev(struct efx_client_type_data *client_type)
 	auxdev->name = auxbus_name;
 	auxdev->dev.release = efx_auxbus_release;
 	auxdev->dev.parent = &client_type->pd->pci_dev->dev;
+	sdev->auxdev.abi_version = EFX_AUX_ABI_VERSION;
 	if (client_type->type == EFX_CLIENT_LLCT)
 		sdev->auxdev.llct_ops = &aux_llct_devops;
 	else

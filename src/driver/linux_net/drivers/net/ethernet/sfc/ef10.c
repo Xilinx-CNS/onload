@@ -34,6 +34,7 @@
 #endif
 #ifdef EFX_NOT_UPSTREAM
 #include "efx_ioctl.h"
+#include "efx_ll.h"
 #endif
 #include <linux/module.h>
 #include "debugfs.h"
@@ -5666,6 +5667,25 @@ static int efx_ef10_probe_pf(struct efx_nic *efx)
 	return efx_ef10_probe(efx);
 }
 
+static int efx_x4_probe_pf(struct efx_nic *efx)
+{
+	int rc = efx_ef10_probe_pf(efx);
+
+#ifdef EFX_NOT_UPSTREAM
+	if (rc)
+		return rc;
+
+	rc = efx_ll_init(efx);
+	if (rc)
+		pci_info(efx->pci_dev,
+			 "Low latency datapath initialisation failed with error %d. Continuing without it.\n",
+			 rc);
+
+	rc = 0;
+#endif
+	return rc;
+}
+
 static void efx_ef10_remove(struct efx_nic *efx)
 {
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
@@ -5684,6 +5704,14 @@ static void efx_ef10_remove(struct efx_nic *efx)
 
 	kfree(nic_data);
 	efx->nic_data = NULL;
+}
+
+static void efx_x4_remove(struct efx_nic *efx)
+{
+#ifdef EFX_NOT_UPSTREAM
+	efx_ll_fini(efx);
+#endif
+	efx_ef10_remove(efx);
 }
 
 #if defined(CONFIG_SFC_SRIOV)
@@ -5710,6 +5738,14 @@ static void efx_ef10_remove_vf(struct efx_nic *efx)
 			vf->efx = NULL;
 		}
 	}
+}
+
+static void efx_x4_remove_vf(struct efx_nic *efx)
+{
+#ifdef EFX_NOT_UPSTREAM
+	efx_ll_fini(efx);
+#endif
+	efx_ef10_remove_vf(efx);
 }
 
 static int efx_ef10_probe_vf(struct efx_nic *efx)
@@ -5761,6 +5797,25 @@ static int efx_ef10_probe_vf(struct efx_nic *efx)
 
 fail:
 	efx_ef10_remove_vf(efx);
+	return rc;
+}
+
+static int efx_x4_probe_vf(struct efx_nic *efx)
+{
+	int rc = efx_ef10_probe_vf(efx);
+
+#ifdef EFX_NOT_UPSTREAM
+	if (rc)
+		return rc;
+
+	rc = efx_ll_init(efx);
+	if (rc)
+		pci_info(efx->pci_dev,
+			 "Low latency datapath initialisation failed with error %d. Continuing without it.\n",
+			 rc);
+
+	rc = 0;
+#endif
 	return rc;
 }
 #endif /* CONFIG_SFC_SRIOV */
@@ -5985,8 +6040,8 @@ const struct efx_nic_type efx_x4_vf_nic_type = {
 	.is_vf = true,
 	.mem_bar = efx_x4_vf_mem_bar,
 	.mem_map_size = efx_ef10_initial_mem_map_size,
-	.probe = efx_ef10_probe_vf,
-	.remove = efx_ef10_remove_vf,
+	.probe = efx_x4_probe_vf,
+	.remove = efx_x4_remove_vf,
 	.dimension_resources = efx_ef10_dimension_resources,
 	.net_alloc = __efx_net_alloc,
 	.net_dealloc = __efx_net_dealloc,
@@ -6329,8 +6384,8 @@ const struct efx_nic_type efx_x4_nic_type = {
 	.is_vf = false,
 	.mem_bar = efx_ef10_pf_mem_bar,
 	.mem_map_size = efx_ef10_initial_mem_map_size,
-	.probe = efx_ef10_probe_pf,
-	.remove = efx_ef10_remove,
+	.probe = efx_x4_probe_pf,
+	.remove = efx_x4_remove,
 	.dimension_resources = efx_ef10_dimension_resources,
 	.free_resources = efx_ef10_free_resources,
 	.net_alloc = __efx_net_alloc,

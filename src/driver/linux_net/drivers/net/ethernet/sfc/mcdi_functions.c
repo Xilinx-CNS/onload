@@ -493,6 +493,64 @@ void efx_mcdi_client_free(struct efx_nic *efx, u32 client_id)
 	efx_mcdi_rpc(efx, MC_CMD_CLIENT_FREE,
 		     inbuf, sizeof(inbuf), NULL, 0, NULL);
 }
+
+int efx_mcdi_alloc_ll_queue(struct efx_nic *efx, enum efx_ll_queue_type type)
+{
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_ALLOC_LL_QUEUES_OUT_LEN(1));
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_ALLOC_LL_QUEUES_IN_LEN);
+	size_t outlen;
+	u32 txqs = 0;
+	u32 rxqs = 0;
+	u32 evqs = 0;
+	int rc;
+
+	switch (type) {
+	case EFX_LL_QUEUE_TXQ:
+		txqs = 1;
+		break;
+	case EFX_LL_QUEUE_RXQ:
+		rxqs = 1;
+		break;
+	case EFX_LL_QUEUE_EVQ:
+		evqs = 1;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	MCDI_SET_DWORD(inbuf, ALLOC_LL_QUEUES_IN_MIN_TXQ_COUNT, txqs);
+	MCDI_SET_DWORD(inbuf, ALLOC_LL_QUEUES_IN_MAX_TXQ_COUNT, txqs);
+	MCDI_SET_DWORD(inbuf, ALLOC_LL_QUEUES_IN_MIN_RXQ_COUNT, rxqs);
+	MCDI_SET_DWORD(inbuf, ALLOC_LL_QUEUES_IN_MAX_RXQ_COUNT, rxqs);
+	MCDI_SET_DWORD(inbuf, ALLOC_LL_QUEUES_IN_MIN_EVQ_COUNT, evqs);
+	MCDI_SET_DWORD(inbuf, ALLOC_LL_QUEUES_IN_MAX_EVQ_COUNT, evqs);
+
+	rc = efx_mcdi_rpc(efx, MC_CMD_ALLOC_LL_QUEUES, inbuf, sizeof(inbuf),
+			  outbuf, sizeof(outbuf), &outlen);
+	if (rc)
+		return rc;
+
+	txqs = MCDI_DWORD(outbuf, ALLOC_LL_QUEUES_OUT_TXQ_COUNT);
+	rxqs = MCDI_DWORD(outbuf, ALLOC_LL_QUEUES_OUT_RXQ_COUNT);
+	evqs = MCDI_DWORD(outbuf, ALLOC_LL_QUEUES_OUT_EVQ_COUNT);
+
+	if (txqs + rxqs + evqs > MC_CMD_ALLOC_LL_QUEUES_OUT_QUEUES_NUM(outlen))
+		return -EIO;
+
+	return MCDI_DWORD(outbuf, ALLOC_LL_QUEUES_OUT_QUEUES);
+}
+
+int efx_mcdi_free_ll_queue(struct efx_nic *efx, u32 queue)
+{
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_FREE_LL_QUEUES_IN_LEN(1));
+
+	BUILD_BUG_ON(MC_CMD_FREE_LL_QUEUES_OUT_LEN != 0);
+	MCDI_SET_DWORD(inbuf, FREE_LL_QUEUES_IN_QUEUE_COUNT, 1);
+	MCDI_SET_DWORD(inbuf, FREE_LL_QUEUES_IN_QUEUES, queue);
+
+	return efx_mcdi_rpc(efx, MC_CMD_FREE_LL_QUEUES, inbuf,
+			    sizeof(inbuf), NULL, 0, NULL);
+}
 #endif
 
 #ifdef CONFIG_SFC_TPH

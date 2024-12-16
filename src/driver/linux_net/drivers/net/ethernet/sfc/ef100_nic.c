@@ -1402,58 +1402,8 @@ static ssize_t bar_config_store(struct device *dev,
 static DEVICE_ATTR_RW(bar_config);
 #endif
 
-enum ef100_tlv_state_machine {
-	EF100_TLV_TYPE,
-	EF100_TLV_TYPE_CONT,
-	EF100_TLV_LENGTH,
-	EF100_TLV_VALUE
-};
-
-struct ef100_tlv_state {
-	enum ef100_tlv_state_machine state;
-	u64 value;
-	u32 value_offset;
-	u16 type;
-	u8 len;
-};
-
-static int ef100_tlv_feed(struct ef100_tlv_state *state, u8 byte)
-{
-	switch (state->state) {
-	case EF100_TLV_TYPE:
-		state->type = byte & 0x7f;
-		state->state = (byte & 0x80) ? EF100_TLV_TYPE_CONT
-					     : EF100_TLV_LENGTH;
-		/* Clear ready to read in a new entry */
-		state->value = 0;
-		state->value_offset = 0;
-		return 0;
-	case EF100_TLV_TYPE_CONT:
-		state->type |= byte << 7;
-		state->state = EF100_TLV_LENGTH;
-		return 0;
-	case EF100_TLV_LENGTH:
-		state->len = byte;
-		/* We only handle TLVs that fit in a u64 */
-		if (state->len > sizeof(state->value))
-			return -EOPNOTSUPP;
-		/* len may be zero, implying a value of zero */
-		state->state = state->len ? EF100_TLV_VALUE : EF100_TLV_TYPE;
-		return 0;
-	case EF100_TLV_VALUE:
-		state->value |= ((u64)byte) << (state->value_offset * 8);
-		state->value_offset++;
-		if (state->value_offset >= state->len)
-			state->state = EF100_TLV_TYPE;
-		return 0;
-	default: /* state machine error, can't happen */
-		WARN_ON_ONCE(1);
-		return -EIO;
-	}
-}
-
 static int ef100_process_design_param(struct efx_nic *efx,
-				      const struct ef100_tlv_state *reader)
+				      const struct efx_tlv_state *reader)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
 
@@ -1562,35 +1512,6 @@ static int ef100_process_design_param(struct efx_nic *efx,
 	}
 }
 
-static int ef100_check_design_params(struct efx_nic *efx)
-{
-	struct ef100_tlv_state reader = {};
-	u32 total_len, offset = 0;
-	efx_dword_t reg;
-	int rc = 0, i;
-	u32 data;
-
-	efx_readd(efx, &reg, ER_GZ_PARAMS_TLV_LEN);
-	total_len = EFX_DWORD_FIELD(reg, EFX_DWORD_0);
-	pci_dbg(efx->pci_dev, "%u bytes of design parameters\n", total_len);
-	while (offset < total_len) {
-		efx_readd(efx, &reg, ER_GZ_PARAMS_TLV + offset);
-		data = EFX_DWORD_FIELD(reg, EFX_DWORD_0);
-		for (i = 0; i < sizeof(data); i++) {
-			rc = ef100_tlv_feed(&reader, data);
-			/* Got a complete value? */
-			if (!rc && reader.state == EF100_TLV_TYPE)
-				rc = ef100_process_design_param(efx, &reader);
-			if (rc)
-				goto out;
-			data >>= 8;
-			offset++;
-		}
-	}
-out:
-	return rc;
-}
-
 static int efx_ef100_update_client_id(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
@@ -1653,7 +1574,9 @@ static int ef100_probe_main(struct efx_nic *efx)
 	nic_data->tso_max_payload_num_segs = ESE_EF100_DP_GZ_TSO_MAX_PAYLOAD_NUM_SEGS_DEFAULT;
 	nic_data->tso_max_payload_len = ESE_EF100_DP_GZ_TSO_MAX_PAYLOAD_LEN_DEFAULT;
 	/* Read design parameters */
-	rc = ef100_check_design_params(efx);
+	rc = efx_check_design_params(efx, ef100_process_design_param,
+				     ER_GZ_PARAMS_TLV_LEN, ER_GZ_PARAMS_TLV,
+				     bar_size, efx_readd);
 	if (rc) {
 		pci_err(efx->pci_dev, "Unsupported design parameters\n");
 		goto fail;

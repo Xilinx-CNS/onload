@@ -20,9 +20,13 @@ endif
 endif
 KDIR ?= /lib/modules/$(shell uname -r)/build
 
-export-srpm export: $(KDIR)/include/linux/sfc/efx_auxbus.h
+export-srpm export: $(KDIR)/include/linux/sfc/efx_auxbus.h $(KDIR)/include/linux/sfc/efx_design_params.h
 
 $(KDIR)/include/linux/sfc/efx_auxbus.h: sfc/efx_auxbus.h
+	@mkdir -p $(@D)
+	cp $^ $@
+
+$(KDIR)/include/linux/sfc/efx_design_params.h: sfc/efx_design_params.h
 	@mkdir -p $(@D)
 	cp $^ $@
 endif
