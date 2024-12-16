@@ -1096,6 +1096,12 @@ static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in_data,
     out_data->filter_handle = id_low & 0xffff;
   }
 
+  /* Free rxq on filter insert failure */
+  if (rc < 0) {
+    EFHW_ERR("%s filter insert failed. Freeing rxq = %d", __func__, rxq);
+    ef10ct_free_rxq(params->nic, rxq);
+  }
+
   return rc;
 }
 
