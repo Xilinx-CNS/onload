@@ -701,7 +701,12 @@ ef10ct_rx_buffer_post_register(struct efhw_nic* nic, int instance,
   struct device *dev;
   struct efx_auxdev* edev;
   struct efx_auxdev_client* cli;
-  union efx_auxiliary_param_value val = {.queue_io_wnd.qid_in = instance};
+  union efx_auxiliary_param_value val = {0};
+  int rxq_handle;
+
+  rxq_handle = ef10ct_reconstruct_queue_handle(instance,
+                                               EF10CT_QUEUE_HANDLE_TYPE_RXQ);
+  val.queue_io_wnd.qid_in = rxq_handle;
 
   EFHW_WARN("%s: instance %d", __func__, instance);
 
@@ -723,7 +728,8 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
 {
   EFHW_MCDI_DECLARE_BUF(in, MC_CMD_INIT_RXQ_V4_IN_LEN);
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
-  int rxq = params->qid;
+  int rxq_num = params->qid;
+  int rxq_handle;
   int evq;
   int rc;
   struct efx_auxdev_rpc rpc;
@@ -737,15 +743,18 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
    * this is properly dealt with. At a minimum we need to ensure this is
    * concurrency safe, but the details of lifecycle management need more
    * consideration in general. */
-  if( ef10ct->rxq[rxq].ref_count > 0 ) {
+  if( ef10ct->rxq[rxq_num].ref_count > 0 ) {
     /* This queue is already bound, so all that's needed is to inc the refs. */
-    ef10ct->rxq[rxq].ref_count++;
+    ef10ct->rxq[rxq_num].ref_count++;
 
     /* Already bound, so should have an associated evq */
-    EFHW_ASSERT(ef10ct->rxq[rxq].evq >= 0);
+    EFHW_ASSERT(ef10ct->rxq[rxq_num].evq >= 0);
 
     return 0;
   }
+
+  rxq_handle = ef10ct_reconstruct_queue_handle(rxq_num,
+                                               EF10CT_QUEUE_HANDLE_TYPE_RXQ);
 
   /* FIXME EF10CT the evq used here is not mapped to userspace, so isn't part
    * of the higher level resource management. We need to decide what evq to
@@ -765,8 +774,8 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
                         CI_EFCT_SUPERBUFS_PER_PAGE * params->n_hugepages
                       ));
   EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V4_IN_TARGET_EVQ, evq);
-  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V4_IN_LABEL, rxq);
-  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V4_IN_INSTANCE, rxq);
+  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V4_IN_LABEL, rxq_num);
+  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V4_IN_INSTANCE, rxq_handle);
   EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V4_IN_PORT_ID, EVB_PORT_ID_ASSIGNED);
 
   EFHW_MCDI_POPULATE_DWORD_4(in, INIT_RXQ_V4_IN_FLAGS,
@@ -792,25 +801,25 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
     return rc;
   }
 
-  if( rxq < 0 || rxq >= ef10ct->rxq_n ) {
+  if( rxq_num < 0 || rxq_num >= ef10ct->rxq_n ) {
     EFHW_ERR(KERN_INFO "%s rxq outside of expected range. rxq = %d",
-             __func__, rxq);
+             __func__, rxq_num);
     return -EINVAL;
   }
 
-  rc = ef10ct_rx_buffer_post_register(nic, rxq, &register_phys_addr);
+  rc = ef10ct_rx_buffer_post_register(nic, rxq_num, &register_phys_addr);
   if( rc < 0 ) {
     EFHW_ERR("%s Failed to get rx post register. rc = %d\n", __FUNCTION__, rc);
     return rc;
   }
-  ef10ct->rxq[rxq].post_buffer_addr = phys_to_virt(register_phys_addr);
+  ef10ct->rxq[rxq_num].post_buffer_addr = phys_to_virt(register_phys_addr);
 
   flush_delayed_work(&ef10ct->evq[ef10ct_get_queue_num(evq)].check_flushes);
-  EFHW_ASSERT(ef10ct->rxq[rxq].evq == -1);
+  EFHW_ASSERT(ef10ct->rxq[rxq_num].evq == -1);
 
-  ef10ct->rxq[rxq].ref_count++;
-  ef10ct->rxq[rxq].evq = evq;
-  params->rxq->qid = rxq;
+  ef10ct->rxq[rxq_num].ref_count++;
+  ef10ct->rxq[rxq_num].evq = evq;
+  params->rxq->qid = rxq_num;
 
   return rc;
 }
@@ -824,23 +833,25 @@ ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
   struct efx_auxdev_rpc rpc;
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct efhw_nic_ef10ct_evq *ef10ct_evq;
-  int dmaq = rxq->qid;
+  int rxq_num = rxq->qid;
+  int rxq_handle = ef10ct_reconstruct_queue_handle(rxq_num,
+                                                  EF10CT_QUEUE_HANDLE_TYPE_RXQ);
 
   /* This releases the SW RXQ resource, so is independent of the underlying
    * HW RXQ flush and free. */
   freer(rxq);
 
   /* FIXME EF10CT proper refcounting */
-  EFHW_ASSERT(ef10ct->rxq[dmaq].ref_count > 0);
-  ef10ct->rxq[dmaq].ref_count--;
+  EFHW_ASSERT(ef10ct->rxq[rxq_num].ref_count > 0);
+  ef10ct->rxq[rxq_num].ref_count--;
 
-  if( ef10ct->rxq[dmaq].ref_count > 0 )
+  if( ef10ct->rxq[rxq_num].ref_count > 0 )
     return;
 
   /* FIXME EF10CT check errors here */
 
   EFHW_MCDI_INITIALISE_BUF(in);
-  EFHW_MCDI_SET_DWORD(in, FINI_RXQ_IN_INSTANCE, dmaq);
+  EFHW_MCDI_SET_DWORD(in, FINI_RXQ_IN_INSTANCE, rxq_handle);
 
   rpc.cmd = MC_CMD_FINI_RXQ;
   rpc.inlen = sizeof(in);
@@ -849,15 +860,15 @@ ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
   rpc.outbuf = NULL;
   ef10ct_fw_rpc(nic, &rpc);
 
-  evq_id = ef10ct->rxq[dmaq].evq;
+  evq_id = ef10ct->rxq[rxq_num].evq;
   ef10ct_evq = &ef10ct->evq[ef10ct_get_queue_num(evq_id)];
 
   atomic_inc(&ef10ct_evq->queues_flushing);
   schedule_delayed_work(&ef10ct_evq->check_flushes, 0);
 
   /* ef10ct->rxq[dmaq].q_id is updated in check_flushes. */
-  ef10ct->rxq[dmaq].evq = -1;
-  ef10ct->rxq[dmaq].post_buffer_addr = 0;
+  ef10ct->rxq[rxq_num].evq = -1;
+  ef10ct->rxq[rxq_num].post_buffer_addr = 0;
 }
 
 static int
@@ -1046,6 +1057,8 @@ static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in_data,
   int rc;
   struct filter_insert_params *params = (struct filter_insert_params*)
                                         in_data->drv_opaque;
+  int rxq_num;
+
   EFHW_MCDI_DECLARE_BUF(in, MC_CMD_FILTER_OP_IN_LEN);
   EFHW_MCDI_DECLARE_BUF(out, MC_CMD_FILTER_OP_OUT_LEN);
   struct efx_auxdev_rpc rpc = {
@@ -1060,6 +1073,14 @@ static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in_data,
   if( rxq < 0 )
     return rxq;
 
+  /* Various parts of the efvi user/kernel interface assume that the qid can fit
+   * within 8 bits. This precludes us from using the full 32 bit queue handle
+   * that we got from firmware without breaking existing apps. Instead, extract
+   * the queue number from the handle and reconstruct the queue handle again
+   * when it is needed. */
+  rxq_num = ef10ct_get_queue_num(rxq);
+  EFHW_ASSERT(rxq_num < 256);
+
   EFHW_MCDI_INITIALISE_BUF(in);
   EFHW_MCDI_INITIALISE_BUF(out);
   ethtool_flow_to_mcdi_op(in, rxq, in_data->filter);
@@ -1069,7 +1090,7 @@ static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in_data,
   if( rc == 0 ) {
     uint32_t id_low = EFHW_MCDI_DWORD(out, FILTER_OP_OUT_HANDLE_LO);
     uint32_t id_hi = EFHW_MCDI_DWORD(out, FILTER_OP_OUT_HANDLE_HI);
-    out_data->rxq = rxq;
+    out_data->rxq = rxq_num;
     out_data->drv_id = id_low | (uint64_t)id_hi << 32;
     /* Metadata filter_id is the bottom 16 bits of MCDI filter handle */
     out_data->filter_handle = id_low & 0xffff;
@@ -1335,10 +1356,11 @@ static int ef10ct_rxq_post_superbuf(struct efhw_nic *nic, int instance,
   uint64_t phys_addr;
   ci_qword_t qword;
   volatile uint64_t *reg;
+  int rxq_num = ef10ct_get_queue_num(instance);
 
-  if( instance < 0 || instance >= ef10ct->rxq_n )
+  if( rxq_num < 0 || rxq_num >= ef10ct->rxq_n )
     return -EINVAL;
-  reg = ef10ct->rxq[instance].post_buffer_addr;
+  reg = ef10ct->rxq[rxq_num].post_buffer_addr;
   if( reg == NULL )
     return -EINVAL;
 
