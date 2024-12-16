@@ -7,8 +7,7 @@
 #include <ci/driver/ci_aux.h>
 
 #if CI_HAVE_EF10CT
-/* For now we are using a test interface as implemented by our test driver. */
-#include <ci/driver/ci_ef10ct_test.h>
+#include <../driver/linux_net/include/linux/sfc/efx_auxbus.h>
 #endif
 
 #endif /* CI_DRIVER_CI_EF10CT_H */
