@@ -250,7 +250,7 @@ void ethtool_flow_to_mcdi_op(ci_dword_t *buf, int rxq,
   case TCP_V4_FLOW:
   case UDP_V4_FLOW:
     match_fields |= EFHW_MCDI_MATCH_FIELD_BIT(ETHER_TYPE);
-    EFHW_MCDI_SET_WORD(buf, FILTER_OP_IN_ETHER_TYPE, ETH_P_IP);
+    EFHW_MCDI_SET_WORD(buf, FILTER_OP_IN_ETHER_TYPE, htons(ETH_P_IP));
 
     match_fields |= EFHW_MCDI_MATCH_FIELD_BIT(IP_PROTO);
     EFHW_MCDI_SET_WORD(buf, FILTER_OP_IN_IP_PROTO,
@@ -292,7 +292,7 @@ void ethtool_flow_to_mcdi_op(ci_dword_t *buf, int rxq,
   case TCP_V6_FLOW:
   case UDP_V6_FLOW:
     match_fields |= EFHW_MCDI_MATCH_FIELD_BIT(ETHER_TYPE);
-    EFHW_MCDI_SET_WORD(buf, FILTER_OP_IN_ETHER_TYPE, ETH_P_IPV6);
+    EFHW_MCDI_SET_WORD(buf, FILTER_OP_IN_ETHER_TYPE, htons(ETH_P_IPV6));
 
     match_fields |= EFHW_MCDI_MATCH_FIELD_BIT(IP_PROTO);
     EFHW_MCDI_SET_WORD(buf, FILTER_OP_IN_IP_PROTO,
@@ -335,7 +335,7 @@ void ethtool_flow_to_mcdi_op(ci_dword_t *buf, int rxq,
     break;
   case IPV4_USER_FLOW: /* Also includes IP_USER_FLOW */
     match_fields |= EFHW_MCDI_MATCH_FIELD_BIT(ETHER_TYPE);
-    EFHW_MCDI_SET_WORD(buf, FILTER_OP_IN_ETHER_TYPE, ETH_P_IP);
+    EFHW_MCDI_SET_WORD(buf, FILTER_OP_IN_ETHER_TYPE, htons(ETH_P_IP));
 
     if (filter->m_u.usr_ip4_spec.ip4src) {
       match_fields |= EFHW_MCDI_MATCH_FIELD_BIT(SRC_IP);
@@ -363,7 +363,7 @@ void ethtool_flow_to_mcdi_op(ci_dword_t *buf, int rxq,
     break;
   case IPV6_USER_FLOW:
     match_fields |= EFHW_MCDI_MATCH_FIELD_BIT(ETHER_TYPE);
-    EFHW_MCDI_SET_WORD(buf, FILTER_OP_IN_ETHER_TYPE, ETH_P_IPV6);
+    EFHW_MCDI_SET_WORD(buf, FILTER_OP_IN_ETHER_TYPE, htons(ETH_P_IPV6));
 
     if (ipv6_addr_non_null(filter->m_u.usr_ip6_spec.ip6src)) {
       match_fields |= EFHW_MCDI_MATCH_FIELD_BIT(SRC_IP);
@@ -409,8 +409,8 @@ void ethtool_flow_to_mcdi_op(ci_dword_t *buf, int rxq,
     if (filter->m_u.ether_spec.h_proto) {
       match_fields |= EFHW_MCDI_MATCH_FIELD_BIT(ETHER_TYPE);
       EFHW_MCDI_SET_WORD(buf, FILTER_OP_IN_ETHER_TYPE,
-                         filter->h_u.ether_spec.h_proto &
-                         filter->m_u.ether_spec.h_proto);
+                         htons(filter->h_u.ether_spec.h_proto &
+                               filter->m_u.ether_spec.h_proto) );
     }
     break;
   case SCTP_V4_FLOW:    /* SCTP over IPv4 */
