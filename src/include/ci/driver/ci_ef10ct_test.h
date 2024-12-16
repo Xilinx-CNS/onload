@@ -502,45 +502,6 @@ static inline struct efx_auxdev *to_efx_auxdev(struct auxiliary_device *adev)
 	return container_of(adev, struct efx_auxdev, auxdev);
 }
 
-
-/* FIXME SCJ these structs are not really part of the interface, they're just
- * here to make it easier to transition the queue init to MCDI. */
-struct efx_auxiliary_evq_params {
-        int qid;
-        int irq;
-        int entries;
-        struct page *q_page;
-        size_t page_offset;
-        size_t q_size;
-        u32 flags;
-        bool subscribe_time_sync;
-        u16 unsol_credit;
-};
-
-
-/**
- * The parameters necessary to request a TX queue.
- *
- * @evq: The event queue to associate with the allocated TXQ.
- */
-struct efx_auxiliary_txq_params {
-        int evq;
-        int label;
-        int qid;
-};
-
-/**
- * The parameters necessary to request an RX queue.
- *
- * @evq: The event queue to associate with the allocated RXQ.
- */
-struct efx_auxiliary_rxq_params {
-        int  evq;
-        int  qid;
-        int  label;
-        bool suppress_events;
-};
-
 static inline bool efx_aux_abi_version_is_compat(u32 abi_version)
 
 {
