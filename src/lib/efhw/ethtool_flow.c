@@ -457,6 +457,7 @@ void ethtool_flow_to_mcdi_op(ci_dword_t *buf, int rxq,
   EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_OP,
                       multicast ? MC_CMD_FILTER_OP_IN_OP_SUBSCRIBE :
                                   MC_CMD_FILTER_OP_IN_OP_INSERT);
+  EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_PORT_ID, EVB_PORT_ID_ASSIGNED);
   EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_MATCH_FIELDS, match_fields);
   EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_RX_DEST,
                       MC_CMD_FILTER_OP_IN_RX_DEST_HOST);
