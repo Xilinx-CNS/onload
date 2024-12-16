@@ -1238,7 +1238,14 @@ ef10ct_vi_io_region(struct efhw_nic* nic, int instance, size_t* size_out,
   struct efx_auxdev* edev;
   struct efx_auxdev_client* cli;
   union efx_auxiliary_param_value val = {.queue_io_wnd.qid_in = instance};
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   int rc = 0;
+
+  if (ef10ct_get_queue_num(instance) >= ef10ct->evq_n) {
+    *size_out = 0;
+    *addr_out = 0;
+    return rc;
+  }
 
   AUX_PRE(dev, edev, cli, nic, rc)
   rc = edev->llct_ops->base_ops->get_param(cli, EFX_AUXILIARY_EVQ_WINDOW,
