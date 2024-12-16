@@ -206,7 +206,7 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct device *dev,
 	/* Tie the lifetime of the kernel's state to that of our own. */
 	if( dev )
 		get_device(dev);
-	dev_hold(net_dev);
+	netdev_hold(net_dev, &nic->net_dev_tracker, GFP_KERNEL);
 
 	rc = efhw_nic_ctor(nic, res_dim, dev_type, net_dev, dev);
 	if (rc < 0)
@@ -236,7 +236,7 @@ fail2:
 fail1:
 	if( dev )
 		put_device(dev);
-	dev_put(net_dev);
+	netdev_put(net_dev, &nic->net_dev_tracker);
 	return rc;
 }
 
@@ -259,7 +259,7 @@ linux_efrm_nic_reclaim(struct linux_efhw_nic *lnic,
 
 	/* Replace the net & pci devs */
 	get_device(dev);
-	dev_hold(net_dev);
+	netdev_hold(net_dev, &nic->net_dev_tracker, GFP_KERNEL);
 	spin_lock_bh(&nic->pci_dev_lock);
 	old_dev = nic->dev;
 	nic->dev = dev;
@@ -506,7 +506,7 @@ efrm_nic_do_unplug(struct efhw_nic* nic, bool hard)
 	spin_unlock_bh(&nic->pci_dev_lock);
 
 	EFRM_ASSERT(net_dev != NULL);
-	dev_put(net_dev);
+	netdev_put(net_dev, &nic->net_dev_tracker);
 	put_device(dev);
 
 	return 0;

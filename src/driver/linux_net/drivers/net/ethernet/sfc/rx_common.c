@@ -1845,7 +1845,7 @@ static void efx_filter_rfs_work(struct work_struct *data)
 
 	/* Release references */
 	clear_bit(slot_idx, &efx->rps_slot_map);
-	dev_put(req->net_dev);
+	netdev_put(req->net_dev, &req->net_dev_tracker);
 
 	return;
 }
@@ -1908,7 +1908,8 @@ int efx_filter_rfs(struct net_device *net_dev, const struct sk_buff *skb,
 	}
 
 	/* Queue the request */
-	dev_hold(req->net_dev = net_dev);
+	req->net_dev = net_dev;
+	netdev_hold(req->net_dev, &req->net_dev_tracker, GFP_ATOMIC);
 	INIT_WORK(&req->work, efx_filter_rfs_work);
 	req->rxq_index = rxq_index;
 	req->flow_id = flow_id;
@@ -1965,4 +1966,3 @@ bool __efx_filter_rfs_expire(struct efx_channel *channel, unsigned int quota)
 }
 
 #endif /* CONFIG_RFS_ACCEL */
-

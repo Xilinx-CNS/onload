@@ -546,4 +546,30 @@ static inline int efrm_follow_pfn(struct vm_area_struct *vma,
 }
 #endif
 
+#ifdef EFX_NEED_NETDEV_HOLD
+#ifdef EFX_HAVE_DEV_HOLD_TRACK
+/* Commit d62607c3fe45 ("net: rename reference+tracking helpers")
+ * renamed these.
+ */
+#define netdev_hold(_n, _t, _g)	dev_hold_track(_n, _t, _g)
+#define netdev_put(_n, _t)	dev_put_track(_n, _t)
+#else
+/* This was introduced in the same commit that adds dev_hold_track */
+typedef struct {} netdevice_tracker;
+
+static inline void netdev_hold(struct net_device *dev,
+			       netdevice_tracker *tracker __always_unused,
+			       gfp_t gfp __always_unused)
+{
+	dev_hold(dev);
+}
+
+static inline void netdev_put(struct net_device *dev,
+			      netdevice_tracker *tracker __always_unused)
+{
+	dev_put(dev);
+}
+#endif
+#endif
+
 #endif /* DRIVER_LINUX_RESOURCE_KERNEL_COMPAT_H */

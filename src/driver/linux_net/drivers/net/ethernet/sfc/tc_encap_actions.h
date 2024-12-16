@@ -26,6 +26,7 @@
  * @ttl: Time To Live associated with the route used
  * @dying: set when egdev is going away, to skip further updates
  * @egdev: egress device from the route lookup.  Holds a reference
+ * @dev_tracker: reference tracker entry for @egdev
  * @ref: counts encap actions referencing this entry
  * @used: jiffies of last time traffic hit any encap action using this.
  *      When counter reads update this, a new neighbour event is sent to
@@ -53,6 +54,7 @@ struct efx_neigh_binder {
 	u8 ttl;
 	bool dying;
 	struct net_device *egdev;
+	netdevice_tracker dev_tracker;
 	refcount_t ref;
 	unsigned long used;
 	struct list_head users;
