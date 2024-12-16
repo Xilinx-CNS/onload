@@ -95,6 +95,9 @@ void efrm_nondl_unregister_driver(struct efrm_nondl_driver *driver)
 
   rtnl_lock();
 
+  if (!nondl_driver)
+    goto out;
+
   EFRM_ASSERT(nondl_driver == driver);
 
   list_for_each_entry_safe_reverse(device, device_n, &driver->devices,
@@ -105,6 +108,7 @@ void efrm_nondl_unregister_driver(struct efrm_nondl_driver *driver)
 
   nondl_driver = NULL;
 
+out:
   rtnl_unlock();
 }
 EXPORT_SYMBOL(efrm_nondl_unregister_driver);
