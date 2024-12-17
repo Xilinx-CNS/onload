@@ -203,7 +203,14 @@ static void ef10ct_check_for_flushes(struct work_struct *work)
       if(CI_QWORD_FIELD(*event, EFCT_FLUSH_TYPE) == EFCT_FLUSH_TYPE_TX) {
         efhw_handle_txdmaq_flushed(evq->nic, q_id);
       } else /* EFCT_FLUSH_TYPE_RX */ {
-        ef10ct_free_rxq(evq->nic, q_id);
+        uint32_t queue_handle;
+
+        /* Flush complete events only reserve 8 bits for a queue id. This means
+         * that in order to free a valid queue handle, we will have to insert
+         * the queue type in the upper 8 bits of the handle. */
+        queue_handle = ef10ct_reconstruct_queue_handle(q_id,
+                                                  EF10CT_QUEUE_HANDLE_TYPE_RXQ);
+        ef10ct_free_rxq(evq->nic, queue_handle);
         /* RXQ flush is not reported upwards. The HW RXQ is managed within
          * efhw. */
       }
