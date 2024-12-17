@@ -722,6 +722,83 @@ ef10ct_rx_buffer_post_register(struct efhw_nic* nic, int instance,
   return 0;
 }
 
+static int ef10ct_rx_iomap_buffer_post_register(struct efhw_nic *nic,
+                                                int rxq_handle, void **addr_out)
+{
+  int rc;
+  struct device *dev;
+  struct efx_auxdev* edev;
+  struct efx_auxdev_client* cli;
+  union efx_auxiliary_param_value val = {.queue_io_wnd.qid_in = rxq_handle};
+  size_t map_size;
+  void *io;
+
+  AUX_PRE(dev, edev, cli, nic, rc);
+  rc = edev->llct_ops->base_ops->get_param(cli, EFX_AUXILIARY_RXQ_WINDOW, &val);
+  AUX_POST(dev, edev, cli, nic, rc);
+
+  if( rc < 0 )
+    return rc;
+
+  /* TODO EF10CT The 'L' variant is reported by fake test hardware, which
+   * doesn't provide iomem.
+  */
+  if( (nic->devtype.arch == EFHW_ARCH_EF10CT) &&
+      (nic->devtype.variant == 'L') )
+  {
+    /* The address provided by the test driver is a physical address that has
+     * been converted from a virtual address, we can simply convert it back in
+     * order to use it. */
+    *addr_out = phys_to_virt(val.queue_io_wnd.base);
+    return 0;
+  }
+
+  map_size = CI_ROUND_UP(val.queue_io_wnd.size, CI_PAGE_SIZE);
+
+  EFHW_ASSERT((val.queue_io_wnd.base & PAGE_MASK) == val.queue_io_wnd.base);
+  io = ioremap_uc(val.queue_io_wnd.base, map_size);
+  if (io == NULL) {
+    EFHW_ERR("%s Failed to iomap! base = %llx, map_size = %lu", __func__,
+             val.queue_io_wnd.base, map_size);
+    return -EINVAL;
+  }
+
+  *addr_out = io;
+  return 0;
+}
+
+static int ef10ct_fini_rxq(struct efhw_nic *nic, int rxq_num)
+{
+  EFHW_MCDI_DECLARE_BUF(in, MC_CMD_FINI_RXQ_IN_LEN);
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  struct efhw_nic_ef10ct_evq *ef10ct_evq;
+  struct efx_auxdev_rpc rpc = {
+    .cmd = MC_CMD_FINI_RXQ,
+    .inlen = sizeof(in),
+    .inbuf = (void*)in,
+    .outlen = 0,
+    .outbuf = NULL,
+  };
+  int rxq_handle;
+  int evq_id;
+  int rc;
+
+  rxq_handle = ef10ct_reconstruct_queue_handle(rxq_num,
+                                               EF10CT_QUEUE_HANDLE_TYPE_RXQ);
+  EFHW_MCDI_INITIALISE_BUF(in);
+  EFHW_MCDI_SET_DWORD(in, FINI_RXQ_IN_INSTANCE, rxq_handle);
+
+  rc = ef10ct_fw_rpc(nic, &rpc);
+
+  evq_id = ef10ct->rxq[rxq_num].evq;
+  ef10ct_evq = &ef10ct->evq[ef10ct_get_queue_num(evq_id)];
+
+  atomic_inc(&ef10ct_evq->queues_flushing);
+  schedule_delayed_work(&ef10ct_evq->check_flushes, 0);
+
+  return rc;
+}
+
 static int
 ef10ct_shared_rxq_bind(struct efhw_nic* nic,
                        struct efhw_shared_bind_params *params)
@@ -733,7 +810,7 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
   int evq;
   int rc;
   struct efx_auxdev_rpc rpc;
-  resource_size_t register_phys_addr;
+  void **post_buffer_addr;
 
   EFHW_WARN("%s: evq %d, rxq %d", __func__, params->wakeup_instance,
             params->qid);
@@ -807,12 +884,13 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
     return -EINVAL;
   }
 
-  rc = ef10ct_rx_buffer_post_register(nic, rxq_num, &register_phys_addr);
-  if( rc < 0 ) {
-    EFHW_ERR("%s Failed to get rx post register. rc = %d\n", __FUNCTION__, rc);
+  post_buffer_addr = (void **)&ef10ct->rxq[rxq_num].post_buffer_addr;
+  rc = ef10ct_rx_iomap_buffer_post_register(nic, rxq_handle, post_buffer_addr);
+  if (rc < 0) {
+    ef10ct_fini_rxq(nic, rxq_num);
+    EFHW_ERR("%s Failed to iomap rx post register. rc = %d", __func__, rc);
     return rc;
   }
-  ef10ct->rxq[rxq_num].post_buffer_addr = phys_to_virt(register_phys_addr);
 
   flush_delayed_work(&ef10ct->evq[ef10ct_get_queue_num(evq)].check_flushes);
   EFHW_ASSERT(ef10ct->rxq[rxq_num].evq == -1);
@@ -828,14 +906,9 @@ static void
 ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
                          efhw_efct_rxq_free_func_t *freer)
 {
-  EFHW_MCDI_DECLARE_BUF(in, MC_CMD_FINI_RXQ_IN_LEN);
-  int evq_id;
-  struct efx_auxdev_rpc rpc;
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
-  struct efhw_nic_ef10ct_evq *ef10ct_evq;
   int rxq_num = rxq->qid;
-  int rxq_handle = ef10ct_reconstruct_queue_handle(rxq_num,
-                                                  EF10CT_QUEUE_HANDLE_TYPE_RXQ);
+  int rc;
 
   /* This releases the SW RXQ resource, so is independent of the underlying
    * HW RXQ flush and free. */
@@ -848,27 +921,18 @@ ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
   if( ef10ct->rxq[rxq_num].ref_count > 0 )
     return;
 
-  /* FIXME EF10CT check errors here */
-
-  EFHW_MCDI_INITIALISE_BUF(in);
-  EFHW_MCDI_SET_DWORD(in, FINI_RXQ_IN_INSTANCE, rxq_handle);
-
-  rpc.cmd = MC_CMD_FINI_RXQ;
-  rpc.inlen = sizeof(in);
-  rpc.inbuf = (void*)in;
-  rpc.outlen = 0;
-  rpc.outbuf = NULL;
-  ef10ct_fw_rpc(nic, &rpc);
-
-  evq_id = ef10ct->rxq[rxq_num].evq;
-  ef10ct_evq = &ef10ct->evq[ef10ct_get_queue_num(evq_id)];
-
-  atomic_inc(&ef10ct_evq->queues_flushing);
-  schedule_delayed_work(&ef10ct_evq->check_flushes, 0);
+  rc = ef10ct_fini_rxq(nic, rxq_num);
+  if( rc < 0 )
+    EFHW_ERR("%s: Failed to fini rxq %d rc = %d", __func__, rxq_num, rc);
 
   /* ef10ct->rxq[dmaq].q_id is updated in check_flushes. */
+  if ( ! ((nic->devtype.arch == EFHW_ARCH_EF10CT) &&
+          (nic->devtype.variant == 'L')) )
+  {
+    iounmap(ef10ct->rxq[rxq_num].post_buffer_addr);
+  }
   ef10ct->rxq[rxq_num].evq = -1;
-  ef10ct->rxq[rxq_num].post_buffer_addr = 0;
+  ef10ct->rxq[rxq_num].post_buffer_addr = NULL;
 }
 
 static int
@@ -1384,17 +1448,21 @@ static int ef10ct_rxq_post_superbuf(struct efhw_nic *nic, int instance,
                       EFCT_TEST_SENTINEL_VALUE, sentinel,
                       EFCT_TEST_ROLLOVER, rollover);
 
-  /* Due to limitations with the efct_test driver it is possible to write
-   * multiple values to RX_BUFFER_POST register before the first one is
-   * read. As a crude workaround for the issue the test driver resets the
-   * register 0 once it has processed the buffer. We poll the value of the
-   * register here in case the test driver hasn't finished yet. */
-  /* TODO EFCT_TEST: remove this when no longer using the testdriver */
-  while(*reg != 0) {
-    msleep(20); /* Ran into softlockups even with reg being declared
-                * as volatile. Maybe this is because the test
-                * driver is scheduled on the core as the one that
-                * is spinning, so can never actually run? */
+  if ((nic->devtype.arch == EFHW_ARCH_EF10CT) &&
+      (nic->devtype.variant == 'L'))
+  {
+    EFHW_NOTICE("%s Using the test driver code!", __func__);
+    /* Due to limitations with the efct_test driver it is possible to write
+     * multiple values to RX_BUFFER_POST register before the first one is
+     * read. As a crude workaround for the issue the test driver resets the
+     * register 0 once it has processed the buffer. We poll the value of the
+     * register here in case the test driver hasn't finished yet. */
+    while(*reg != 0) {
+      msleep(20); /* Ran into softlockups even with reg being declared
+                   * as volatile. Maybe this is because the test
+                   * driver is scheduled on the core as the one that
+                   * is spinning, so can never actually run? */
+    }
   }
   *reg = qword.u64[0];
 

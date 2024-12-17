@@ -384,6 +384,12 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
 
   efct_filter_state_free(&ef10ct->filter_state);
 
+  /* iounmap the superbuf post registers if we are not using the test driver. */
+  if ( nic->devtype.variant != 'L')
+    for (i = 0; i < ef10ct->rxq_n; i++)
+      if (ef10ct->rxq[i].post_buffer_addr != NULL)
+          iounmap(ef10ct->rxq[i].post_buffer_addr);
+
   vfree(ef10ct->evq);
   vfree(ef10ct->rxq);
   vfree(ef10ct->shared);
