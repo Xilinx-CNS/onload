@@ -30861,5 +30861,34 @@
 #define       MC_CMD_MAE_MPORT_ENUMERATE_OUT_MPORT_DESC_DATA_MAXNUM 244
 #define       MC_CMD_MAE_MPORT_ENUMERATE_OUT_MPORT_DESC_DATA_MAXNUM_MCDI2 1012
 
+/* MC_CMD_QUEUE_HANDLE structuredef: On X4, to distinguish between full-
+ * featured (X2-style) VIs and low-latency (X3-style) queues, we use the top
+ * bits of the queue handle to specify the queue type in all MCDI calls which
+ * refer to VIs/queues. These bits should be masked off when indexing into a
+ * queue in the BAR.
+ */
+#define    MC_CMD_QUEUE_HANDLE_LEN 4
+/* Combined queue number and type. This is the ID returned by and passed into
+ * MCDI calls that use queues.
+ */
+#define       MC_CMD_QUEUE_HANDLE_QUEUE_HANDLE_OFST 0
+#define       MC_CMD_QUEUE_HANDLE_QUEUE_HANDLE_LEN 4
+#define        MC_CMD_QUEUE_HANDLE_QUEUE_NUM_OFST 0
+#define        MC_CMD_QUEUE_HANDLE_QUEUE_NUM_LBN 0
+#define        MC_CMD_QUEUE_HANDLE_QUEUE_NUM_WIDTH 24
+#define        MC_CMD_QUEUE_HANDLE_QUEUE_TYPE_OFST 0
+#define        MC_CMD_QUEUE_HANDLE_QUEUE_TYPE_LBN 24
+#define        MC_CMD_QUEUE_HANDLE_QUEUE_TYPE_WIDTH 8
+/* enum: Indicates that the queue instance is a full-featured VI */
+#define          MC_CMD_QUEUE_HANDLE_QUEUE_TYPE_FF_VI 0x0
+/* enum: Indicates that the queue instance is a LL TXQ */
+#define          MC_CMD_QUEUE_HANDLE_QUEUE_TYPE_LL_TXQ 0x1
+/* enum: Indicates that the queue instance is a LL RXQ */
+#define          MC_CMD_QUEUE_HANDLE_QUEUE_TYPE_LL_RXQ 0x2
+/* enum: Indicates that the queue instance is a LL EVQ */
+#define          MC_CMD_QUEUE_HANDLE_QUEUE_TYPE_LL_EVQ 0x3
+#define       MC_CMD_QUEUE_HANDLE_QUEUE_HANDLE_LBN 0
+#define       MC_CMD_QUEUE_HANDLE_QUEUE_HANDLE_WIDTH 32
+
 #endif /* _SIENA_MC_DRIVER_PCOL_H */
 /*! \cidoxg_end */

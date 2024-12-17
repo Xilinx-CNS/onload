@@ -8,6 +8,8 @@
 #include <ci/driver/ci_ef10ct.h>
 #include <ci/tools/sysdep.h>
 #include <ci/efhw/stack_vi_allocator.h>
+#include <ci/efhw/mc_driver_pcol.h>
+#include <lib/efhw/mcdi_common.h>
 #include <linux/mutex.h>
 
 extern struct efhw_func_ops ef10ct_char_functional_units;
@@ -37,6 +39,12 @@ struct ef10ct_shared_kernel_evq {
   /* Some kind of interrupt stuff? */
 };
 
+enum ef10ct_queue_handle_type {
+  EF10CT_QUEUE_HANDLE_TYPE_TXQ = MC_CMD_QUEUE_HANDLE_QUEUE_TYPE_LL_TXQ,
+  EF10CT_QUEUE_HANDLE_TYPE_RXQ = MC_CMD_QUEUE_HANDLE_QUEUE_TYPE_LL_RXQ,
+  EF10CT_QUEUE_HANDLE_TYPE_EVQ = MC_CMD_QUEUE_HANDLE_QUEUE_TYPE_LL_EVQ,
+};
+
 struct efhw_nic_ef10ct {
   uint32_t evq_n;
   struct efhw_nic_ef10ct_evq *evq;
@@ -55,6 +63,35 @@ struct efhw_nic_ef10ct {
   struct efct_filter_state filter_state;
   struct dentry* debug_dir;
 };
+
+static inline u32 ef10ct_get_queue_num(u32 queue_handle)
+{
+  ci_dword_t data;
+
+  EFHW_MCDI_SET_DWORD(&data, QUEUE_HANDLE_QUEUE_HANDLE, queue_handle);
+  return EFHW_MCDI_DWORD_FIELD(&data, QUEUE_HANDLE_QUEUE_NUM);
+}
+
+static inline enum ef10ct_queue_handle_type
+ef10ct_get_queue_type(u32 queue_handle)
+{
+  ci_dword_t data;
+
+  EFHW_MCDI_SET_DWORD(&data, QUEUE_HANDLE_QUEUE_HANDLE, queue_handle);
+  return EFHW_MCDI_DWORD_FIELD(&data, QUEUE_HANDLE_QUEUE_TYPE);
+}
+
+static inline u32
+ef10ct_reconstruct_queue_handle(u32 queue_num,
+                                enum ef10ct_queue_handle_type type)
+{
+  ci_dword_t data;
+
+  EFHW_MCDI_POPULATE_DWORD_2(&data, QUEUE_HANDLE_QUEUE_HANDLE,
+                             QUEUE_HANDLE_QUEUE_NUM, queue_num,
+                             QUEUE_HANDLE_QUEUE_TYPE, type);
+  return EFHW_MCDI_DWORD(&data, QUEUE_HANDLE_QUEUE_HANDLE);
+}
 
 int ef10ct_alloc_evq(struct efhw_nic *nic);
 void ef10ct_free_evq(struct efhw_nic *nic, int evq);
