@@ -572,23 +572,9 @@ remove_exclusive_rxq_ownership(struct efct_filter_state *state, int hw_filter)
     state->exclusive_rxq_mapping[rxq] = 0;
 }
 
-static bool is_filter_multicast(struct efct_hw_filter *hw_filter)
-{
-  /* This check is used to determine whether a filter is "exclusive" [1] or if
-   * it is multi-recipient. Currently, the only non-exclusive filter wesupport
-   * is ipv4 multicast. However, if we expand our set of supported filter types
-   * there will also have to be an accompanying change here.
-   *
-   * [^1] N.B. This "exclusivity" refers only to the filter itself and is a
-   * separate concept to rxq exclusive ownership. */
-  return hw_filter->ip_proto == IPPROTO_UDP &&
-         ipv4_is_multicast(hw_filter->local_ip);
-}
-
-
 bool
 efct_filter_remove(struct efct_filter_state *state, int filter_id,
-                   uint64_t *drv_id_out, bool *is_multicast)
+                   uint64_t *drv_id_out)
 {
   int hw_filter;
   bool remove_drv = false;
@@ -601,7 +587,6 @@ efct_filter_remove(struct efct_filter_state *state, int filter_id,
     if( state->hw_filters[hw_filter].refcount == 0 ) {
         /* The above check implies the current filter is unused. */
         *drv_id_out = state->hw_filters[hw_filter].drv_id;
-        *is_multicast = is_filter_multicast(&state->hw_filters[hw_filter]);
         remove_exclusive_rxq_ownership(state, hw_filter);
         remove_drv = true;
     }

@@ -1219,16 +1219,12 @@ ef10ct_filter_remove(struct efhw_nic *nic, int filter_id)
   };
   bool remove_drv;
   uint64_t drv_id;
-  bool is_multicast;
   int rc;
 
-  remove_drv = efct_filter_remove(&ef10ct->filter_state, filter_id, &drv_id,
-                                  &is_multicast);
+  remove_drv = efct_filter_remove(&ef10ct->filter_state, filter_id, &drv_id);
 
   if( remove_drv ) {
-    EFHW_MCDI_SET_DWORD(in, FILTER_OP_IN_OP,
-                        is_multicast ? MC_CMD_FILTER_OP_IN_OP_UNSUBSCRIBE :
-                                       MC_CMD_FILTER_OP_IN_OP_REMOVE);
+    EFHW_MCDI_SET_DWORD(in, FILTER_OP_IN_OP, MC_CMD_FILTER_OP_IN_OP_REMOVE);
     EFHW_MCDI_SET_DWORD(in, FILTER_OP_IN_HANDLE_LO, drv_id);
     EFHW_MCDI_SET_DWORD(in, FILTER_OP_IN_HANDLE_HI, drv_id >> 32);
 
