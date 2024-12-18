@@ -40,6 +40,7 @@
 #ifndef __CI_EFHW_EFAB_TYPES_H__
 #define __CI_EFHW_EFAB_TYPES_H__
 
+#include <ci/driver/kernel_compat.h>
 #include <ci/efhw/efhw_config.h>
 #include <ci/efhw/hardware_sysdep.h>
 #include <ci/efhw/iopage_types.h>
@@ -569,6 +570,7 @@ struct efhw_nic {
 	int index;
 
 	struct net_device *net_dev; /*!< Network device */
+	netdevice_tracker net_dev_tracker;
 	struct device *dev;         /*!< HW device */
 	struct pci_dev *pci_dev;    /*!< PCI device */
 	spinlock_t pci_dev_lock;    /*!< Protects access to dev & net_dev */
