@@ -63,6 +63,8 @@ typedef union {
 /* Flags for TX/RX queues */
 #define EFHW_VI_JUMBO_EN           0x01    /*! scatter RX over multiple desc */
 #define EFHW_VI_RX_ZEROCOPY        0x02    /*! Zerocopy for AF_XDP */
+#define EFHW_VI_ENABLE_TPH         0x08    /*! PCIe TPH steering hints */
+#define EFHW_VI_TPH_TAG_MODE       0x10    /*! 0 = No ST mode, 1 = use ST.  Depends on EFHW_VI_ENABLE_TPH */
 #define EFHW_VI_TX_PHYS_ADDR_EN    0x20    /*! TX physical address mode */
 #define EFHW_VI_RX_PHYS_ADDR_EN    0x40    /*! RX physical address mode */
 #define EFHW_VI_TX_IP_CSUM_DIS     0x100   /*! enable ip checksum generation */
@@ -245,6 +247,8 @@ typedef union {
    vis. */
 #define NIC_FLAG_SHARED_PD 0x40000000000000LL
 #define NIC_FLAG_LLCT 0x100000000000000LL
+/* Can poll for RX independently of other events */
+#define NIC_FLAG_RX_POLL 0x200000000000000LL
 
 /* Filter type flags */
 #define NIC_FILTER_FLAG_RX_TYPE_IP_LOCAL 0x1

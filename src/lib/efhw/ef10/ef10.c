@@ -11,6 +11,7 @@
 #include <ci/efhw/checks.h>
 #include <ci/efhw/efhw_buftable.h>
 #include <ci/efhw/buddy.h>
+#include <ci/efhw/tph.h>
 
 #include <ci/driver/ci_ef10.h>
 #include <ci/driver/resource/driverlink.h>
@@ -30,6 +31,7 @@ MODULE_PARM_DESC(force_ev_timer,
                  "Set to 0 to avoid forcing allocation of event timer with wakeup queue");
 
 #define EFHW_CLIENT_ID_NONE (~0u)
+#define DEBUG_TLP 0
 
 #define MCDI_CHECK(op, rc, actual_len, rate_limit) \
 	ef10_mcdi_check_response(__func__, #op, (rc), op##_OUT_LEN, \
@@ -784,6 +786,94 @@ void ef10_mcdi_cmd_event_queue_disable(struct efhw_nic *nic, uint evq)
   rc = ef10_mcdi_rpc(nic, MC_CMD_FINI_EVQ, MC_CMD_FINI_EVQ_IN_LEN, 0,
                      &out_size, in, NULL);
   MCDI_CHECK(MC_CMD_FINI_EVQ, rc, out_size, 0);
+}
+
+
+static int
+ef10_mcdi_cmd_get_vi_tlp_processing(struct efhw_nic *nic, unsigned instance,
+                                    struct tlp_state *tlp)
+{
+  int rc;
+  size_t out_size;
+
+  EFHW_MCDI_DECLARE_BUF(get_out, MC_CMD_GET_VI_TLP_PROCESSING_OUT_LEN);
+  EFHW_MCDI_DECLARE_BUF(get_in, MC_CMD_GET_VI_TLP_PROCESSING_IN_LEN);
+  EFHW_MCDI_INITIALISE_BUF(get_in);
+
+  EFHW_MCDI_SET_DWORD(get_in, GET_VI_TLP_PROCESSING_IN_INSTANCE, instance);
+  rc = ef10_mcdi_rpc(nic, MC_CMD_GET_VI_TLP_PROCESSING, sizeof(get_in),
+                     sizeof(get_out), &out_size, get_in, &get_out);
+  MCDI_CHECK(MC_CMD_GET_VI_TLP_PROCESSING, rc, out_size, 0);
+
+  tlp->data = EFHW_MCDI_DWORD(get_out, GET_VI_TLP_PROCESSING_OUT_DATA);
+
+  tlp->tag1 = EFHW_MCDI_BYTE(get_out, GET_VI_TLP_PROCESSING_OUT_TPH_TAG1_RX);
+  tlp->tag2 = EFHW_MCDI_BYTE(get_out, GET_VI_TLP_PROCESSING_OUT_TPH_TAG2_EV);
+  tlp->relaxed = tlp->data &
+            (1u << MC_CMD_GET_VI_TLP_PROCESSING_OUT_RELAXED_ORDERING_LBN);
+  tlp->inorder =  tlp->data &
+            (1u << MC_CMD_GET_VI_TLP_PROCESSING_OUT_ID_BASED_ORDERING_LBN);
+  tlp->snoop = tlp->data &
+            (1u << MC_CMD_GET_VI_TLP_PROCESSING_OUT_NO_SNOOP_LBN);
+  tlp->tph = tlp->data &
+            (1u << MC_CMD_GET_VI_TLP_PROCESSING_OUT_TPH_ON_LBN);
+
+  EFHW_NOTICE("%s: tph now %x (data %x) (rc %d)", __FUNCTION__, tlp->tph,
+              tlp->data, rc);
+
+  return rc;
+}
+
+
+static int
+ef10_mcdi_cmd_set_vi_tlp_processing(struct efhw_nic *nic, uint instance,
+                                    int set, uint8_t tag)
+{
+  int rc;
+  size_t out_size;
+  struct tlp_state tlp;
+
+  EFHW_MCDI_DECLARE_BUF(set_in, MC_CMD_SET_VI_TLP_PROCESSING_IN_LEN);
+  EFHW_MCDI_INITIALISE_BUF(set_in);
+
+  rc = ef10_mcdi_cmd_get_vi_tlp_processing(nic, instance, &tlp);
+  EFHW_NOTICE("%s: tph was %x (data %x, instance %d) (rc %d)",
+              __FUNCTION__, tlp.tph, tlp.data, instance, rc);
+
+  tlp.tph = set ? 1 : 0;
+  tlp.tag1 = tlp.tag2 = tag;
+  tlp.relaxed = 0;
+  tlp.snoop = 0;
+  tlp.inorder = 0;
+
+  /* The mcdi headers have awkward definitions of these values so do it
+   * manually */
+  EFHW_MCDI_SET_DWORD(set_in, SET_VI_TLP_PROCESSING_IN_INSTANCE, instance);
+  tlp.data = (unsigned)tlp.tag1 | ((unsigned)tlp.tag2 << (8));
+  if (tlp.relaxed)
+    tlp.data |= 1u <<
+                (MC_CMD_SET_VI_TLP_PROCESSING_IN_RELAXED_ORDERING_LBN-32);
+  if (tlp.inorder)
+    tlp.data |= 1u <<
+                (MC_CMD_SET_VI_TLP_PROCESSING_IN_ID_BASED_ORDERING_LBN-32);
+  if (tlp.snoop)
+    tlp.data |= 1u << (MC_CMD_SET_VI_TLP_PROCESSING_IN_NO_SNOOP_LBN-32);
+  if (tlp.tph)
+    tlp.data |= 1u << (MC_CMD_SET_VI_TLP_PROCESSING_IN_TPH_ON_LBN-32);
+  EFHW_MCDI_SET_DWORD(set_in, SET_VI_TLP_PROCESSING_IN_DATA, tlp.data);
+
+  EFHW_NOTICE("%s: setting tph %x (data %x)",
+              __FUNCTION__, (tlp.data >> 19) & 1, tlp.data);
+  rc = ef10_mcdi_rpc(nic, MC_CMD_SET_VI_TLP_PROCESSING, sizeof(set_in), 0,
+                     &out_size, set_in, NULL);
+  MCDI_CHECK(MC_CMD_SET_VI_TLP_PROCESSING, rc, out_size, 0);
+
+#if DEBUG_TLP
+  /* read back the value to check it had an effect */
+  ef10_mcdi_cmd_read_vi_tlp_processing(nic, instance, &tlp);
+#endif
+
+  return rc;
 }
 
 
@@ -1545,6 +1635,8 @@ ef10_dmaq_rx_q_init(struct efhw_nic *nic, struct efhw_dmaq_params *params)
   int flag_packed_stream = (params->flags & EFHW_VI_RX_PACKED_STREAM)  ? 1 : 0;
   int flag_force_rx_merge = (params->flags & EFHW_VI_NO_RX_CUT_THROUGH) &&
                        (nic->flags & NIC_FLAG_RX_FORCE_EVENT_MERGING) ? 1 : 0;
+  int flag_enable_tph = (params->flags & EFHW_VI_ENABLE_TPH) != 0;
+  int flag_tph_tag_mode = (params->flags & EFHW_VI_TPH_TAG_MODE) != 0;
   int ps_buf_size_mcdi = 0;
   int dma_mode = MC_CMD_INIT_RXQ_EXT_IN_SINGLE_PACKET;
   size_t outlen;
@@ -1597,8 +1689,24 @@ ef10_dmaq_rx_q_init(struct efhw_nic *nic, struct efhw_dmaq_params *params)
   rc = ef10_mcdi_rpc(nic, MC_CMD_INIT_RXQ, MC_CMD_INIT_RXQ_V4_IN_LEN,
                      MC_CMD_INIT_RXQ_V4_OUT_LEN, &outlen, in, NULL);
 
+  if( rc == 0 && flag_enable_tph ) {
+    uint16_t tag = 0;
+    if( flag_tph_tag_mode != 0 ) {
+      /* TODO verify that raw_smp_processor_id() returns the right value */
+      rc = pcie_tph_get_cpu_st(nic->pci_dev, TPH_MEM_TYPE_VM, raw_smp_processor_id(), &tag);
+      if( rc != 0 )
+        EFHW_WARN("Failed to read steering tag (error %d), continuing without it\n", rc);
+    }
+
+    rc = ef10_mcdi_cmd_set_vi_tlp_processing(nic, params->evq, flag_enable_tph, tag);
+    if( rc != 0 ) {
+      EFHW_WARN("Failed to set steering tag (error %d), continuing without it\n", rc);
+      rc = 0;
+    }
+  }
   if( rc == 0 )
     params->qid_out = params->dmaq;
+
   return rc == 0 ? flag_rx_prefix ? nic->rx_prefix_len : 0 : rc;
 }
 

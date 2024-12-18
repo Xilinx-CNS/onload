@@ -176,6 +176,9 @@ enum ef_vi_capability {
   /** Filter on MAC + IPv4 protocol */
   EF_VI_CAP_RX_FILTER_MAC_IP4_PROTO,
 
+  /** Ability to independently poll for RX */
+  EF_VI_CAP_RX_POLL,
+
   /** Maximum value of capabilities enumeration */
   EF_VI_CAP_MAX, /* Keep this last */
 };

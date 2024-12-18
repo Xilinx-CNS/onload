@@ -16,6 +16,16 @@ struct ef10_ef100_alloc_vi_constraints {
 	struct efhw_vi_constraints *evc;
 };
 
+struct tlp_state {
+  unsigned relaxed;
+  unsigned inorder;
+  unsigned snoop;
+  unsigned tph;
+  unsigned data;
+  uint8_t tag1;
+  uint8_t tag2;
+};
+
 #define EF10_EF100_RSS_INDIRECTION_TABLE_LEN 128
 #define EF10_EF100_RSS_KEY_LEN 40
 

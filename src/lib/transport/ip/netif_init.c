@@ -27,6 +27,7 @@
 #include <net/if.h>
 #include <ci/internal/efabcfg.h>
 #include <ci/internal/syscall.h>
+#include <linux/memfd.h>
 #endif
 
 
@@ -1153,6 +1154,9 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
 
   if ( (s = getenv("EF_TCP_TIME_WAIT_ASSASSINATION")))
     opts->time_wait_assassinate = atoi(s);
+
+  if ( (s = getenv("EF_TPH_MODE")))
+    opts->tph_mode = atoi(s);
 
   /* Get our netifs to inherit flags if the O/S is being forced to */
   if (CITP_OPTS.accept_force_inherit_nonblock)
@@ -2365,7 +2369,7 @@ static void init_resource_alloc(ci_resource_onload_alloc_t* ra,
     char mfd_name[CI_CFG_STACK_NAME_LEN + 8];
     snprintf(mfd_name, sizeof(mfd_name), "efct/%s", name);
     ra->in_efct_memfd = syscall(__NR_memfd_create, mfd_name,
-                                MFD_CLOEXEC | MFD_HUGETLB);
+                                MFD_CLOEXEC | MFD_HUGETLB | MFD_HUGE_2MB);
     if( ra->in_efct_memfd < 0 && errno != ENOSYS )
       LOG_S(ci_log("%s: memfd_create failed %d", __FUNCTION__, errno));
   }
@@ -2374,7 +2378,7 @@ static void init_resource_alloc(ci_resource_onload_alloc_t* ra,
     char mfd_name[CI_CFG_STACK_NAME_LEN + 8];
     snprintf(mfd_name, sizeof(mfd_name), "pktbuf/%s", name);
     ra->in_pktbuf_memfd = syscall(__NR_memfd_create, mfd_name,
-                                  MFD_CLOEXEC | MFD_HUGETLB);
+                                  MFD_CLOEXEC | MFD_HUGETLB | MFD_HUGE_2MB);
     if( ra->in_pktbuf_memfd < 0 && errno != ENOSYS )
       LOG_S(ci_log("%s: memfd_create failed %d", __FUNCTION__, errno));
   }

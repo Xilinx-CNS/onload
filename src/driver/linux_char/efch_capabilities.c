@@ -342,6 +342,10 @@ int efch_capabilities_op(struct efch_capabilities_in* in,
     get_from_filter_flags(nic, NIC_FILTER_FLAG_RX_MAC_IP4_PROTO, out);
     break;
 
+  case EF_VI_CAP_RX_POLL:
+    get_from_nic_flags(nic, NIC_FLAG_RX_POLL, out);
+    break;
+
   default:
     out->support_rc = -ENOSYS;
     out->val = 0;

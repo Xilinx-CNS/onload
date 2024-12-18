@@ -12,6 +12,7 @@
 #include <sys/mman.h>
 #include "driver_access.h"
 #include <ci/efch/op_types.h>
+#include <linux/memfd.h>
 #endif
 #include "ef_vi_internal.h"
 #include "logging.h"
@@ -166,7 +167,8 @@ static int efct_kbufs_attach(ef_vi* vi,
   {
     char name[32];
     snprintf(name, sizeof(name), "ef_vi:%d", qid);
-    mfd = syscall(__NR_memfd_create, name, MFD_CLOEXEC | MFD_HUGETLB);
+    mfd = syscall(__NR_memfd_create, name,
+                  MFD_CLOEXEC | MFD_HUGETLB | MFD_HUGE_2MB);
     if( mfd < 0 && errno != ENOSYS && errno != EINVAL ) {
       rc = -errno;
       LOGVV(ef_log("%s: memfd_create failed %d", __FUNCTION__, rc));

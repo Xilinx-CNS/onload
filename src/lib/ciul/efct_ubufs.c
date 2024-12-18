@@ -10,6 +10,7 @@
 #include <stdio.h>
 
 #include <sys/mman.h>
+#include <linux/mman.h>
 #include <etherfabric/memreg.h>
 #include "ef_vi_internal.h"
 #include "shrub_pool.h"
@@ -256,7 +257,6 @@ static void efct_ubufs_post_kernel(ef_vi* vi, int qid, int sbid, bool sentinel)
   ci_resource_op(vi->dh, &op);
 }
 
-
 static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd, unsigned n_superbufs)
 {
 #ifdef __KERNEL__
@@ -304,7 +304,7 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd, unsigned n_superb
                           CI_HUGEPAGE_SIZE);
   map = mmap((void*)vi->efct_rxqs.q[ix].superbuf, map_bytes,
              PROT_READ | PROT_WRITE,
-             flags  | MAP_NORESERVE | MAP_HUGETLB |
+             flags  | MAP_NORESERVE | MAP_HUGETLB | MAP_HUGE_2MB |
              MAP_FIXED | MAP_POPULATE,
              fd, 0);
   if( map == MAP_FAILED )

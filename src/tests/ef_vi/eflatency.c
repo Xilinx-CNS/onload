@@ -31,8 +31,8 @@
 
 /* Forward declarations. */
 struct eflatency_vi;
-static inline void rx_wait_no_ts(struct eflatency_vi*);
-static inline void rx_wait_with_ts(struct eflatency_vi*);
+static inline void rx_wait_poll_evq(struct eflatency_vi*);
+static inline void rx_wait_poll_rx(struct eflatency_vi*);
 
 
 #define DEFAULT_PAYLOAD_SIZE  0
@@ -82,6 +82,7 @@ struct eflatency_vi {
   ef_event  evs[EF_VI_EVENT_POLL_MIN_EVS];
   ef_pd     pd;
   ef_memreg memreg;
+  bool      needs_rx_post;
 };
 
 static ef_driver_handle  driver_handle;
@@ -218,13 +219,27 @@ static void output_results(struct timeval start, struct timeval end)
 typedef struct {
   const char* name;
   void (*init)(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi);
-  void (*ping)(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi);
-  void (*pong)(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi);
+  void (*send)(struct eflatency_vi* tx_vi);
   void (*cleanup)(ef_vi* rx_vi, ef_vi* tx_vi);
 } test_t;
 
-static void
+static int
 generic_desc_check(struct eflatency_vi* vi, int wait);
+
+static inline
+void poll_tx_and_wait_for_pkt(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi,
+                              void (*rx_wait)(struct eflatency_vi*))
+{
+  if( rx_vi->needs_rx_post )
+    rx_post(&rx_vi->vi);
+
+  /* Check once for a TX completion and then wait for packet.
+   * If rx_vi == tx_vi we may observe received packet in poll on tx_vi
+   * so only wait if initial poll doesn't see an RX event. */
+  if ( !generic_desc_check(tx_vi, 0) )
+    rx_wait(rx_vi);
+}
+
 
 static void
 generic_ping(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi,
@@ -233,14 +248,10 @@ generic_ping(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi,
 {
   struct timeval start, end;
   int i;
-  int do_rx_post = ( rx_vi->vi.nic_type.arch != EF_VI_ARCH_EFCT );
 
   for( i = 0; i < cfg_warmups; ++i ) {
     tx_send(tx_vi);
-    if( do_rx_post )
-      rx_post(&rx_vi->vi);
-    rx_wait(rx_vi);
-   generic_desc_check(tx_vi, 0);
+    poll_tx_and_wait_for_pkt(rx_vi, tx_vi, rx_wait);
   }
 
   gettimeofday(&start, NULL);
@@ -248,12 +259,9 @@ generic_ping(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi,
   for( i = 0; i < cfg_iter; ++i ) {
     uint64_t start = ci_frc64_get();
     tx_send(tx_vi);
-    if( do_rx_post )
-      rx_post(&rx_vi->vi);
-    rx_wait(rx_vi);
+    poll_tx_and_wait_for_pkt(rx_vi, tx_vi, rx_wait);
     uint64_t stop = ci_frc64_get();
     timings[i] = stop - start;
-    generic_desc_check(tx_vi, 0);
   }
 
   gettimeofday(&end, NULL);
@@ -268,13 +276,10 @@ generic_pong(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi,
              void (*tx_send)(struct eflatency_vi*))
 {
   int i;
-  int do_rx_post = ( rx_vi->vi.nic_type.arch != EF_VI_ARCH_EFCT );
 
   for( i = 0; i < cfg_warmups + cfg_iter; ++i ) {
-    rx_wait(rx_vi);
+    poll_tx_and_wait_for_pkt(rx_vi, tx_vi, rx_wait);
     tx_send(tx_vi);
-    if( do_rx_post )
-      rx_post(&rx_vi->vi);
   }
 }
 
@@ -293,20 +298,9 @@ static inline void dma_send(struct eflatency_vi* vi)
   TRY(ef_vi_transmit(&vi->vi, pb->dma_buf_addr, tx_frame_len, 0));
 }
 
-static void dma_ping(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
-{
-  generic_ping(rx_vi, tx_vi, rx_wait_no_ts, dma_send);
-}
-
-static void dma_pong(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
-{
-  generic_pong(rx_vi, tx_vi, rx_wait_no_ts, dma_send);
-}
-
 static const test_t dma_test = {
   .name = "DMA",
-  .ping = dma_ping,
-  .pong = dma_pong,
+  .send = dma_send,
   .cleanup = NULL,
 };
 
@@ -326,21 +320,10 @@ static void pio_init(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
                     tx_frame_len));
 }
 
-static void pio_ping(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
-{
-  generic_ping(rx_vi, tx_vi, rx_wait_no_ts, pio_send);
-}
-
-static void pio_pong(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
-{
-  generic_pong(rx_vi, tx_vi, rx_wait_no_ts, pio_send);
-}
-
 static const test_t pio_test = {
   .name = "PIO",
   .init = pio_init,
-  .ping = pio_ping,
-  .pong = pio_pong,
+  .send = pio_send,
   .cleanup = NULL,
 };
 
@@ -407,21 +390,10 @@ static inline void alt_send(struct eflatency_vi* vi)
   alt_fill(vi);
 }
 
-static void alt_ping(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
-{
-  generic_ping(rx_vi, tx_vi, rx_wait_with_ts, alt_send);
-}
-
-static void alt_pong(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
-{
-  generic_pong(rx_vi, tx_vi, rx_wait_with_ts, alt_send);
-}
-
 static const test_t alt_test = {
   .name = "Alternatives",
   .init = alt_init,
-  .ping = alt_ping,
-  .pong = alt_pong,
+  .send = alt_send,
   /* Flush the alternative before freeing it. */
   .cleanup = alt_discard,
 };
@@ -449,27 +421,15 @@ static inline void ctpio_send(struct eflatency_vi* vi)
   }
 }
 
-static void ctpio_ping(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
-{
-  generic_ping(rx_vi, tx_vi, rx_wait_no_ts, ctpio_send);
-}
-
-static void ctpio_pong(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
-{
-  generic_pong(rx_vi, tx_vi, rx_wait_no_ts, ctpio_send);
-}
-
 static const test_t ctpio_test = {
   .name = "CTPIO",
-  .ping = ctpio_ping,
-  .pong = ctpio_pong,
+  .send = ctpio_send,
   .cleanup = NULL,
 };
 
 static const test_t x3_ctpio_test = {
   .name = "X3 CTPIO",
-  .ping = ctpio_ping,
-  .pong = ctpio_pong,
+  .send = ctpio_send,
   .cleanup = NULL,
 };
 
@@ -477,7 +437,14 @@ static const test_t x3_ctpio_test = {
 
 /**********************************************************************/
 
-static void
+/* Poll for events. Will always return as soon as RX event found,
+ * possibly leaving other events to be processed on next call
+ *
+ * wait - continue polling until RX event found
+ *
+ * Returns 1 if RX event found, else 0
+ */
+static int
 generic_desc_check(struct eflatency_vi* vi, int wait)
 {
   /* We might exit with events read but unprocessed. */
@@ -493,11 +460,11 @@ generic_desc_check(struct eflatency_vi* vi, int wait)
       switch( EF_EVENT_TYPE(evs[i]) ) {
       case EF_EVENT_TYPE_RX:
         vi->i = ++i;
-        return;
+        return 1;
       case EF_EVENT_TYPE_RX_REF:
         handle_rx_ref(&vi->vi, evs[i].rx_ref.pkt_id, evs[i].rx_ref.len);
         vi->i = ++i;
-        return;
+        return 1;
       case EF_EVENT_TYPE_TX:
         ef_vi_transmit_unbundle(&vi->vi, &(evs[i]), tx_ids);
         break;
@@ -509,13 +476,13 @@ generic_desc_check(struct eflatency_vi* vi, int wait)
         n_rx = ef_vi_receive_unbundle(&vi->vi, &(evs[i]), rx_ids);
         TEST(n_rx == 1);
         vi->i = ++i;
-        return;
+        return 1;
       case EF_EVENT_TYPE_RX_MULTI_PKTS:
         n_rx = evs[i].rx_multi_pkts.n_pkts;
         TEST(n_rx == 1);
         ef_vi_rxq_next_desc_id(&vi->vi);
         vi->i = ++i;
-        return;
+        return 1;
       case EF_EVENT_TYPE_RX_REF_DISCARD:
         handle_rx_ref(&vi->vi, evs[i].rx_ref_discard.pkt_id,
                       evs[i].rx_ref_discard.len);
@@ -549,30 +516,45 @@ generic_desc_check(struct eflatency_vi* vi, int wait)
     if( ! n_ev && ! wait )
       break;
   }
-}
-
-static void
-generic_rx_wait(struct eflatency_vi* vi)
-{
-  generic_desc_check(vi, 1);
-}
-
-static inline void rx_wait_no_ts(struct eflatency_vi* vi)
-{
-  generic_rx_wait(vi);
-}
-
-static inline int
-tx_with_ts_handler(ef_vi* vi, const ef_event* ev, ef_request_id* ids)
-{
-  ++tx_alt.complete_id;
-  alt_assert_state_validity();
   return 0;
 }
 
-static inline void rx_wait_with_ts(struct eflatency_vi* vi)
+
+static void rx_wait_poll_rx(struct eflatency_vi* vi)
 {
-  generic_rx_wait(vi);
+  ef_event ev;
+
+  while( 1 ) {
+    while( !ef_receive_poll(&vi->vi, &ev, 1) )
+      ;
+
+    switch( EF_EVENT_TYPE(ev) ) {
+    case EF_EVENT_TYPE_RX_REF:
+      handle_rx_ref(&vi->vi, ev.rx_ref.pkt_id, ev.rx_ref.len);
+      return;
+    case EF_EVENT_TYPE_RX_REF_DISCARD:
+      handle_rx_ref(&vi->vi, ev.rx_ref_discard.pkt_id,
+                    ev.rx_ref_discard.len);
+      if( ev.rx_ref_discard.flags & EF_VI_DISCARD_RX_ETH_FCS_ERR &&
+          cfg_ctpio_thresh < tx_frame_len )
+        break;
+      fprintf(stderr, "ERROR: unexpected ref discard flags=%x\n",
+              ev.rx_ref_discard.flags);
+      TEST(0);
+      break;
+    default:
+      fprintf(stderr, "ERROR: unexpected event "EF_EVENT_FMT"\n",
+              EF_EVENT_PRI_ARG(ev));
+      TEST(0);
+      break;
+    }
+  }
+}
+
+
+static inline void rx_wait_poll_evq(struct eflatency_vi* vi)
+{
+  generic_desc_check(vi, 1);
 }
 
 /**********************************************************************/
@@ -684,15 +666,16 @@ static const test_t* do_init(int ifindex, int mode,
   return t;
 }
 
-static void prepare(ef_vi* vi)
+static void prepare(struct eflatency_vi* rx_vi)
 {
   int i;
-  if( vi->nic_type.arch != EF_VI_ARCH_EFCT ) {
+  rx_vi->needs_rx_post = ( rx_vi->vi.nic_type.arch != EF_VI_ARCH_EFCT );
+  if( rx_vi->needs_rx_post ) {
     /* Ensure we leave space to allow ping/pong to unconditionally post a
      * buffer, which they do at the start of their loop.
      */
-    for( i = 0; i < N_RX_BUFS && ef_vi_receive_space(vi) > 1; ++i )
-      rx_post(vi);
+    for( i = 0; i < N_RX_BUFS && ef_vi_receive_space(&rx_vi->vi) > 1; ++i )
+      rx_post(&rx_vi->vi);
   }
 }
 
@@ -733,8 +716,10 @@ int main(int argc, char* argv[])
   const test_t* t;
   int iters_run = 0;
   struct eflatency_vi* tx_vi_ptr;
+  void (*rx_wait)(struct eflatency_vi*);
   unsigned long rx_min_page_size;
   unsigned long min_page_size;
+  unsigned long can_rx_poll;
   void* pkt_mem;
   int pkt_mem_bytes;
   int i;
@@ -892,6 +877,14 @@ int main(int argc, char* argv[])
     tx_vi_ptr = &tx_vi;
   }
 
+  /* Test gives TX send method. Determine RX polling method */
+  if( ef_vi_capabilities_get(driver_handle, rx_ifindex,
+                             EF_VI_CAP_RX_POLL,
+                             &can_rx_poll) == 0 && can_rx_poll )
+    rx_wait = rx_wait_poll_rx;
+  else
+    rx_wait = rx_wait_poll_evq;
+
   for( i = 0; i < N_BUFS; ++i ) {
     struct pkt_buf* pb = (void*) ((char*) pkt_mem + i * BUF_SIZE);
     ef_memreg* memreg = i < N_RX_BUFS ? &rx_vi.memreg : &tx_vi_ptr->memreg;
@@ -899,7 +892,7 @@ int main(int argc, char* argv[])
     pb->dma_buf_addr += offsetof(struct pkt_buf, dma_buf);
   }
 
-  prepare(&rx_vi.vi);
+  prepare(&rx_vi);
 
   if( ping ) {
     timings = mmap(NULL, cfg_iter * sizeof(timings[0]), PROT_READ | PROT_WRITE,
@@ -948,7 +941,7 @@ int main(int argc, char* argv[])
     ++iters_run;
     if( t->init )
       t->init(&rx_vi, tx_vi_ptr);
-    (ping ? t->ping : t->pong)(&rx_vi, tx_vi_ptr);
+    (ping ? generic_ping : generic_pong)(&rx_vi, tx_vi_ptr, rx_wait, t->send);
     if( t->cleanup != NULL )
       t->cleanup(&rx_vi.vi, &tx_vi_ptr->vi);
     cfg_payload_len += cfg_payload_step;

@@ -1359,6 +1359,15 @@ get_vi_settings(ci_netif* ni, struct efhw_nic* nic,
   }
 #endif
 
+  if( NI_OPTS(ni).tph_mode != 0 ) {
+    info->ef_vi_flags |= EF_VI_ENABLE_TPH;
+    info->efhw_flags |= EFHW_VI_ENABLE_TPH;
+    if( NI_OPTS(ni).tph_mode == 2 ) {
+      info->ef_vi_flags |= EF_VI_TPH_TAG_MODE;
+      info->efhw_flags |= EFHW_VI_TPH_TAG_MODE;
+    }
+  }
+
   get_if_name(ni, info->intf_i, if_name);
 
   rc = check_timestamping_support(ni->state->pretty_name, "RX",

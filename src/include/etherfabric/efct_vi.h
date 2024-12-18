@@ -186,7 +186,8 @@ extern void efct_vi_rxpkt_release(struct ef_vi* vi, uint32_t pkt_id);
 **
 ** \par
 ** \note \a efct_vi_rx_future_peek can be called concurrently with other APIs.
-** However, \a efct_vi_rx_future_poll and \a ef_eventq_poll cannot be.
+** However, \a efct_vi_rx_future_poll cannot be called concurrently with
+** \a ef_eventq_poll or \a ef_receive_poll.
 */
 extern const void* efct_vi_rx_future_peek(struct ef_vi* vi);
 

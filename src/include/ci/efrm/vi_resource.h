@@ -111,6 +111,10 @@ enum efrm_vi_q_flags {
 	EFRM_VI_TX_CTPIO              = 0x40000,
 	/** TXQ: CTPIO: Require store-and-forward. */
 	EFRM_VI_TX_CTPIO_NO_POISON    = 0x80000,
+	/** RXQ: TPH steering hints mode: 0 = No ST mode, 1 = use steering tags.  Depends on EFRM_VI_ENABLE_TPH */
+	EFRM_VI_TPH_TAG_MODE          = 0x100000,
+	/** RXQ: Enable PCIe TPH steering hints */
+	EFRM_VI_ENABLE_TPH            = 0x200000,
 };
 
 
