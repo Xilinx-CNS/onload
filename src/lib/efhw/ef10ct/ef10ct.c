@@ -1069,6 +1069,11 @@ ef10ct_get_pci_dev(struct efhw_nic* nic)
 
   AUX_PRE(dev, edev, cli, nic, rc)
   rc = edev->llct_ops->base_ops->get_param(cli, EFX_PCI_DEV, &val);
+  /* Ensure auxbus is still present when we increment the refcount to the pci
+   * dev. This means it will not be used after free. */
+  if( rc >= 0 )
+    pci_dev_get(val.pci_dev);
+
   AUX_POST(dev, edev, cli, nic, rc);
 
   if( rc < 0 )
