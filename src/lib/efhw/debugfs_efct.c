@@ -23,18 +23,25 @@ static int efct_debugfs_read_hw_filters(struct seq_file *file,
 {
   struct efct_hw_filter *filter;
   int i;
+  /* 24 bytes should be enough to store remote ipv4 address and port:
+   * 16 (ip address) + 1 (colon) + 5 (port) + 1 (trailing space) + 1 (null) */
+  char remote_ip_buf[24] = {0};
 
   for( i = 0; i < fs->hw_filters_n; i++ ) {
     filter = &fs->hw_filters[i];
-    if( filter->refcount > 0 )
-      seq_printf(file, "%03x: ref: %d\tid: %d/%llu\trxq: %d\t%s:%pI4:%d "
+    if( filter->refcount > 0 ) {
+      if( filter->remote_ip )
+        snprintf(remote_ip_buf, sizeof(remote_ip_buf), "%pI4:%d ",
+                 &filter->remote_ip, ntohs(filter->remote_port));
+      seq_printf(file, "%03x: ref: %d\tid: %d/%llu\trxq: %d\t%s:%pI4:%d %s"
                        "%pM %d\n", i,
                  filter->refcount, filter->hw_id, filter->drv_id, filter->rxq,
                  filter->ip_proto == IPPROTO_UDP ? "udp" :
                  filter->ip_proto == IPPROTO_TCP ? "tcp" : "unknown",
-                 &filter->local_ip, ntohs(filter->local_port), &filter->loc_mac,
-                 filter->outer_vlan < 0 ? -1 :
+                 &filter->local_ip, ntohs(filter->local_port), remote_ip_buf,
+                 &filter->loc_mac, filter->outer_vlan < 0 ? -1 :
                  ntohs(filter->outer_vlan & 0xffff));
+    }
   }
   return 0;
 }
