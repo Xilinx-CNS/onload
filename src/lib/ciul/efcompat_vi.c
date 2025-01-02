@@ -51,17 +51,17 @@ convert_ef_precisetime_to_efcompat_ts(const ef_precisetime *ts_precise,
 
   /* Assumption: 32-bits are required to represent ts_precise->tv_sec, so the
    * top 32 bits should never be set. */
-  EF_VI_ASSERT(!(ts_precise->tv_sec & ((~(uint64_t)0) << 32)));
+  EF_VI_ASSERT(!(ts_precise->tv_sec & 0xffffffff00000000ull));
   /* Assumption: 30-bits are required to represent ts_precise->tv_nsec, so the
    * top 2 bits should never be set. */
-  EF_VI_ASSERT(!(ts_precise->tv_nsec & ((~(uint32_t)0) << 30)));
+  EF_VI_ASSERT(!(ts_precise->tv_nsec & 0xc0000000ul));
   /* Assumption: 2-bits are required to represent ts_precise->tv_nsec_frac and
    * these are stored in the top bits, so the bottom 14 bits are not set. */
-  EF_VI_ASSERT(!(ts_precise->tv_nsec_frac & ((~(uint16_t)0) >> 2)));
+  EF_VI_ASSERT(!(ts_precise->tv_nsec_frac & 0x3fffu));
   /* Assumption: the top bit is not used as a flag, as we steal this for our
    * own "valid" flag. In reality, only two flags currently exist, so this
    * could assert that the top 14 bits are unset. */
-  EF_VI_ASSERT(!(ts_precise->tv_flags & ((~(uint16_t)0) << 15)));
+  EF_VI_ASSERT(!(ts_precise->tv_flags & 0x8000u));
 
   ts_compat->tv_sec       = ts_precise->tv_sec;
   ts_compat->tv_nsec      = ts_precise->tv_nsec;
