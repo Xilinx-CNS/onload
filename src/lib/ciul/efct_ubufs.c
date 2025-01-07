@@ -475,7 +475,10 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
     rxq->qid = -1;
     rxq->live.superbuf_pkts = &ubufs->q[i].superbuf_pkts;
     rxq->live.config_generation = &rxq->config_generation;
-    // TODO time_sync?
+    /* NOTE: we don't need to store the latest time sync event in
+     * rxq->live.time_sync as efct only uses it to get the clock
+     * status (set/in-sync) which ef10ct provides in RX packet
+     * metadata. See efct_vi_rxpkt_get_precise_timestamp. */
   }
 
   /* TODO get this limit from the design parameter DP_RX_BUFFER_FIFO_SIZE,

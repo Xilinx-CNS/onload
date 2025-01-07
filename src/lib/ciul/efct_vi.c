@@ -1427,23 +1427,42 @@ int efct_vi_rxpkt_get_precise_timestamp(ef_vi* vi, uint32_t pkt_id,
   const struct efct_rx_descriptor* desc = efct_rx_desc(vi, pkt_id);
   uint64_t ts;
   unsigned status;
-  ci_qword_t time_sync;
-
-  time_sync.u64[0] =
-    OO_ACCESS_ONCE(*vi->efct_rxqs.q[pkt_id_to_rxq_ix(pkt_id)].live.time_sync);
+  int clock_set;
+  int clock_in_sync;
 
   if( pkt_id_to_index_in_superbuf(pkt_id) == desc->superbuf_pkts - 1 ) {
     ts = desc->final_timestamp;
     status = desc->final_ts_status;
   }
   else {
-    const ci_oword_t* header = efct_rx_header(vi, pkt_id + 1);
+    const ci_oword_t* header =
+      efct_rx_header(vi, pkt_id + vi->efct_rxqs.meta_offset);
     ts = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_TIMESTAMP);
     status = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_TIMESTAMP_STATUS);
   }
 
-  if( status != 1 )
+  if( status == 0 )
     return -ENODATA;
+
+  if( vi->efct_rxqs.q[pkt_id_to_rxq_ix(pkt_id)].live.time_sync == NULL ) {
+    /* If we don't have access to the last time_sync event, then we must be
+     * using ef10ct which provides more information about the clock status
+     * in the timestamp status header field. While efct only provides valid
+     * or invalid, ef10ct has the following:
+     * 0 = 0b00 = no timestamp
+     * 1 = 0b01 = valid timestamp,  SET and  SYNC
+     * 2 = 0b10 = valid timestamp, !SET and !SYNC
+     * 3 = 0b11 = valid timestamp,  SET and !SYNC
+     * So SET iff 0b01 is set and SYNC iff 0b10 is not set. */
+    clock_set = status & 0x1;
+    clock_in_sync = !(status & 0x2);
+  } else {
+    ci_qword_t time_sync;
+    time_sync.u64[0] =
+      OO_ACCESS_ONCE(*vi->efct_rxqs.q[pkt_id_to_rxq_ix(pkt_id)].live.time_sync);
+    clock_set = CI_QWORD_FIELD(time_sync, EFCT_TIME_SYNC_CLOCK_IS_SET);
+    clock_in_sync = CI_QWORD_FIELD(time_sync, EFCT_TIME_SYNC_CLOCK_IN_SYNC);
+  }
 
   /* The `ts` variable contains the full timestamp data for the packet, and has
    * the following layout:
@@ -1457,11 +1476,9 @@ int efct_vi_rxpkt_get_precise_timestamp(ef_vi* vi, uint32_t pkt_id,
   ts_out->tv_sec = ts >> 32;
   ts_out->tv_nsec = (uint32_t)ts >> 2;
   ts_out->tv_nsec_frac = (uint16_t)ts << 14;
-  ts_out->tv_flags =
-    (CI_QWORD_FIELD(time_sync, EFCT_TIME_SYNC_CLOCK_IS_SET) ?
-      EF_VI_SYNC_FLAG_CLOCK_SET : 0) |
-    (CI_QWORD_FIELD(time_sync, EFCT_TIME_SYNC_CLOCK_IN_SYNC) ?
-      EF_VI_SYNC_FLAG_CLOCK_IN_SYNC : 0);
+  ts_out->tv_flags = (clock_set ? EF_VI_SYNC_FLAG_CLOCK_SET : 0) |
+                     (clock_in_sync ? EF_VI_SYNC_FLAG_CLOCK_IN_SYNC : 0);
+
   return 0;
 }
 
