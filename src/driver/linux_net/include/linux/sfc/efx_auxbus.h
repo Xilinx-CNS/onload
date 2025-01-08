@@ -7,11 +7,30 @@
 #ifndef _EFX_AUXBUS_H
 #define _EFX_AUXBUS_H
 
+#include "efx_design_params.h"
+
 /* This is part of the device name exposed in the auxiliary bus. */
 #ifdef EFX_NOT_UPSTREAM
 #define EFX_ONLOAD_DEVNAME	"onload"
 #endif
 #define EFX_LLCT_DEVNAME	"llct"
+
+/* Auxbus ABI major version. This is incremented whenever the ABI is changed
+ * such that it is not backwards compatible with the previous ABI version. For
+ * example, this is so when the offsets of fields in &struct efx_auxdev are
+ * changed.
+ */
+#define EFX_AUX_ABI_VERSION_MAJOR 1
+/* Auxbus ABI minor version. This is incremented when the ABI is changed such
+ * that it is backwards compatible with the previous ABI version. For example,
+ * this is so when fields in &struct efx_auxdev are added to the end of the
+ * struct.
+ */
+#define EFX_AUX_ABI_VERSION_MINOR 0
+#define EFX_AUX_ABI_VERSION ((EFX_AUX_ABI_VERSION_MAJOR << 16) | \
+			     EFX_AUX_ABI_VERSION_MINOR)
+#define EFX_AUX_ABI_VERSION_MAJOR_GET(ver) (ver >> 16)
+#define EFX_AUX_ABI_VERSION_MINOR_GET(ver) (ver & 0xffff)
 
 /* Driver API */
 /**
@@ -85,46 +104,6 @@ typedef int efx_auxdev_event_handler(struct efx_auxdev_client *client,
 struct efx_auxdev;
 
 /**
- * struct efx_design_params - Design parameters.
- *
- * @rx_stride: stride between entries in receive window.
- * @rx_buffer_len: Length of each receive buffer.
- * @rx_queues: Maximum Rx queues available.
- * @tx_apertures: Maximum Tx apertures available.
- * @rx_buf_fifo_size: Maximum number of receive buffers can be posted.
- * @frame_offset_fixed: Fixed offset to the frame.
- * @rx_metadata_len: Receive metadata length.
- * @tx_max_reorder: Largest window of reordered writes to the CTPIO.
- * @tx_aperture_size: CTPIO aperture length.
- * @tx_fifo_size: Size of packet FIFO per CTPIO aperture.
- * @ts_subnano_bit: partial time stamp in sub nano seconds.
- * @unsol_credit_seq_mask: Width of sequence number in EVQ_UNSOL_CREDIT_GRANT
- *	register.
- * @l4_csum_proto: L4 csum fields.
- * @max_runt: Max length of frame data when LEN_ERR indicates runt.
- * @evq_sizes: Event queue sizes.
- * @num_filter: Number of filters.
- */
-struct efx_design_params {
-	u32 rx_stride;
-	u32 rx_buffer_len;
-	u32 rx_queues;
-	u32 tx_apertures;
-	u32 rx_buf_fifo_size;
-	u32 frame_offset_fixed;
-	u32 rx_metadata_len;
-	u32 tx_max_reorder;
-	u32 tx_aperture_size;
-	u32 tx_fifo_size;
-	u32 ts_subnano_bit;
-	u32 unsol_credit_seq_mask;
-	u32 l4_csum_proto;
-	u32 max_runt;
-	u32 evq_sizes;
-	u32 num_filter;
-};
-
-/**
  * struct efx_auxdev_client - Information for attached drivers.
  *
  * This is also used for device operations.
@@ -138,6 +117,9 @@ struct efx_design_params {
  * @channels: All channels allocated to this client. Each entry is a pointer to
  *	a struct efx_client_channel.
  * @design_params: Hardware design parameters.
+ * @txqs: Xarray mapping a txq QUEUE_NUM to a QUEUEHANDLE.
+ * @rxqs: Xarray mapping a rxq QUEUE_NUM to a QUEUEHANDLE.
+ * @evqs: Xarray mapping an evq QUEUE_NUM to a QUEUEHANDLE.
  */
 struct efx_auxdev_client {
 	struct efx_auxdev *auxdev;
@@ -148,6 +130,9 @@ struct efx_auxdev_client {
 	struct net_device *net_dev;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XARRAY)
 	struct xarray channels;
+	struct xarray txqs;
+	struct xarray rxqs;
+	struct xarray evqs;
 #endif
 	struct efx_design_params design_params;
 };
@@ -221,6 +206,17 @@ struct efx_auxdev_dl_vi_resources {
 	unsigned int vi_stride;
 };
 
+/** Location of an IO area associated with a queue.
+ * @qid_in: Queue ID which the returned region is for.
+ * @base: bus address of base of the region.
+ * @size: size of this queue's region.
+ */
+struct efx_auxiliary_io_window {
+	int qid_in;
+	resource_size_t base;
+	size_t size;
+};
+
 /**
  * enum efx_auxiliary_param - Device parameters
  *
@@ -229,7 +225,7 @@ struct efx_auxdev_dl_vi_resources {
  *	Returned through @net_dev.
  * @EFX_MEMBASE: Kernel virtual address of the start of the memory BAR.
  *	Get only.
- *	Returned through @membase_addr.
+ *	Returned through @iomem_addr.
  * @EFX_MEMBAR: PCIe memory BAR index. Get only.
  *	Returned through @value to be interpreted as unsigned.
  * @EFX_USE_MSI: Hardware only has an MSI interrupt, no MSI-X.
@@ -257,6 +253,27 @@ struct efx_auxdev_dl_vi_resources {
  *	Value passed via @b.
  * @EFX_PARAM_FILTER_BLOCK_KERNEL_MCAST: Block multicast traffic. Get or set.
  *	Value passed via @b.
+ * @EFX_AUXILIARY_INT_PRIME: The location of the EVQ_INT_PRIME register.
+ *      Get only.
+ *      Returned through @iomem_addr.
+ * @EFX_AUXILIARY_EVQ_WINDOW: The location of control area for event queues.
+ *      The base address is for the event queue evq_min provided through
+ *      EFX_AUXILIARY_NIC_RESOURCES. The stride can be used to calculate the
+ *      offset of each subsequent event queue from this base.
+ *      Get only.
+ *      Returned through @queue_io_wnd.
+ * @EFX_AUXILIARY_CTPIO_WINDOW: The bus address of the CTPIO region for a TXQ
+ *      On successful return the provided addr will refer to the IO region, and
+ *      size will provide the size of the region.
+ *      The returned address should be IO mapped for access to the region.
+ *	Get only.
+ *	Return through @queue_io_wnd
+ * @EFX_AUXILIARY_RXQ_WINDOW: The bus address of the IO region for an RXQ
+ *      On successful return the provided addr will refer to the IO region, and
+ *      size will provide the size of the region.
+ *      The returned address should be IO mapped for access to the region.
+ *	Get only.
+ *	Return through @queue_io_wnd
  */
 enum efx_auxiliary_param {
 	EFX_NETDEV,
@@ -273,12 +290,16 @@ enum efx_auxiliary_param {
 	EFX_DRIVER_DATA,
 	EFX_PARAM_FILTER_BLOCK_KERNEL_UCAST,
 	EFX_PARAM_FILTER_BLOCK_KERNEL_MCAST,
+	EFX_AUXILIARY_INT_PRIME,
+	EFX_AUXILIARY_EVQ_WINDOW,
+	EFX_AUXILIARY_CTPIO_WINDOW,
+	EFX_AUXILIARY_RXQ_WINDOW,
 };
 
 /** Possible values for device parameters */
 union efx_auxiliary_param_value {
 	struct net_device *net_dev;
-	void __iomem *membase_addr;
+	void __iomem *iomem_addr;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XARRAY)
 	struct xarray channels;
 #endif
@@ -287,6 +308,7 @@ union efx_auxiliary_param_value {
 	struct efx_design_params *design_params;
 	void *driver_data;
 	struct pci_dev *pci_dev;
+	struct efx_auxiliary_io_window queue_io_wnd;
 };
 #endif
 
@@ -452,11 +474,13 @@ struct efx_auxdev_llct_ops {
  * struct efx_auxdev - Auxiliary device interface.
  *
  * @auxdev: The parent auxiliary bus device.
+ * @abi_version: ABI version of this auxbus interface. Offset may not change.
  * @onload_ops: Device API.
  * @llct_ops: LLCT device API.
  */
 struct efx_auxdev {
 	struct auxiliary_device auxdev;
+	u32 abi_version;
 	const struct efx_auxdev_onload_ops *onload_ops;
 	const struct efx_auxdev_llct_ops *llct_ops;
 };
@@ -464,5 +488,16 @@ struct efx_auxdev {
 static inline struct efx_auxdev *to_efx_auxdev(struct auxiliary_device *adev)
 {
 	return container_of(adev, struct efx_auxdev, auxdev);
+}
+
+static inline bool efx_aux_abi_version_is_compat(u32 abi_version)
+{
+	u32 major_ver = EFX_AUX_ABI_VERSION_MAJOR_GET(abi_version);
+	u32 minor_ver = EFX_AUX_ABI_VERSION_MINOR_GET(abi_version);
+	/* Majors must match. Provided minor must be newer or equal to the
+	 * client's.
+	 */
+	return major_ver == EFX_AUX_ABI_VERSION_MAJOR &&
+	       minor_ver >= EFX_AUX_ABI_VERSION_MINOR;
 }
 #endif /* _EFX_AUXBUS_H */

@@ -1525,14 +1525,10 @@ static int efx_init_struct(struct efx_nic *efx, struct pci_dev *pci_dev)
 	return 0;
 }
 
-/* This configures the PCI device to enable I/O and DMA. */
-int efx_init_io(struct efx_nic *efx, int bar, dma_addr_t dma_mask, unsigned int mem_map_size)
+static int efx_pci_enable(struct efx_nic *efx, dma_addr_t dma_mask)
 {
 	struct pci_dev *pci_dev = efx->pci_dev;
 	int rc;
-
-	efx->mem_bar = UINT_MAX;
-	pci_dbg(pci_dev, "initialising I/O bar=%d\n", bar);
 
 	rc = pci_enable_device(pci_dev);
 	if (rc) {
@@ -1549,45 +1545,113 @@ int efx_init_io(struct efx_nic *efx, int bar, dma_addr_t dma_mask, unsigned int 
 	}
 	pci_dbg(pci_dev, "using DMA mask %llx\n", (unsigned long long)dma_mask);
 
-	efx->membase_phys = pci_resource_start(efx->pci_dev, bar);
-	if (!efx->membase_phys) {
+	return 0;
+fail2:
+	pci_disable_device(pci_dev);
+fail1:
+	return rc;
+}
+
+/**
+ * efx_pci_map_bar() - Memory maps PCI device BAR.
+ * @efx: NIC to map BAR of.
+ * @bar: BAR number to map.
+ * @mem_map_size: Size of memory map.
+ * @membase_phys_out: Outparam for physical address of BAR memory region.
+ * @membase_out: Outparam for virtual address of BAR memory region.
+ * Return: 0 on success.
+ */
+int efx_pci_map_bar(struct efx_nic *efx, int bar, unsigned int mem_map_size,
+		    resource_size_t *membase_phys_out,
+		    void __iomem **membase_out)
+{
+	struct pci_dev *pci_dev = efx->pci_dev;
+	resource_size_t membase_phys;
+	void __iomem *membase;
+	int rc;
+
+	membase_phys = pci_resource_start(pci_dev, bar);
+	if (!membase_phys) {
 		pci_err(pci_dev,
 			"ERROR: No BAR%d mapping from the BIOS. Try pci=realloc on the kernel command line\n",
 			bar);
 		rc = -ENODEV;
-		goto fail3;
+		goto fail1;
 	}
 	rc = pci_request_region(pci_dev, bar, "sfc");
 
 	if (rc) {
 		pci_err(pci_dev, "request for memory BAR[%d] failed\n", bar);
 		rc = -EIO;
-		goto fail3;
+		goto fail1;
 	}
-	efx->mem_bar = bar;
+
 #if defined(EFX_USE_KCOMPAT)
-	efx->membase = efx_ioremap(efx->membase_phys, mem_map_size);
+	membase = efx_ioremap(membase_phys, mem_map_size);
 #else
-	efx->membase = ioremap(efx->membase_phys, mem_map_size);
+	membase = ioremap(membase_phys, mem_map_size);
 #endif
 
-	if (!efx->membase) {
+	if (!membase) {
 		pci_err(pci_dev, "could not map memory BAR[%d] at %llx+%x\n",
-			bar, (unsigned long long)efx->membase_phys,
+			bar, (unsigned long long)membase_phys,
 			mem_map_size);
 		rc = -ENOMEM;
-		goto fail4;
+		goto fail2;
 	}
 	pci_dbg(pci_dev, "memory BAR[%d] at %llx+%x (virtual %p)\n", bar,
-		(unsigned long long)efx->membase_phys, mem_map_size,
-		efx->membase);
+		(unsigned long long)membase_phys, mem_map_size,
+		membase);
+
+	*membase_phys_out = membase_phys;
+	*membase_out = membase;
+	return 0;
+fail2:
+	pci_release_region(pci_dev, bar);
+fail1:
+	*membase_phys_out = 0;
+	*membase_out = NULL;
+	return rc;
+}
+
+/**
+ * efx_pci_unmap_bar() - Unmap PCI bar previously mapped by efx_pci_map_bar()
+ * @efx: NIC to map BAR of.
+ * @membase_phys: Physical address of mapping.
+ * @membase: Virtual address of mapping.
+ */
+void efx_pci_unmap_bar(struct efx_nic *efx, int bar,
+		       resource_size_t membase_phys, void __iomem *membase)
+{
+	if (membase)
+		iounmap(membase);
+
+	if (membase_phys)
+		pci_release_region(efx->pci_dev, bar);
+}
+
+/* This configures the PCI device to enable I/O and DMA. */
+int efx_init_io(struct efx_nic *efx, int bar, dma_addr_t dma_mask, unsigned int mem_map_size)
+{
+	struct pci_dev *pci_dev = efx->pci_dev;
+	int rc;
+
+	pci_dbg(pci_dev, "initialising I/O bar=%d\n", bar);
+
+	rc = efx_pci_enable(efx, dma_mask);
+	if (rc)
+		goto fail1;
+	efx->mem_bar = UINT_MAX;
+
+	rc = efx_pci_map_bar(efx, bar, mem_map_size, &efx->membase_phys,
+			     &efx->membase);
+	if (rc)
+		goto fail2;
+
+	efx->mem_bar = bar;
 
 	return 0;
 
-fail4:
-	pci_release_region(efx->pci_dev, bar);
-fail3:
-	efx->membase_phys = 0;
 fail2:
 	pci_disable_device(efx->pci_dev);
 fail1:
@@ -1598,20 +1662,16 @@ void efx_fini_io(struct efx_nic *efx)
 {
 	pci_dbg(efx->pci_dev, "shutting down I/O\n");
 
-	if (efx->membase) {
-		iounmap(efx->membase);
-		efx->membase = NULL;
-	}
-
+	efx_pci_unmap_bar(efx, efx->mem_bar, efx->membase_phys, efx->membase);
 	if (efx->membase_phys) {
-		pci_release_region(efx->pci_dev, efx->mem_bar);
-		efx->membase_phys = 0;
-		efx->mem_bar = UINT_MAX;
-
 		/* Don't disable bus-mastering if VFs are assigned */
 		if (!pci_vfs_assigned(efx->pci_dev))
 			pci_disable_device(efx->pci_dev);
 	}
+
+	efx->membase = NULL;
+	efx->membase_phys = 0;
+	efx->mem_bar = UINT_MAX;
 }
 
 int efx_init_probe_data(struct pci_dev *pci_dev,
@@ -2803,3 +2863,73 @@ void efx_dl_probe(struct efx_nic *efx)
 #endif
 #endif
 
+static int tlv_feed(struct efx_tlv_state *state, u8 byte)
+{
+	switch (state->state) {
+	case EFX_TLV_TYPE:
+		state->type = byte & 0x7f;
+		state->state = (byte & 0x80) ? EFX_TLV_TYPE_CONT
+					     : EFX_TLV_LENGTH;
+		/* Clear ready to read in a new entry */
+		state->value = 0;
+		state->value_offset = 0;
+		return 0;
+	case EFX_TLV_TYPE_CONT:
+		state->type |= byte << 7;
+		state->state = EFX_TLV_LENGTH;
+		return 0;
+	case EFX_TLV_LENGTH:
+		state->len = byte;
+		/* We only handle TLVs that fit in a u64 */
+		if (state->len > sizeof(state->value))
+			return -EOPNOTSUPP;
+		/* len may be zero, implying a value of zero */
+		state->state = state->len ? EFX_TLV_VALUE : EFX_TLV_TYPE;
+		return 0;
+	case EFX_TLV_VALUE:
+		if (state->value_offset >= sizeof(state->value))
+			return -EOVERFLOW;
+		state->value |= ((u64)byte) << (state->value_offset * 8);
+		state->value_offset++;
+		if (state->value_offset >= state->len)
+			state->state = EFX_TLV_TYPE;
+		return 0;
+	default: /* state machine error, can't happen */
+		WARN_ON_ONCE(1);
+		return -EIO;
+	}
+}
+
+int efx_check_design_params(struct efx_nic *efx,
+			    efx_design_param_processor *processor,
+			    int tlv_len_off, int tlv_off, size_t bar_size,
+			    efx_readd_fn *readd)
+{
+	struct efx_tlv_state reader = {};
+	u32 total_len, offset = 0;
+	efx_dword_t reg;
+	int rc = 0, i;
+	u32 data;
+
+	readd(efx, &reg, tlv_len_off);
+	total_len = EFX_DWORD_FIELD(reg, EFX_DWORD_0);
+	if (total_len > bar_size)
+		return -EINVAL;
+	pci_dbg(efx->pci_dev, "%u bytes of design parameters\n", total_len);
+	while (offset < total_len) {
+		readd(efx, &reg, tlv_off + offset);
+		data = EFX_DWORD_FIELD(reg, EFX_DWORD_0);
+		for (i = 0; i < sizeof(data); i++) {
+			rc = tlv_feed(&reader, data);
+			/* Got a complete value? */
+			if (!rc && reader.state == EFX_TLV_TYPE)
+				rc = processor(efx, &reader);
+			if (rc)
+				goto out;
+			data >>= 8;
+			offset++;
+		}
+	}
+out:
+	return rc;
+}

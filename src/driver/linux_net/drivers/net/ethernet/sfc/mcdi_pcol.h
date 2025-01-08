@@ -5635,6 +5635,8 @@
 #define          MC_CMD_LOOPBACK_V2_POST_PCS_WS 0x7
 /* enum: Loopback after the MAC Wireside */
 #define          MC_CMD_LOOPBACK_V2_POST_MAC_WS 0x8
+/* enum: Loopback after the MAC FIFOs (before the MAC) */
+#define          MC_CMD_LOOPBACK_V2_PRE_MAC 0x9
 #define       MC_CMD_LOOPBACK_V2_MODE_LBN 0
 #define       MC_CMD_LOOPBACK_V2_MODE_WIDTH 32
 
@@ -9594,7 +9596,7 @@
 #define       MC_CMD_STAT_DESC_STAT_ID_PHY_STAT_ID_LEN 2
 #define       MC_CMD_STAT_DESC_STAT_ID_PHY_STAT_ID_LBN 16
 #define       MC_CMD_STAT_DESC_STAT_ID_PHY_STAT_ID_WIDTH 16
-/* Stat offset from start of DMA buffer (in bytes) */
+/* Index of the statistic in the DMA buffer. */
 #define       MC_CMD_STAT_DESC_STAT_INDEX_OFST 4
 #define       MC_CMD_STAT_DESC_STAT_INDEX_LEN 2
 #define       MC_CMD_STAT_DESC_STAT_INDEX_LBN 32
@@ -10224,6 +10226,100 @@
 #define       MC_CMD_GET_MODULE_DATA_OUT_DATA_MINNUM 1
 #define       MC_CMD_GET_MODULE_DATA_OUT_DATA_MAXNUM 248
 #define       MC_CMD_GET_MODULE_DATA_OUT_DATA_MAXNUM_MCDI2 1016
+
+
+/***********************************/
+/* MC_CMD_GET_NETPORT_STATISTICS
+ * Get generic MAC statistics. This call retrieves unified statistics managed
+ * by the MC. The MC will populate and provide all supported statistics in the
+ * format as returned by MC_CMD_MAC_STATISTICS_DESCRIPTOR. Refer to the
+ * aforementioned command for the format and contents of the stats DMA buffer.
+ * To ensure consistent and accurate results, it is essential for the driver to
+ * initialize the DMA buffer with zeros when DMA mode is used. Returns: 0 on
+ * success, ETIME if the DMA buffer is not ready, ENOENT on non-existent port
+ * handle, and EINVAL on invalid parameters (DMA buffer too small)
+ */
+#define MC_CMD_GET_NETPORT_STATISTICS 0x1fa
+#undef MC_CMD_0x1fa_PRIVILEGE_CTG
+
+#define MC_CMD_0x1fa_PRIVILEGE_CTG SRIOV_CTG_GENERAL
+
+/* MC_CMD_GET_NETPORT_STATISTICS_IN msgrequest */
+#define    MC_CMD_GET_NETPORT_STATISTICS_IN_LEN 20
+/* Handle of port to get MAC statistics for. */
+#define       MC_CMD_GET_NETPORT_STATISTICS_IN_PORT_HANDLE_OFST 0
+#define       MC_CMD_GET_NETPORT_STATISTICS_IN_PORT_HANDLE_LEN 4
+/* Contains options for querying the MAC statistics. */
+#define       MC_CMD_GET_NETPORT_STATISTICS_IN_CMD_OFST 4
+#define       MC_CMD_GET_NETPORT_STATISTICS_IN_CMD_LEN 4
+#define        MC_CMD_GET_NETPORT_STATISTICS_IN_DMA_OFST 4
+#define        MC_CMD_GET_NETPORT_STATISTICS_IN_DMA_LBN 0
+#define        MC_CMD_GET_NETPORT_STATISTICS_IN_DMA_WIDTH 1
+#define        MC_CMD_GET_NETPORT_STATISTICS_IN_CLEAR_OFST 4
+#define        MC_CMD_GET_NETPORT_STATISTICS_IN_CLEAR_LBN 1
+#define        MC_CMD_GET_NETPORT_STATISTICS_IN_CLEAR_WIDTH 1
+#define        MC_CMD_GET_NETPORT_STATISTICS_IN_PERIODIC_CHANGE_OFST 4
+#define        MC_CMD_GET_NETPORT_STATISTICS_IN_PERIODIC_CHANGE_LBN 2
+#define        MC_CMD_GET_NETPORT_STATISTICS_IN_PERIODIC_CHANGE_WIDTH 1
+#define        MC_CMD_GET_NETPORT_STATISTICS_IN_PERIODIC_ENABLE_OFST 4
+#define        MC_CMD_GET_NETPORT_STATISTICS_IN_PERIODIC_ENABLE_LBN 3
+#define        MC_CMD_GET_NETPORT_STATISTICS_IN_PERIODIC_ENABLE_WIDTH 1
+#define        MC_CMD_GET_NETPORT_STATISTICS_IN_PERIODIC_NOEVENT_OFST 4
+#define        MC_CMD_GET_NETPORT_STATISTICS_IN_PERIODIC_NOEVENT_LBN 4
+#define        MC_CMD_GET_NETPORT_STATISTICS_IN_PERIODIC_NOEVENT_WIDTH 1
+#define        MC_CMD_GET_NETPORT_STATISTICS_IN_PERIOD_MS_OFST 4
+#define        MC_CMD_GET_NETPORT_STATISTICS_IN_PERIOD_MS_LBN 15
+#define        MC_CMD_GET_NETPORT_STATISTICS_IN_PERIOD_MS_WIDTH 17
+/* Specifies the physical address of the DMA buffer to use for statistics
+ * transfer. This field must contain a valid address under either of these
+ * conditions: 1. DMA flag is set (immediate DMA requested) 2. Both
+ * PERIODIC_CHANGE and PERIODIC_ENABLE are set (periodic DMA configured)
+ */
+#define       MC_CMD_GET_NETPORT_STATISTICS_IN_DMA_ADDR_OFST 8
+#define       MC_CMD_GET_NETPORT_STATISTICS_IN_DMA_ADDR_LEN 8
+#define       MC_CMD_GET_NETPORT_STATISTICS_IN_DMA_ADDR_LO_OFST 8
+#define       MC_CMD_GET_NETPORT_STATISTICS_IN_DMA_ADDR_LO_LEN 4
+#define       MC_CMD_GET_NETPORT_STATISTICS_IN_DMA_ADDR_LO_LBN 64
+#define       MC_CMD_GET_NETPORT_STATISTICS_IN_DMA_ADDR_LO_WIDTH 32
+#define       MC_CMD_GET_NETPORT_STATISTICS_IN_DMA_ADDR_HI_OFST 12
+#define       MC_CMD_GET_NETPORT_STATISTICS_IN_DMA_ADDR_HI_LEN 4
+#define       MC_CMD_GET_NETPORT_STATISTICS_IN_DMA_ADDR_HI_LBN 96
+#define       MC_CMD_GET_NETPORT_STATISTICS_IN_DMA_ADDR_HI_WIDTH 32
+/* Specifies the length of the DMA buffer in bytes for statistics transfer. The
+ * buffer size must be at least DMA_BUFFER_SIZE bytes (as returned by
+ * MC_CMD_MAC_STATISTICS_DESCRIPTOR). Providing an insufficient buffer size
+ * will result in an EINVAL error. This field must contain a valid length under
+ * either of these conditions: 1. DMA flag is set (immediate DMA requested) 2.
+ * Both PERIODIC_CHANGE and PERIODIC_ENABLE are set (periodic DMA configured)
+ */
+#define       MC_CMD_GET_NETPORT_STATISTICS_IN_DMA_LEN_OFST 16
+#define       MC_CMD_GET_NETPORT_STATISTICS_IN_DMA_LEN_LEN 4
+
+/* MC_CMD_GET_NETPORT_STATISTICS_OUT msgresponse */
+#define    MC_CMD_GET_NETPORT_STATISTICS_OUT_LENMIN 0
+#define    MC_CMD_GET_NETPORT_STATISTICS_OUT_LENMAX 248
+#define    MC_CMD_GET_NETPORT_STATISTICS_OUT_LENMAX_MCDI2 1016
+#define    MC_CMD_GET_NETPORT_STATISTICS_OUT_LEN(num) (0+8*(num))
+#define    MC_CMD_GET_NETPORT_STATISTICS_OUT_STATS_NUM(len) (((len)-0)/8)
+/* Statistics buffer. Zero-length if DMA mode is used. The statistics buffer is
+ * an array of 8-byte counter values, containing the generation start marker,
+ * stats counters, and generation end marker. The index of each counter in the
+ * array is reported by the MAC_STATISTICS_DESCRIPTOR command. The same layout
+ * is used for the DMA buffer for DMA mode stats.
+ */
+#define       MC_CMD_GET_NETPORT_STATISTICS_OUT_STATS_OFST 0
+#define       MC_CMD_GET_NETPORT_STATISTICS_OUT_STATS_LEN 8
+#define       MC_CMD_GET_NETPORT_STATISTICS_OUT_STATS_LO_OFST 0
+#define       MC_CMD_GET_NETPORT_STATISTICS_OUT_STATS_LO_LEN 4
+#define       MC_CMD_GET_NETPORT_STATISTICS_OUT_STATS_LO_LBN 0
+#define       MC_CMD_GET_NETPORT_STATISTICS_OUT_STATS_LO_WIDTH 32
+#define       MC_CMD_GET_NETPORT_STATISTICS_OUT_STATS_HI_OFST 4
+#define       MC_CMD_GET_NETPORT_STATISTICS_OUT_STATS_HI_LEN 4
+#define       MC_CMD_GET_NETPORT_STATISTICS_OUT_STATS_HI_LBN 32
+#define       MC_CMD_GET_NETPORT_STATISTICS_OUT_STATS_HI_WIDTH 32
+#define       MC_CMD_GET_NETPORT_STATISTICS_OUT_STATS_MINNUM 0
+#define       MC_CMD_GET_NETPORT_STATISTICS_OUT_STATS_MAXNUM 31
+#define       MC_CMD_GET_NETPORT_STATISTICS_OUT_STATS_MAXNUM_MCDI2 127
 
 /* EVB_PORT_ID structuredef */
 #define    EVB_PORT_ID_LEN 4
@@ -13909,7 +14005,10 @@
 /*               MC_CMD_GET_CAPABILITIES_V2_OUT_ACCESS_NOT_PERMITTED 0xff */
 /* enum: PF does not exist. */
 /*               MC_CMD_GET_CAPABILITIES_V2_OUT_PF_NOT_PRESENT 0xfe */
-/* Number of VIs available for each external port */
+/* Number of VIs available for external ports 0-3. For devices with more than
+ * four ports, the remainder are in NUM_VIS_PER_PORT2 in
+ * GET_CAPABILITIES_V12_OUT.
+ */
 #define       MC_CMD_GET_CAPABILITIES_V2_OUT_NUM_VIS_PER_PORT_OFST 58
 #define       MC_CMD_GET_CAPABILITIES_V2_OUT_NUM_VIS_PER_PORT_LEN 2
 #define       MC_CMD_GET_CAPABILITIES_V2_OUT_NUM_VIS_PER_PORT_NUM 4
@@ -14319,7 +14418,10 @@
 /*               MC_CMD_GET_CAPABILITIES_V3_OUT_ACCESS_NOT_PERMITTED 0xff */
 /* enum: PF does not exist. */
 /*               MC_CMD_GET_CAPABILITIES_V3_OUT_PF_NOT_PRESENT 0xfe */
-/* Number of VIs available for each external port */
+/* Number of VIs available for external ports 0-3. For devices with more than
+ * four ports, the remainder are in NUM_VIS_PER_PORT2 in
+ * GET_CAPABILITIES_V12_OUT.
+ */
 #define       MC_CMD_GET_CAPABILITIES_V3_OUT_NUM_VIS_PER_PORT_OFST 58
 #define       MC_CMD_GET_CAPABILITIES_V3_OUT_NUM_VIS_PER_PORT_LEN 2
 #define       MC_CMD_GET_CAPABILITIES_V3_OUT_NUM_VIS_PER_PORT_NUM 4
@@ -14754,7 +14856,10 @@
 /*               MC_CMD_GET_CAPABILITIES_V4_OUT_ACCESS_NOT_PERMITTED 0xff */
 /* enum: PF does not exist. */
 /*               MC_CMD_GET_CAPABILITIES_V4_OUT_PF_NOT_PRESENT 0xfe */
-/* Number of VIs available for each external port */
+/* Number of VIs available for external ports 0-3. For devices with more than
+ * four ports, the remainder are in NUM_VIS_PER_PORT2 in
+ * GET_CAPABILITIES_V12_OUT.
+ */
 #define       MC_CMD_GET_CAPABILITIES_V4_OUT_NUM_VIS_PER_PORT_OFST 58
 #define       MC_CMD_GET_CAPABILITIES_V4_OUT_NUM_VIS_PER_PORT_LEN 2
 #define       MC_CMD_GET_CAPABILITIES_V4_OUT_NUM_VIS_PER_PORT_NUM 4
@@ -15197,7 +15302,10 @@
 /*               MC_CMD_GET_CAPABILITIES_V5_OUT_ACCESS_NOT_PERMITTED 0xff */
 /* enum: PF does not exist. */
 /*               MC_CMD_GET_CAPABILITIES_V5_OUT_PF_NOT_PRESENT 0xfe */
-/* Number of VIs available for each external port */
+/* Number of VIs available for external ports 0-3. For devices with more than
+ * four ports, the remainder are in NUM_VIS_PER_PORT2 in
+ * GET_CAPABILITIES_V12_OUT.
+ */
 #define       MC_CMD_GET_CAPABILITIES_V5_OUT_NUM_VIS_PER_PORT_OFST 58
 #define       MC_CMD_GET_CAPABILITIES_V5_OUT_NUM_VIS_PER_PORT_LEN 2
 #define       MC_CMD_GET_CAPABILITIES_V5_OUT_NUM_VIS_PER_PORT_NUM 4
@@ -15645,7 +15753,10 @@
 /*               MC_CMD_GET_CAPABILITIES_V6_OUT_ACCESS_NOT_PERMITTED 0xff */
 /* enum: PF does not exist. */
 /*               MC_CMD_GET_CAPABILITIES_V6_OUT_PF_NOT_PRESENT 0xfe */
-/* Number of VIs available for each external port */
+/* Number of VIs available for external ports 0-3. For devices with more than
+ * four ports, the remainder are in NUM_VIS_PER_PORT2 in
+ * GET_CAPABILITIES_V12_OUT.
+ */
 #define       MC_CMD_GET_CAPABILITIES_V6_OUT_NUM_VIS_PER_PORT_OFST 58
 #define       MC_CMD_GET_CAPABILITIES_V6_OUT_NUM_VIS_PER_PORT_LEN 2
 #define       MC_CMD_GET_CAPABILITIES_V6_OUT_NUM_VIS_PER_PORT_NUM 4
@@ -16104,7 +16215,10 @@
 /*               MC_CMD_GET_CAPABILITIES_V7_OUT_ACCESS_NOT_PERMITTED 0xff */
 /* enum: PF does not exist. */
 /*               MC_CMD_GET_CAPABILITIES_V7_OUT_PF_NOT_PRESENT 0xfe */
-/* Number of VIs available for each external port */
+/* Number of VIs available for external ports 0-3. For devices with more than
+ * four ports, the remainder are in NUM_VIS_PER_PORT2 in
+ * GET_CAPABILITIES_V12_OUT.
+ */
 #define       MC_CMD_GET_CAPABILITIES_V7_OUT_NUM_VIS_PER_PORT_OFST 58
 #define       MC_CMD_GET_CAPABILITIES_V7_OUT_NUM_VIS_PER_PORT_LEN 2
 #define       MC_CMD_GET_CAPABILITIES_V7_OUT_NUM_VIS_PER_PORT_NUM 4
@@ -16620,7 +16734,10 @@
 /*               MC_CMD_GET_CAPABILITIES_V8_OUT_ACCESS_NOT_PERMITTED 0xff */
 /* enum: PF does not exist. */
 /*               MC_CMD_GET_CAPABILITIES_V8_OUT_PF_NOT_PRESENT 0xfe */
-/* Number of VIs available for each external port */
+/* Number of VIs available for external ports 0-3. For devices with more than
+ * four ports, the remainder are in NUM_VIS_PER_PORT2 in
+ * GET_CAPABILITIES_V12_OUT.
+ */
 #define       MC_CMD_GET_CAPABILITIES_V8_OUT_NUM_VIS_PER_PORT_OFST 58
 #define       MC_CMD_GET_CAPABILITIES_V8_OUT_NUM_VIS_PER_PORT_LEN 2
 #define       MC_CMD_GET_CAPABILITIES_V8_OUT_NUM_VIS_PER_PORT_NUM 4
@@ -17150,7 +17267,10 @@
 /*               MC_CMD_GET_CAPABILITIES_V9_OUT_ACCESS_NOT_PERMITTED 0xff */
 /* enum: PF does not exist. */
 /*               MC_CMD_GET_CAPABILITIES_V9_OUT_PF_NOT_PRESENT 0xfe */
-/* Number of VIs available for each external port */
+/* Number of VIs available for external ports 0-3. For devices with more than
+ * four ports, the remainder are in NUM_VIS_PER_PORT2 in
+ * GET_CAPABILITIES_V12_OUT.
+ */
 #define       MC_CMD_GET_CAPABILITIES_V9_OUT_NUM_VIS_PER_PORT_OFST 58
 #define       MC_CMD_GET_CAPABILITIES_V9_OUT_NUM_VIS_PER_PORT_LEN 2
 #define       MC_CMD_GET_CAPABILITIES_V9_OUT_NUM_VIS_PER_PORT_NUM 4
@@ -17715,7 +17835,10 @@
 /*               MC_CMD_GET_CAPABILITIES_V10_OUT_ACCESS_NOT_PERMITTED 0xff */
 /* enum: PF does not exist. */
 /*               MC_CMD_GET_CAPABILITIES_V10_OUT_PF_NOT_PRESENT 0xfe */
-/* Number of VIs available for each external port */
+/* Number of VIs available for external ports 0-3. For devices with more than
+ * four ports, the remainder are in NUM_VIS_PER_PORT2 in
+ * GET_CAPABILITIES_V12_OUT.
+ */
 #define       MC_CMD_GET_CAPABILITIES_V10_OUT_NUM_VIS_PER_PORT_OFST 58
 #define       MC_CMD_GET_CAPABILITIES_V10_OUT_NUM_VIS_PER_PORT_LEN 2
 #define       MC_CMD_GET_CAPABILITIES_V10_OUT_NUM_VIS_PER_PORT_NUM 4
@@ -18294,7 +18417,10 @@
 /*               MC_CMD_GET_CAPABILITIES_V11_OUT_ACCESS_NOT_PERMITTED 0xff */
 /* enum: PF does not exist. */
 /*               MC_CMD_GET_CAPABILITIES_V11_OUT_PF_NOT_PRESENT 0xfe */
-/* Number of VIs available for each external port */
+/* Number of VIs available for external ports 0-3. For devices with more than
+ * four ports, the remainder are in NUM_VIS_PER_PORT2 in
+ * GET_CAPABILITIES_V12_OUT.
+ */
 #define       MC_CMD_GET_CAPABILITIES_V11_OUT_NUM_VIS_PER_PORT_OFST 58
 #define       MC_CMD_GET_CAPABILITIES_V11_OUT_NUM_VIS_PER_PORT_LEN 2
 #define       MC_CMD_GET_CAPABILITIES_V11_OUT_NUM_VIS_PER_PORT_NUM 4
@@ -18486,6 +18612,597 @@
 /* Number of available indirect memory maps. */
 #define       MC_CMD_GET_CAPABILITIES_V11_OUT_INDIRECT_MAP_INDEX_COUNT_OFST 192
 #define       MC_CMD_GET_CAPABILITIES_V11_OUT_INDIRECT_MAP_INDEX_COUNT_LEN 4
+
+/* MC_CMD_GET_CAPABILITIES_V12_OUT msgresponse */
+#define    MC_CMD_GET_CAPABILITIES_V12_OUT_LEN 204
+/* First word of flags. */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_FLAGS1_OFST 0
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_FLAGS1_LEN 4
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_VPORT_RECONFIGURE_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_VPORT_RECONFIGURE_LBN 3
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_VPORT_RECONFIGURE_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_STRIPING_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_STRIPING_LBN 4
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_STRIPING_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_VADAPTOR_QUERY_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_VADAPTOR_QUERY_LBN 5
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_VADAPTOR_QUERY_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_EVB_PORT_VLAN_RESTRICT_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_EVB_PORT_VLAN_RESTRICT_LBN 6
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_EVB_PORT_VLAN_RESTRICT_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_DRV_ATTACH_PREBOOT_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_DRV_ATTACH_PREBOOT_LBN 7
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_DRV_ATTACH_PREBOOT_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_FORCE_EVENT_MERGING_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_FORCE_EVENT_MERGING_LBN 8
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_FORCE_EVENT_MERGING_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_SET_MAC_ENHANCED_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_SET_MAC_ENHANCED_LBN 9
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_SET_MAC_ENHANCED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_UNKNOWN_UCAST_DST_FILTER_ALWAYS_MULTI_RECIPIENT_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_UNKNOWN_UCAST_DST_FILTER_ALWAYS_MULTI_RECIPIENT_LBN 10
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_UNKNOWN_UCAST_DST_FILTER_ALWAYS_MULTI_RECIPIENT_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_VADAPTOR_PERMIT_SET_MAC_WHEN_FILTERS_INSTALLED_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_VADAPTOR_PERMIT_SET_MAC_WHEN_FILTERS_INSTALLED_LBN 11
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_VADAPTOR_PERMIT_SET_MAC_WHEN_FILTERS_INSTALLED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_MAC_SECURITY_FILTERING_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_MAC_SECURITY_FILTERING_LBN 12
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_MAC_SECURITY_FILTERING_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_ADDITIONAL_RSS_MODES_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_ADDITIONAL_RSS_MODES_LBN 13
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_ADDITIONAL_RSS_MODES_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_QBB_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_QBB_LBN 14
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_QBB_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_PACKED_STREAM_VAR_BUFFERS_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_PACKED_STREAM_VAR_BUFFERS_LBN 15
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_PACKED_STREAM_VAR_BUFFERS_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_RSS_LIMITED_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_RSS_LIMITED_LBN 16
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_RSS_LIMITED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_PACKED_STREAM_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_PACKED_STREAM_LBN 17
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_PACKED_STREAM_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_INCLUDE_FCS_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_INCLUDE_FCS_LBN 18
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_INCLUDE_FCS_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_VLAN_INSERTION_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_VLAN_INSERTION_LBN 19
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_VLAN_INSERTION_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_VLAN_STRIPPING_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_VLAN_STRIPPING_LBN 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_VLAN_STRIPPING_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_TSO_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_TSO_LBN 21
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_TSO_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_PREFIX_LEN_0_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_PREFIX_LEN_0_LBN 22
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_PREFIX_LEN_0_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_PREFIX_LEN_14_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_PREFIX_LEN_14_LBN 23
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_PREFIX_LEN_14_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_TIMESTAMP_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_TIMESTAMP_LBN 24
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_TIMESTAMP_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_BATCHING_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_BATCHING_LBN 25
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_BATCHING_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_MCAST_FILTER_CHAINING_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_MCAST_FILTER_CHAINING_LBN 26
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_MCAST_FILTER_CHAINING_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_PM_AND_RXDP_COUNTERS_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_PM_AND_RXDP_COUNTERS_LBN 27
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_PM_AND_RXDP_COUNTERS_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_DISABLE_SCATTER_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_DISABLE_SCATTER_LBN 28
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_DISABLE_SCATTER_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_MCAST_UDP_LOOPBACK_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_MCAST_UDP_LOOPBACK_LBN 29
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_MCAST_UDP_LOOPBACK_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_EVB_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_EVB_LBN 30
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_EVB_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_VXLAN_NVGRE_OFST 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_VXLAN_NVGRE_LBN 31
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_VXLAN_NVGRE_WIDTH 1
+/* RxDPCPU firmware id. */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_RX_DPCPU_FW_ID_OFST 4
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_RX_DPCPU_FW_ID_LEN 2
+/* enum: Standard RXDP firmware */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXDP 0x0
+/* enum: Low latency RXDP firmware */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXDP_LOW_LATENCY 0x1
+/* enum: Packed stream RXDP firmware */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXDP_PACKED_STREAM 0x2
+/* enum: Rules engine RXDP firmware */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXDP_RULES_ENGINE 0x5
+/* enum: DPDK RXDP firmware */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXDP_DPDK 0x6
+/* enum: BIST RXDP firmware */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXDP_BIST 0x10a
+/* enum: RXDP Test firmware image 1 */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXDP_TEST_FW_TO_MC_CUT_THROUGH 0x101
+/* enum: RXDP Test firmware image 2 */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXDP_TEST_FW_TO_MC_STORE_FORWARD 0x102
+/* enum: RXDP Test firmware image 3 */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXDP_TEST_FW_TO_MC_STORE_FORWARD_FIRST 0x103
+/* enum: RXDP Test firmware image 4 */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXDP_TEST_EVERY_EVENT_BATCHABLE 0x104
+/* enum: RXDP Test firmware image 5 */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXDP_TEST_BACKPRESSURE 0x105
+/* enum: RXDP Test firmware image 6 */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXDP_TEST_FW_PACKET_EDITS 0x106
+/* enum: RXDP Test firmware image 7 */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXDP_TEST_FW_RX_HDR_SPLIT 0x107
+/* enum: RXDP Test firmware image 8 */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXDP_TEST_FW_DISABLE_DL 0x108
+/* enum: RXDP Test firmware image 9 */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXDP_TEST_FW_DOORBELL_DELAY 0x10b
+/* enum: RXDP Test firmware image 10 */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXDP_TEST_FW_SLOW 0x10c
+/* TxDPCPU firmware id. */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_TX_DPCPU_FW_ID_OFST 6
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_TX_DPCPU_FW_ID_LEN 2
+/* enum: Standard TXDP firmware */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_TXDP 0x0
+/* enum: Low latency TXDP firmware */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_TXDP_LOW_LATENCY 0x1
+/* enum: High packet rate TXDP firmware */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_TXDP_HIGH_PACKET_RATE 0x3
+/* enum: Rules engine TXDP firmware */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_TXDP_RULES_ENGINE 0x5
+/* enum: DPDK TXDP firmware */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_TXDP_DPDK 0x6
+/* enum: BIST TXDP firmware */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_TXDP_BIST 0x12d
+/* enum: TXDP Test firmware image 1 */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_TXDP_TEST_FW_TSO_EDIT 0x101
+/* enum: TXDP Test firmware image 2 */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_TXDP_TEST_FW_PACKET_EDITS 0x102
+/* enum: TXDP CSR bus test firmware */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_TXDP_TEST_FW_CSR 0x103
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_RXPD_FW_VERSION_OFST 8
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_RXPD_FW_VERSION_LEN 2
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RXPD_FW_VERSION_REV_OFST 8
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RXPD_FW_VERSION_REV_LBN 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RXPD_FW_VERSION_REV_WIDTH 12
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RXPD_FW_VERSION_TYPE_OFST 8
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RXPD_FW_VERSION_TYPE_LBN 12
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RXPD_FW_VERSION_TYPE_WIDTH 4
+/* enum: reserved value - do not use (may indicate alternative interpretation
+ * of REV field in future)
+ */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXPD_FW_TYPE_RESERVED 0x0
+/* enum: Trivial RX PD firmware for early Huntington development (Huntington
+ * development only)
+ */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXPD_FW_TYPE_FIRST_PKT 0x1
+/* enum: RX PD firmware for telemetry prototyping (Medford2 development only)
+ */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXPD_FW_TYPE_TESTFW_TELEMETRY 0x1
+/* enum: RX PD firmware with approximately Siena-compatible behaviour
+ * (Huntington development only)
+ */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXPD_FW_TYPE_SIENA_COMPAT 0x2
+/* enum: Full featured RX PD production firmware */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXPD_FW_TYPE_FULL_FEATURED 0x3
+/* enum: (deprecated original name for the FULL_FEATURED variant) */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXPD_FW_TYPE_VSWITCH 0x3
+/* enum: siena_compat variant RX PD firmware using PM rather than MAC
+ * (Huntington development only)
+ */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXPD_FW_TYPE_SIENA_COMPAT_PM 0x4
+/* enum: Low latency RX PD production firmware */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXPD_FW_TYPE_LOW_LATENCY 0x5
+/* enum: Packed stream RX PD production firmware */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXPD_FW_TYPE_PACKED_STREAM 0x6
+/* enum: RX PD firmware handling layer 2 only for high packet rate performance
+ * tests (Medford development only)
+ */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXPD_FW_TYPE_LAYER2_PERF 0x7
+/* enum: Rules engine RX PD production firmware */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXPD_FW_TYPE_RULES_ENGINE 0x8
+/* enum: Custom firmware variant (see SF-119495-PD and bug69716) */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXPD_FW_TYPE_L3XUDP 0x9
+/* enum: DPDK RX PD production firmware */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXPD_FW_TYPE_DPDK 0xa
+/* enum: RX PD firmware for GUE parsing prototype (Medford development only) */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXPD_FW_TYPE_TESTFW_GUE_PROTOTYPE 0xe
+/* enum: RX PD firmware parsing but not filtering network overlay tunnel
+ * encapsulations (Medford development only)
+ */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_RXPD_FW_TYPE_TESTFW_ENCAP_PARSING_ONLY 0xf
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_TXPD_FW_VERSION_OFST 10
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_TXPD_FW_VERSION_LEN 2
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TXPD_FW_VERSION_REV_OFST 10
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TXPD_FW_VERSION_REV_LBN 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TXPD_FW_VERSION_REV_WIDTH 12
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TXPD_FW_VERSION_TYPE_OFST 10
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TXPD_FW_VERSION_TYPE_LBN 12
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TXPD_FW_VERSION_TYPE_WIDTH 4
+/* enum: reserved value - do not use (may indicate alternative interpretation
+ * of REV field in future)
+ */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_TXPD_FW_TYPE_RESERVED 0x0
+/* enum: Trivial TX PD firmware for early Huntington development (Huntington
+ * development only)
+ */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_TXPD_FW_TYPE_FIRST_PKT 0x1
+/* enum: TX PD firmware for telemetry prototyping (Medford2 development only)
+ */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_TXPD_FW_TYPE_TESTFW_TELEMETRY 0x1
+/* enum: TX PD firmware with approximately Siena-compatible behaviour
+ * (Huntington development only)
+ */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_TXPD_FW_TYPE_SIENA_COMPAT 0x2
+/* enum: Full featured TX PD production firmware */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_TXPD_FW_TYPE_FULL_FEATURED 0x3
+/* enum: (deprecated original name for the FULL_FEATURED variant) */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_TXPD_FW_TYPE_VSWITCH 0x3
+/* enum: siena_compat variant TX PD firmware using PM rather than MAC
+ * (Huntington development only)
+ */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_TXPD_FW_TYPE_SIENA_COMPAT_PM 0x4
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_TXPD_FW_TYPE_LOW_LATENCY 0x5 /* enum */
+/* enum: TX PD firmware handling layer 2 only for high packet rate performance
+ * tests (Medford development only)
+ */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_TXPD_FW_TYPE_LAYER2_PERF 0x7
+/* enum: Rules engine TX PD production firmware */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_TXPD_FW_TYPE_RULES_ENGINE 0x8
+/* enum: Custom firmware variant (see SF-119495-PD and bug69716) */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_TXPD_FW_TYPE_L3XUDP 0x9
+/* enum: DPDK TX PD production firmware */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_TXPD_FW_TYPE_DPDK 0xa
+/* enum: RX PD firmware for GUE parsing prototype (Medford development only) */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_TXPD_FW_TYPE_TESTFW_GUE_PROTOTYPE 0xe
+/* Hardware capabilities of NIC */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_HW_CAPABILITIES_OFST 12
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_HW_CAPABILITIES_LEN 4
+/* Licensed capabilities */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_LICENSE_CAPABILITIES_OFST 16
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_LICENSE_CAPABILITIES_LEN 4
+/* Second word of flags. Not present on older firmware (check the length). */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_FLAGS2_OFST 20
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_FLAGS2_LEN 4
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_TSO_V2_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_TSO_V2_LBN 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_TSO_V2_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_TSO_V2_ENCAP_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_TSO_V2_ENCAP_LBN 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_TSO_V2_ENCAP_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_EVQ_TIMER_CTRL_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_EVQ_TIMER_CTRL_LBN 2
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_EVQ_TIMER_CTRL_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_EVENT_CUT_THROUGH_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_EVENT_CUT_THROUGH_LBN 3
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_EVENT_CUT_THROUGH_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_CUT_THROUGH_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_CUT_THROUGH_LBN 4
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_CUT_THROUGH_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_VFIFO_ULL_MODE_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_VFIFO_ULL_MODE_LBN 5
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_VFIFO_ULL_MODE_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_MAC_STATS_40G_TX_SIZE_BINS_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_MAC_STATS_40G_TX_SIZE_BINS_LBN 6
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_MAC_STATS_40G_TX_SIZE_BINS_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_INIT_EVQ_TYPE_SUPPORTED_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_INIT_EVQ_TYPE_SUPPORTED_LBN 7
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_INIT_EVQ_TYPE_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_INIT_EVQ_V2_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_INIT_EVQ_V2_LBN 7
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_INIT_EVQ_V2_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_MAC_TIMESTAMPING_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_MAC_TIMESTAMPING_LBN 8
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_MAC_TIMESTAMPING_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_TIMESTAMP_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_TIMESTAMP_LBN 9
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_TIMESTAMP_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_SNIFF_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_SNIFF_LBN 10
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_SNIFF_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_SNIFF_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_SNIFF_LBN 11
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_SNIFF_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_NVRAM_UPDATE_REPORT_VERIFY_RESULT_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_NVRAM_UPDATE_REPORT_VERIFY_RESULT_LBN 12
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_NVRAM_UPDATE_REPORT_VERIFY_RESULT_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_MCDI_BACKGROUND_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_MCDI_BACKGROUND_LBN 13
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_MCDI_BACKGROUND_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_MCDI_DB_RETURN_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_MCDI_DB_RETURN_LBN 14
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_MCDI_DB_RETURN_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_CTPIO_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_CTPIO_LBN 15
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_CTPIO_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TSA_SUPPORT_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TSA_SUPPORT_LBN 16
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TSA_SUPPORT_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TSA_BOUND_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TSA_BOUND_LBN 17
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TSA_BOUND_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_SF_ADAPTER_AUTHENTICATION_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_SF_ADAPTER_AUTHENTICATION_LBN 18
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_SF_ADAPTER_AUTHENTICATION_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_FILTER_ACTION_FLAG_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_FILTER_ACTION_FLAG_LBN 19
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_FILTER_ACTION_FLAG_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_FILTER_ACTION_MARK_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_FILTER_ACTION_MARK_LBN 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_FILTER_ACTION_MARK_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_EQUAL_STRIDE_SUPER_BUFFER_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_EQUAL_STRIDE_SUPER_BUFFER_LBN 21
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_EQUAL_STRIDE_SUPER_BUFFER_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_EQUAL_STRIDE_PACKED_STREAM_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_EQUAL_STRIDE_PACKED_STREAM_LBN 21
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_EQUAL_STRIDE_PACKED_STREAM_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_L3XUDP_SUPPORT_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_L3XUDP_SUPPORT_LBN 22
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_L3XUDP_SUPPORT_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_FW_SUBVARIANT_NO_TX_CSUM_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_FW_SUBVARIANT_NO_TX_CSUM_LBN 23
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_FW_SUBVARIANT_NO_TX_CSUM_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_VI_SPREADING_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_VI_SPREADING_LBN 24
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_VI_SPREADING_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RXDP_HLB_IDLE_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RXDP_HLB_IDLE_LBN 25
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RXDP_HLB_IDLE_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_INIT_RXQ_NO_CONT_EV_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_INIT_RXQ_NO_CONT_EV_LBN 26
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_INIT_RXQ_NO_CONT_EV_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_INIT_RXQ_WITH_BUFFER_SIZE_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_INIT_RXQ_WITH_BUFFER_SIZE_LBN 27
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_INIT_RXQ_WITH_BUFFER_SIZE_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_BUNDLE_UPDATE_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_BUNDLE_UPDATE_LBN 28
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_BUNDLE_UPDATE_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_TSO_V3_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_TSO_V3_LBN 29
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_TX_TSO_V3_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_DYNAMIC_SENSORS_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_DYNAMIC_SENSORS_LBN 30
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_DYNAMIC_SENSORS_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_NVRAM_UPDATE_POLL_VERIFY_RESULT_OFST 20
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_NVRAM_UPDATE_POLL_VERIFY_RESULT_LBN 31
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_NVRAM_UPDATE_POLL_VERIFY_RESULT_WIDTH 1
+/* Number of FATSOv2 contexts per datapath supported by this NIC (when
+ * TX_TSO_V2 == 1). Not present on older firmware (check the length).
+ */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_TX_TSO_V2_N_CONTEXTS_OFST 24
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_TX_TSO_V2_N_CONTEXTS_LEN 2
+/* One byte per PF containing the number of the external port assigned to this
+ * PF, indexed by PF number. Special values indicate that a PF is either not
+ * present or not assigned.
+ */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_PFS_TO_PORTS_ASSIGNMENT_OFST 26
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_PFS_TO_PORTS_ASSIGNMENT_LEN 1
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_PFS_TO_PORTS_ASSIGNMENT_NUM 16
+/* enum: The caller is not permitted to access information on this PF. */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_ACCESS_NOT_PERMITTED 0xff
+/* enum: PF does not exist. */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_PF_NOT_PRESENT 0xfe
+/* enum: PF does exist but is not assigned to any external port. */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_PF_NOT_ASSIGNED 0xfd
+/* enum: This value indicates that PF is assigned, but it cannot be expressed
+ * in this field. It is intended for a possible future situation where a more
+ * complex scheme of PFs to ports mapping is being used. The future driver
+ * should look for a new field supporting the new scheme. The current/old
+ * driver should treat this value as PF_NOT_ASSIGNED.
+ */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_INCOMPATIBLE_ASSIGNMENT 0xfc
+/* One byte per PF containing the number of its VFs, indexed by PF number. A
+ * special value indicates that a PF is not present.
+ */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_NUM_VFS_PER_PF_OFST 42
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_NUM_VFS_PER_PF_LEN 1
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_NUM_VFS_PER_PF_NUM 16
+/* enum: The caller is not permitted to access information on this PF. */
+/*               MC_CMD_GET_CAPABILITIES_V12_OUT_ACCESS_NOT_PERMITTED 0xff */
+/* enum: PF does not exist. */
+/*               MC_CMD_GET_CAPABILITIES_V12_OUT_PF_NOT_PRESENT 0xfe */
+/* Number of VIs available for external ports 0-3. For devices with more than
+ * four ports, the remainder are in NUM_VIS_PER_PORT2 in
+ * GET_CAPABILITIES_V12_OUT.
+ */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_NUM_VIS_PER_PORT_OFST 58
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_NUM_VIS_PER_PORT_LEN 2
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_NUM_VIS_PER_PORT_NUM 4
+/* Size of RX descriptor cache expressed as binary logarithm The actual size
+ * equals (2 ^ RX_DESC_CACHE_SIZE)
+ */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_RX_DESC_CACHE_SIZE_OFST 66
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_RX_DESC_CACHE_SIZE_LEN 1
+/* Size of TX descriptor cache expressed as binary logarithm The actual size
+ * equals (2 ^ TX_DESC_CACHE_SIZE)
+ */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_TX_DESC_CACHE_SIZE_OFST 67
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_TX_DESC_CACHE_SIZE_LEN 1
+/* Total number of available PIO buffers */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_NUM_PIO_BUFFS_OFST 68
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_NUM_PIO_BUFFS_LEN 2
+/* Size of a single PIO buffer */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_SIZE_PIO_BUFF_OFST 70
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_SIZE_PIO_BUFF_LEN 2
+/* On chips later than Medford the amount of address space assigned to each VI
+ * is configurable. This is a global setting that the driver must query to
+ * discover the VI to address mapping. Cut-through PIO (CTPIO) is not available
+ * with 8k VI windows.
+ */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_VI_WINDOW_MODE_OFST 72
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_VI_WINDOW_MODE_LEN 1
+/* enum: Each VI occupies 8k as on Huntington and Medford. PIO is at offset 4k.
+ * CTPIO is not mapped.
+ */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_VI_WINDOW_MODE_8K 0x0
+/* enum: Each VI occupies 16k. PIO is at offset 4k. CTPIO is at offset 12k. */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_VI_WINDOW_MODE_16K 0x1
+/* enum: Each VI occupies 64k. PIO is at offset 4k. CTPIO is at offset 12k. */
+#define          MC_CMD_GET_CAPABILITIES_V12_OUT_VI_WINDOW_MODE_64K 0x2
+/* Number of vFIFOs per adapter that can be used for VFIFO Stuffing
+ * (SF-115995-SW) in the present configuration of firmware and port mode.
+ */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_VFIFO_STUFFING_NUM_VFIFOS_OFST 73
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_VFIFO_STUFFING_NUM_VFIFOS_LEN 1
+/* Number of buffers per adapter that can be used for VFIFO Stuffing
+ * (SF-115995-SW) in the present configuration of firmware and port mode.
+ */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_VFIFO_STUFFING_NUM_CP_BUFFERS_OFST 74
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_VFIFO_STUFFING_NUM_CP_BUFFERS_LEN 2
+/* Entry count in the MAC stats array, including the final GENERATION_END
+ * entry. For MAC stats DMA, drivers should allocate a buffer large enough to
+ * hold at least this many 64-bit stats values, if they wish to receive all
+ * available stats. If the buffer is shorter than MAC_STATS_NUM_STATS * 8, the
+ * stats array returned will be truncated.
+ */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_MAC_STATS_NUM_STATS_OFST 76
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_MAC_STATS_NUM_STATS_LEN 2
+/* Maximum supported value for MC_CMD_FILTER_OP_V3/MATCH_MARK_VALUE. This field
+ * will only be non-zero if MC_CMD_GET_CAPABILITIES/FILTER_ACTION_MARK is set.
+ */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_FILTER_ACTION_MARK_MAX_OFST 80
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_FILTER_ACTION_MARK_MAX_LEN 4
+/* On devices where the INIT_RXQ_WITH_BUFFER_SIZE flag (in
+ * GET_CAPABILITIES_OUT_V2) is set, drivers have to specify a buffer size when
+ * they create an RX queue. Due to hardware limitations, only a small number of
+ * different buffer sizes may be available concurrently. Nonzero entries in
+ * this array are the sizes of buffers which the system guarantees will be
+ * available for use. If the list is empty, there are no limitations on
+ * concurrent buffer sizes.
+ */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_GUARANTEED_RX_BUFFER_SIZES_OFST 84
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_GUARANTEED_RX_BUFFER_SIZES_LEN 4
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_GUARANTEED_RX_BUFFER_SIZES_NUM 16
+/* Third word of flags. Not present on older firmware (check the length). */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_FLAGS3_OFST 148
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_FLAGS3_LEN 4
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_WOL_ETHERWAKE_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_WOL_ETHERWAKE_LBN 0
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_WOL_ETHERWAKE_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RSS_EVEN_SPREADING_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RSS_EVEN_SPREADING_LBN 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RSS_EVEN_SPREADING_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RSS_SELECTABLE_TABLE_SIZE_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RSS_SELECTABLE_TABLE_SIZE_LBN 2
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RSS_SELECTABLE_TABLE_SIZE_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_MAE_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_MAE_SUPPORTED_LBN 3
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_MAE_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_VDPA_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_VDPA_SUPPORTED_LBN 4
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_VDPA_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_VLAN_STRIPPING_PER_ENCAP_RULE_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_VLAN_STRIPPING_PER_ENCAP_RULE_LBN 5
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RX_VLAN_STRIPPING_PER_ENCAP_RULE_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_EXTENDED_WIDTH_EVQS_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_EXTENDED_WIDTH_EVQS_SUPPORTED_LBN 6
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_EXTENDED_WIDTH_EVQS_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_UNSOL_EV_CREDIT_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_UNSOL_EV_CREDIT_SUPPORTED_LBN 7
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_UNSOL_EV_CREDIT_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_ENCAPSULATED_MCDI_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_ENCAPSULATED_MCDI_SUPPORTED_LBN 8
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_ENCAPSULATED_MCDI_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_EXTERNAL_MAE_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_EXTERNAL_MAE_SUPPORTED_LBN 9
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_EXTERNAL_MAE_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_NVRAM_UPDATE_ABORT_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_NVRAM_UPDATE_ABORT_SUPPORTED_LBN 10
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_NVRAM_UPDATE_ABORT_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_MAE_ACTION_SET_ALLOC_V2_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_MAE_ACTION_SET_ALLOC_V2_SUPPORTED_LBN 11
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_MAE_ACTION_SET_ALLOC_V2_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RSS_STEER_ON_OUTER_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RSS_STEER_ON_OUTER_SUPPORTED_LBN 12
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_RSS_STEER_ON_OUTER_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_MAE_ACTION_SET_ALLOC_V3_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_MAE_ACTION_SET_ALLOC_V3_SUPPORTED_LBN 13
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_MAE_ACTION_SET_ALLOC_V3_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_DYNAMIC_MPORT_JOURNAL_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_DYNAMIC_MPORT_JOURNAL_LBN 14
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_DYNAMIC_MPORT_JOURNAL_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_CLIENT_CMD_VF_PROXY_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_CLIENT_CMD_VF_PROXY_LBN 15
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_CLIENT_CMD_VF_PROXY_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_LBN 16
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_LL_RX_EVENT_SUPPRESSION_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_CXL_CONFIG_ENABLE_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_CXL_CONFIG_ENABLE_LBN 17
+#define        MC_CMD_GET_CAPABILITIES_V12_OUT_CXL_CONFIG_ENABLE_WIDTH 1
+/* These bits are reserved for communicating test-specific capabilities to
+ * host-side test software. All production drivers should treat this field as
+ * opaque.
+ */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_TEST_RESERVED_OFST 152
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_TEST_RESERVED_LEN 8
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_TEST_RESERVED_LO_OFST 152
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_TEST_RESERVED_LO_LEN 4
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_TEST_RESERVED_LO_LBN 1216
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_TEST_RESERVED_LO_WIDTH 32
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_TEST_RESERVED_HI_OFST 156
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_TEST_RESERVED_HI_LEN 4
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_TEST_RESERVED_HI_LBN 1248
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_TEST_RESERVED_HI_WIDTH 32
+/* The minimum size (in table entries) of indirection table to be allocated
+ * from the pool for an RSS context. Note that the table size used must be a
+ * power of 2.
+ */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_RSS_MIN_INDIRECTION_TABLE_SIZE_OFST 160
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_RSS_MIN_INDIRECTION_TABLE_SIZE_LEN 4
+/* The maximum size (in table entries) of indirection table to be allocated
+ * from the pool for an RSS context. Note that the table size used must be a
+ * power of 2.
+ */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_RSS_MAX_INDIRECTION_TABLE_SIZE_OFST 164
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_RSS_MAX_INDIRECTION_TABLE_SIZE_LEN 4
+/* The maximum number of queues that can be used by an RSS context in exclusive
+ * mode. In exclusive mode the context has a configurable indirection table and
+ * a configurable RSS key.
+ */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_RSS_MAX_INDIRECTION_QUEUES_OFST 168
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_RSS_MAX_INDIRECTION_QUEUES_LEN 4
+/* The maximum number of queues that can be used by an RSS context in even-
+ * spreading mode. In even-spreading mode the context has no indirection table
+ * but it does have a configurable RSS key.
+ */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_RSS_MAX_EVEN_SPREADING_QUEUES_OFST 172
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_RSS_MAX_EVEN_SPREADING_QUEUES_LEN 4
+/* The total number of RSS contexts supported. Note that the number of
+ * available contexts using indirection tables is also limited by the
+ * availability of indirection table space allocated from a common pool.
+ */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_RSS_NUM_CONTEXTS_OFST 176
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_RSS_NUM_CONTEXTS_LEN 4
+/* The total amount of indirection table space that can be shared between RSS
+ * contexts.
+ */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_RSS_TABLE_POOL_SIZE_OFST 180
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_RSS_TABLE_POOL_SIZE_LEN 4
+/* A bitmap of the queue sizes the device can provide, where bit N being set
+ * indicates that 2**N is a valid size. The device may be limited in the number
+ * of different queue sizes that can exist simultaneously, so a bit being set
+ * here does not guarantee that an attempt to create a queue of that size will
+ * succeed.
+ */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_SUPPORTED_QUEUE_SIZES_OFST 184
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_SUPPORTED_QUEUE_SIZES_LEN 4
+/* A bitmap of queue sizes that are always available, in the same format as
+ * SUPPORTED_QUEUE_SIZES. Attempting to create a queue with one of these sizes
+ * will never fail due to unavailability of the requested size.
+ */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_GUARANTEED_QUEUE_SIZES_OFST 188
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_GUARANTEED_QUEUE_SIZES_LEN 4
+/* Number of available indirect memory maps. */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_INDIRECT_MAP_INDEX_COUNT_OFST 192
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_INDIRECT_MAP_INDEX_COUNT_LEN 4
+/* Number of VIs available for external ports 4-7. Information for ports 0-3 is
+ * in NUM_VIS_PER_PORT in GET_CAPABILITIES_V2_OUT.
+ */
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_NUM_VIS_PER_PORT2_OFST 196
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_NUM_VIS_PER_PORT2_LEN 2
+#define       MC_CMD_GET_CAPABILITIES_V12_OUT_NUM_VIS_PER_PORT2_NUM 4
 
 
 /***********************************/
@@ -24837,7 +25554,7 @@
 
 /* MC_CMD_QUEUE_HANDLE structuredef: On X4, to distinguish between full-
  * featured (X2-style) VIs and low-latency (X3-style) queues, we use the top
- * four bits of the queue number for low-latency queues in all MCDI calls which
+ * bits of the queue handle to specify the queue type in all MCDI calls which
  * refer to VIs/queues. These bits should be masked off when indexing into a
  * queue in the BAR.
  */

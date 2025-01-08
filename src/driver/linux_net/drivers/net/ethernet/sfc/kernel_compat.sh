@@ -23,6 +23,7 @@ EFX_HAVE_PCI_TPH			file				include/linux/pci-tph.h
 EFX_HAVE_PCIE_ENABLE_TPH		symbol	pcie_enable_tph		include/linux/pci-tph.h
 EFX_HAVE_PCIE_TPH_GET_CPU_ST		symbol	pcie_tph_get_cpu_st	include/linux/pci-tph.h
 EFX_HAVE_NET_GRO_H			file				include/net/gro.h
+EFX_NEED_SKB_GRO_MAY_PULL              nsymbol  skb_gro_may_pull    include/net/gro.h
 EFX_HAVE_CSUM_LEVEL			symbol	csum_level		include/linux/skbuff.h
 EFX_HAVE_SKB_SYSTSTAMP			member	struct_skb_shared_hwtstamps	syststamp	include/linux/skbuff.h
 EFX_HAVE_HWTSTAMP_FLAGS         symbol	hwtstamp_flags		include/uapi/linux/net_tstamp.h
@@ -293,6 +294,7 @@ EFX_HAVE_AUXILIARY_BUS			file	include/linux/auxiliary_bus.h
 EFX_HAVE_NET_RPS_H                     file       include/net/rps.h
 EFX_HAVE_IP_TUNNEL_FLAGS_TO_BE16	symbol	ip_tunnel_flags_to_be16	include/net/ip_tunnels.h
 EFX_NEED_TIME64_TO_TM			nsymbol	time64_to_tm		include/linux/time.h
+EFX_HAVE_ASSIGN_STR_NO_SRC_ARG      custom
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
 
@@ -390,6 +392,12 @@ function do_EFX_NEED_TIMESPEC64_TO_NS_SIGNED
 {
     test -f $KBUILD_SRC/include/linux/time64.h &&
 	grep -q 'Prevent multiplication overflow ./' $KBUILD_SRC/include/linux/time64.h
+}
+
+function do_EFX_HAVE_ASSIGN_STR_NO_SRC_ARG
+{
+    test -f $KBUILD_SRC/include/trace/stages/stage6_event_callback.h &&
+    grep -q '#define __assign_str(dst)' $KBUILD_SRC/include/trace/stages/stage6_event_callback.h
 }
 
 TOPDIR=$(dirname "$0")/../../../..
