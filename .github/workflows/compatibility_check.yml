@@ -34,41 +34,24 @@ jobs:
           make ONLOAD_TREE=$GITHUB_WORKSPACE/onload_internal -j $(nproc)
 
 
-  extract_branch_info:
-    runs-on: ubuntu-latest
-    timeout-minutes: 1
-    outputs:
-      onloadBranch: ${{ steps.onloadBranch.outputs.branch }}
-      tcpdirectBranch: ${{ steps.tcpdirectBranch.outputs.branch }}
-    steps:
-      - name: Checkout onload
-        uses: actions/checkout@v4
-        with:
-          path: onload
-
-      - name: Install yq
-        run: |
-           sudo apt-get update
-           sudo apt-get install -y python3 python3-pip jq
-           pip3 install yq
-
-      - name: Extract onload branch
-        id: onloadBranch
-        run: echo "branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> "$GITHUB_OUTPUT"
-
-      - name: Extract TCPDirect branch
-        id: tcpdirectBranch
-        run: echo "branch=$(yq -r '.products.TCPDirect.version' < $GITHUB_WORKSPACE/onload/versions.yaml)" >> "$GITHUB_OUTPUT"
-
-
   tcpdirect:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: extract_branch_info
     env:
       TCPDIRECT_TREE: ${{ github.workspace }}/tcpdirect
       ONLOAD_TREE: ${{ github.workspace }}/onload
     steps:
+      - name: Checkout Onload
+        uses: actions/checkout@v4
+        with:
+          path: ${{ env.ONLOAD_TREE }}
+
+      - name: Extract version information
+        working-directory: ${{ env.ONLOAD_TREE }}
+        run: |
+          cat versions.env | sed -E "s/^#.*$//g" >> "$GITHUB_ENV"
+          echo "ONLOAD_DEV_BRANCH=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> "$GITHUB_ENV"
+
       # We try checking out TCPDirect with the current onload branch to support
       # development workflows, but will fall back to the branch defined in our
       # versions.yaml file.
@@ -79,7 +62,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/tcpdirect
           path: ${{ env.TCPDIRECT_TREE }}
-          ref: ${{ needs.extract_branch_info.outputs.onloadBranch }}
+          ref: ${{ env.ONLOAD_DEV_BRANCH }}
 
       - name: Cleanup failed TCPDirect development branch checkout
         if: ${{ ! cancelled() && steps.primary_tcpdirect_checkout.outcome == 'failure' }}
@@ -91,12 +74,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/tcpdirect
           path: tcpdirect
-          ref: ${{ needs.extract_branch_info.outputs.tcpdirectBranch }}
-
-      - name: Checkout Onload
-        uses: actions/checkout@v4
-        with:
-          path: ${{ env.ONLOAD_TREE }}
+          ref: ${{ env.TCPDIRECT_VERSION }}
 
       - name: Checkout packetdrill
         uses: actions/checkout@v4
