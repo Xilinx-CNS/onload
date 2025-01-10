@@ -5,7 +5,7 @@ EFSEND_APPS := efsend efsend_pio efsend_timestamping efsend_warming \
                efsend_cplane
 TEST_APPS	:= efforward efrss efsink \
 		   efsink_packed eflatency efexclusivity stats \
-		   efjumborx $(EFSEND_APPS)
+		   $(EFSEND_APPS)
 
 TARGETS		:= $(TEST_APPS:%=$(AppPattern))
 
@@ -27,8 +27,6 @@ efexclusivity: efexclusivity.o utils.o
 $(EFSEND_APPS): utils.o efsend_common.o
 
 efsink: efsink.o utils.o
-
-efjumborx: efjumborx.o utils.o
 
 efsink_packed: efsink_packed.o utils.o
 

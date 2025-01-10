@@ -31,7 +31,6 @@ addressing mode, or hardware timestamping. Run with "--help" to check this.
 | \ref efsend_warming         | Send UDP packets on a specified interface utilizing transmit warming functions for improved latency in 'cold cache' situations.
 | \ref efsink_packed          | Receive streams of packets on a single interface using packed streams.
 | \ref efrss                  | Forward packets between two interfaces without modification, spreading the load over multiple virtual interfaces and threads.
-| \ref efjumborx              | Receive jumbo packets.
 | \ref exchange               | Simplified electronic trading exchange.
 | \ref trader_onload_ds_efvi  | Simplified electronic trader.
 
@@ -188,14 +187,6 @@ process, which starts sending UDP multicast messages.  The client
 receives these messages, and replies to a subset of them with a TCP
 message.  The server measures the latency from the UDP send to the TCP
 receive.
-
-\section efjumborx efjumborx
-
-The efjumborx application demonstrates receiving jumbo packets.
-
-Various parameters can be set, including the interface, IP address and port
-to use. Verbose output can be enabled to view progress. The received packet
-can be printed as text or in hexadecimal.
 
 \section exchange exchange
 
