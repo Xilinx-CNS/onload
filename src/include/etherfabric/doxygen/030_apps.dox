@@ -30,7 +30,6 @@ addressing mode, or hardware timestamping. Run with "--help" to check this.
 | \ref efsend_pio             | Send UDP packets on a specified interface using Programmed I/O.
 | \ref efsend_warming         | Send UDP packets on a specified interface utilizing transmit warming functions for improved latency in 'cold cache' situations.
 | \ref efsink_packed          | Receive streams of packets on a single interface using packed streams.
-| \ref efforward_packed       | Forward packets between two interfaces without modification using packed stream mode for receive.
 | \ref efrss                  | Forward packets between two interfaces without modification, spreading the load over multiple virtual interfaces and threads.
 | \ref efjumborx              | Receive jumbo packets.
 | \ref exchange               | Simplified electronic trading exchange.
@@ -161,11 +160,6 @@ trigger.
 \section efsink_packed efsink_packed
 
 The efsink_packed application is a variant of \ref efsink that
-demonstrates usage of the packed-stream firmware.
-
-\section efforward_packed efforward_packed
-
-The efforward_packed application is a variant of \ref efforward that
 demonstrates usage of the packed-stream firmware.
 
 \section efrss efrss

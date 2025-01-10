@@ -4,7 +4,7 @@
 EFSEND_APPS := efsend efsend_pio efsend_timestamping efsend_warming \
                efsend_cplane
 TEST_APPS	:= efforward efrss efsink \
-		   efsink_packed efforward_packed eflatency efexclusivity stats \
+		   efsink_packed eflatency efexclusivity stats \
 		   efjumborx $(EFSEND_APPS)
 
 TARGETS		:= $(TEST_APPS:%=$(AppPattern))
@@ -31,8 +31,6 @@ efsink: efsink.o utils.o
 efjumborx: efjumborx.o utils.o
 
 efsink_packed: efsink_packed.o utils.o
-
-efforward_packed: efforward_packed.o utils.o
 
 efpingpong: MMAKE_LIBS     := $(LINK_CITOOLS_LIB) $(MMAKE_LIBS)
 efpingpong: MMAKE_LIB_DEPS := $(CITOOLS_LIB_DEPEND) $(MMAKE_LIB_DEPS)
