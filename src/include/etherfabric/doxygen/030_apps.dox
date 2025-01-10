@@ -27,7 +27,6 @@ addressing mode, or hardware timestamping. Run with "--help" to check this.
 | \ref efsink                 | Receive streams of packets on a single interface.
 | \ref efforward              | Forward packets between two interfaces without modification.
 | \ref efsend_timestamping    | Send UDP packets on a specified interface, with TX timestamping.
-| \ref efsend_pio             | Send UDP packets on a specified interface using Programmed I/O.
 | \ref efsend_warming         | Send UDP packets on a specified interface utilizing transmit warming functions for improved latency in 'cold cache' situations.
 | \ref efsink_packed          | Receive streams of packets on a single interface using packed streams.
 | \ref efrss                  | Forward packets between two interfaces without modification, spreading the load over multiple virtual interfaces and threads.
@@ -126,24 +125,10 @@ each packet was transmitted.
 The number of packets sent, the size of the packet, the amount of
 time to wait between sends can be controlled.
 
-\section efsend_pio efsend_pio
-
-The efsend_pio application sends UDP packets on a specified interface.
-
-Packet data is copied to the NIC's PIO buffer before being sent,
-which typically results in lower latency sends compared to accessing
-packet data stored on the host via DMA, which is the method used by
-the efsend sample app.
-
-The application sends a UDP packet, waits for transmission of the
-packet to finish and then sends the next.
-
-The number of packets sent, the size of the packet, the amount of
-time to wait between sends can be controlled.
-
 \section efsend_warming efsend_warming
 
-The efsend_warming application demonstrates transmit warming.
+The efsend_warming application demonstrates transmit warming. It can be used
+with either CTPIO or PIO send methods (depending which the NIC supports).
 
 The application sends a UDP packet each time a trigger fires.
 While waiting for a trigger, the application can warm the transmit path

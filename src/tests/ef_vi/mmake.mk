@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # X-SPDX-Copyright-Text: (c) Copyright 2003-2019 Xilinx, Inc.
 
-EFSEND_APPS := efsend efsend_pio efsend_timestamping efsend_warming \
-               efsend_cplane
+EFSEND_APPS := efsend efsend_timestamping efsend_warming efsend_cplane
 TEST_APPS	:= efforward efrss efsink \
 		   efsink_packed eflatency efexclusivity stats \
 		   $(EFSEND_APPS)
