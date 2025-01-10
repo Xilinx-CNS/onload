@@ -83,7 +83,7 @@ enum mode {
   MODE_PIO = 1,
   MODE_CTPIO = 2,
 };
-static unsigned cfg_mode = MODE_PIO;
+static unsigned cfg_mode = MODE_CTPIO;
 static bool efct = false;
 static void *ctpio_region;
 char pbuf[BUF_SIZE];
@@ -477,8 +477,8 @@ void usage(void)
   fprintf(stderr, "  -w                  - enable transmit warming\n");
   fprintf(stderr, "  -u <warm-interval>  - how often to warm (microseconds)\n");
   fprintf(stderr, "  -p <size (MB)>      - pollute xMB of cache after sends\n");
-  fprintf(stderr, "  -x <send-mode>      - method of send to warm: [c]tpio,\n");
-  fprintf(stderr, "                        [p]io (default)\n");
+  fprintf(stderr, "  -x <send-mode>      - method of send to warm:\n");
+  fprintf(stderr, "                        [c]tpio (default), [p]io\n");
   fprintf(stderr, "  -c <ct-threshold>   - set the ctpio ct threshold, when\n");
   fprintf(stderr, "                        using CTPIO mode: 64 (default)\n");
   fprintf(stderr, "  -a '<main>;<trig>'  - set affinity of main and trigger\n");
