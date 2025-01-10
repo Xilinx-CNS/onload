@@ -10,28 +10,30 @@ jobs:
   ssa:
     if: vars.INTERNAL_REPO
     runs-on: ubuntu-latest
+    env:
+      SSA_TREE: ${{ github.workspace }}/ssa
+      ONLOAD_TREE: ${{ github.workspace }}/onload
     steps:
-      - name: onload_internal
+      - name: Checkout Onload
         uses: actions/checkout@v4
         with:
-          path: onload_internal
+          path: ${{ env.ONLOAD_TREE }}
 
-      - name: Extract simple_sockets_apps branch name
-        id: ssa_ref
-        run: echo "branch=$(yq -r '.products.simple_sockets_apps.version' < $GITHUB_WORKSPACE/onload_internal/versions.yaml)" >> "$GITHUB_OUTPUT"
+      - name: Extract version information
+        working-directory: ${{ env.ONLOAD_TREE }}
+        run: cat versions.env | sed -E "s/^#.*$//g" >> "$GITHUB_ENV"
 
-      - name: ssa checkout
+      - name: Checkout SSA
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/simple_sockets_apps
           ssh-key: ${{ secrets.SIMPLE_SOCKET_APPS_READ_PRIVATE_KEY }}
-          path: ssa
-          ref: ${{ steps.ssa_ref.outputs.branch }}
+          path: ${{ env.SSA_TREE }}
+          ref: ${{ env.SIMPLE_SOCKET_APPS_VERSION }}
 
-      - name: ssa build
-        run: |
-          cd $GITHUB_WORKSPACE/ssa
-          make ONLOAD_TREE=$GITHUB_WORKSPACE/onload_internal -j $(nproc)
+      - name: Build SSA
+        working-directory: ${{ env.SSA_TREE }}
+        run: make -j $(nproc)
 
 
   tcpdirect:
@@ -54,7 +56,7 @@ jobs:
 
       # We try checking out TCPDirect with the current onload branch to support
       # development workflows, but will fall back to the branch defined in our
-      # versions.yaml file.
+      # versions file.
       - name: Checkout TCPDirect development branch
         id: primary_tcpdirect_checkout
         continue-on-error: true
