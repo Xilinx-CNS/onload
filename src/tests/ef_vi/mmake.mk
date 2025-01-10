@@ -7,10 +7,6 @@ TEST_APPS	:= efforward efrss efsink \
 		   efsink_packed efforward_packed eflatency efexclusivity stats \
 		   efjumborx $(EFSEND_APPS)
 
-ifeq (${PLATFORM},gnu_x86_64)
-	TEST_APPS += efrink_controller efrink_consumer
-endif
-
 TARGETS		:= $(TEST_APPS:%=$(AppPattern))
 
 
@@ -50,8 +46,6 @@ eflatency: MMAKE_LIB_DEPS := $(CITOOLS_LIB_DEPEND) $(MMAKE_LIB_DEPS)
 
 efexclusivity: MMAKE_LIBS     := $(LINK_CITOOLS_LIB) $(MMAKE_LIBS)
 efexclusivity: MMAKE_LIB_DEPS := $(CITOOLS_LIB_DEPEND) $(MMAKE_LIB_DEPS)
-
-efrink_controller: efrink_controller.o utils.o
 
 stats: stats.py
 	cp $< $@

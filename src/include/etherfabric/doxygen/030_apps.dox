@@ -35,8 +35,6 @@ addressing mode, or hardware timestamping. Run with "--help" to check this.
 | \ref efjumborx              | Receive jumbo packets.
 | \ref exchange               | Simplified electronic trading exchange.
 | \ref trader_onload_ds_efvi  | Simplified electronic trader.
-| \ref efrink_controller      | Receive packets on a single interface into a shared memory ring.
-| \ref efrink_consumer        | Consume packets from a shared memory ring.
 
 \section eflatency eflatency
 
@@ -242,32 +240,6 @@ where:
 - _server_ is the IP address of the server machine (e.g. `192.168.0.10`)
 
 There are various additional options. See the help text for details.
-
-\section efrink_controller efrink_controller
-
-The efrink_controller application receives streams of packets on a single
-interface into a shared memory ring. This can be read by multiple consumers,
-such as \ref efrink_consumer.
-
-This is an advanced technique which has the potential to provide a more
-efficient way to receive data when multiple consumer processes want to
-receive the same data stream(s) from the network.
-
-A single controller sets up a region of shared memory, and posts chunks of
-this to the RX ring of the NIC. As the NIC writes packet data, it returns
-completion events. The controller receives these events and marks each packet
-buffer as complete.
-
-One or more readers such as \ref efrink_consumer can access the shared memory
-to read the packets. The data is protected via a generation counter.
-
-\section efrink_consumer efrink_consumer
-
-The efrink_consumer application consumes packets from a shared memory ring,
-that is being managed by \ref efrink_controller.
-
-Multiple copies of efrink_consumer can run at the same time. For best
-performance, all processes should share the same NUMA node/cache.
 
 \section building Building the Example Applications
 
