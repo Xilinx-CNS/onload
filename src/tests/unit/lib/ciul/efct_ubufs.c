@@ -57,11 +57,19 @@ void efct_superbufs_cleanup(ef_vi* vi)
          sbuf_bytes_per_rxq * vi->efct_rxqs.max_qs);
 }
 
+int ef_memreg_alloc_flags(ef_memreg* mr, ef_driver_handle mr_dh,
+                          struct ef_pd* pd, ef_driver_handle pd_dh,
+                          void* p_mem, size_t len_bytes, unsigned flags)
+{
+  return 0;
+}
+
 int ef_memreg_alloc(ef_memreg* mr, ef_driver_handle mr_dh,
                     struct ef_pd* pd, ef_driver_handle pd_dh,
                     void* p_mem, size_t len_bytes)
 {
-  return 0;
+  return ef_memreg_alloc_flags(mr, mr_dh, pd, pd_dh, p_mem, len_bytes,
+                               ef_pd_mr_flags(pd));
 }
 
 int ef_memreg_free(ef_memreg* mr, ef_driver_handle mr_dh)

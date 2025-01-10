@@ -18,7 +18,9 @@ typedef union {
 } ef_vi_qword;
 
 
-struct ef_vi;
+typedef struct ef_vi ef_vi;
+typedef struct ef_pd ef_pd;
+typedef struct ef_memreg ef_memreg;
 
 
 /*! Return size of state buffer of an initialised VI. */
@@ -268,6 +270,16 @@ ef_vi_inline enum ef_vi_arch ef_vi_get_real_arch(ef_vi* vi)
                          : (enum ef_vi_arch)vi->nic_type.arch;
 }
 
+
+/* Register a memory region for use with ef_vi. The only difference from
+ * `ef_memreg_alloc` is the presence of the `mr_flags` parameter. */
+extern int ef_memreg_alloc_flags(ef_memreg* mr, ef_driver_handle mr_dh,
+                                 struct ef_pd* pd, ef_driver_handle pd_dh,
+                                 void* p_mem, size_t len_bytes,
+                                 unsigned mr_flags);
+
+/* Return the default `ef_memreg` flags. */
+extern unsigned ef_pd_mr_flags(ef_pd* pd);
 
 /* Internal interfaces, so exclude from doxygen documentation */
 /*! \endcond internal */

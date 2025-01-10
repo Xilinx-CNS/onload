@@ -54,13 +54,14 @@ CI_BUILD_ASSERT(__builtin_offsetof(struct efch_vi_set_alloc, in_flags) == 8);
 CI_BUILD_ASSERT(__builtin_offsetof(struct efch_vi_set_alloc, in_pd_fd) == 12);
 CI_BUILD_ASSERT(__builtin_offsetof(struct efch_vi_set_alloc, in_pd_rs_id) == 16);
 
-CI_BUILD_ASSERT(sizeof(struct efch_memreg_alloc) == 40);
+CI_BUILD_ASSERT(sizeof(struct efch_memreg_alloc) == 48);
 CI_BUILD_ASSERT(__builtin_offsetof(struct efch_memreg_alloc, in_vi_or_pd_fd) == 0);
 CI_BUILD_ASSERT(__builtin_offsetof(struct efch_memreg_alloc, in_vi_or_pd_id) == 4);
 CI_BUILD_ASSERT(__builtin_offsetof(struct efch_memreg_alloc, in_mem_ptr) == 8);
 CI_BUILD_ASSERT(__builtin_offsetof(struct efch_memreg_alloc, in_mem_bytes) == 16);
 CI_BUILD_ASSERT(__builtin_offsetof(struct efch_memreg_alloc, in_addrs_out_ptr) == 24);
 CI_BUILD_ASSERT(__builtin_offsetof(struct efch_memreg_alloc, in_addrs_out_stride) == 32);
+CI_BUILD_ASSERT(__builtin_offsetof(struct efch_memreg_alloc, in_flags) == 40);
 
 CI_BUILD_ASSERT(sizeof(struct efch_pio_alloc) == 8);
 CI_BUILD_ASSERT(__builtin_offsetof(struct efch_pio_alloc, in_pd_fd) == 0);

@@ -338,8 +338,8 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
 
   rxq->superbuf_pkts = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
 
-  rc = ef_memreg_alloc(&rxq->memreg, vi->dh, ubufs->pd, ubufs->pd_dh,
-                       map, map_bytes);
+  rc = ef_memreg_alloc_flags(&rxq->memreg, vi->dh, ubufs->pd, ubufs->pd_dh,
+                             map, map_bytes, 0);
   if( rc < 0 ) {
     ef_shrub_fini_pool(rxq->buffer_pool);
     munmap(map, map_bytes);

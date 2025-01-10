@@ -163,3 +163,9 @@ int ef_pd_free(ef_pd* pd, ef_driver_handle pd_dh)
     return 0;
   }
 }
+
+unsigned ef_pd_mr_flags(ef_pd* pd)
+{
+  /* The public users of the LLCT datapath want a dummy memreg mapping. */
+  return pd->pd_flags & EFCH_PD_FLAG_LLCT ? EFCH_MEMREG_FLAG_DUMMY : 0;
+}

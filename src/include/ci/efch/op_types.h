@@ -94,6 +94,9 @@ struct efch_vi_set_alloc {
 };
 
 
+/* Request the virtual->virtual "dummy" memory mapping. */
+#define EFCH_MEMREG_FLAG_DUMMY 0x1
+
 struct efch_memreg_alloc {
   int32_t             in_vi_or_pd_fd;
   efch_resource_id_t  in_vi_or_pd_id;
@@ -101,6 +104,8 @@ struct efch_memreg_alloc {
   uint64_t            in_mem_bytes;
   uint64_t            in_addrs_out_ptr;
   uint64_t            in_addrs_out_stride;
+  uint16_t            in_flags;
+  uint16_t            reserved[3];
 };
 
 

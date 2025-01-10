@@ -22,7 +22,8 @@
 
 static int memreg_alloc(ef_driver_handle mr_dh,
                         ef_pd* pd, ef_driver_handle pd_dh,
-                        ef_addr* dma_addrs, char* chunk_start, char* chunk_end)
+                        ef_addr* dma_addrs, char* chunk_start, char* chunk_end,
+                        unsigned mr_flags)
 {
   ci_resource_alloc_t ra;
 
@@ -37,14 +38,16 @@ static int memreg_alloc(ef_driver_handle mr_dh,
   ra.u.memreg.in_mem_bytes = chunk_end - chunk_start;
   ra.u.memreg.in_addrs_out_ptr = (uintptr_t) dma_addrs;
   ra.u.memreg.in_addrs_out_stride = sizeof(dma_addrs[0]);
+  ra.u.memreg.in_flags = mr_flags;
 
   return ci_resource_alloc(mr_dh, &ra);
 }
 
 
-int ef_memreg_alloc(ef_memreg* mr, ef_driver_handle mr_dh, 
-                    ef_pd* pd, ef_driver_handle pd_dh,
-                    void* p_mem, size_t len_bytes)
+int ef_memreg_alloc_flags(ef_memreg* mr, ef_driver_handle mr_dh,
+                          ef_pd* pd, ef_driver_handle pd_dh,
+                          void* p_mem, size_t len_bytes,
+                          unsigned mr_flags)
 {
   /* The memory region must be aligned on a 4K boundary. */
   if( ((uintptr_t) p_mem & (EFHW_NIC_PAGE_SIZE - 1)) != 0 )
@@ -84,7 +87,8 @@ int ef_memreg_alloc(ef_memreg* mr, ef_driver_handle mr_dh,
   do {
     LOGVVV(ef_log("ef_memreg_alloc(base=%p, len=%zu): chunk=%p+%zu\n",
 		  p_mem, len_bytes, chunk_start, chunk_end - chunk_start));
-    int rc = memreg_alloc(mr_dh, pd, pd_dh, dma_addrs, chunk_start, chunk_end);
+    int rc = memreg_alloc(mr_dh, pd, pd_dh, dma_addrs, chunk_start, chunk_end,
+                          mr_flags);
     if( rc < 0 ) {
       LOGVV(ef_log("ef_memreg_alloc(base=%p, len=%zu): ERROR: chunk=%p-%p "
 		   "rc=%d", p_mem, len_bytes, chunk_start, chunk_end, rc));
@@ -102,6 +106,15 @@ int ef_memreg_alloc(ef_memreg* mr, ef_driver_handle mr_dh,
   mr->mr_dma_addrs = mr->mr_dma_addrs_base;
   mr->mr_dma_addrs += ((char*) p_mem - p_mem_sys_base) >> EFHW_NIC_PAGE_SHIFT;
   return 0;
+}
+
+
+int ef_memreg_alloc(ef_memreg* mr, ef_driver_handle mr_dh,
+                    ef_pd* pd, ef_driver_handle pd_dh,
+                    void* p_mem, size_t len_bytes)
+{
+  return ef_memreg_alloc_flags(mr, mr_dh, pd, pd_dh, p_mem, len_bytes,
+                               ef_pd_mr_flags(pd));
 }
 
 

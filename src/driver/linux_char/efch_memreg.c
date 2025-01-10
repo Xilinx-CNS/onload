@@ -119,7 +119,8 @@ static void efch_dummy_map(struct efrm_pd *pd, uint64_t in_ptr, int nic_pages,
   }
 }
 
-static int efch_memreg_map(struct efrm_pd *pd, uint64_t in_ptr,
+static int efch_memreg_map(struct efrm_pd *pd,
+                           uint64_t in_ptr, uint32_t in_flags,
                            struct efch_memreg_area_params *ar,
                            int nic_order, void **addrs,
                            void **user_addrs, int user_addrs_stride,
@@ -128,7 +129,8 @@ static int efch_memreg_map(struct efrm_pd *pd, uint64_t in_ptr,
   int rc = 0;
   struct efhw_nic *nic = efrm_client_get_nic(efrm_pd_to_resource(pd)->rs_client);
 
-  if( efhw_nic_buffer_table_orders_num(nic) > 0 )
+  if( (efhw_nic_buffer_table_orders_num(nic) > 0) &&
+      ( ! (in_flags & EFCH_MEMREG_FLAG_DUMMY) ) )
     rc = efch_dma_map(pd, ar, nic_order, addrs, user_addrs, user_addrs_stride,
                       user_addr_put);
   else
@@ -292,8 +294,9 @@ memreg_rm_alloc(ci_resource_alloc_t* alloc_,
       cur_page = (struct page **)((char *)cur_page + page_stride);
     }
 
-    rc = efch_memreg_map(pd, alloc->in_mem_ptr, &mr->area, mr->nic_order,
-                         addrs, &user_addrs, user_addrs_stride, put_user_64);
+    rc = efch_memreg_map(pd, alloc->in_mem_ptr, alloc->in_flags, &mr->area,
+                         mr->nic_order, addrs, &user_addrs, user_addrs_stride,
+                         put_user_64);
     if (rc < 0)
       goto fail4;
 
