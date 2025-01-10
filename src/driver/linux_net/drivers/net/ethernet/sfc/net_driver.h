@@ -90,7 +90,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"5.3.19.1013"
+#define EFX_DRIVER_VERSION	"5.3.19.1015"
 #endif
 
 #ifdef DEBUG

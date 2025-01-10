@@ -386,6 +386,8 @@ struct efx_pps_dev_attr {
  * @sw_stats.oversize_sync_windows: Number of corrected sync windows that
  *                                  are too large
  * @sw_stats.rx_no_timestamp: Number of packets received without a timestamp.
+ * @sw_stats.pps_fw: Number of internal PPS events (generated from clock source on the NIC)
+ * @sw_stats.pps_in: Number of external PPS events (generated from PPS_IN external connector)
  * @initialised_stats: Indicates if @initial_mc_stats has been populated.
  * @initial_mc_stats: Firmware statistics.
  * @timeset: Last set of synchronisation statistics.
@@ -477,6 +479,8 @@ struct efx_ptp_data {
 		unsigned int undersize_sync_windows;
 		unsigned int oversize_sync_windows;
 		unsigned int rx_no_timestamp;
+		unsigned int pps_fw;
+		unsigned int pps_in;
 	} sw_stats;
 	bool initialised_stats;
 	__le16 initial_mc_stats[MC_CMD_PTP_OUT_STATUS_LEN / sizeof(__le16)];
@@ -572,6 +576,8 @@ static const struct efx_hw_stat_desc efx_ptp_stat_desc[] = {
 	PTP_MC_STAT(ptp_timestamp_packets, TS),
 	PTP_MC_STAT(ptp_filter_matches, FM),
 	PTP_MC_STAT(ptp_non_filter_matches, NFM),
+	PTP_SW_STAT(pps_fw, sw_stats.pps_fw),
+	PTP_SW_STAT(pps_hw, sw_stats.pps_in),
 };
 #define PTP_STAT_COUNT ARRAY_SIZE(efx_ptp_stat_desc)
 static const unsigned long efx_ptp_stat_mask[] = {
@@ -3615,6 +3621,8 @@ static void ptp_event_pps(struct efx_nic *efx, struct efx_ptp_data *ptp)
 {
 	if (efx && ptp->pps_workwq)
 		queue_work(ptp->pps_workwq, &ptp->pps_work);
+
+	ptp->sw_stats.pps_fw++;
 }
 
 #if defined(EFX_NOT_UPSTREAM)
@@ -3651,6 +3659,7 @@ static void hw_pps_event_pps(struct efx_nic *efx, struct efx_ptp_data *ptp)
 		ptp_clock_event(ptp->phc_clock, &ptp_evt);
 	}
 #endif
+	ptp->sw_stats.pps_in++;
 }
 #endif
 
