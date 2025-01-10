@@ -1,8 +1,0 @@
-# SPDX-License-Identifier: BSD-2-Clause
-# X-SPDX-Copyright-Text: (c) Copyright 2018-2024 Advanced Micro Devices, Inc.
-
----
-products:
-  Onload:
-    version: 9.1.0
-...

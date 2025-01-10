@@ -10,20 +10,100 @@ jobs:
   ssa:
     if: vars.INTERNAL_REPO
     runs-on: ubuntu-latest
+    env:
+      SSA_TREE: ${{ github.workspace }}/ssa
+      ONLOAD_TREE: ${{ github.workspace }}/onload
     steps:
-      - name: onload_internal
+      - name: Checkout Onload
         uses: actions/checkout@v4
         with:
-          path: onload_internal
+          path: ${{ env.ONLOAD_TREE }}
 
-      - name: ssa checkout
+      - name: Checkout SSA
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/simple_sockets_apps
           ssh-key: ${{ secrets.SIMPLE_SOCKET_APPS_READ_PRIVATE_KEY }}
-          path: ssa
+          path: ${{ env.SSA_TREE }}
 
-      - name: ssa build
+      - name: Build SSA
+        working-directory: ${{ env.SSA_TREE }}
+        run: make -j $(nproc)
+
+
+  tcpdirect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TCPDIRECT_TREE: ${{ github.workspace }}/tcpdirect
+      ONLOAD_TREE: ${{ github.workspace }}/onload
+    steps:
+      - name: Checkout Onload
+        uses: actions/checkout@v4
+        with:
+          path: ${{ env.ONLOAD_TREE }}
+
+      - name: Extract version information
+        working-directory: ${{ env.ONLOAD_TREE }}
         run: |
-          cd $GITHUB_WORKSPACE/ssa
-          make ONLOAD_TREE=$GITHUB_WORKSPACE/onload_internal -j $(nproc)
+          cat versions.env | sed -E "s/^#.*$//g" >> "$GITHUB_ENV"
+          echo "ONLOAD_DEV_BRANCH=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> "$GITHUB_ENV"
+
+      # We try checking out TCPDirect with the current onload branch to support
+      # development workflows, but will fall back to the branch defined in our
+      # versions file.
+      - name: Checkout TCPDirect development branch
+        id: primary_tcpdirect_checkout
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/tcpdirect
+          path: ${{ env.TCPDIRECT_TREE }}
+          ref: ${{ env.ONLOAD_DEV_BRANCH }}
+
+      - name: Cleanup failed TCPDirect development branch checkout
+        if: ${{ ! cancelled() && steps.primary_tcpdirect_checkout.outcome == 'failure' }}
+        run: rm -rf "$TCPDIRECT_TREE"
+
+      - name: Checkout TCPDirect
+        uses: actions/checkout@v4
+        if: ${{ ! cancelled() && steps.primary_tcpdirect_checkout.outcome == 'failure' }}
+        with:
+          repository: ${{ github.repository_owner }}/tcpdirect
+          path: tcpdirect
+          ref: ${{ env.TCPDIRECT_VERSION }}
+
+      - name: Checkout packetdrill
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          repository: ${{ github.repository_owner }}/packetdrill-tcpdirect
+          path: packetdrill-tcpdirect
+          ref: tcpdirect-8.1
+
+      - name: Install the TCPDirect build and test dependencies
+        uses: ./tcpdirect/.github/actions/install-dependencies
+
+      - name: Build the base TCPDirect library
+        uses: ./tcpdirect/.github/actions/build
+        with:
+          tcpdirect_tree: ${{ env.TCPDIRECT_TREE }}
+          onload_tree: ${{ env.ONLOAD_TREE }}
+          build_target: all
+          debug: true
+
+      - name: Build the TCPDirect socket shim
+        uses: ./tcpdirect/.github/actions/build
+        with:
+          tcpdirect_tree: ${{ env.TCPDIRECT_TREE }}
+          onload_tree: ${{ env.ONLOAD_TREE }}
+          build_target: shim
+          debug: true
+
+      - name: Run the TCPDirect unit tests
+        uses: ./tcpdirect/.github/actions/test
+        with:
+          tcpdirect_tree: ${{ env.TCPDIRECT_TREE }}
+          onload_tree: ${{ env.ONLOAD_TREE }}
+          test_timeout_multiplier: 2
+          run_slow_tests: false
