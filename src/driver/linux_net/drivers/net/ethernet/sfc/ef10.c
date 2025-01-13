@@ -3311,6 +3311,10 @@ efx_ef10_handle_rx_event_errors(struct efx_rx_queue *rx_queue,
 		}
 		handled = true;
 	}
+	if (EFX_QWORD_FIELD(*event, ESF_DZ_RX_TRUNC_ERR)) {
+		rx_queue->n_rx_frm_trunc += n_packets;
+		return EFX_RX_PKT_DISCARD;
+	}
 	if (EFX_QWORD_FIELD(*event, ESF_DZ_RX_IPCKSUM_ERR)) {
 		if (unlikely(rx_encap_hdr != ESE_EZ_ENCAP_HDR_VXLAN &&
 			     rx_l3_class != ESE_DZ_L3_CLASS_IP4 &&
@@ -3477,7 +3481,8 @@ static int efx_ef10_handle_rx_event(struct efx_channel *channel,
 		n_packets = 1;
 	}
 
-	EFX_POPULATE_QWORD_5(errors, ESF_DZ_RX_ECRC_ERR, 1,
+	EFX_POPULATE_QWORD_6(errors, ESF_DZ_RX_ECRC_ERR, 1,
+				     ESF_DZ_RX_TRUNC_ERR, 1,
 				     ESF_DZ_RX_IPCKSUM_ERR, 1,
 				     ESF_DZ_RX_TCPUDP_CKSUM_ERR, 1,
 				     ESF_EZ_RX_IP_INNER_CHKSUM_ERR, 1,
