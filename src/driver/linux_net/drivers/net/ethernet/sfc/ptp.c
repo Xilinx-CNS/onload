@@ -7,32 +7,6 @@
  * by the Free Software Foundation, incorporated herein by reference.
  */
 
-/* Theory of operation:
- *
- * PTP support is assisted by firmware running on the MC, which provides
- * the hardware timestamping capabilities.  Both transmitted and received
- * PTP event packets are queued onto internal queues for subsequent processing;
- * this is because the MC operations are relatively long and would block
- * block NAPI/interrupt operation.
- *
- * Receive event processing:
- *	The event contains the packet's UUID and sequence number, together
- *	with the hardware timestamp.  The PTP receive packet queue is searched
- *	for this UUID/sequence number and, if found, put on a pending queue.
- *	Packets not matching are delivered without timestamps (MCDI events will
- *	always arrive after the actual packet).
- *	It is important for the operation of the PTP protocol that the ordering
- *	of packets between the event and general port is maintained.
- *
- * Work queue processing:
- *	If work waiting, synchronise host/hardware time
- *
- *	Transmit: send packet through MC, which returns the transmission time
- *	that is converted to an appropriate timestamp.
- *
- *	Receive: the packet's reception time is converted to an appropriate
- *	timestamp.
- */
 #include <linux/ip.h>
 #include <linux/udp.h>
 #include <linux/time.h>
@@ -386,6 +360,8 @@ struct efx_pps_dev_attr {
  * @sw_stats.oversize_sync_windows: Number of corrected sync windows that
  *                                  are too large
  * @sw_stats.rx_no_timestamp: Number of packets received without a timestamp.
+ * @sw_stats.pps_fw: Number of internal PPS events (generated from clock source on the NIC)
+ * @sw_stats.pps_in: Number of external PPS events (generated from PPS_IN external connector)
  * @initialised_stats: Indicates if @initial_mc_stats has been populated.
  * @initial_mc_stats: Firmware statistics.
  * @timeset: Last set of synchronisation statistics.
@@ -477,6 +453,8 @@ struct efx_ptp_data {
 		unsigned int undersize_sync_windows;
 		unsigned int oversize_sync_windows;
 		unsigned int rx_no_timestamp;
+		unsigned int pps_fw;
+		unsigned int pps_in;
 	} sw_stats;
 	bool initialised_stats;
 	__le16 initial_mc_stats[MC_CMD_PTP_OUT_STATUS_LEN / sizeof(__le16)];
@@ -545,11 +523,6 @@ static int efx_phc_settime32(struct ptp_clock_info *ptp,
 static LIST_HEAD(efx_all_phcs_list);
 static DEFINE_SPINLOCK(ptp_all_phcs_list_lock);
 
-bool efx_ptp_use_mac_tx_timestamps(struct efx_nic *efx)
-{
-	return efx_has_cap(efx, TX_MAC_TIMESTAMPING);
-}
-
 static int efx_ptp_insert_unicast_filter(struct efx_nic *efx,
 					 struct sk_buff *skb);
 
@@ -572,6 +545,8 @@ static const struct efx_hw_stat_desc efx_ptp_stat_desc[] = {
 	PTP_MC_STAT(ptp_timestamp_packets, TS),
 	PTP_MC_STAT(ptp_filter_matches, FM),
 	PTP_MC_STAT(ptp_non_filter_matches, NFM),
+	PTP_SW_STAT(pps_fw, sw_stats.pps_fw),
+	PTP_SW_STAT(pps_hw, sw_stats.pps_in),
 };
 #define PTP_STAT_COUNT ARRAY_SIZE(efx_ptp_stat_desc)
 static const unsigned long efx_ptp_stat_mask[] = {
@@ -1014,19 +989,11 @@ ktime_t efx_ptp_nic_to_kernel_time(struct efx_tx_queue *tx_queue)
 {
 	struct efx_nic *efx = tx_queue->efx;
 	struct efx_ptp_data *ptp = efx->ptp_data;
-	ktime_t kt;
 
-	if (efx_ptp_use_mac_tx_timestamps(efx))
-		kt = efx_ptp_mac_nic_to_ktime_correction(efx, ptp,
-				tx_queue->completed_timestamp_major,
-				tx_queue->completed_timestamp_minor,
-				ptp->ts_corrections.general_tx);
-	else
-		kt = ptp->nic_to_kernel_time(
-				tx_queue->completed_timestamp_major,
-				tx_queue->completed_timestamp_minor,
-				ptp->ts_corrections.general_tx);
-	return kt;
+	return efx_ptp_mac_nic_to_ktime_correction(efx, ptp,
+					tx_queue->completed_timestamp_major,
+					tx_queue->completed_timestamp_minor,
+					ptp->ts_corrections.general_tx);
 }
 
 /* Get PTP attributes and set up time conversions */
@@ -1799,76 +1766,6 @@ static void efx_ptp_xmit_skb_queue(struct efx_nic *efx, struct sk_buff *skb)
 	}
 }
 
-/* Transmit a PTP packet, via the MCDI interface, to the wire. */
-static void efx_ptp_xmit_skb_mc(struct efx_nic *efx, struct sk_buff *skb)
-{
-	MCDI_DECLARE_BUF(txtime, MC_CMD_PTP_OUT_TRANSMIT_LEN);
-	struct efx_ptp_data *ptp_data = efx->ptp_data;
-	struct skb_shared_hwtstamps timestamps;
-	size_t len;
-	int rc;
-
-	MCDI_SET_DWORD(ptp_data->txbuf, PTP_IN_OP, MC_CMD_PTP_OP_TRANSMIT);
-	MCDI_SET_DWORD(ptp_data->txbuf, PTP_IN_PERIPH_ID, 0);
-
-	/* Get the UDP source IP address and use it to set up a unicast receive
-	 * filter for received PTP packets. This enables PTP hybrid mode to
-	 * work. */
-	efx_ptp_insert_unicast_filter(efx, skb);
-
-	if (skb_shinfo(skb)->nr_frags != 0) {
-		rc = skb_linearize(skb);
-		if (rc != 0)
-			goto fail;
-	}
-
-	if (skb->ip_summed == CHECKSUM_PARTIAL) {
-		rc = skb_checksum_help(skb);
-		if (rc != 0)
-			goto fail;
-	}
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_FAKE_VLAN_TX_ACCEL)
-	if (skb_vlan_tag_present(skb)) {
-		skb = vlan_insert_tag_set_proto(skb, htons(ETH_P_8021Q),
-				     skb_vlan_tag_get(skb));
-		if (unlikely(!skb))
-			return;
-	}
-#endif
-	skb_copy_from_linear_data(skb,
-				  MCDI_PTR(ptp_data->txbuf,
-					   PTP_IN_TRANSMIT_PACKET),
-				  skb->len);
-	MCDI_SET_DWORD(ptp_data->txbuf, PTP_IN_TRANSMIT_LENGTH, skb->len);
-
-	rc = efx_mcdi_rpc(efx, MC_CMD_PTP,
-			  ptp_data->txbuf, MC_CMD_PTP_IN_TRANSMIT_LEN(skb->len),
-			  txtime, sizeof(txtime), &len);
-	if (rc != 0)
-		goto fail;
-
-	memset(&timestamps, 0, sizeof(timestamps));
-	timestamps.hwtstamp = ptp_data->nic_to_kernel_time(
-		MCDI_DWORD(txtime, PTP_OUT_TRANSMIT_MAJOR),
-		MCDI_DWORD(txtime, PTP_OUT_TRANSMIT_MINOR),
-		ptp_data->ts_corrections.ptp_tx);
-
-#if defined(EFX_NOT_UPSTREAM)
-#if !IS_ENABLED(CONFIG_PTP_1588_CLOCK)
-	/* Failure to get the system timestamp is non-fatal */
-	(void)efx_ptp_get_host_time(efx, &timestamps);
-#endif
-#endif
-	skb_tstamp_tx(skb, &timestamps);
-
-	rc = 0;
-
-fail:
-	dev_kfree_skb_any(skb);
-
-	return;
-}
-
 static enum ptp_packet_state efx_ptp_match_rx(struct efx_nic *efx,
 					      struct sk_buff *skb)
 {
@@ -2150,41 +2047,34 @@ static int efx_ptp_insert_multicast_filters(struct efx_nic *efx)
 	if (rc < 0)
 		goto fail;
 
-	/* if the NIC supports hw timestamps by the MAC, we can support
-	 * PTP over IPv6 and Ethernet.
-	 */
-	if (efx_ptp_use_mac_tx_timestamps(efx)) {
-		rc = efx_ptp_insert_ipv6_filter(efx, &ptp->rxfilters_mcast,
-						&ptp_addr_ipv6, PTP_EVENT_PORT, 0);
+	rc = efx_ptp_insert_ipv6_filter(efx, &ptp->rxfilters_mcast,
+					&ptp_addr_ipv6, PTP_EVENT_PORT, 0);
+	if (rc < 0)
+		goto fail;
 
-		if (rc < 0)
-			goto fail;
+	rc = efx_ptp_insert_ipv6_filter(efx, &ptp->rxfilters_mcast,
+					&ptp_addr_ipv6, PTP_GENERAL_PORT, 0);
+	if (rc < 0)
+		goto fail;
 
-		rc = efx_ptp_insert_ipv6_filter(efx, &ptp->rxfilters_mcast,
-						&ptp_addr_ipv6, PTP_GENERAL_PORT, 0);
+	rc = efx_ptp_insert_ipv6_filter(efx, &ptp->rxfilters_mcast,
+					&ptp_peer_delay_addr_ipv6, PTP_EVENT_PORT, 0);
+	if (rc < 0)
+		goto fail;
 
-		if (rc < 0)
-			goto fail;
+	rc = efx_ptp_insert_ipv6_filter(efx, &ptp->rxfilters_mcast,
+					&ptp_peer_delay_addr_ipv6, PTP_GENERAL_PORT, 0);
+	if (rc < 0)
+		goto fail;
 
-		rc = efx_ptp_insert_ipv6_filter(efx, &ptp->rxfilters_mcast,
-						&ptp_peer_delay_addr_ipv6, PTP_EVENT_PORT, 0);
-		if (rc < 0)
-			goto fail;
+	/* Not all firmware variants support RSS filters */
+	rc = efx_ptp_insert_eth_multicast_filter(efx, ptp_addr_ether);
+	if (rc < 0 && rc != -EPROTONOSUPPORT)
+		goto fail;
 
-		rc = efx_ptp_insert_ipv6_filter(efx, &ptp->rxfilters_mcast,
-						&ptp_peer_delay_addr_ipv6, PTP_GENERAL_PORT, 0);
-		if (rc < 0)
-			goto fail;
-
-		/* Not all firmware variants support RSS filters */
-		rc = efx_ptp_insert_eth_multicast_filter(efx, ptp_addr_ether);
-		if (rc < 0 && rc != -EPROTONOSUPPORT)
-			goto fail;
-
-		rc = efx_ptp_insert_eth_multicast_filter(efx, ptp_peer_delay_addr_ether);
-		if (rc < 0 && rc != -EPROTONOSUPPORT)
-			goto fail;
-	}
+	rc = efx_ptp_insert_eth_multicast_filter(efx, ptp_peer_delay_addr_ether);
+	if (rc < 0 && rc != -EPROTONOSUPPORT)
+		goto fail;
 
 	return 0;
 
@@ -2246,9 +2136,7 @@ static int efx_ptp_insert_unicast_filter(struct efx_nic *efx,
 
 		rc = efx_ptp_insert_ipv4_filter(efx, &ptp->rxfilters_ucast,
 						addr, PTP_GENERAL_PORT, expiry);
-	} else if (skb->protocol == htons(ETH_P_IPV6) &&
-		   efx_ptp_use_mac_tx_timestamps(efx)) {
-		/* IPv6 PTP only supported by devices with MAC hw timestamp */
+	} else if (skb->protocol == htons(ETH_P_IPV6)) {
 		struct in6_addr *addr = &ipv6_hdr(skb)->saddr;
 
 		rc = efx_ptp_insert_ipv6_filter(efx, &ptp->rxfilters_ucast,
@@ -3108,13 +2996,9 @@ int efx_ptp_probe(struct efx_nic *efx, struct efx_channel *channel)
 	if (!ptp->workwq)
 		return -ENOMEM;
 
-	if (efx_ptp_use_mac_tx_timestamps(efx)) {
-		ptp->xmit_skb = efx_ptp_xmit_skb_queue;
-		/* Request sync events on this channel. */
-		channel->sync_events_state = SYNC_EVENTS_QUIESCENT;
-	} else {
-		ptp->xmit_skb = efx_ptp_xmit_skb_mc;
-	}
+	ptp->xmit_skb = efx_ptp_xmit_skb_queue;
+	/* Request sync events on this channel. */
+	channel->sync_events_state = SYNC_EVENTS_QUIESCENT;
 
 	return 0;
 }
@@ -3403,6 +3287,7 @@ static int efx_ptp_ts_init(struct efx_nic *efx,
 void efx_ptp_get_ts_info(struct efx_nic *efx,
 			 struct kernel_ethtool_ts_info *ts_info)
 {
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 	struct efx_ptp_data *phc_ptp = efx->phc_ptp_data;
 	struct efx_ptp_data *ptp = efx->ptp_data;
 
@@ -3418,14 +3303,10 @@ void efx_ptp_get_ts_info(struct efx_nic *efx,
 	ts_info->so_timestamping |= SOF_TIMESTAMPING_SYS_HARDWARE;
 #endif
 	/* Check licensed features. */
-	if (efx_ptp_use_mac_tx_timestamps(efx)) {
-		struct efx_ef10_nic_data *nic_data = efx->nic_data;
+	if (!(nic_data->licensed_features &
+	    (1 << LICENSED_V3_FEATURES_TX_TIMESTAMPS_LBN)))
+		ts_info->so_timestamping &= ~SOF_TIMESTAMPING_TX_HARDWARE;
 
-		if (!(nic_data->licensed_features &
-		      (1 << LICENSED_V3_FEATURES_TX_TIMESTAMPS_LBN)))
-			ts_info->so_timestamping &=
-				~SOF_TIMESTAMPING_TX_HARDWARE;
-	}
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
 	if (ptp->phc_clock)
 		ts_info->phc_index = ptp_clock_index(ptp->phc_clock);
@@ -3615,6 +3496,8 @@ static void ptp_event_pps(struct efx_nic *efx, struct efx_ptp_data *ptp)
 {
 	if (efx && ptp->pps_workwq)
 		queue_work(ptp->pps_workwq, &ptp->pps_work);
+
+	ptp->sw_stats.pps_fw++;
 }
 
 #if defined(EFX_NOT_UPSTREAM)
@@ -3651,6 +3534,7 @@ static void hw_pps_event_pps(struct efx_nic *efx, struct efx_ptp_data *ptp)
 		ptp_clock_event(ptp->phc_clock, &ptp_evt);
 	}
 #endif
+	ptp->sw_stats.pps_in++;
 }
 #endif
 

@@ -241,10 +241,40 @@ static inline void efx_update_diff_stat(u64 *stat, u64 diff)
 		*stat = diff;
 }
 
+unsigned int efx_wanted_parallelism(struct efx_nic *efx);
 /* Interrupts */
 int efx_nic_init_interrupt(struct efx_nic *efx);
 int efx_nic_irq_test_start(struct efx_nic *efx);
 void efx_nic_fini_interrupt(struct efx_nic *efx);
+
+/**
+ * efx_nic_init_irq_pool() - Add a pool of interrupts to a PF or VF.
+ *
+ * @pd: Pointer to hardware to set up.
+ *
+ * Return: 0 for success, or a negative error code.
+ */
+int efx_nic_init_irq_pool(struct efx_probe_data *pd);
+/**
+ * efx_nic_fini_irq_pool() - Clean up a pool of interrupts for a PF or VF.
+ *
+ * @pd: Pointer to hardware to clean up.
+ */
+void efx_nic_fini_irq_pool(struct efx_probe_data *pd);
+
+/**
+ * efx_nic_alloc_irq() - Try to reserve an interrupt.
+ *
+ * @pd: The probe data to allocate from.
+ * @os_vector: Pointer to integer storage for IRQ number from the OS.
+ *
+ * returns: A pointer to the efx_msi_context that was allocated and stored in
+ * the irq_pool, or an error pointer on fail.
+ * %ENOSPC indicates no interrupt was available.
+ */
+struct efx_msi_context *efx_nic_alloc_irq(struct efx_probe_data *pd,
+					  int *os_vector);
+void efx_nic_free_irq(struct efx_probe_data *pd, int irq_index);
 
 static inline int efx_nic_event_test_irq_cpu(struct efx_channel *channel)
 {

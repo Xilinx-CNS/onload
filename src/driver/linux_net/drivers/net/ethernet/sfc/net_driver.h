@@ -826,6 +826,7 @@ struct efx_rss_context {
  * @debug_dir: debugfs directory for this channel
  * @rx_list: list of SKBs from current RX, awaiting processing
  * @zc: zero-copy enabled on channel
+ * @irq_index: Index in the interrupt pool, @irq_pool in struct efx_probe_data.
  * @rx_queue: RX queue for this channel
  * @tx_queue_count: Number of TX queues pointed to by %tx_queues
  * @tx_queues: Pointer to TX queues for this channel
@@ -912,6 +913,8 @@ struct efx_channel {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 	bool zc;
 #endif
+#define EFX_IRQ_INDEX_INVALID -1
+	int irq_index;
 	struct efx_rx_queue rx_queue;
 	unsigned int tx_queue_count;
 	struct efx_tx_queue *tx_queues;
@@ -1023,7 +1026,8 @@ static inline bool efx_channel_disable(struct efx_channel *channel)
 /**
  * struct efx_msi_context - Context for each MSI
  * @efx: The associated NIC
- * @index: Index of the channel/IRQ
+ * @index: Index of the IRQ
+ * @channel: Index of the channel associated to this IRQ
  * @name: Name of the channel/IRQ
  *
  * Unlike &struct efx_channel, this is never reallocated and is always
@@ -1032,6 +1036,7 @@ static inline bool efx_channel_disable(struct efx_channel *channel)
 struct efx_msi_context {
 	struct efx_nic *efx;
 	unsigned int index;
+	unsigned int channel;
 	char name[IFNAMSIZ + 6];
 };
 
@@ -1063,6 +1068,10 @@ struct efx_channel_type {
 	bool (*receive_raw)(struct efx_rx_queue *, u32);
 	bool keep_eventq;
 	bool hide_tx;
+#ifdef EFX_NOT_UPSTREAM
+	/** @client_type: The type of client this channel is for. */
+	enum efx_client_type client_type;
+#endif
 	const char *(*get_queue_name)(struct efx_channel *, bool tx);
 };
 
@@ -1406,13 +1415,11 @@ struct efx_mae;
  * @rss_mode: RSS spreading mode
  * @msg_enable: Log message enable flags
  * @state: Device state number (%STATE_*). Serialised by the rtnl_lock.
- * @max_irqs: Maximum number if interrupts the device supports.
  * @reset_pending: Bitmask for pending resets
  * @last_reset: Time of previous reset (jiffies)
  * @current_reset: Time of current reset (jiffies)
  * @reset_count: Count of resets to rate limit reset rescheduling
  * @channel_list: Channels used by a PCI function.
- * @msi_context: Context for each MSI
  * @extra_channel_type: Types of extra (non-traffic) channels that
  *	should be allocated for this NIC
  * @mae: Details of the Match Action Engine
@@ -1619,14 +1626,12 @@ struct efx_nic {
 #endif
 
 	enum nic_state state;
-	u16 max_irqs;
 	unsigned long reset_pending;
 	unsigned long last_reset;
 	unsigned long current_reset;
 	unsigned int reset_count;
 
 	struct list_head channel_list;
-	struct efx_msi_context *msi_context;
 	const struct efx_channel_type *
 		extra_channel_type[EFX_MAX_EXTRA_CHANNELS];
 	struct efx_mae *mae;
@@ -1896,10 +1901,16 @@ struct efx_ll;
  * struct efx_probe_data - State after hardware probe
  * @efx: Efx NIC details
  * @pci_dev: The PCI device
+ * @irq_pool: Stores the struct efx_msi_context for an interrupt index.
+ * @max_irqs: Maximum number of interrupts needed from the PCI function.
+ * @irqs_left: The number of interrupts still available in the pool.
  */
 struct efx_probe_data {
 	struct efx_nic efx;
 	struct pci_dev *pci_dev;
+	struct xarray irq_pool;
+	unsigned int max_irqs;
+	unsigned int irqs_left;
 #ifdef EFX_NOT_UPSTREAM
 	/**
 	 * @efx_ll: Probe data for the LL datapath.
@@ -1923,6 +1934,10 @@ struct efx_probe_data {
 	 */
 	bool fw_client_supported;
 #endif
+#endif
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_PCI_ALLOC_DYN)
+	/** @xentries: Pre-allocated interrupt vectors */
+	struct msix_entry *xentries;
 #endif
 };
 

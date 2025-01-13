@@ -570,8 +570,7 @@ netdev_tx_t efx_hard_start_xmit(struct sk_buff *skb,
 	 */
 	if (unlikely(efx_xmit_with_hwtstamp(skb)) &&
 	    likely(efx_ptp_channel(efx)) &&
-	    ((efx_ptp_use_mac_tx_timestamps(efx) && efx->ptp_data) ||
-	     unlikely(efx_ptp_is_ptp_tx(efx, skb)))) {
+	    efx->ptp_data) {
 
 		/* There may be existing transmits on the channel that are
 		 * waiting for this packet to trigger the doorbell write.

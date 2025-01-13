@@ -1378,10 +1378,6 @@ static void efx_ef10_fini_nic(struct efx_nic *efx)
 
 	kfree(nic_data->mc_stats);
 	nic_data->mc_stats = NULL;
-
-	if (!efx_ptp_uses_separate_channel(efx) &&
-	    !efx_ptp_use_mac_tx_timestamps(efx))
-		efx_ptp_remove(efx);
 }
 
 static int efx_ef10_init_nic(struct efx_nic *efx)
@@ -1477,10 +1473,6 @@ static int efx_ef10_init_nic(struct efx_nic *efx)
 	efx->net_dev->hw_enc_features = hw_enc_features;
 #endif
 #endif
-
-	if (!efx_ptp_uses_separate_channel(efx) &&
-	    !efx_ptp_use_mac_tx_timestamps(efx))
-		efx_ptp_probe(efx, NULL);
 
 	return 0;
 }
@@ -2479,7 +2471,7 @@ static irqreturn_t efx_ef10_msi_interrupt(int irq, void *dev_id)
 			efx->last_irq_cpu = raw_smp_processor_id();
 
 		/* Schedule processing of the channel */
-		channel = efx_get_channel(efx, context->index);
+		channel = efx_get_channel(efx, context->channel);
 		efx_schedule_channel_irq(channel);
 	}
 
@@ -5674,21 +5666,16 @@ static int efx_ef10_probe_pf(struct efx_nic *efx)
 
 static int efx_x4_probe_pf(struct efx_nic *efx)
 {
-	int rc = efx_ef10_probe_pf(efx);
-
 #ifdef EFX_NOT_UPSTREAM
-	if (rc)
-		return rc;
-
+	int rc;
 	rc = efx_ll_init(efx);
 	if (rc)
 		pci_info(efx->pci_dev,
 			 "Low latency datapath initialisation failed with error %d. Continuing without it.\n",
 			 rc);
 
-	rc = 0;
 #endif
-	return rc;
+	return efx_ef10_probe_pf(efx);
 }
 
 static void efx_ef10_remove(struct efx_nic *efx)
@@ -5807,21 +5794,16 @@ fail:
 
 static int efx_x4_probe_vf(struct efx_nic *efx)
 {
-	int rc = efx_ef10_probe_vf(efx);
-
 #ifdef EFX_NOT_UPSTREAM
-	if (rc)
-		return rc;
-
+	int rc;
 	rc = efx_ll_init(efx);
 	if (rc)
 		pci_info(efx->pci_dev,
 			 "Low latency datapath initialisation failed with error %d. Continuing without it.\n",
 			 rc);
 
-	rc = 0;
 #endif
-	return rc;
+	return efx_ef10_probe_vf(efx);
 }
 #endif /* CONFIG_SFC_SRIOV */
 

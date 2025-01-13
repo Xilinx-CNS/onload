@@ -106,6 +106,7 @@ struct efx_auxdev_client *efx_auxbus_open_common(struct auxiliary_device *auxdev
 	cdev->auxdev = adev;
 	cdev->events_requested = events_requested;
 	efx_auxbus_init_queues(cdev);
+	xa_init(&cdev->irqs);
 	return cdev;
 }
 
@@ -239,7 +240,10 @@ static void efx_auxbus_destroy_queues(struct efx_auxdev_client *cdev)
 static void efx_auxbus_close(struct efx_auxdev_client *cdev)
 {
 	struct efx_client_type_data *client_type;
+	struct efx_auxdev_irq *entry;
+	struct efx_probe_data *pd;
 	struct efx_client *client;
+	unsigned long index;
 
 	if (!cdev)
 		return;
@@ -251,6 +255,16 @@ static void efx_auxbus_close(struct efx_auxdev_client *cdev)
 	client = container_of(cdev, struct efx_client, auxiliary_info);
 	client_type = client->client_type;
 	efx_auxbus_wait_for_event_callbacks(client_type);
+
+	pd = cdev_to_probe_data(cdev);
+	xa_for_each(&cdev->irqs, index, entry) {
+		if (!entry)
+			continue;
+		if (pd)
+			efx_nic_free_irq(pd, entry->nic_nr);
+		kfree(entry);
+	}
+	xa_destroy(&cdev->irqs);
 
 	efx_auxbus_destroy_queues(cdev);
 	cdev->net_dev = NULL;
@@ -1158,12 +1172,70 @@ static void efx_auxbus_rxq_free(struct efx_auxdev_client *handle, int rxq_nr)
 static
 struct efx_auxdev_irq *efx_auxbus_irq_alloc(struct efx_auxdev_client *handle)
 {
-	return ERR_PTR(-EOPNOTSUPP);
+	struct efx_msi_context *msi_context;
+	struct efx_auxdev_irq *irq;
+	struct efx_probe_data *pd;
+	void *xa_res;
+	int rc;
+
+	if (!handle)
+		return ERR_PTR(-EINVAL);
+
+	pd = cdev_to_probe_data(handle);
+	if (!pd)
+		return ERR_PTR(-EINVAL);
+
+	irq = kzalloc(sizeof(*irq), GFP_KERNEL);
+	if (!irq)
+		return ERR_PTR(-ENOMEM);
+
+	msi_context = efx_nic_alloc_irq(pd, &irq->os_vector);
+	if (IS_ERR(msi_context)) {
+		rc = PTR_ERR(msi_context);
+		goto fail;
+	}
+
+	irq->nic_nr = msi_context->index;
+
+	xa_res = xa_store(&handle->irqs, irq->nic_nr, irq, GFP_KERNEL);
+	if (xa_is_err(xa_res)) {
+		rc = xa_err(xa_res);
+		goto fail_free_irq;
+	}
+
+	return irq;
+
+fail_free_irq:
+	efx_nic_free_irq(pd, irq->nic_nr);
+fail:
+	kfree(irq);
+	return ERR_PTR(rc);
 }
 
 static void efx_auxbus_irq_free(struct efx_auxdev_client *handle,
 				struct efx_auxdev_irq *irq)
 {
+	struct efx_auxdev_irq *xa_res;
+	struct efx_probe_data *pd;
+
+	if (!handle)
+		return;
+	if (!irq)
+		return;
+
+	pd = cdev_to_probe_data(handle);
+	if (!pd)
+		return;
+
+	xa_res = xa_erase(&handle->irqs, irq->nic_nr);
+	if (xa_is_err(xa_res))
+		return;
+
+	if (xa_res != irq)
+		return;
+
+	efx_nic_free_irq(pd, irq->nic_nr);
+	kfree(irq);
 }
 
 static const struct efx_auxdev_llct_ops aux_llct_devops = {

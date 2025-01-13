@@ -120,6 +120,8 @@ struct efx_auxdev;
  * @txqs: Xarray mapping a txq QUEUE_NUM to a QUEUEHANDLE.
  * @rxqs: Xarray mapping a rxq QUEUE_NUM to a QUEUEHANDLE.
  * @evqs: Xarray mapping an evq QUEUE_NUM to a QUEUEHANDLE.
+ * @irqs: All irqs allocated to this client. Each entry is a pointer to a struct
+ *        efx_auxdev_irq.
  */
 struct efx_auxdev_client {
 	struct efx_auxdev *auxdev;
@@ -133,6 +135,7 @@ struct efx_auxdev_client {
 	struct xarray txqs;
 	struct xarray rxqs;
 	struct xarray evqs;
+	struct xarray irqs;
 #endif
 	struct efx_design_params design_params;
 };
@@ -492,8 +495,8 @@ static inline struct efx_auxdev *to_efx_auxdev(struct auxiliary_device *adev)
 
 static inline bool efx_aux_abi_version_is_compat(u32 abi_version)
 {
-	u32 major_ver = EFX_AUX_ABI_VERSION_MAJOR_GET(abi_version);
-	u32 minor_ver = EFX_AUX_ABI_VERSION_MINOR_GET(abi_version);
+	s32 major_ver = EFX_AUX_ABI_VERSION_MAJOR_GET(abi_version);
+	s32 minor_ver = EFX_AUX_ABI_VERSION_MINOR_GET(abi_version);
 	/* Majors must match. Provided minor must be newer or equal to the
 	 * client's.
 	 */

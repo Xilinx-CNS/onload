@@ -819,18 +819,18 @@ void efx_ethtool_get_stats(struct net_device *net_dev,
 				data++;
 			}
 		}
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-#if defined(CONFIG_XDP_SOCKETS)
-		efx_for_each_channel(channel, efx) {
-			tx_queue = efx_channel_get_xsk_tx_queue(channel);
-			if (tx_queue)
-				data[0] = tx_queue->tx_packets;
-			data++;
-		}
-#endif
-#endif
 	}
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+#if defined(CONFIG_XDP_SOCKETS)
+	efx_for_each_channel(channel, efx) {
+		tx_queue = efx_channel_get_xsk_tx_queue(channel);
+		if (tx_queue)
+			data[0] = tx_queue->tx_packets;
+		data++;
+	}
+#endif
+#endif
 	efx_ptp_update_stats(efx, data);
 }
 

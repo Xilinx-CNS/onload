@@ -14,7 +14,7 @@
 #include "llct_regs.h"
 
 /**
- * struct efx_bar_map_info - Represents a PCI function memory mapped BAR region.
+ * struct efx_ll - Represents a PCI function memory mapped BAR region.
  * @mem_bar: BAR number of the pci function
  * @membase_phys: Physical address of BAR memory region.
  * @uc_membase: Virtual address of BAR memory region mapped with
