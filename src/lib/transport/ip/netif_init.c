@@ -15,6 +15,7 @@
 #include "uk_intf_ver.h"
 #include "tcp_rx.h"
 #include <ci/internal/efabcfg.h>
+#include <ci/efhw/device.h>
 #include <ci/internal/banner.h>
 #include <onload/version.h>
 #include <etherfabric/internal/internal.h>
@@ -1983,9 +1984,16 @@ static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
       return rc;
   }
   if( vi->efct_rxqs.active_qs ) {
-    int rc = efct_kbufs_init_internal(vi,
+    int rc = 0;
+    if( nsn->vi_arch == EFHW_ARCH_EFCT ) {
+      rc = efct_kbufs_init_internal(vi,
                         (void*)((char*)ni->efct_shm_ptr + vi_efct_shm_offset),
                         oo_efct_superbuf_config_refresh, nic_i, NULL);
+    } else if( NI_OPTS(ni).multiarch_rx_datapath != EF_MULTIARCH_DATAPATH_FF &&
+               nsn->vi_arch == EFHW_ARCH_EF10CT ) {
+      /* TODO: ef10ct ubufs */
+      rc = -EOPNOTSUPP;
+    }
     if( rc < 0 )
       return rc;
   }

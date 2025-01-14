@@ -1616,8 +1616,16 @@ static int initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
       return rc;
   }
   if( vi->efct_rxqs.active_qs ) {
-    int rc = efct_kbufs_init_internal(vi, vi_rs->efct_shm,
-        tcp_helper_superbuf_config_refresh, 0, NULL);
+    int rc = 0;
+    if( nic->devtype.arch == EFHW_ARCH_EFCT ) {
+      rc = efct_kbufs_init_internal(vi, vi_rs->efct_shm,
+                                    tcp_helper_superbuf_config_refresh,
+                                    0, NULL);
+    } else if( NI_OPTS(ni).multiarch_rx_datapath != EF_MULTIARCH_DATAPATH_FF &&
+               nic->devtype.arch == EFHW_ARCH_EF10CT ) {
+      /* TODO: ef10ct ubufs */
+      rc = -EOPNOTSUPP;
+    }
     if( rc < 0 )
       return rc;
   }
