@@ -5313,12 +5313,16 @@ oof_manager_dump(struct oof_manager* fm,
   mutex_lock(&fm->fm_outer_lock);
   spin_lock_bh(&fm->fm_inner_lock);
 
-  log(loga, "%s: hwports up=%x down=%x unavailable=%x update_seen=%x "
-            "local_addr_n=%d",
-      __FUNCTION__, fm->fm_hwports_up,fm->fm_hwports_down,
-      ~fm->fm_hwports_available, fm->fm_hwports_mcast_update_seen,
-      fm->fm_local_addr_n);
+  log(loga, "%s: hwports up=%x",
+      __FUNCTION__, fm->fm_hwports_up);
+  log(loga, "  down=%x unavailable=%x update_seen=%x ",
+      fm->fm_hwports_down,
+      ~fm->fm_hwports_available, fm->fm_hwports_mcast_update_seen);
+  log(loga, "  mcast_replicate=%x vlan_filters=%x no_5tuple=%x",
+      fm->fm_hwports_mcast_replicate_capable, fm->fm_hwports_vlan_filters,
+      fm->fm_hwports_no5tuple);
 
+  log(loga, "%s: local_addr_n=%d", __FUNCTION__, fm->fm_local_addr_n);
   for( la_i = 0; la_i < fm->fm_local_addr_n; ++la_i ) {
     la = &fm->fm_local_addrs[la_i];
 
