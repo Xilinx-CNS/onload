@@ -398,6 +398,32 @@ static int ef10ct_alloc_txq(struct efhw_nic *nic)
   return txq;
 }
 
+static void ef10ct_free_txq(struct efhw_nic *nic, int txq)
+{
+  struct efx_auxdev_client* cli;
+  struct efx_auxdev* edev;
+  struct device *dev;
+  int rc = 0;
+
+  AUX_PRE(dev, edev, cli, nic, rc);
+  edev->llct_ops->txq_free(cli, txq);
+  AUX_POST(dev, edev, cli, nic, rc);
+}
+
+static int ef10ct_alloc_rxq(struct efhw_nic *nic)
+{
+  struct efx_auxdev_client* cli;
+  struct efx_auxdev* edev;
+  struct device *dev;
+  int rxq;
+
+  AUX_PRE(dev, edev, cli, nic, rxq);
+  rxq = edev->llct_ops->rxq_alloc(cli);
+  AUX_POST(dev, edev, cli, nic, rxq);
+
+  return rxq;
+}
+
 static int ef10ct_vi_alloc_hw(struct efhw_nic *nic,
                               struct efhw_vi_constraints *evc, unsigned n_vis)
 {
@@ -472,22 +498,14 @@ static int ef10ct_vi_alloc(struct efhw_nic *nic,
 static void ef10ct_vi_free_hw(struct efhw_nic *nic, int instance)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
-  struct efx_auxdev_client* cli;
-  struct efx_auxdev* edev;
-  struct device *dev;
   int txq = ef10ct->evq[instance].txq;
-  int rc = 0;
 
   EFHW_WARN("%s: q %d", __func__, instance);
 
-  AUX_PRE(dev, edev, cli, nic, rc);
-  edev->llct_ops->channel_free(cli, instance);
-  AUX_POST(dev, edev, cli, nic, rc);
+  ef10ct_free_evq(nic, instance);
 
   if( txq != EF10CT_EVQ_NO_TXQ) {
-    AUX_PRE(dev, edev, cli, nic, rc);
-    edev->llct_ops->txq_free(cli, txq);
-    AUX_POST(dev, edev, cli, nic, rc);
+    ef10ct_free_txq(nic, txq);
   }
 
   ef10ct->evq[instance].txq = EF10CT_EVQ_NO_TXQ;
@@ -848,15 +866,10 @@ static int get_rxq_from_mask(struct efhw_nic *nic,
                              const struct cpumask *mask, bool exclusive)
 {
   int rc;
-  struct device *dev;
-  struct efx_auxdev* edev;
-  struct efx_auxdev_client* cli;
 
   EFHW_WARN("%s", __func__);
 
-  AUX_PRE(dev, edev, cli, nic, rc);
-  rc = edev->llct_ops->rxq_alloc(cli);
-  AUX_POST(dev, edev, cli, nic, rc);
+  rc = ef10ct_alloc_rxq(nic);
 
   /* FIXME EF10CT full lifetime management of this RXQ. We do the queue init
    * on demand on first attach, where we have information about the VI user
