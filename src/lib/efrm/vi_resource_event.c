@@ -83,6 +83,7 @@ efrm_eventq_register_callback(struct efrm_vi *virs,
 			      efrm_evq_callback_fn handler, void *arg)
 {
 	struct efrm_nic_per_vi *cb_info;
+	struct efrm_nic *rm_nic;
 	int instance;
 	int bit;
 	int rc = 0;
@@ -100,8 +101,11 @@ efrm_eventq_register_callback(struct efrm_vi *virs,
 	virs->evq_callback_arg = arg;
 	virs->evq_callback_fn = handler;
 
+	rm_nic = efrm_nic(virs->rs.rs_client->nic);
 	instance = virs->rs.rs_instance;
-	cb_info = &efrm_nic(virs->rs.rs_client->nic)->vis[instance];
+	EFRM_ASSERT(instance < rm_nic->max_vis);
+	cb_info = &rm_nic->vis[instance];
+
 	cb_info->vi = virs;
 	bit = atomic_fetch_or(VI_RESOURCE_EVQ_STATE_CALLBACK_REGISTERED,
 			       &cb_info->state);
@@ -115,6 +119,7 @@ EXPORT_SYMBOL(efrm_eventq_register_callback);
 void efrm_eventq_kill_callback(struct efrm_vi *virs)
 {
 	struct efrm_nic_per_vi *cb_info;
+	struct efrm_nic *rm_nic;
 	int32_t evq_state;
 	int instance;
 	int bit;
@@ -125,8 +130,10 @@ void efrm_eventq_kill_callback(struct efrm_vi *virs)
 
 	mutex_lock(&register_evq_cb_mutex);
 
+	rm_nic = efrm_nic(virs->rs.rs_client->nic);
 	instance = virs->rs.rs_instance;
-	cb_info = &efrm_nic(virs->rs.rs_client->nic)->vis[instance];
+	EFRM_ASSERT(instance < rm_nic->max_vis);
+	cb_info = &rm_nic->vis[instance];
 
 	/* Disable the callback. */
 	bit = atomic_fetch_and(~VI_RESOURCE_EVQ_STATE_CALLBACK_REGISTERED,
