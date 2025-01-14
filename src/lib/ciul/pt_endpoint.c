@@ -854,20 +854,4 @@ int ef_vi_pace(ef_vi* ep, ef_driver_handle fd, int val)
   return -EOPNOTSUPP;
 }
 
-/* TODO move this to driver code as EFHW_* APIs are not userspace interface */
-int ef_vi_arch_from_efhw_arch(int efhw_arch)
-{
-  switch( efhw_arch ) {
-  case EFHW_ARCH_EF10:
-    return EF_VI_ARCH_EF10;
-  case EFHW_ARCH_EFCT:
-  case EFHW_ARCH_EF10CT:
-    return EF_VI_ARCH_EFCT;
-  case EFHW_ARCH_AF_XDP:
-    return EF_VI_ARCH_AF_XDP;
-  default:
-    return -1;
-  }
-}
-
 /*! \cidoxg_end */

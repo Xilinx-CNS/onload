@@ -1581,10 +1581,12 @@ static int initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
                          unsigned* vi_out_flags, ef_vi_stats* vi_stats)
 {
   uint32_t* vi_ids = (void*) ((ef_vi_state*) vi_state + 1);
+  int ef_vi_arch;
 
   efrm_vi_get_mappings(vi_rs, vm);
 
-  ef_vi_init(vi, nic->devtype.arch, nic->devtype.variant, nic->devtype.revision,
+  ef_vi_arch = ef_vi_arch_from_efhw_arch(nic->devtype.arch);
+  ef_vi_init(vi, ef_vi_arch, nic->devtype.variant, nic->devtype.revision,
              alloc_info->ef_vi_flags, efhw_vi_nic_flags(nic),
              (ef_vi_state*) vi_state);
   *vi_out_flags = (vm->out_flags & EFHW_VI_CLOCK_SYNC_STATUS) ?

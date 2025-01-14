@@ -476,3 +476,19 @@ int ef_eventq_capacity(ef_vi* vi)
   EF_VI_ASSERT( vi->ep_state->evq.evq_clear_stride <= 0 );
   return vi->evq_mask / EF_VI_EV_SIZE - 1u + vi->ep_state->evq.evq_clear_stride;
 }
+
+/* TODO move this to driver code as EFHW_* APIs are not userspace interface */
+int ef_vi_arch_from_efhw_arch(int efhw_arch)
+{
+  switch( efhw_arch ) {
+  case EFHW_ARCH_EF10:
+    return EF_VI_ARCH_EF10;
+  case EFHW_ARCH_EFCT:
+  case EFHW_ARCH_EF10CT:
+    return EF_VI_ARCH_EFCT;
+  case EFHW_ARCH_AF_XDP:
+    return EF_VI_ARCH_AF_XDP;
+  default:
+    return -1;
+  }
+}
