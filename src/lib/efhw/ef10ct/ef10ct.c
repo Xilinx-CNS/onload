@@ -240,14 +240,15 @@ ef10ct_nic_event_queue_enable(struct efhw_nic *nic,
   int i;
 #endif
   struct efx_auxdev_rpc rpc;
+  int evq_num = ef10ct_get_queue_num(efhw_params->evq);
 
   EFHW_WARN("%s: evq %d", __func__, efhw_params->evq);
 
   /* This is a dummy EVQ, so nothing to do. */
-  if( efhw_params->evq >= ef10ct->evq_n )
+  if( evq_num >= ef10ct->evq_n )
     return 0;
 
-  ef10ct_evq = &ef10ct->evq[efhw_params->evq];
+  ef10ct_evq = &ef10ct->evq[evq_num];
 
   /* We only look at the first page because this memory should be physically
    * contiguous, but the API provides us with an address per 4K (NIC page)
@@ -321,14 +322,15 @@ ef10ct_nic_event_queue_disable(struct efhw_nic *nic,
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct efhw_nic_ef10ct_evq *ef10ct_evq;
   struct efx_auxdev_rpc rpc;
+  int evq_num = ef10ct_get_queue_num(evq);
 
   EFHW_WARN("%s: evq %d", __func__, evq);
 
   /* This is a dummy EVQ, so nothing to do. */
-  if( evq >= ef10ct->evq_n )
+  if( evq_num >= ef10ct->evq_n )
     return;
 
-  ef10ct_evq = &ef10ct->evq[evq];
+  ef10ct_evq = &ef10ct->evq[evq_num];
 
   /* In the normal case we'll be disabling the queue because all outstanding
    * flushes have completed. However, in the case of a flush timeout there may
@@ -428,9 +430,9 @@ static int ef10ct_vi_alloc_hw(struct efhw_nic *nic,
                               struct efhw_vi_constraints *evc, unsigned n_vis)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
-  int evq;
   int evq_rc;
   int txq_rc;
+  int evq_num;
 
   if( n_vis != 1 )
     return -EOPNOTSUPP;
@@ -438,18 +440,23 @@ static int ef10ct_vi_alloc_hw(struct efhw_nic *nic,
   /* FIXME EF10CT re-allocation post reset needs consideration */
 
   evq_rc = ef10ct_alloc_evq(nic);
-  evq = evq_rc;
-  EFHW_ASSERT(evq_rc < 0 || ef10ct->evq[evq].txq == EF10CT_EVQ_NO_TXQ);
+  if (evq_rc < 0) {
+    EFHW_ERR("%s: rc %d", __func__, evq_rc);
+    return evq_rc;
+  }
 
-  if( evc->want_txq && evq >= 0 ) {
+  evq_num = ef10ct_get_queue_num(evq_rc);
+  EFHW_ASSERT(ef10ct->evq[evq_num].txq == EF10CT_EVQ_NO_TXQ);
+
+  if( evc->want_txq) {
     txq_rc = ef10ct_alloc_txq(nic);
 
     if( txq_rc < 0 ) {
-      ef10ct_free_evq(nic, evq);
+      ef10ct_free_evq(nic, evq_rc);
       evq_rc = txq_rc;
     }
     else {
-      ef10ct->evq[evq].txq = txq_rc;
+      ef10ct->evq[evq_num].txq = txq_rc;
     }
   }
 
@@ -498,7 +505,8 @@ static int ef10ct_vi_alloc(struct efhw_nic *nic,
 static void ef10ct_vi_free_hw(struct efhw_nic *nic, int instance)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
-  int txq = ef10ct->evq[instance].txq;
+  int evq_num = ef10ct_get_queue_num(instance);
+  int txq = ef10ct->evq[evq_num].txq;
 
   EFHW_WARN("%s: q %d", __func__, instance);
 
@@ -508,7 +516,7 @@ static void ef10ct_vi_free_hw(struct efhw_nic *nic, int instance)
     ef10ct_free_txq(nic, txq);
   }
 
-  ef10ct->evq[instance].txq = EF10CT_EVQ_NO_TXQ;
+  ef10ct->evq[evq_num].txq = EF10CT_EVQ_NO_TXQ;
 }
 
 static void ef10ct_vi_free_sw(struct efhw_nic *nic, int instance)
@@ -531,7 +539,7 @@ static void ef10ct_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis)
 
   EFHW_ASSERT(n_vis == 1);
 
-  if( instance < ef10ct->evq_n )
+  if( ef10ct_get_queue_num(instance) < ef10ct->evq_n )
     ef10ct_vi_free_hw(nic, instance);
   else
     ef10ct_vi_free_sw(nic, instance);
@@ -550,13 +558,16 @@ ef10ct_dmaq_tx_q_init(struct efhw_nic *nic,
 {
   EFHW_MCDI_DECLARE_BUF(in, MC_CMD_INIT_TXQ_EXT_IN_LEN);
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
-  struct efhw_nic_ef10ct_evq *ef10ct_evq = &ef10ct->evq[txq_params->evq];
+  struct efhw_nic_ef10ct_evq *ef10ct_evq;
   struct efx_auxdev_rpc rpc;
+  int evq_num;
   int rc;
 
+  evq_num = ef10ct_get_queue_num(txq_params->evq);
+  ef10ct_evq = &ef10ct->evq[evq_num];
   EFHW_WARN("%s: txq %d evq %d", __func__, ef10ct_evq->txq, txq_params->evq);
 
-  EFHW_ASSERT(txq_params->evq < ef10ct->evq_n);
+  EFHW_ASSERT(evq_num < ef10ct->evq_n);
   EFHW_ASSERT(ef10ct_evq->txq != EFCT_EVQ_NO_TXQ);
 
   EFHW_MCDI_INITIALISE_BUF(in);
@@ -697,7 +708,7 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
   }
   ef10ct->rxq[rxq].post_buffer_addr = phys_to_virt(register_phys_addr);
 
-  flush_delayed_work(&ef10ct->evq[evq].check_flushes);
+  flush_delayed_work(&ef10ct->evq[ef10ct_get_queue_num(evq)].check_flushes);
   EFHW_ASSERT(ef10ct->rxq[rxq].evq == -1);
 
   ef10ct->rxq[rxq].ref_count++;
@@ -742,7 +753,7 @@ ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
   ef10ct_fw_rpc(nic, &rpc);
 
   evq_id = ef10ct->rxq[dmaq].evq;
-  ef10ct_evq = &ef10ct->evq[evq_id];
+  ef10ct_evq = &ef10ct->evq[ef10ct_get_queue_num(evq_id)];
 
   atomic_inc(&ef10ct_evq->queues_flushing);
   schedule_delayed_work(&ef10ct_evq->check_flushes, 0);
@@ -785,9 +796,11 @@ ef10ct_flush_tx_dma_channel(struct efhw_nic *nic,
 {
   EFHW_MCDI_DECLARE_BUF(in, MC_CMD_FINI_TXQ_IN_LEN);
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
-  struct efhw_nic_ef10ct_evq *ef10ct_evq = &ef10ct->evq[evq];
+  struct efhw_nic_ef10ct_evq *ef10ct_evq;
   int rc = 0;
   struct efx_auxdev_rpc rpc;
+
+  ef10ct_evq = &ef10ct->evq[ef10ct_get_queue_num(evq)];
 
   EFHW_MCDI_INITIALISE_BUF(in);
   EFHW_MCDI_SET_DWORD(in, FINI_TXQ_IN_INSTANCE, dmaq);
