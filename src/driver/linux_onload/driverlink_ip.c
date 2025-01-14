@@ -219,14 +219,19 @@ static struct nf_hook_ops oo_netfilter_ip6_hook = {
 static void oo_hwport_up(struct oo_nic* onic, int up)
 {
   struct efhw_nic* efhw_nic = efrm_client_get_nic(onic->efrm_client);
-  int replication_capable = efhw_nic->flags & NIC_FLAG_HW_MULTICAST_REPLICATION;
-  int vlan_capable = efhw_nic->filter_flags &
-                    (NIC_FILTER_FLAG_IPX_VLAN_HW | NIC_FILTER_FLAG_IPX_VLAN_SW);
-  int has5tuple = efhw_nic->filter_flags &
-                (NIC_FILTER_FLAG_RX_TYPE_IP_FULL | NIC_FILTER_FLAG_IP_FULL_SW);
-  int no5tuple = !has5tuple;
+  unsigned flags = 0;
+
+  if( efhw_nic->flags & NIC_FLAG_HW_MULTICAST_REPLICATION )
+    flags |= OOF_HWPORT_FLAG_MCAST_REPLICATE;
+  if( (efhw_nic->filter_flags & NIC_FILTER_FLAG_IPX_VLAN_HW) ||
+      (efhw_nic->filter_flags & NIC_FILTER_FLAG_IPX_VLAN_SW) )
+    flags |= OOF_HWPORT_FLAG_VLAN_FILTERS;
+  if( !(efhw_nic->filter_flags & NIC_FILTER_FLAG_RX_TYPE_IP_FULL) &&
+      !(efhw_nic->filter_flags & NIC_FILTER_FLAG_IP_FULL_SW) )
+    flags |= OOF_HWPORT_FLAG_NO_5TUPLE;
+
   oof_onload_hwport_up_down(&efab_tcp_driver, oo_nic_hwport(onic), up,
-                            replication_capable, vlan_capable, no5tuple, 0);
+                            flags, 0);
   if( up )
     onic->oo_nic_flags |= OO_NIC_UP;
   else
@@ -327,8 +332,7 @@ void oo_nic_remove(const struct efhw_nic* nic)
      * oo_netdev_going_down(), which will not have a chance to do its job
      * regarding filters.
      */
-    oof_onload_hwport_up_down(&efab_tcp_driver,
-                              oo_nic_hwport(onic), 0, 0, 0, 0, 1);
+    oof_onload_hwport_up_down(&efab_tcp_driver, oo_nic_hwport(onic), 0, 0, 1);
 
 #if CI_CFG_NIC_RESET_SUPPORT
     /* We need to prevent simultaneous resets so that the queues that are to be

@@ -1799,8 +1799,7 @@ oof_manager_update_all_filters(struct oof_manager* fm)
 
 
 void oof_hwport_up_down(struct oof_manager* fm, int hwport, int up,
-                        int mcast_replicate_capable, int vlan_filters,
-                        int no5tuple, int sync)
+                        unsigned flags, int sync)
 {
   /* A physical interface has gone up or down. */
   if( fm == NULL )
@@ -1816,12 +1815,12 @@ void oof_hwport_up_down(struct oof_manager* fm, int hwport, int up,
     fm->fm_hwports_no5tuple_new &= ~(1 << hwport);
   }
 
-  if( mcast_replicate_capable )
+  if( flags & OOF_HWPORT_FLAG_MCAST_REPLICATE )
     fm->fm_hwports_mcast_replicate_capable_new |= 1 << hwport;
   fm->fm_hwports_vlan_filters_new &= ~(1 << hwport);
-  if( vlan_filters )
+  if( flags & OOF_HWPORT_FLAG_VLAN_FILTERS )
     fm->fm_hwports_vlan_filters_new |= 1 << hwport;
-  if( no5tuple )
+  if( flags & OOF_HWPORT_FLAG_NO_5TUPLE )
     fm->fm_hwports_no5tuple_new |= 1 << hwport;
   if( up ) {
     fm->fm_hwports_up_new |= 1 << hwport;

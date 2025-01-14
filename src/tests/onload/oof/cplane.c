@@ -283,8 +283,16 @@ void ooft_free_cplane(struct ooft_cplane* cp)
 
 void ooft_hwport_up_down(struct ooft_hwport* hw, int up)
 {
-  oof_onload_hwport_up_down(&efab_tcp_driver, hw->id, up,
-                            hw->mcast_replication, hw->vlans, hw->no5tuple, 1);
+  unsigned flags = 0;
+
+  if( hw->mcast_replication )
+    flags |= OOF_HWPORT_FLAG_MCAST_REPLICATE;
+  if( hw->vlans )
+    flags |= OOF_HWPORT_FLAG_VLAN_FILTERS;
+  if( hw->no5tuple )
+    flags |= OOF_HWPORT_FLAG_NO_5TUPLE;
+
+  oof_onload_hwport_up_down(&efab_tcp_driver, hw->id, up, flags, 1);
 }
 
 

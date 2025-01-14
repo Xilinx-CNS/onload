@@ -90,18 +90,13 @@ void oof_onload_hwport_removed(efab_tcp_driver_t* drv, int hwport)
 
 
 void oof_onload_hwport_up_down(efab_tcp_driver_t* drv, int hwport, int up,
-                               int mcast_replicate_capable, int vlan_filters,
-                               int no5tuple, int sync)
+                               unsigned flags, int sync)
 {
   struct oo_filter_ns* fns;
   struct oo_filter_ns_manager* manager = drv->filter_ns_manager;
   ci_dllink* link;
 
   mutex_lock(&manager->ofnm_lock);
-
-  mcast_replicate_capable = !! mcast_replicate_capable;
-  vlan_filters = !! vlan_filters;
-  no5tuple = !! no5tuple;
 
   if( up ) {
     /* Reset hwport capabilities when bringing it up */
@@ -111,10 +106,12 @@ void oof_onload_hwport_up_down(efab_tcp_driver_t* drv, int hwport, int up,
     /* Now mark it up and set capabilities based on new information */
     manager->ofnm_hwports_up |= 1 << hwport;
     manager->ofnm_hwports_down &= ~(1 << hwport);
-    manager->ofnm_hwports_mcast_replicate_capable |=
-                                           mcast_replicate_capable << hwport;
-    manager->ofnm_hwports_vlan_filters |= vlan_filters << hwport;
-    manager->ofnm_hwports_no5tuple |= no5tuple << hwport;
+    if( flags & OOF_HWPORT_FLAG_MCAST_REPLICATE )
+      manager->ofnm_hwports_mcast_replicate_capable |= 1 << hwport;
+    if( flags & OOF_HWPORT_FLAG_VLAN_FILTERS )
+      manager->ofnm_hwports_vlan_filters |= 1 << hwport;
+    if( flags & OOF_HWPORT_FLAG_NO_5TUPLE )
+      manager->ofnm_hwports_no5tuple |= 1 << hwport;
   }
   else {
     manager->ofnm_hwports_up &= ~(1 << hwport);
@@ -123,8 +120,7 @@ void oof_onload_hwport_up_down(efab_tcp_driver_t* drv, int hwport, int up,
 
   CI_DLLIST_FOR_EACH(link, &manager->ofnm_ns_list) {
     fns = CI_CONTAINER(struct oo_filter_ns, ofn_ofnm_link, link);
-    oof_hwport_up_down(fns->ofn_filter_manager, hwport, up,
-                       mcast_replicate_capable, vlan_filters, no5tuple, sync);
+    oof_hwport_up_down(fns->ofn_filter_manager, hwport, up, flags, sync);
   }
   mutex_unlock(&manager->ofnm_lock);
 }
@@ -284,17 +280,20 @@ oof_onload_init_hwport_state_locked(struct oo_filter_ns_manager* manager,
   ci_assert_equal(manager->ofnm_hwports_up & manager->ofnm_hwports_down, 0);
 
   for( i = 0; i < (sizeof(manager->ofnm_hwports_up) * 8); i++ ) {
+    unsigned flags = 0;
+
+    if( manager->ofnm_hwports_mcast_replicate_capable & (1 << i) )
+      flags |= OOF_HWPORT_FLAG_MCAST_REPLICATE;
+    if( manager->ofnm_hwports_vlan_filters & (1 << i) )
+      flags |= OOF_HWPORT_FLAG_VLAN_FILTERS;
+    if( manager->ofnm_hwports_no5tuple & (1 << i) )
+      flags |= OOF_HWPORT_FLAG_NO_5TUPLE;
+
     if( manager->ofnm_hwports_up & (1 << i) ) {
-      oof_hwport_up_down(fns->ofn_filter_manager, i, 1,
-                      manager->ofnm_hwports_mcast_replicate_capable & (1 << i),
-                      manager->ofnm_hwports_vlan_filters & (1 << i),
-                      manager->ofnm_hwports_no5tuple & (1 << i), 1);
+      oof_hwport_up_down(fns->ofn_filter_manager, i, 1, flags, 1);
     }
     else if( manager->ofnm_hwports_down & (1 << i) ) {
-      oof_hwport_up_down(fns->ofn_filter_manager, i, 0,
-                      manager->ofnm_hwports_mcast_replicate_capable & (1 << i),
-                      manager->ofnm_hwports_vlan_filters & (1 << i),
-                      manager->ofnm_hwports_no5tuple & (1 << i), 1);
+      oof_hwport_up_down(fns->ofn_filter_manager, i, 0, flags, 1);
     }
   }
 }
