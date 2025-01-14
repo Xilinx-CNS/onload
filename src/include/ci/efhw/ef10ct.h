@@ -56,7 +56,6 @@ struct efhw_nic_ef10ct {
   struct efx_auxiliary_client *client;
   struct efhw_nic *nic;
   struct {
-    struct efhw_stack_vi_allocator tx;
     struct efhw_stack_vi_allocator rx;
     struct mutex lock;
   } vi_allocator;

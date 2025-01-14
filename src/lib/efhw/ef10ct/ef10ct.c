@@ -500,10 +500,7 @@ static void ef10ct_vi_free_sw(struct efhw_nic *nic, int instance)
     struct efhw_nic_ef10ct* ef10ct = nic->arch_extra;
     /* If this vi is in the range [0..ef10ct->evq_n) it has a txq */
     mutex_lock(&ef10ct->vi_allocator.lock);
-    if( instance < ef10ct->evq_n )
-      efhw_stack_vi_free(&ef10ct->vi_allocator.tx, instance);
-    else
-      efhw_stack_vi_free(&ef10ct->vi_allocator.rx, instance);
+    efhw_stack_vi_free(&ef10ct->vi_allocator.rx, instance);
     mutex_unlock(&ef10ct->vi_allocator.lock);
 
     efhw_nic_release_auxdev(nic, cli);
