@@ -34,7 +34,7 @@ static void check_all_filters(tcp_helper_resource_t* thr1,
 /* This test covers adding the different types of sockets to a basic cplane
  * environment.
  */
-int __test_sanity(int no5tuple)
+int __test_sanity(enum ooft_nic_type nic_type, enum ooft_rx_mode mode)
 {
   tcp_helper_resource_t* thr1;
   struct ooft_endpoint* udp_wild;
@@ -54,7 +54,8 @@ int __test_sanity(int no5tuple)
   ci_dllist hw_passive2;
   int rc;
   struct oof_manager* fm;
-  int with_hw_5tuple_only = !no5tuple;
+  bool no5tuple;
+  struct ooft_hwport* hwport;
 
   new_test();
   plan(60);
@@ -69,7 +70,7 @@ int __test_sanity(int no5tuple)
   /* Allocating the endpoints sets up the details that will be needed when
    * we pass these to oof, ie the local and remove port and addr info.
    */
-  thr1 = ooft_alloc_stack(4);
+  thr1 = ooft_alloc_stack_mode(4, mode);
 
   /* Allocating a stack results in the stack being associated with a filter
    * manager for the namespace of the created stack.  In this test both our
@@ -87,7 +88,12 @@ int __test_sanity(int no5tuple)
    * For a more complex setup each of the components can be added individually
    * using the functions in cplane.h.
    */
-  TRY(ooft_cplane_init(current_ns(), no5tuple));
+  TRY(ooft_cplane_init(current_ns(), nic_type));
+
+  /* This sanity test uses only one NIC, and we assume that 5tuple filter
+   * support is consistent accross all hwports, so just check the first */
+  hwport = ooft_hwport_from_id(1);
+  no5tuple = hwport->flags & OOF_HWPORT_FLAG_NO_5TUPLE;
 
   TEST_DEBUG(oof_onload_manager_dump(&efab_tcp_driver, dump, "\n"));
 
@@ -107,7 +113,7 @@ int __test_sanity(int no5tuple)
   udp_connected = ooft_alloc_endpoint(thr1, IPPROTO_UDP, 1, htons(4000),
                                       2, htons(5000));
 
-  thr2 = ooft_alloc_stack(4);
+  thr2 = ooft_alloc_stack_mode(4, mode);
   tcp_active = ooft_alloc_endpoint(thr2, IPPROTO_TCP, 1, htons(2000),
                                    2, htons(3000));
   tcp_listen = ooft_alloc_endpoint(thr2, IPPROTO_TCP, 1, htons(4000), 0, 0);
@@ -221,7 +227,7 @@ int __test_sanity(int no5tuple)
 
   /* Removing the listener will add new hw filter for passive2, unless the
    * threshold is too small or 3tuple sharing is forced by lack of 5tuple filters. */
-  bool expect_unshare = oof_shared_keep_thresh >= 1 && with_hw_5tuple_only;
+  bool expect_unshare = oof_shared_keep_thresh >= 1 && !no5tuple;
   ooft_endpoint_expect_sw_remove_all(tcp_listen);
   if( expect_unshare ) {
     ooft_endpoint_expect_hw_unicast(tcp_passive2, tcp_passive2->laddr_be, 0);
@@ -291,5 +297,5 @@ int __test_sanity(int no5tuple)
 }
 
 int test_sanity() {
-  return __test_sanity(0);
+  return __test_sanity(OOFT_NIC_X2_FF, OOFT_RX_FF);
 }

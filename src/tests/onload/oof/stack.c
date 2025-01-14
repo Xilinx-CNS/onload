@@ -35,10 +35,18 @@ tcp_helper_resource_t* ooft_alloc_stack(int n_eps)
   thr->stack_id = thr_id++;
   thr->ns = current_ns();
   thr->ofn = oo_filter_ns_get(&efab_tcp_driver, current->nsproxy->net_ns, &oof_preexisted);
+  thr->mode = OOFT_RX_FF;
 
   return thr;
 }
 
+tcp_helper_resource_t* ooft_alloc_stack_mode(int n_eps, enum ooft_rx_mode mode)
+{
+  tcp_helper_resource_t* thr = ooft_alloc_stack(n_eps);
+  thr->mode = mode;
+
+  return thr;
+}
 
 void ooft_free_stack(tcp_helper_resource_t* thr)
 {
@@ -281,6 +289,21 @@ void ooft_endpoint_expect_sw_remove_addr(struct ooft_endpoint* ep,
 }
 
 
+bool ooft_endpoint_want_unicast_hwport(struct ooft_endpoint* ep,
+                                       struct ooft_hwport* hw)
+{
+  /* FF mode uses only FF hwports, so reject any that are LL */
+  if( ep->thr->mode == OOFT_RX_FF )
+    return !(oo_nics[hw->id].oo_nic_flags & OO_NIC_LL);
+
+  /* Both and LL modes will always prefer the LL option, so reject any hwports
+   * that are hidden by a LL port for the same interface */
+  return !hw->hidden_by_ll;
+
+  /* TODO consider port up/down ness and testing errors on install */
+}
+
+
 /* Adds a filter with the supplied local address on each hwport in this
  * endpoint's namespace.  Other fields are taken from the endpoint.
  * flag OOFT_EXPECT_FLAG_WILD would omit details of remote to create semi-wild filters.
@@ -295,9 +318,14 @@ void ooft_endpoint_expect_hw_unicast(struct ooft_endpoint* ep,
     if( ! oo_nics[i].efrm_client )
       continue;
     struct ooft_hwport* hw = HWPORT_FROM_CLIENT(oo_nics[i].efrm_client);
-    int wild = hw->no5tuple || (flags & OOFT_EXPECT_FLAG_WILD);
+    int wild = (hw->flags & OOF_HWPORT_FLAG_NO_5TUPLE) ||
+               (flags & OOFT_EXPECT_FLAG_WILD);
     int raddr_be = wild ? 0 : ep->raddr_be;
     int rport_be = wild ? 0 : ep->rport_be;
+
+    if( !ooft_endpoint_want_unicast_hwport(ep, hw) )
+      continue;
+
     if( (1 << i) & hwport_mask)
       ooft_client_expect_hw_add_ip(oo_nics[i].efrm_client,
                                    tcp_helper_rx_vi_id(ep->thr, i),
@@ -368,7 +396,7 @@ void ooft_endpoint_expect_multicast_filters(struct ooft_endpoint* ep,
   for( i = 0; i < CI_CFG_MAX_HWPORTS; i++ ) {
     if( (1 << i) & idx->hwport_mask ) {
       hw = HWPORT_FROM_CLIENT(oo_nics[i].efrm_client);
-      vlans = hw->vlans;
+      vlans = hw->flags & OOF_HWPORT_FLAG_VLAN_FILTERS;
       ooft_client_expect_hw_add_ip(oo_nics[i].efrm_client,
                                    tcp_helper_rx_vi_id(ep->thr, i),
                                    tcp_helper_vi_hw_stack_id(ep->thr, i),

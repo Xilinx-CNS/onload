@@ -11,18 +11,61 @@
 
 bool cplane_use_prefsrc_as_local = false;
 
+enum ooft_hwport_type ooft_nic_primary_hwport_type(enum ooft_nic_type type)
+{
+  switch(type) {
+  case OOFT_NIC_X2_FF:
+    return OOFT_HWPORT_EF10_FF;
+  case OOFT_NIC_X2_LL:
+    return OOFT_HWPORT_EF10_LL;
+  case OOFT_NIC_X4_FF:
+    return OOFT_HWPORT_EF10_FF;
+  case OOFT_NIC_X4_LL:
+    return OOFT_HWPORT_EF10_LL;
+  case OOFT_NIC_AFXDP:
+    return OOFT_HWPORT_AFXDP;
+  };
+
+  ci_assert(false);
+  return OOFT_HWPORT_NONE;
+}
+
+enum ooft_hwport_type ooft_nic_secondary_hwport_type(enum ooft_nic_type type)
+{
+  if( type == OOFT_NIC_X4_FF || type == OOFT_NIC_X4_LL )
+    return OOFT_HWPORT_EF10CT;
+  else
+    return OOFT_HWPORT_NONE;
+}
+
+unsigned ooft_hwport_type_to_flags(enum ooft_hwport_type type)
+{
+  switch(type) {
+  case OOFT_HWPORT_EF10_FF:
+    return OOF_HWPORT_FLAG_MCAST_REPLICATE | OOF_HWPORT_FLAG_VLAN_FILTERS;
+  case OOFT_HWPORT_EF10_LL:
+    return OOF_HWPORT_FLAG_MCAST_REPLICATE;
+  case OOFT_HWPORT_EF10CT:
+    return OOF_HWPORT_FLAG_MCAST_REPLICATE | OOF_HWPORT_FLAG_VLAN_FILTERS;
+  case OOFT_HWPORT_AFXDP:
+    return OOF_HWPORT_FLAG_NO_5TUPLE;
+  default:
+    /* Unknown NIC type */
+    ci_assert(false);
+  };
+
+  return 0;
+}
+
 struct ooft_hwport* ooft_alloc_hwport(struct ooft_cplane* cp, struct net* ns,
-                                      int vlans, int mcast_replication,
-                                      int no5tuple)
+                                      enum ooft_hwport_type type)
 {
   struct ooft_hwport* hw = calloc(1, sizeof(struct ooft_hwport));
   TEST(hw);
 
   hw->id = cp->hwport_ids++;
-  hw->vlans = vlans;
-  hw->mcast_replication = mcast_replication;
-  hw->no5tuple = no5tuple;
-  ci_dllist_init(&hw->idxs);
+  hw->flags = ooft_hwport_type_to_flags(type);
+  hw->type = type;
   ci_dllist_push_tail(&cp->hwports, &hw->cplane_link);
 
   ooft_init_efrm_client(&hw->client, hw->id);
@@ -135,9 +178,53 @@ struct net* get_net(struct net* net)
   return net;
 }
 
+void ooft_add_hwport_to_ifindex(struct ooft_ifindex* idx,
+                                struct ooft_hwport* hw, struct net* ns)
+{
+  idx->hwport_mask |= 1 << hw->id;
+
+  if( hw->type == OOFT_HWPORT_EF10CT ) {
+    idx->hwport_mask_ll |= 1 << hw->id;
+    oo_nics[hw->id].oo_nic_flags |= OO_NIC_LL;
+
+    if( idx->hwport_mask_ff ) {
+      int port = ffs(idx->hwport_mask_ff) - 1;
+
+      /* TODO currently bonds are not handled by these tests */
+      ci_assert_equal(idx->hwport_mask_ff & ~(1 << port), 0);
+
+      struct ooft_hwport* ff_hw = ooft_hwport_from_id(port);
+      ff_hw->hidden_by_ll = true;
+      oo_nics[ff_hw->id].oo_nic_flags |= OO_NIC_FALLBACK;
+      oo_nics[hw->id].fallback_hwport = ff_hw->id;
+    }
+  }
+  else {
+    idx->hwport_mask_ff |= 1 << hw->id;
+    if( idx->hwport_mask_ll ) {
+      int port = ffs(idx->hwport_mask_ll) - 1;
+
+      /* TODO currently bonds are not handled by these tests */
+      ci_assert_equal(idx->hwport_mask_ff & ~(1 << port), 0);
+
+      struct ooft_hwport* ll_hw = ooft_hwport_from_id(port);
+      hw->hidden_by_ll = true;
+      oo_nics[hw->id].oo_nic_flags |= OO_NIC_FALLBACK;
+      oo_nics[ll_hw->id].fallback_hwport = hw->id;
+    }
+  }
+
+  ci_assert_equal(idx->hwport_mask, idx->hwport_mask_ll^idx->hwport_mask_ff);
+
+  ooft_ns_update_hwport_mask(ns);
+  oof_onload_mcast_update_interface(idx->id,  0 /* down for now */,
+                                    idx->hwport_mask, idx->vlan_id,
+                                    idx->mac, ns, &efab_tcp_driver);
+  oof_onload_mcast_update_filters(idx->id, ns, &efab_tcp_driver);
+}
+
 
 struct ooft_ifindex* ooft_alloc_ifindex(struct ooft_cplane* cp,
-                                        struct ooft_hwport* hw,
                                         struct net* ns, int vlan_id,
                                         unsigned char mac[6])
 {
@@ -147,17 +234,9 @@ struct ooft_ifindex* ooft_alloc_ifindex(struct ooft_cplane* cp,
   idx->id = cp->idx_ids++;
   idx->vlan_id = vlan_id;
   memcpy(idx->mac, mac, 6);
-  idx->hwport_mask |= 1 << hw->id;
   ci_dllist_init(&idx->addrs);
   ci_dllist_push_tail(&cp->idxs, &idx->cplane_link);
-  ci_dllist_push_tail(&hw->idxs, &idx->hwport_link);
   ci_dllist_push_tail(&ns->idxs, &idx->ns_link);
-  ooft_ns_update_hwport_mask(ns);
-
-  oof_onload_mcast_update_interface(idx->id,  0 /* down for now */,
-                                    idx->hwport_mask, idx->vlan_id,
-                                    idx->mac, ns, &efab_tcp_driver);
-  oof_onload_mcast_update_filters(idx->id, ns, &efab_tcp_driver);
 
   return idx;
 }
@@ -247,33 +326,52 @@ struct ooft_cplane* ooft_alloc_cplane(void)
   return cp;
 }
 
-int ooft_cplane_init(struct net* net_ns, int no5tuple)
+int ooft_cplane_init(struct net* net_ns, enum ooft_nic_type type)
 {
-  struct ooft_hwport* hw0 = ooft_alloc_hwport(cp, net_ns, 1, 1, no5tuple);
-  struct ooft_hwport* hw1 = ooft_alloc_hwport(cp, net_ns, 1, 1, no5tuple);
+  enum ooft_hwport_type hw_type = ooft_nic_primary_hwport_type(type);
+  struct ooft_hwport* hw0 = ooft_alloc_hwport(cp, net_ns, hw_type);
+  struct ooft_hwport* hw1 = ooft_alloc_hwport(cp, net_ns, hw_type);
+  struct ooft_hwport* hw0_ll = NULL;
+  struct ooft_hwport* hw1_ll = NULL;
+
+  hw_type = ooft_nic_secondary_hwport_type(type);
+  if( hw_type != OOFT_HWPORT_NONE ) {
+    hw0_ll = ooft_alloc_hwport(cp, net_ns, hw_type);
+    hw1_ll = ooft_alloc_hwport(cp, net_ns, hw_type);
+  }
 
   unsigned char mac0[6] = { 0,1,0,0,0,0 };
-  struct ooft_ifindex* idx0 = ooft_alloc_ifindex(cp, hw0, net_ns,
+  struct ooft_ifindex* idx0 = ooft_alloc_ifindex(cp, net_ns,
                                                  EFX_FILTER_VID_UNSPEC, mac0);
+  ooft_add_hwport_to_ifindex(idx0, hw0, net_ns);
+  if( hw0_ll )
+    ooft_add_hwport_to_ifindex(idx0, hw0_ll, net_ns);
   ooft_alloc_addr(net_ns, idx0, inet_addr("1.0.0.0"));
   idx0->up = 1;
 
   unsigned char mac1[6] = { 0,1,0,0,0,1 };
-  struct ooft_ifindex* idx1 = ooft_alloc_ifindex(cp, hw1, net_ns,
+  struct ooft_ifindex* idx1 = ooft_alloc_ifindex(cp, net_ns,
                                                  EFX_FILTER_VID_UNSPEC, mac1);
+  ooft_add_hwport_to_ifindex(idx1, hw1, net_ns);
   ooft_alloc_addr(net_ns, idx1, inet_addr("1.0.0.1"));
+  if( hw1_ll )
+    ooft_add_hwport_to_ifindex(idx1, hw1_ll, net_ns);
   idx1->up = 1;
 
-  /* Now bring up both hwports */
+  /* Now bring up all hwports */
   ooft_hwport_up_down(hw0, 1);
   ooft_hwport_up_down(hw1, 1);
+  if( hw0_ll )
+    ooft_hwport_up_down(hw0_ll, 1);
+  if( hw1_ll )
+    ooft_hwport_up_down(hw1_ll, 1);
 
   return 0;
 }
 
 int ooft_default_cplane_init(struct net* net_ns)
 {
-  return ooft_cplane_init(net_ns, 0);
+  return ooft_cplane_init(net_ns, OOFT_NIC_X2_FF);
 }
 
 void ooft_free_cplane(struct ooft_cplane* cp)
@@ -283,16 +381,7 @@ void ooft_free_cplane(struct ooft_cplane* cp)
 
 void ooft_hwport_up_down(struct ooft_hwport* hw, int up)
 {
-  unsigned flags = 0;
-
-  if( hw->mcast_replication )
-    flags |= OOF_HWPORT_FLAG_MCAST_REPLICATE;
-  if( hw->vlans )
-    flags |= OOF_HWPORT_FLAG_VLAN_FILTERS;
-  if( hw->no5tuple )
-    flags |= OOF_HWPORT_FLAG_NO_5TUPLE;
-
-  oof_onload_hwport_up_down(&efab_tcp_driver, hw->id, up, flags, 1);
+  oof_onload_hwport_up_down(&efab_tcp_driver, hw->id, up, hw->flags, 1);
 }
 
 
@@ -310,11 +399,23 @@ struct ooft_ifindex* ooft_idx_from_id(int id)
   return idx;
 }
 
-struct ooft_hwport* ooft_hwport_from_idx(struct ooft_ifindex* idx)
+struct ooft_hwport* ooft_hwport_from_id(int id)
 {
   struct ooft_hwport* hw = NULL;
-  int port_id = -1;
   ci_dllink* link;
+
+  CI_DLLIST_FOR_EACH(link, &cp->hwports)
+    if (HWPORT_FROM_CP_LINK(link)->id == id ) {
+      hw = HWPORT_FROM_CP_LINK(link);
+      break;
+    }
+
+  return hw;
+}
+
+struct ooft_hwport* ooft_hwport_from_idx(struct ooft_ifindex* idx)
+{
+  int port_id = -1;
 
   /* First get the id of the hwport in use.  This function assumes that this
    * is a simple interface, with just one base hwport (ie not a bond).
@@ -329,13 +430,7 @@ struct ooft_hwport* ooft_hwport_from_idx(struct ooft_ifindex* idx)
     }
   }
 
-  CI_DLLIST_FOR_EACH(link, &cp->hwports)
-    if (HWPORT_FROM_CP_LINK(link)->id == port_id ) {
-      hw = HWPORT_FROM_CP_LINK(link);
-      break;
-    }
-
-  return hw;
+  return ooft_hwport_from_id(port_id);
 }
  
 

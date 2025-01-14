@@ -33,18 +33,22 @@ static void check_all_filters(tcp_helper_resource_t* thr1,
 
 static void second_namespace_init(struct net* net_ns)
 {
-  struct ooft_hwport* hw0 = ooft_alloc_hwport(cp, net_ns, 1, 1, 0);
-  struct ooft_hwport* hw1 = ooft_alloc_hwport(cp, net_ns, 1, 1, 0);
+  struct ooft_hwport* hw0 = ooft_alloc_hwport(cp, net_ns,
+                                              OOFT_HWPORT_EF10_FF);
+  struct ooft_hwport* hw1 = ooft_alloc_hwport(cp, net_ns,
+                                              OOFT_HWPORT_EF10_FF);
 
   unsigned char mac0[6] = { 0,1,0,0,0,2 };
-  struct ooft_ifindex* idx0 = ooft_alloc_ifindex(cp, hw0, net_ns,
+  struct ooft_ifindex* idx0 = ooft_alloc_ifindex(cp, net_ns,
                                                  EFX_FILTER_VID_UNSPEC, mac0);
+  ooft_add_hwport_to_ifindex(idx0, hw0, net_ns);
   ooft_alloc_addr(net_ns, idx0, inet_addr("1.0.0.2"));
   idx0->up = 1;
 
   unsigned char mac1[6] = { 0,1,0,0,0,3 };
-  struct ooft_ifindex* idx1 = ooft_alloc_ifindex(cp, hw1, net_ns,
+  struct ooft_ifindex* idx1 = ooft_alloc_ifindex(cp, net_ns,
                                                  EFX_FILTER_VID_UNSPEC, mac1);
+  ooft_add_hwport_to_ifindex(idx1, hw1, net_ns);
   ooft_alloc_addr(net_ns, idx1, inet_addr("1.0.0.3"));
   idx1->up = 1;
 

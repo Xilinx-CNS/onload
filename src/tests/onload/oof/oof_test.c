@@ -116,5 +116,14 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "namespace_macvlan_move") )
     test_namespace_macvlan_move();
 
+  if( all || !strcmp(argv[1], "llct_sanity") )
+    test_llct_sanity();
+
+  if( all || !strcmp(argv[1], "llct_sanity_ff") )
+    test_llct_sanity_ff();
+
+  if( all || !strcmp(argv[1], "llct_sanity_ll") )
+    test_llct_sanity_ll();
+
   return 0;
 }

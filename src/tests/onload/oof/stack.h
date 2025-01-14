@@ -42,6 +42,8 @@ typedef struct tcp_helper_resource_s {
 
   struct tcp_helper_cluster_s* thc;
   struct cpumask filter_irqmask;
+
+  enum ooft_rx_mode mode;
 } tcp_helper_resource_t;
 
 struct ooft_endpoint {
@@ -78,6 +80,8 @@ typedef struct tcp_helper_cluster_s {
  * Test data structure management
  * --------------------------------------- */
 extern tcp_helper_resource_t* ooft_alloc_stack(int n_eps);
+extern tcp_helper_resource_t* ooft_alloc_stack_mode(int n_eps,
+                                                    enum ooft_rx_mode mode);
 extern void ooft_free_stack(tcp_helper_resource_t* thr);
 extern struct ooft_endpoint* ooft_alloc_endpoint(tcp_helper_resource_t* thr,
                             int proto, uint32_t laddr_be, uint16_t lport_be,

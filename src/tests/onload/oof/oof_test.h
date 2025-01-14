@@ -29,11 +29,30 @@ extern void context_free(struct ooft_task* task);
 extern int oo_debug_bits;
 extern int scalable_filter_gid;
 
-extern int __test_sanity(int no5tuple);
+enum ooft_rx_mode {
+  OOFT_RX_FF,
+  OOFT_RX_LL,
+  OOFT_RX_BOTH,
+};
+
+/* There's a separate nic and hwport enum to allow tests to request a nic,
+ * then just get the appropriate set of hwports. */
+enum ooft_nic_type {
+  OOFT_NIC_X2_FF, /* X2 with FF FW */
+  OOFT_NIC_X2_LL, /* X2 with ULL FW */
+  OOFT_NIC_X4_FF, /* X4 with FF FW */
+  OOFT_NIC_X4_LL, /* X4 with ULL FW */
+  OOFT_NIC_AFXDP, /* Generic NIC using kernel AF_XDP */
+};
+
+extern int __test_sanity(enum ooft_nic_type type, enum ooft_rx_mode mode);
 extern int test_sanity(void);
 extern int test_sanity_no5tuple(void);
 extern int test_multicast_sanity(void);
 extern int test_namespace_sanity(void);
 extern int test_namespace_macvlan_move(void);
+extern int test_llct_sanity(void);
+extern int test_llct_sanity_ff(void);
+extern int test_llct_sanity_ll(void);
 
 #endif /* __OOF_TEST_H__ */

@@ -11,7 +11,8 @@ SRCS := ../../tap/tap.c oof_test.c oof_interface.c \
 	oof_filters.c tcp_filters.c efrm_interface.c stack_interface.c \
 	stack.c cplane.c efrm.c oof_onload.c oof_nat.c
 TEST_SRCS := tests/sanity.c tests/multicast_sanity.c tests/namespace_sanity.c \
-	tests/namespace_macvlan_move.c tests/sanity_no5tuple.c
+	tests/namespace_macvlan_move.c tests/sanity_no5tuple.c \
+        tests/llct_sanity.c tests/llct_sanity_ff.c tests/llct_sanity_ll.c
 HDRS := cplane.h oof_impl.h stack_interface.h driverlink_interface.h  \
 	oof_test.h tcp_filters_deps.h efrm_interface.h oo_hw_filter.h \
 	tcp_filters_internal.h onload_kernel_compat.h stack.h utils.h \
