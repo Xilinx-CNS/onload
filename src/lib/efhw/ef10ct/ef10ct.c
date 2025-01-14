@@ -280,7 +280,7 @@ ef10ct_nic_event_queue_enable(struct efhw_nic *nic,
   EFHW_MCDI_SET_DWORD(in, INIT_EVQ_V2_IN_TMR_RELOAD, 0);
 
   EFHW_MCDI_POPULATE_DWORD_6(in, INIT_EVQ_V2_IN_FLAGS,
-                             INIT_EVQ_V2_IN_FLAG_INTERRUPTING, 0,
+                             INIT_EVQ_V2_IN_FLAG_INTERRUPTING, 1,
                              INIT_EVQ_V2_IN_FLAG_RX_MERGE, 1,
                              INIT_EVQ_V2_IN_FLAG_TX_MERGE, 1,
                              INIT_EVQ_V2_IN_FLAG_TYPE,
