@@ -575,7 +575,7 @@ ef10ct_dmaq_tx_q_init(struct efhw_nic *nic,
   EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_TARGET_EVQ, txq_params->evq);
   EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_LABEL, txq_params->tag);
   EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_INSTANCE, ef10ct_evq->txq);
-  EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_PORT_ID, txq_params->vport_id);
+  EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_PORT_ID, EVB_PORT_ID_ASSIGNED);
 
   EFHW_MCDI_POPULATE_DWORD_4(in, INIT_TXQ_EXT_IN_FLAGS,
                              INIT_TXQ_EXT_IN_FLAG_IP_CSUM_DIS, 1,
