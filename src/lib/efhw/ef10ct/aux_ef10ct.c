@@ -191,7 +191,7 @@ static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid)
   if( rc )
     goto fail2;
 
-  params.evq = evq_id;
+  params.evq = evq_num;
   params.n_pages = 1 << page_order;
   params.evq_size = (params.n_pages << PAGE_SHIFT) / sizeof(efhw_event_t);
   params.dma_addrs = shared_evq->iopages.dma_addrs;
