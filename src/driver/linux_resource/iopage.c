@@ -159,7 +159,7 @@ efhw_iopages_alloc(struct efhw_nic *nic, struct efhw_iopages *p,
 	struct pci_dev *pci_dev = efhw_nic_get_pci_dev(nic);
 	struct device *dev = pci_dev ? &pci_dev->dev : NULL;
 	int rc = -ENOMEM;
-	int gfp_flag = __GFP_COMP | GFP_KERNEL;
+	int gfp_flag = __GFP_COMP | GFP_KERNEL | __GFP_ZERO;
 
 	p->n_pages = 1 << order;
 	p->dma_addrs = kmalloc(p->n_pages * sizeof(p->dma_addrs[0]), GFP_KERNEL);

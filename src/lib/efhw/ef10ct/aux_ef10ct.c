@@ -6,6 +6,7 @@
 #include <ci/efhw/nic.h>
 #include <ci/efhw/ef10ct.h>
 #include <ci/efhw/efct_filters.h>
+#include <ci/efhw/iopage.h>
 
 #include "linux_resource_internal.h"
 #include "efrm_internal.h"
@@ -171,10 +172,7 @@ static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct efhw_nic_ef10ct_evq *ef10ct_evq;
-  uint n_pages = 1; /* TODO: What should the size be? */
-  struct page* page;
-  dma_addr_t dma_addr;
-  dma_addr_t *dma_addrs;
+  uint page_order = 0; /* TODO: What should the size be? */
   struct efhw_evq_params params = {};
   int evq_id, rc, evq_num;
   struct ef10ct_shared_kernel_evq *shared_evq = &ef10ct->shared[qid];
@@ -189,29 +187,14 @@ static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid)
 
   ef10ct_evq = &ef10ct->evq[evq_num];
 
-  /* TODO: We may want to use alloc_pages_node to get memory on a specific numa
-   * node. */
-  page = alloc_page(GFP_KERNEL | __GFP_ZERO);
-
-  if( page == NULL ) {
-    rc = -ENOMEM;
+  rc = efhw_iopages_alloc(nic, &shared_evq->iopages, page_order, 1, 0);
+  if( rc )
     goto fail2;
-  }
-
-  /* TODO: I think we want to use something like dma_map_single here, however we
-   * don't have a pci dev for ef10ct so these function don't currently work.
-   * Instead, just get the physical address of the page */
-  dma_addr = page_to_phys(page);
-
-  /* Only allocating a single page means that dma_addrs doesn't have to be an
-   * an array. */
-  EFHW_ASSERT(n_pages == 1);
-  dma_addrs = &dma_addr;
 
   params.evq = evq_id;
-  params.evq_size = (n_pages << PAGE_SHIFT) / sizeof(efhw_event_t);
-  params.dma_addrs = dma_addrs;
-  params.n_pages = n_pages;
+  params.n_pages = 1 << page_order;
+  params.evq_size = (params.n_pages << PAGE_SHIFT) / sizeof(efhw_event_t);
+  params.dma_addrs = shared_evq->iopages.dma_addrs;
   /* Wakeup stuff is ignored */
   /* Do we care about flags? */
 
@@ -221,12 +204,10 @@ static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid)
 
   shared_evq->evq_id = evq_id;
   shared_evq->evq = &ef10ct->evq[evq_num];
-  shared_evq->page = page;
-
   return 0;
 
 fail3:
-  put_page(page);
+  efhw_iopages_free(nic, &shared_evq->iopages);
 fail2:
   ef10ct_free_evq(nic, evq_id);
 fail1:
@@ -246,7 +227,7 @@ static void ef10ct_nic_free_shared_evq(struct efhw_nic *nic, int qid)
   efhw_nic_event_queue_disable(nic, shared_evq->evq_id, 0);
 
   ef10ct_free_evq(nic, shared_evq->evq_id);
-  put_page(shared_evq->page);
+  efhw_iopages_free(nic, &shared_evq->iopages);
 
   /* Just to be safe */
   memset(shared_evq, 0, sizeof(*shared_evq));
