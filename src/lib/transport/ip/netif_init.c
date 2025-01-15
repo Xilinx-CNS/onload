@@ -1967,9 +1967,11 @@ static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
   ci_netif_state_nic_t* nsn = &(ni->state->nic[nic_i]);
   uint32_t* ids = (void*) (state + 1);
   unsigned vi_bar_off = vi_instance * 8192;
+  int rc;
 
-  ef_vi_init(vi, ef_vi_arch_from_efhw_arch(nsn->vi_arch), nsn->vi_variant,
-             nsn->vi_revision, nsn->vi_flags, nsn->vi_nic_flags, state);
+  rc = ef_vi_init(vi, ef_vi_arch_from_efhw_arch(nsn->vi_arch), nsn->vi_variant,
+                  nsn->vi_revision, nsn->vi_flags, nsn->vi_nic_flags, state);
+  ci_assert(rc == 0);
   ef_vi_init_out_flags(vi, nsn->vi_out_flags);
   vi_io_offset += vi_bar_off & (CI_PAGE_SIZE - 1);
   ef_vi_init_io(vi, ni->io_ptr + vi_io_offset);
@@ -1979,12 +1981,12 @@ static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
   *vi_mem_ptr = ef_vi_init_qs(vi, *vi_mem_ptr, ids, evq_bytes / 8,
                               nsn->vi_rxq_size, nsn->rx_prefix_len, txq_size);
   if( vi->internal_ops.design_parameters ) {
-    int rc = vi->internal_ops.design_parameters(vi, dp);
+    rc = vi->internal_ops.design_parameters(vi, dp);
     if( rc < 0 )
       return rc;
   }
   if( vi->efct_rxqs.active_qs ) {
-    int rc = 0;
+    rc = 0;
     if( nsn->vi_arch == EFHW_ARCH_EFCT ) {
       rc = efct_kbufs_init_internal(vi,
                         (void*)((char*)ni->efct_shm_ptr + vi_efct_shm_offset),

@@ -1581,14 +1581,15 @@ static int initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
                          unsigned* vi_out_flags, ef_vi_stats* vi_stats)
 {
   uint32_t* vi_ids = (void*) ((ef_vi_state*) vi_state + 1);
-  int ef_vi_arch;
+  int rc, ef_vi_arch;
 
   efrm_vi_get_mappings(vi_rs, vm);
 
   ef_vi_arch = ef_vi_arch_from_efhw_arch(nic->devtype.arch);
-  ef_vi_init(vi, ef_vi_arch, nic->devtype.variant, nic->devtype.revision,
-             alloc_info->ef_vi_flags, efhw_vi_nic_flags(nic),
-             (ef_vi_state*) vi_state);
+  rc = ef_vi_init(vi, ef_vi_arch, nic->devtype.variant, nic->devtype.revision,
+                  alloc_info->ef_vi_flags, efhw_vi_nic_flags(nic),
+                  (ef_vi_state*) vi_state);
+  ci_assert(rc == 0);
   *vi_out_flags = (vm->out_flags & EFHW_VI_CLOCK_SYNC_STATUS) ?
                         EF_VI_OUT_CLOCK_SYNC_STATUS : 0;
 
@@ -1606,7 +1607,6 @@ static int initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
   vi->vi_i = EFAB_VI_RESOURCE_INSTANCE(vi_rs);
   vi->dh = efrm_client_get_nic(vi_rs->rs.rs_client);
   if( vi->internal_ops.design_parameters ) {
-    int rc;
     struct efab_nic_design_parameters dp = EFAB_NIC_DP_INITIALIZER;
     rc = efhw_nic_design_parameters(nic, &dp);
     if( rc < 0 )
@@ -1616,7 +1616,7 @@ static int initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
       return rc;
   }
   if( vi->efct_rxqs.active_qs ) {
-    int rc = 0;
+    rc = 0;
     if( nic->devtype.arch == EFHW_ARCH_EFCT ) {
       rc = efct_kbufs_init_internal(vi, vi_rs->efct_shm,
                                     tcp_helper_superbuf_config_refresh,

@@ -595,8 +595,9 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
 
   ids = (void*) (state + 1);
 
-  ef_vi_init(vi, nic_type.arch, nic_type.variant, nic_type.revision,
-	     vi_flags, nic_type.nic_flags, state);
+  rc = ef_vi_init(vi, nic_type.arch, nic_type.variant, nic_type.revision,
+		  vi_flags, nic_type.nic_flags, state);
+  EF_VI_BUG_ON(rc < 0);
   ef_vi_init_out_flags(vi, (ra.u.vi_out.out_flags & EFHW_VI_CLOCK_SYNC_STATUS) ?
                        EF_VI_OUT_CLOCK_SYNC_STATUS : 0);
   ef_vi_init_io(vi, io_mmap_ptr);
