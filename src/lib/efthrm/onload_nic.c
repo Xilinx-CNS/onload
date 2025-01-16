@@ -129,6 +129,8 @@ struct oo_nic* oo_nic_add(const struct efhw_nic* nic)
   struct oo_nic* onic;
   int i, max = sizeof(oo_nics) / sizeof(oo_nics[0]);
   struct efrm_client* efrm_client;
+  struct efhw_nic* alternate_efhw;
+  struct oo_nic* alternate_oonic;
   int ifindex;
   int rc;
 
@@ -154,6 +156,34 @@ struct oo_nic* oo_nic_add(const struct efhw_nic* nic)
 
   onic->efrm_client = efrm_client;
   onic->oo_nic_flags = 0;
+  onic->fallback_hwport = -1;
+
+  if( nic->flags & NIC_FLAG_LLCT ) {
+    onic->oo_nic_flags |= OO_NIC_LL;
+
+    /* This is a LL hwport. See if the fallback FF port has already been
+     * registered. If so, record details now. */
+    alternate_efhw = efhw_nic_find(nic->net_dev, 0, NIC_FLAG_LLCT);
+    if( alternate_efhw ) {
+      alternate_oonic = oo_nic_find(alternate_efhw);
+      if( alternate_oonic ) {
+        onic->fallback_hwport = oo_nic_hwport(alternate_oonic);
+        alternate_oonic->oo_nic_flags |= OO_NIC_FALLBACK;
+      }
+    }
+  }
+  else {
+    /* This is a normal hwport. See if we've previously registered a LL port
+     * to use for fallback for this net_dev. If so, update details now. */
+    alternate_efhw = efhw_nic_find(nic->net_dev, NIC_FLAG_LLCT, 0);
+    if( alternate_efhw ) {
+      alternate_oonic = oo_nic_find(alternate_efhw);
+      if( alternate_oonic ) {
+        alternate_oonic->fallback_hwport = oo_nic_hwport(onic);
+        onic->oo_nic_flags |= OO_NIC_FALLBACK;
+      }
+    }
+  }
 
   /* Tell cp_server about this hwport */
   rc = cp_announce_hwport(efrm_client_get_nic(efrm_client), i);
@@ -163,7 +193,8 @@ struct oo_nic* oo_nic_add(const struct efhw_nic* nic)
            __func__, ifindex, i, rc);
   }
 
-  ci_log("%s: ifindex=%d oo_index=%d", __FUNCTION__, ifindex, i);
+  ci_log("%s: ifindex=%d oo_index=%d flags=%x fallback=%d", __FUNCTION__,
+         ifindex, i, onic->oo_nic_flags, onic->fallback_hwport);
 
   return onic;
 

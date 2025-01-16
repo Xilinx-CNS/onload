@@ -12,12 +12,16 @@ struct oo_nic {
   struct efrm_client* efrm_client;
 #define OO_NIC_UP         0x00000001u  /* Interface is currently IFF_UP. */
 #define OO_NIC_UNPLUGGED  0x00000002u  /* Interface has been hot-unplugged. */
+#define OO_NIC_LL         0x00000004u  /* Interface is preferred LL port */
+#define OO_NIC_FALLBACK   0x00000008u  /* Interface is fallback for LL port */
   unsigned            oo_nic_flags;
 #ifdef __KERNEL__
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
   struct bpf_prog*    prog;
 #endif
 #endif
+  /* Set with OO_NIC_LL to indicate alternate fallback port for same net_dev */
+  int fallback_hwport;
 };
 
 
