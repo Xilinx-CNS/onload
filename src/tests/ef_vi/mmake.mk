@@ -3,7 +3,7 @@
 
 EFSEND_APPS := efsend efsend_timestamping efsend_warming efsend_cplane
 TEST_APPS	:= efforward efrss efsink \
-		   efsink_packed eflatency efexclusivity stats \
+		   efsink_packed eflatency stats \
 		   $(EFSEND_APPS)
 
 TARGETS		:= $(TEST_APPS:%=$(AppPattern))
@@ -21,8 +21,6 @@ clean:
 
 eflatency: eflatency.o utils.o
 
-efexclusivity: efexclusivity.o utils.o
-
 $(EFSEND_APPS): utils.o efsend_common.o
 
 efsink: efsink.o utils.o
@@ -37,10 +35,6 @@ $(EFSEND_APPS): MMAKE_LIB_DEPS := $(CITOOLS_LIB_DEPEND) $(MMAKE_LIB_DEPS)
 
 eflatency: MMAKE_LIBS     := $(LINK_CITOOLS_LIB) $(MMAKE_LIBS)
 eflatency: MMAKE_LIB_DEPS := $(CITOOLS_LIB_DEPEND) $(MMAKE_LIB_DEPS)
-
-
-efexclusivity: MMAKE_LIBS     := $(LINK_CITOOLS_LIB) $(MMAKE_LIBS)
-efexclusivity: MMAKE_LIB_DEPS := $(CITOOLS_LIB_DEPEND) $(MMAKE_LIB_DEPS)
 
 stats: stats.py
 	cp $< $@
