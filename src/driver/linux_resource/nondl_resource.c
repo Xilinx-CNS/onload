@@ -39,7 +39,7 @@ static void efrm_nondl_try_add_device(struct efrm_nondl_device *device,
   list_add_tail(&device->driver_node, &driver->devices);
 
   if(device->is_up) {
-    nic = efhw_nic_find(device->netdev);
+    nic = efhw_nic_find(device->netdev, 0, 0);
     efrm_notify_nic_probe(nic, device->netdev);
   }
 
@@ -56,7 +56,7 @@ static void efrm_nondl_del_device(struct efrm_nondl_device *device)
   ASSERT_RTNL();
 
   if(device->is_up) {
-    nic = efhw_nic_find(device->netdev);
+    nic = efhw_nic_find(device->netdev, 0, 0);
     efrm_notify_nic_remove(nic);
   }
 

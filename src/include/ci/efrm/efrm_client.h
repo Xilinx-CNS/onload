@@ -61,7 +61,8 @@ extern int efrm_client_get_ifindex(struct efrm_client *);
 
 extern int efrm_client_accel_allowed(struct efrm_client *client);
 
-extern struct efhw_nic* efhw_nic_find(const struct net_device *);
+extern struct efhw_nic* efhw_nic_find(const struct net_device *,
+                                      uint64_t require, uint64_t reject);
 extern struct efhw_nic* efhw_nic_find_by_dev(const struct device *dev);
 extern struct efhw_nic* efhw_nic_find_by_foo(nic_match_func match,
                                              const void *match_data);

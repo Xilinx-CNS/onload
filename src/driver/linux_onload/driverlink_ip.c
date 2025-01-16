@@ -253,7 +253,7 @@ static void oo_hwport_up(struct oo_nic* onic, int up)
  */
 struct oo_nic *oo_netdev_may_add(const struct net_device *net_dev)
 {
-  struct oo_nic* onic = oo_nic_find_by_net_dev(net_dev);
+  struct oo_nic* onic = oo_nic_find_by_net_dev(net_dev, 0, 0);
 
   if( onic != NULL ) {
     oo_hwport_up(onic, net_dev->flags & IFF_UP);
@@ -366,7 +366,7 @@ static void oo_fixup_wakeup_breakage(const struct net_device* dev)
   struct oo_nic* onic;
   ci_netif* ni = NULL;
   int hwport, intf_i;
-  if( (onic = oo_nic_find_by_net_dev(dev)) != NULL ) {
+  if( (onic = oo_nic_find_by_net_dev(dev, 0, 0)) != NULL ) {
     hwport = onic - oo_nics;
     while( iterate_netifs_unlocked(&ni, OO_THR_REF_BASE,
                                    OO_THR_REF_INFTY) == 0 )
@@ -380,7 +380,7 @@ void oo_netdev_up(const struct net_device* netdev)
 {
   struct oo_nic *onic;
   /* Does efrm own this device? */
-  if( efhw_nic_find(netdev) ) {
+  if( efhw_nic_find(netdev, 0, 0) ) {
     /* oo_netdev_may_add may trigger oof_hwport_up_down only
      * once on probe time */
     onic = oo_netdev_may_add(netdev);
@@ -396,7 +396,7 @@ static void oo_netdev_going_down(struct net_device* netdev)
 {
   struct oo_nic *onic;
 
-  onic = oo_nic_find_by_net_dev(netdev);
+  onic = oo_nic_find_by_net_dev(netdev, 0, 0);
   if( onic != NULL )
       oo_hwport_up(onic, 0);
 }

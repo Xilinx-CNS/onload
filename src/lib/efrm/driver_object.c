@@ -543,14 +543,17 @@ int efrm_client_accel_allowed(struct efrm_client *client)
 EXPORT_SYMBOL(efrm_client_accel_allowed);
 
 
-struct efhw_nic* efhw_nic_find(const struct net_device *dev)
+struct efhw_nic* efhw_nic_find(const struct net_device *dev,
+                               uint64_t require_flags, uint64_t reject_flags)
 {
 	struct efhw_nic *result = NULL;
 	struct efrm_nic *nic;
 
 	spin_lock_bh(&efrm_nic_tablep->lock);
 	list_for_each_entry(nic, &efrm_nics, link) {
-		if (nic->efhw_nic.net_dev == dev) {
+		if ((nic->efhw_nic.net_dev == dev) &&
+                    ((nic->efhw_nic.flags & require_flags) == require_flags) &&
+                    ((nic->efhw_nic.flags & reject_flags) == 0)) {
 			result = &nic->efhw_nic;
 			break;
 		}

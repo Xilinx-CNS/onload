@@ -442,7 +442,7 @@ int efct_probe(struct auxiliary_device *auxdev,
   net_dev = val.net_dev;
   EFRM_NOTICE("%s probe of dev %s", __func__, net_dev->name);
 
-  if( efhw_nic_find(net_dev) ) {
+  if( efhw_nic_find(net_dev, 0, 0) ) {
     EFRM_TRACE("%s: netdev %s already registered", __func__, net_dev->name);
     rc = -EBUSY;
     goto fail2;

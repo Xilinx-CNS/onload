@@ -24,7 +24,7 @@ static int efrm_nondl_add_device(struct net_device *net_dev, int n_vis)
 
   ASSERT_RTNL();
 
-  if( efhw_nic_find(net_dev) ) {
+  if( efhw_nic_find(net_dev, 0, 0) ) {
     EFRM_TRACE("efrm_nic_add_ifindex: netdev %s already registered",
                netdev_name(net_dev));
     return -EALREADY;

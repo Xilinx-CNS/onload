@@ -29,7 +29,9 @@ struct efhw_nic;
 extern struct oo_nic* oo_nic_add(const struct efhw_nic* nic);
 
 extern struct oo_nic* oo_nic_find(const struct efhw_nic* nic);
-extern struct oo_nic* oo_nic_find_by_net_dev(const struct net_device* dev);
+extern struct oo_nic* oo_nic_find_by_net_dev(const struct net_device* dev,
+                                             uint64_t require_flags,
+                                             uint64_t reject_flags);
 
 extern int oo_nic_hwport(struct oo_nic*);
 

@@ -190,9 +190,14 @@ static void oo_nic_remove(struct oo_nic* onic)
 }
 
 
-struct oo_nic* oo_nic_find_by_net_dev(const struct net_device* dev)
+/* Where a single net_device may correspond to multiple oo_nics the require
+ * and reject flags can be used to restrict the returned nic to one where
+ * the efhw_nic flags match the supplied constraints. */
+struct oo_nic* oo_nic_find_by_net_dev(const struct net_device* dev,
+                                      uint64_t require_flags,
+                                      uint64_t reject_flags)
 {
-  return oo_nic_find(efhw_nic_find(dev));
+  return oo_nic_find(efhw_nic_find(dev, require_flags, reject_flags));
 }
 
 
