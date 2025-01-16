@@ -39,7 +39,6 @@ onload_files = {
          'tests/onload/tproxy_preload'),
         ('tests/onload/sync_preload/sync_preload.so',
          'tests/onload/sync_preload'),
-        ('tests/rtt/rtt', 'tests/rtt'),
         'tests/orm_test_client/orm_test_client',
         ],
     }
@@ -72,7 +71,6 @@ ul_build_dirs = [
     'tests/onload/hwtimestamping',
     'tests/onload/tproxy_preload',
     'tests/onload/sync_preload',
-    'tests/rtt',
     'tests/orm_test_client',
 ]
 

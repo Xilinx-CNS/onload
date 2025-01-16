@@ -179,7 +179,7 @@ docopy .                      mk
 docopy scripts                sfcaffinity_config
 docopy scripts                sfcaffinity.py sfcmask.py sfcirqaffinity
 
-docopy src/tests              ef_vi rtt trade_sim
+docopy src/tests              ef_vi trade_sim
 if $testciul; then
     docopy src/tests              ciul
 fi
