@@ -330,16 +330,53 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
       }
     }
   }
+  else {
+    /* Return a recognisable error code to indicate that we didn't try and
+     * install a filter here. */
+    return -ELNRNG;
+  }
   return rc;
 }
 
 
-int __oo_hw_filter_add_hwports(struct oo_hw_filter* oofilter,
-                               const struct oo_hw_filter_spec* oo_filter_spec,
-                               unsigned set_vlan_mask, unsigned hwport_mask,
-                               unsigned redirect_mask,
-                               unsigned drop_hwport_mask, unsigned src_flags,
-                               bool *ok_seen, unsigned *failed_ports)
+static int oo_hw_filter_update_error(int rc_old, int rc_new)
+{
+  /* Preserve the most severe error seen - other errors are more severe
+   * then firewall denial, and it is more severe than no error. -ELNRG
+   * is not an error - it just indicates this hwport is not in use for
+   * the stack this filter directs to. */
+
+  /* Normalise -ELNRNG to 0, as it's not an error */
+  if( rc_old == -ELNRNG )
+    rc_old = 0;
+  if( rc_new == -ELNRNG )
+    rc_new = 0;
+
+  /* New succeeded, so old is still good */
+  if( rc_new == 0 )
+    return rc_old;
+
+  /* Old succeeded, new failed, so keep new rc */
+  if( rc_old == 0 )
+    return rc_new;
+
+  /* Old failed with a boring error, and new failed, so must be at least
+   * as severe as boring, so go with the new error. */
+  if( (rc_old == -EACCES) || (rc_old == -EBUSY && !oof_all_ports_required) )
+    return rc_new;
+
+  /* Both failed with an interesting error, so just keep the old one */
+  return rc_old;
+}
+
+
+static int
+__oo_hw_filter_add_hwports(struct oo_hw_filter* oofilter,
+                           const struct oo_hw_filter_spec* oo_filter_spec,
+                           unsigned set_vlan_mask, unsigned hwport_mask,
+                           unsigned redirect_mask,
+                           unsigned drop_hwport_mask, unsigned src_flags,
+                           bool *ok_seen, unsigned *failed_ports)
 {
   int rc1, rc = 0, hwport;
 
@@ -361,13 +398,12 @@ int __oo_hw_filter_add_hwports(struct oo_hw_filter* oofilter,
             ((redirect_mask & (1u << hwport)) ? OO_HW_SRC_FLAG_REDIRECT : 0));
       /* Track any failing interfaces */
       if( rc1 ) {
+        /* Track any ports where we couldn't install a filter. We can try
+         * again for any of them that have a fallback option. */
         *failed_ports |= (1u << hwport);
 
-        /* Preserve the most severe error seen - other errors are more severe
-         * then firewall denial, and it is more severe than no error.  */
-        if( !rc || rc == -EACCES ||
-            (rc == -EBUSY && !oof_all_ports_required) )
-          rc = rc1;
+        /* Preserve the most severe error seen */
+        rc = oo_hw_filter_update_error(rc, rc1);
       }
       else {
         *ok_seen = true;
@@ -377,6 +413,35 @@ int __oo_hw_filter_add_hwports(struct oo_hw_filter* oofilter,
   return rc;
 }
 
+static unsigned oo_hw_filter_primary_ports(unsigned hwport_mask)
+{
+  int hwport;
+  unsigned primary_mask = hwport_mask;
+
+  for( hwport = 0; hwport < CI_CFG_MAX_HWPORTS; ++hwport )
+    if( oo_nics[hwport].oo_nic_flags & OO_NIC_FALLBACK )
+      primary_mask &= ~(1u << hwport);
+
+  return primary_mask;
+}
+
+static unsigned oo_hw_filter_fallback_ports(unsigned hwport_mask)
+{
+  int hwport;
+  int fallback;
+  unsigned fallback_mask = 0;
+
+  while(hwport_mask) {
+    hwport = ffs(hwport_mask) - 1;
+    fallback = oo_nics[hwport].fallback_hwport;
+    if( fallback >= 0 )
+      fallback_mask |= 1u << fallback;
+    hwport_mask &= ~(1u << hwport);
+  }
+
+  return fallback_mask;
+}
+
 int oo_hw_filter_add_hwports(struct oo_hw_filter* oofilter,
                              const struct oo_hw_filter_spec* oo_filter_spec,
                              unsigned set_vlan_mask, unsigned hwport_mask,
@@ -384,17 +449,33 @@ int oo_hw_filter_add_hwports(struct oo_hw_filter* oofilter,
                              unsigned drop_hwport_mask,
                              unsigned src_flags)
 {
-  int rc;
-  bool ok_seen;
+  int rc, rc1 = 0;
+  bool ok_seen = false;
+  unsigned install_ports = oo_hw_filter_primary_ports(hwport_mask);
   unsigned failed_ports = 0;
 
   if( (src_flags & OO_HW_SRC_FLAG_KERNEL_REDIRECT) == 0 )
     ci_assert_nequal(oofilter->trs != NULL, oofilter->thc != NULL);
 
+  /* Firstly mask out the fallback interfaces and install what we can */
   rc = __oo_hw_filter_add_hwports(oofilter, oo_filter_spec, set_vlan_mask,
-                                  hwport_mask, redirect_mask,
+                                  install_ports, redirect_mask,
                                   drop_hwport_mask, src_flags,
                                   &ok_seen, &failed_ports);
+  /* For any port that failed see if we have a fallback available. Try again
+   * with any fallback ports. */
+  if( failed_ports ) {
+    install_ports = oo_hw_filter_fallback_ports(failed_ports);
+    failed_ports = 0;
+    if( hwport_mask ) {
+      rc1 = __oo_hw_filter_add_hwports(oofilter, oo_filter_spec,
+                                       set_vlan_mask, install_ports,
+                                       redirect_mask, drop_hwport_mask,
+                                       src_flags, &ok_seen, &failed_ports);
+      /* Preserve the most severe error seen over the two attempts */
+      rc = oo_hw_filter_update_error(rc, rc1);
+    }
+  }
 
   if( ok_seen ) {
     if ( ( rc == -EACCES ) ||
