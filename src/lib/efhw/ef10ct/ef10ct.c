@@ -183,7 +183,7 @@ static void ef10ct_check_for_flushes(struct work_struct *work)
   struct efhw_nic_ef10ct_evq *evq = 
     container_of(work, struct efhw_nic_ef10ct_evq, check_flushes.work);
   unsigned offset = evq->next;
-  ci_qword_t *event = evq->base + offset;
+  ci_qword_t *event = &evq->base[offset];
   bool found_flush = false;
   int q_id;
   int i;
@@ -212,7 +212,7 @@ static void ef10ct_check_for_flushes(struct work_struct *work)
       memset(event, 0, sizeof(*event));
       break;
     }
-    event = evq->base + offset;
+    event = &evq->base[offset];
   }
 
   if( !found_flush || !atomic_dec_and_test(&evq->queues_flushing) ) {

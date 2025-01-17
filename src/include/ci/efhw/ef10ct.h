@@ -20,7 +20,7 @@ struct efhw_nic_ef10ct_evq {
   struct efhw_nic *nic;
   atomic_t queues_flushing;
   struct delayed_work check_flushes;
-  void *base;
+  ci_qword_t *base;
   unsigned capacity;
   unsigned next;
   int txq;
