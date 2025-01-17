@@ -818,6 +818,7 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
   int rc;
   struct efx_auxdev_rpc rpc;
   void **post_buffer_addr;
+  bool suppress_events = false;
 
   EFHW_WARN("%s: evq %d, rxq %d", __func__, params->wakeup_instance,
             params->qid);
@@ -849,6 +850,7 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
   EFHW_ASSERT(ef10ct->shared_n >= 1 );
   evq = ef10ct->shared[0].evq_id;
   EFHW_WARN("%s: Using shared evq %d", __func__, evq);
+  suppress_events = true;
 
   EFHW_MCDI_INITIALISE_BUF(in);
 
@@ -862,12 +864,13 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
   EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V5_IN_INSTANCE, rxq_handle);
   EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V5_IN_PORT_ID, EVB_PORT_ID_ASSIGNED);
 
-  EFHW_MCDI_POPULATE_DWORD_4(in, INIT_RXQ_V5_IN_FLAGS,
+  EFHW_MCDI_POPULATE_DWORD_5(in, INIT_RXQ_V5_IN_FLAGS,
                              INIT_RXQ_V5_IN_DMA_MODE,
 			     MC_CMD_INIT_RXQ_V5_IN_EQUAL_STRIDE_SUPER_BUFFER,
 			     INIT_RXQ_V5_IN_FLAG_TIMESTAMP, 1,
 			     INIT_RXQ_V5_IN_FLAG_PREFIX, 1,
-			     INIT_RXQ_V5_IN_FLAG_DISABLE_SCATTER, 1);
+			     INIT_RXQ_V5_IN_FLAG_DISABLE_SCATTER, 1,
+			     INIT_RXQ_V5_IN_FLAG_SUPPRESS_RX_EVENTS, suppress_events);
 
   EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V5_IN_ES_PACKET_STRIDE, EFCT_PKT_STRIDE);
   EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V5_IN_ES_MAX_DMA_LEN, nic->mtu);
