@@ -123,6 +123,8 @@ struct efhw_evq_params {
 	 * DMA mapped. Otherwise they are simply physical addresses.
 	 */
 	dma_addr_t* dma_addrs;
+	/* kernel virtual address pointing to same base as dma_addrs */
+	void *virt_base;
 	uint n_pages; /* number of entries in dma_addrs */
 	int wakeup_channel; /* irq or queue to deliver wakeups for this queue */
 	int flags;

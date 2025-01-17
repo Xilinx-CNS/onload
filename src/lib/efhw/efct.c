@@ -581,7 +581,7 @@ efct_nic_event_queue_enable(struct efhw_nic *nic,
 
   if( rc == 0 ) {
     efct_evq->nic = nic;
-    efct_evq->base = phys_to_virt(efhw_params->dma_addrs[0]);
+    efct_evq->base = efhw_params->virt_base;
     efct_evq->capacity = efhw_params->evq_size;
     atomic_set(&efct_evq->queues_flushing, 0);
     INIT_DELAYED_WORK(&efct_evq->check_flushes, efct_check_for_flushes);

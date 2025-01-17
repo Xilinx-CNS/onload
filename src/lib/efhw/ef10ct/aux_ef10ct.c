@@ -195,6 +195,7 @@ static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid)
   params.n_pages = 1 << page_order;
   params.evq_size = (params.n_pages << PAGE_SHIFT) / sizeof(efhw_event_t);
   params.dma_addrs = shared_evq->iopages.dma_addrs;
+  params.virt_base = shared_evq->iopages.ptr;
   /* Wakeup stuff is ignored */
   /* Do we care about flags? */
 

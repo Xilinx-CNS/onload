@@ -304,7 +304,7 @@ ef10ct_nic_event_queue_enable(struct efhw_nic *nic,
 
   if( rc == 0 ) {
     ef10ct_evq->nic = nic;
-    ef10ct_evq->base = phys_to_virt(efhw_params->dma_addrs[0]);
+    ef10ct_evq->base = efhw_params->virt_base;
     ef10ct_evq->capacity = efhw_params->evq_size;
     atomic_set(&ef10ct_evq->queues_flushing, 0);
     INIT_DELAYED_WORK(&ef10ct_evq->check_flushes, ef10ct_check_for_flushes);

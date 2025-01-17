@@ -889,6 +889,7 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 		evq_params.evq = instance;
 		evq_params.evq_size = q->capacity;
 		evq_params.dma_addrs = q->dma_addrs;
+		evq_params.virt_base = q->host_pages.ptr;
 		evq_params.n_pages = (1 << q->host_page_order) *
 					EFHW_NIC_PAGES_IN_OS_PAGE;
 		evq_params.flags = flags;
