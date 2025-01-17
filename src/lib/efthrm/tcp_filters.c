@@ -334,21 +334,18 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
 }
 
 
-int oo_hw_filter_add_hwports(struct oo_hw_filter* oofilter,
-                             const struct oo_hw_filter_spec* oo_filter_spec,
-                             unsigned set_vlan_mask, unsigned hwport_mask,
-                             unsigned redirect_mask,
-                             unsigned drop_hwport_mask,
-                             unsigned src_flags)
+int __oo_hw_filter_add_hwports(struct oo_hw_filter* oofilter,
+                               const struct oo_hw_filter_spec* oo_filter_spec,
+                               unsigned set_vlan_mask, unsigned hwport_mask,
+                               unsigned redirect_mask,
+                               unsigned drop_hwport_mask, unsigned src_flags,
+                               bool *ok_seen, unsigned *failed_ports)
 {
-  int rc1, rc = 0, ok_seen = 0, hwport;
+  int rc1, rc = 0, hwport;
 
   /* We will change this copy of the filter spec according to [set_vlan_mask]
    * as we iterate over the hwports. */
   struct oo_hw_filter_spec masked_spec = *oo_filter_spec;
-
-  if( (src_flags & OO_HW_SRC_FLAG_KERNEL_REDIRECT) == 0 )
-    ci_assert_nequal(oofilter->trs != NULL, oofilter->thc != NULL);
 
   for( hwport = 0; hwport < CI_CFG_MAX_HWPORTS; ++hwport )
     if( ((hwport_mask & (1u << hwport)) && oofilter->filter_id[hwport] < 0) ||
@@ -362,16 +359,43 @@ int oo_hw_filter_add_hwports(struct oo_hw_filter* oofilter,
             src_flags |
             ((drop_hwport_mask & (1u << hwport)) ? OO_HW_SRC_FLAG_DROP : 0) |
             ((redirect_mask & (1u << hwport)) ? OO_HW_SRC_FLAG_REDIRECT : 0));
-      /* Need to know if any interfaces are ok */
-      if( ! rc1 )
-        ok_seen = 1;
-      /* Preserve the most severe error seen - other errors are more severe
-       * then firewall denial, and it is more severe than no error.
-       */
-      if( rc1 && ( !rc || rc == -EACCES ||
-                   (rc == -EBUSY && !oof_all_ports_required) ) )
-        rc = rc1;
+      /* Track any failing interfaces */
+      if( rc1 ) {
+        *failed_ports |= (1u << hwport);
+
+        /* Preserve the most severe error seen - other errors are more severe
+         * then firewall denial, and it is more severe than no error.  */
+        if( !rc || rc == -EACCES ||
+            (rc == -EBUSY && !oof_all_ports_required) )
+          rc = rc1;
+      }
+      else {
+        *ok_seen = true;
+      }
     }
+
+  return rc;
+}
+
+int oo_hw_filter_add_hwports(struct oo_hw_filter* oofilter,
+                             const struct oo_hw_filter_spec* oo_filter_spec,
+                             unsigned set_vlan_mask, unsigned hwport_mask,
+                             unsigned redirect_mask,
+                             unsigned drop_hwport_mask,
+                             unsigned src_flags)
+{
+  int rc;
+  bool ok_seen;
+  unsigned failed_ports = 0;
+
+  if( (src_flags & OO_HW_SRC_FLAG_KERNEL_REDIRECT) == 0 )
+    ci_assert_nequal(oofilter->trs != NULL, oofilter->thc != NULL);
+
+  rc = __oo_hw_filter_add_hwports(oofilter, oo_filter_spec, set_vlan_mask,
+                                  hwport_mask, redirect_mask,
+                                  drop_hwport_mask, src_flags,
+                                  &ok_seen, &failed_ports);
+
   if( ok_seen ) {
     if ( ( rc == -EACCES ) ||
          ( !oof_all_ports_required && ( rc == -EBUSY ) ) ) {
