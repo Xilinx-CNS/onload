@@ -1134,7 +1134,7 @@ static bool efct_vi_sb_has_been_filled(ef_vi *vi, uint32_t sbid,
   EF_VI_DEBUG(rxq_ptr = &vi->ep_state->rxq.rxq_ptr[ix]);
   EF_VI_ASSERT(rxq_ptr->meta_offset == 0);
 
-  header = (void *)((char *)efct_superbuf_access(vi, qid, sbid)
+  header = (void *)((char *)efct_superbuf_access(vi, ix, sbid)
                             + (superbuf_pkts - 1) * EFCT_PKT_STRIDE);
   return CI_OWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL) == sb_sentinel;
 }
@@ -1187,20 +1187,20 @@ int efct_vi_sync_rxq(ef_vi *vi, int ix, int qid)
   rxq_ptr->superbuf_pkts = *rxq->live.superbuf_pkts;
   rxq_ptr->meta_offset = 0;
 
-  rc = vi->efct_rxqs.ops->next(vi, qid, &sentinel, &sbseq);
+  rc = vi->efct_rxqs.ops->next(vi, ix, &sentinel, &sbseq);
   if ( rc < 0 )
     return rc;
 
   while ( efct_vi_sb_has_been_filled(vi, rc, sentinel, rxq_ptr->superbuf_pkts, ix, qid) )
   {
-    vi->efct_rxqs.ops->free(vi, qid, rc);
-    rc = vi->efct_rxqs.ops->next(vi, qid, &sentinel, &sbseq);
+    vi->efct_rxqs.ops->free(vi, ix, rc);
+    rc = vi->efct_rxqs.ops->next(vi, ix, &sentinel, &sbseq);
     if (rc < 0)
       return rc;
   }
 
-  meta_pkt = (qid * CI_EFCT_MAX_SUPERBUFS + rc) << PKT_ID_PKT_BITS;
-  header = (void *)((char *)efct_superbuf_access(vi, qid, rc));
+  meta_pkt = (ix * CI_EFCT_MAX_SUPERBUFS + rc) << PKT_ID_PKT_BITS;
+  header = (void *)((char *)efct_superbuf_access(vi, ix, rc));
   for ( pkt_index = 0; pkt_index < rxq_ptr->superbuf_pkts;
         header += EFCT_PKT_STRIDE / sizeof(*header), pkt_index++ )
   {
