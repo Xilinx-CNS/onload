@@ -368,20 +368,27 @@ static void oo_fixup_wakeup_breakage(struct oo_nic *onic)
 
 void oo_netdev_up(const struct net_device* netdev)
 {
-  struct oo_nic* onic = oo_nic_find_by_net_dev(netdev, 0, 0);
-
+  struct oo_nic* onic = oo_nic_find_by_net_dev(netdev, 0, NIC_FLAG_LLCT);
   if( onic ) {
     oo_nic_notify_up(onic, netdev);
     oo_fixup_wakeup_breakage(onic);
   }
+
+  /* Check if there's an additional datapath, and update that too if so */
+  onic = oo_nic_find_by_net_dev(netdev, NIC_FLAG_LLCT, 0);
+  if( onic )
+    oo_nic_notify_up(onic, netdev);
 }
 
 
 static void oo_netdev_going_down(struct net_device* netdev)
 {
-  struct oo_nic *onic;
+  struct oo_nic* onic = oo_nic_find_by_net_dev(netdev, 0, NIC_FLAG_LLCT);
+  if( onic != NULL )
+      oo_hwport_up(onic, 0);
 
-  onic = oo_nic_find_by_net_dev(netdev, 0, 0);
+  /* Check if there's an additional datapath, and update that too if so */
+  onic = oo_nic_find_by_net_dev(netdev, NIC_FLAG_LLCT, 0);
   if( onic != NULL )
       oo_hwport_up(onic, 0);
 }

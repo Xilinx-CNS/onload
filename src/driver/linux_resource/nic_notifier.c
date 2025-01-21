@@ -128,14 +128,19 @@ static int efrm_netdev_event(struct notifier_block *this,
 {
   struct net_device *net_dev = netdev_notifier_info_to_dev(ptr);
   struct efhw_nic *nic;
+  int new_mtu;
 
   if (event == NETDEV_CHANGEMTU) {
-    nic = efhw_nic_find(net_dev, 0, 0);
+    new_mtu = net_dev->mtu + ETH_HLEN; /* ? + ETH_VLAN_HLEN */
+
+    nic = efhw_nic_find(net_dev, 0, NIC_FLAG_LLCT);
     if (nic) {
-      EFRM_TRACE("%s: old=%d new=%d", __func__,
-                 nic->mtu, net_dev->mtu + ETH_HLEN);
-      nic->mtu = net_dev->mtu + ETH_HLEN; /* ? + ETH_VLAN_HLEN */
+      EFRM_TRACE("%s: old=%d new=%d", __func__, nic->mtu, new_mtu);
+      nic->mtu = new_mtu;
     }
+    nic = efhw_nic_find(net_dev, NIC_FLAG_LLCT, 0);
+    if (nic)
+      nic->mtu = new_mtu;
   }
   if (event == NETDEV_CHANGENAME) {
     nic = efhw_nic_find(net_dev, 0, 0);
