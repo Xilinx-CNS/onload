@@ -336,7 +336,7 @@ ef10ct_nic_event_queue_enable(struct efhw_nic *nic,
   int evq_id = ef10ct_reconstruct_queue_handle(evq_num,
                                                EF10CT_QUEUE_HANDLE_TYPE_EVQ);
 
-  EFHW_WARN("%s: evq %d", __func__, evq_id);
+  EFHW_WARN("%s: evq 0x%x", __func__, evq_id);
 
   /* This is a dummy EVQ, so nothing to do. */
   if( evq_num >= ef10ct->evq_n )
@@ -419,7 +419,7 @@ ef10ct_nic_event_queue_disable(struct efhw_nic *nic,
   int evq_id = ef10ct_reconstruct_queue_handle(evq_num,
                                                EF10CT_QUEUE_HANDLE_TYPE_EVQ);
 
-  EFHW_WARN("%s: evq %d", __func__, evq_id);
+  EFHW_WARN("%s: evq 0x%x", __func__, evq_id);
 
   /* This is a dummy EVQ, so nothing to do. */
   if( evq_num >= ef10ct->evq_n )
@@ -485,7 +485,8 @@ void ef10ct_free_evq(struct efhw_nic *nic, int evq)
   struct device *dev;
   int rc = 0;
 
-  ef10ct_free_irq(nic, evq);
+  if( (nic->devtype.variant != 'L') )
+    ef10ct_free_irq(nic, evq);
 
   AUX_PRE(dev, edev, cli, nic, rc);
   edev->llct_ops->channel_free(cli, evq);
@@ -625,7 +626,7 @@ static void ef10ct_vi_free_hw(struct efhw_nic *nic, int evq_num)
   evq_id = ef10ct_reconstruct_queue_handle(evq_num,
                                            EF10CT_QUEUE_HANDLE_TYPE_EVQ);
 
-  EFHW_WARN("%s: q %d", __func__, evq_id);
+  EFHW_WARN("%s: q 0x%x", __func__, evq_id);
 
   ef10ct_free_evq(nic, evq_id);
 
@@ -684,7 +685,7 @@ ef10ct_dmaq_tx_q_init(struct efhw_nic *nic,
   evq_id = ef10ct_reconstruct_queue_handle(evq_num,
                                            EF10CT_QUEUE_HANDLE_TYPE_EVQ);
   ef10ct_evq = &ef10ct->evq[evq_num];
-  EFHW_WARN("%s: txq %d evq %d", __func__, ef10ct_evq->txq, evq_id);
+  EFHW_WARN("%s: txq 0x%x evq 0x%x", __func__, ef10ct_evq->txq, evq_id);
 
   EFHW_ASSERT(evq_num < ef10ct->evq_n);
   EFHW_ASSERT(ef10ct_evq->txq != EFCT_EVQ_NO_TXQ);
@@ -730,7 +731,7 @@ ef10ct_rx_buffer_post_register(struct efhw_nic* nic, int instance,
                                                EF10CT_QUEUE_HANDLE_TYPE_RXQ);
   val.queue_io_wnd.qid_in = rxq_handle;
 
-  EFHW_WARN("%s: instance %d", __func__, instance);
+  EFHW_WARN("%s: instance 0x%x", __func__, instance);
 
   AUX_PRE(dev, edev, cli, nic, rc);
   rc = edev->llct_ops->base_ops->get_param(cli, EFX_AUXILIARY_RXQ_WINDOW, &val);
@@ -835,7 +836,7 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
   void **post_buffer_addr;
   bool suppress_events = false;
 
-  EFHW_WARN("%s: evq %d, rxq %d", __func__, params->wakeup_instance,
+  EFHW_WARN("%s: evq 0x%x, rxq 0x%x", __func__, params->wakeup_instance,
             params->qid);
 
 
@@ -864,7 +865,7 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
    * and attach to an evq. */
   EFHW_ASSERT(ef10ct->shared_n >= 1 );
   evq = ef10ct->shared[0].evq_id;
-  EFHW_WARN("%s: Using shared evq %d", __func__, evq);
+  EFHW_WARN("%s: Using shared evq 0x%x", __func__, evq);
   suppress_events = true;
 
   EFHW_MCDI_INITIALISE_BUF(in);
@@ -1109,7 +1110,7 @@ static int select_rxq(struct filter_insert_params *params, uint64_t rxq_in)
 
   if( !anyqueue ) {
     if( rxq_in >= ef10ct->rxq_n ) {
-      EFHW_WARN("%s: Invalid queue id %lld\n", __func__, rxq_in);
+      EFHW_WARN("%s: Invalid queue id 0x%llx\n", __func__, rxq_in);
       rc = -EINVAL;
       goto out;
     }
