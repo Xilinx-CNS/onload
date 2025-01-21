@@ -240,37 +240,30 @@ static void oo_hwport_up(struct oo_nic* onic, int up)
 
 
 /* This function is called when an interface comes up and handles doing any
- * necessary notifications to the interested parts of onload.  It can be
- * called multiple times for the same device if the interface was IFF_UP when
- * this driver was loaded, then oo_netdev_event() will call oo_netdev_may_add()
- * before dl_probe is run, which will call oo_netdev_may_add() itself.
- * However, in that case we will ignore it as the NIC will not yet be known
- * to the resource driver. Instead we will check if the interface is up at
- * probe time and call it again if so.
+ * necessary notifications to the interested parts of onload.
+ *
+ * It can be called before the NIC has been probed, in which case we will not
+ * have an existing oo_nic and so will do nothing. On NIC probe oo_nic_add
+ * is responsible for checking if the interface is already up, and triggering
+ * a net dev up notification once it's added the NIC if so.
  *
  * Once a device is noticed by onload, it should stay registered in cplane
  * despite going up or being hotplugged.
  */
-struct oo_nic *oo_netdev_may_add(const struct net_device *net_dev)
+void oo_nic_notify_up(struct oo_nic *onic, const struct net_device *net_dev)
 {
-  struct oo_nic* onic = oo_nic_find_by_net_dev(net_dev, 0, 0);
+  oo_hwport_up(onic, net_dev->flags & IFF_UP);
 
-  if( onic != NULL ) {
-    oo_hwport_up(onic, net_dev->flags & IFF_UP);
-
-    /* Remove OO_NIC_UNPLUGGED regardless of whether the interface is IFF_UP,
-     * as we don't want to attempt to create ghost VIs now that the hardware is
-     * back.
-     */
-    if( onic->oo_nic_flags & OO_NIC_UNPLUGGED ) {
-      ci_log("%s: Rediscovered %s ifindex %d hwport %d", __func__,
-             net_dev->name, net_dev->ifindex, (int)(onic - oo_nics));
-      cp_announce_hwport(efrm_client_get_nic(onic->efrm_client), onic - oo_nics);
-      onic->oo_nic_flags &= ~OO_NIC_UNPLUGGED;
-    }
+  /* Remove OO_NIC_UNPLUGGED regardless of whether the interface is IFF_UP,
+   * as we don't want to attempt to create ghost VIs now that the hardware is
+   * back.
+   */
+  if( onic->oo_nic_flags & OO_NIC_UNPLUGGED ) {
+    ci_log("%s: Rediscovered %s ifindex %d hwport %d", __func__,
+           net_dev->name, net_dev->ifindex, (int)(onic - oo_nics));
+    cp_announce_hwport(efrm_client_get_nic(onic->efrm_client), onic - oo_nics);
+    onic->oo_nic_flags &= ~OO_NIC_UNPLUGGED;
   }
-
-  return onic;
 }
 
 static int oo_nic_probe(const struct efhw_nic* nic,
@@ -304,7 +297,7 @@ static int oo_nic_probe(const struct efhw_nic* nic,
 
   /* If a NIC is already up when it's probed we need to notify now. */
   if( netif_running(net_dev) )
-    oo_netdev_up(net_dev);
+    oo_nic_notify_up(onic, net_dev);
 
   return 0;
 }
@@ -353,7 +346,7 @@ void oo_nic_remove(const struct efhw_nic* nic)
 }
 
 
-static void oo_fixup_wakeup_breakage(const struct net_device* dev)
+static void oo_fixup_wakeup_breakage(struct oo_nic *onic)
 {
   /* This is needed after a hardware interface is brought up, and after an
    * MTU change.  When a netdev goes down, or the MTU is changed, the net
@@ -363,31 +356,23 @@ static void oo_fixup_wakeup_breakage(const struct net_device* dev)
    * NB. This should cease to be necessary once the net driver is changed
    * to keep event queues up when the interface goes down.
    */
-  struct oo_nic* onic;
   ci_netif* ni = NULL;
   int hwport, intf_i;
-  if( (onic = oo_nic_find_by_net_dev(dev, 0, 0)) != NULL ) {
-    hwport = onic - oo_nics;
-    while( iterate_netifs_unlocked(&ni, OO_THR_REF_BASE,
-                                   OO_THR_REF_INFTY) == 0 )
-      if( (intf_i = ni->hwport_to_intf_i[hwport]) >= 0 )
-        ci_bit_clear(&ni->state->evq_primed, intf_i);
-  }
+  hwport = onic - oo_nics;
+  while( iterate_netifs_unlocked(&ni, OO_THR_REF_BASE,
+                                 OO_THR_REF_INFTY) == 0 )
+    if( (intf_i = ni->hwport_to_intf_i[hwport]) >= 0 )
+      ci_bit_clear(&ni->state->evq_primed, intf_i);
 }
 
 
 void oo_netdev_up(const struct net_device* netdev)
 {
-  struct oo_nic *onic;
-  /* Does efrm own this device? */
-  if( efhw_nic_find(netdev, 0, 0) ) {
-    /* oo_netdev_may_add may trigger oof_hwport_up_down only
-     * once on probe time */
-    onic = oo_netdev_may_add(netdev);
-    if( onic != NULL ) {
-      oo_fixup_wakeup_breakage(netdev);
-      oo_hwport_up(onic, 1);
-    }
+  struct oo_nic* onic = oo_nic_find_by_net_dev(netdev, 0, 0);
+
+  if( onic ) {
+    oo_nic_notify_up(onic, netdev);
+    oo_fixup_wakeup_breakage(onic);
   }
 }
 
@@ -407,6 +392,7 @@ static int oo_netdev_event(struct notifier_block *this,
                            unsigned long event, void *ptr)
 {
   struct net_device *netdev = netdev_notifier_info_to_dev(ptr);
+  struct oo_nic *onic;
 
   switch( event ) {
   case NETDEV_UP:
@@ -418,7 +404,10 @@ static int oo_netdev_event(struct notifier_block *this,
     break;
 
   case NETDEV_CHANGEMTU:
-    oo_fixup_wakeup_breakage(netdev);
+    /* For NICs where we rely on the net driver EVQs for wakeups we need to
+     * update our prime state now. */
+    if( (onic = oo_nic_find_by_net_dev(netdev, 0, NIC_FLAG_EVQ_IRQ)) != NULL )
+      oo_fixup_wakeup_breakage(onic);
 
 #ifdef EFRM_RTMSG_IFINFO_EXPORTED
     /* The control plane has to know about the new MTU value.
