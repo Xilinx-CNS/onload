@@ -27,6 +27,11 @@
 #include <ci/tools/bitfield.h>
 #include <ci/efhw/mc_driver_pcol.h>
 
+/* Avoid including the real aux header, which conflicts with the test one */
+#define _EFX_AUXBUS_H
+#include <ci/efhw/ef10ct.h>
+#undef _EFX_AUXBUS_H
+
 #include "efct_test_device.h"
 #include "efct_test_ops.h"
 #include "efct_test_tx.h"
@@ -86,7 +91,7 @@ static int efct_test_evq_window_addr(struct efx_auxdev_client *handle,
                                      struct efx_auxiliary_io_window *queue_io_wnd)
 {
   struct efct_test_device *tdev = handle->tdev;
-  int evq = queue_io_wnd->qid_in;
+  int evq = ef10ct_get_queue_num(queue_io_wnd->qid_in);
 
   queue_io_wnd->base = virt_to_phys(tdev->evq_window + 0x1000 * evq);
   queue_io_wnd->size = 0x1000;
@@ -97,7 +102,7 @@ static int efct_test_ctpio_addr(struct efx_auxdev_client *handle,
                                 struct efx_auxiliary_io_window *queue_io_wnd)
 {
   struct efct_test_device *tdev = handle->tdev;
-  int txq = queue_io_wnd->qid_in;
+  int txq = ef10ct_get_queue_num(queue_io_wnd->qid_in);
 
   printk(KERN_INFO "%s: txq %d evq %d\n", __func__, txq, tdev->txqs[txq].evq);
 
@@ -116,7 +121,7 @@ static int efct_test_buffer_post_addr(struct efx_auxdev_client *handle,
    * rather than forcing them to calculate the location based off an offset from
    * the BAR. */
   struct efct_test_device *tdev = handle->tdev;
-  int rxq = queue_io_wnd->qid_in;
+  int rxq = ef10ct_get_queue_num(queue_io_wnd->qid_in);
   
   /* FIXME EF10CT when we support multi-queue dynamic attach can re-instate
    * these checks. */
@@ -242,6 +247,7 @@ static int efct_test_init_evq(struct efx_auxdev_client *handle,
     return -EINVAL;
 
   qid = EFHW_MCDI_DWORD(rpc->inbuf, INIT_EVQ_V2_IN_INSTANCE);
+  qid = ef10ct_get_queue_num(qid);
   evq = &handle->tdev->evqs[qid];
 
   printk(KERN_INFO "%s: qid %d\n", __func__, qid);
@@ -287,6 +293,7 @@ static int efct_test_free_evq(struct efx_auxdev_client *handle,
     return -EINVAL;
 
   evq = EFHW_MCDI_DWORD(rpc->inbuf, FINI_EVQ_IN_INSTANCE);
+  evq = ef10ct_get_queue_num(evq);
 
   printk(KERN_INFO "%s: qid %d\n", __func__, evq);
   WARN(!handle->tdev->evqs[evq].inited,
@@ -315,7 +322,9 @@ static int efct_test_init_txq(struct efx_auxdev_client *handle,
     return -EINVAL;
 
   txq_idx = EFHW_MCDI_DWORD(rpc->inbuf, INIT_TXQ_EXT_IN_INSTANCE);
+  txq_idx = ef10ct_get_queue_num(txq_idx);
   evq = EFHW_MCDI_DWORD(rpc->inbuf, INIT_TXQ_EXT_IN_TARGET_EVQ);
+  evq = ef10ct_get_queue_num(evq);
 
   printk(KERN_INFO "%s: evq %d\n", __func__, evq);
   if( !tdev->evqs[evq].inited )
@@ -359,6 +368,7 @@ static int efct_test_free_txq(struct efx_auxdev_client *handle,
     return -EINVAL;
 
   txq_idx = EFHW_MCDI_DWORD(rpc->inbuf, FINI_TXQ_IN_INSTANCE);
+  txq_idx = ef10ct_get_queue_num(txq_idx);
   txq = &tdev->txqs[txq_idx];
   evq = txq->evq;
 
@@ -392,11 +402,13 @@ static int efct_test_init_rxq(struct efx_auxdev_client *handle,
 
   if(WARN_ON( rpc->cmd != MC_CMD_INIT_RXQ ||
               rpc->inbuf == NULL ||
-              rpc->inlen != MC_CMD_INIT_RXQ_V4_IN_LEN ))
+              rpc->inlen != MC_CMD_INIT_RXQ_V5_IN_LEN ))
     return -EINVAL;
 
   rxq_idx = EFHW_MCDI_DWORD(rpc->inbuf, INIT_RXQ_V4_IN_INSTANCE);
+  rxq_idx = ef10ct_get_queue_num(rxq_idx);
   evq = EFHW_MCDI_DWORD(rpc->inbuf, INIT_RXQ_V4_IN_TARGET_EVQ);
+  evq = ef10ct_get_queue_num(evq);
 
   printk(KERN_INFO "%s: evq %d\n", __func__, evq);
 
@@ -460,6 +472,7 @@ static int efct_test_free_rxq(struct efx_auxdev_client *handle,
     return -EINVAL;
 
   rxq_idx = EFHW_MCDI_DWORD(rpc->inbuf, FINI_RXQ_IN_INSTANCE);
+  rxq_idx = ef10ct_get_queue_num(rxq_idx);
   rxq = &tdev->rxqs[rxq_idx];
   evq = rxq->evq;
 
@@ -655,8 +668,22 @@ static int efct_test_fw_rpc(struct efx_auxdev_client *handle,
   return rc;
 }
 
+const char *efct_test_queue_name(enum ef10ct_queue_handle_type type)
+{
+  switch(type) {
+    case EF10CT_QUEUE_HANDLE_TYPE_TXQ:
+      return "TXQ";
+    case EF10CT_QUEUE_HANDLE_TYPE_RXQ:
+      return "RXQ";
+    case EF10CT_QUEUE_HANDLE_TYPE_EVQ:
+      return "EVQ";
+  }
 
-static int efct_test_queue_alloc(uint64_t *free, const char *type)
+  return "unknown";
+}
+
+static int efct_test_queue_alloc(uint64_t *free,
+                                 enum ef10ct_queue_handle_type type)
 {
   int qid;
 
@@ -667,28 +694,31 @@ static int efct_test_queue_alloc(uint64_t *free, const char *type)
   *free &= ~(1 << qid);
 
   printk(KERN_INFO "%s: alloced %s qid %d, free mask now %llx\n",
-         __func__, type, qid, *free);
-  return qid;
+         __func__, efct_test_queue_name(type), qid, *free);
+  return ef10ct_reconstruct_queue_handle(qid, type);
 }
 
 static void efct_test_queue_free(uint64_t *free, int channel_nr,
-                                 const char *type)
+                                 enum ef10ct_queue_handle_type type)
 {
+  channel_nr = ef10ct_get_queue_num(channel_nr);
   if( (1 << channel_nr) & *free )
     printk(KERN_ERR "%s: ERROR freeing %s qid %d, current free mask %llx\n",
-           __func__, type, channel_nr, *free);
+           __func__, efct_test_queue_name(type), channel_nr, *free);
 
   *free |= 1 << channel_nr;
 }
 
 static int efct_test_channel_alloc(struct efx_auxdev_client *handle)
 {
-  return efct_test_queue_alloc(&handle->tdev->free_evqs, "EVQ");
+  return efct_test_queue_alloc(&handle->tdev->free_evqs,
+                               EF10CT_QUEUE_HANDLE_TYPE_EVQ);
 }
 
 static void efct_test_channel_free(struct efx_auxdev_client *handle, int channel_nr)
 {
-  return efct_test_queue_free(&handle->tdev->free_evqs, channel_nr, "EVQ");
+  return efct_test_queue_free(&handle->tdev->free_evqs, channel_nr,
+                              EF10CT_QUEUE_HANDLE_TYPE_EVQ);
 }
 
 static struct efx_auxdev_irq*
@@ -704,22 +734,26 @@ static void efct_test_irq_free(struct efx_auxdev_client *handle,
 
 static int efct_test_txq_alloc(struct efx_auxdev_client *handle)
 {
-  return efct_test_queue_alloc(&handle->tdev->free_txqs, "TXQ");
+  return efct_test_queue_alloc(&handle->tdev->free_txqs,
+                               EF10CT_QUEUE_HANDLE_TYPE_TXQ);
 }
 
 static void efct_test_txq_free(struct efx_auxdev_client *handle, int txq_nr)
 {
-  efct_test_queue_free(&handle->tdev->free_txqs, txq_nr, "TXQ");
+  efct_test_queue_free(&handle->tdev->free_txqs, txq_nr,
+                       EF10CT_QUEUE_HANDLE_TYPE_TXQ);
 }
 
 static int efct_test_rxq_alloc(struct efx_auxdev_client *handle)
 {
-  return efct_test_queue_alloc(&handle->tdev->free_rxqs, "RXQ");
+  return efct_test_queue_alloc(&handle->tdev->free_rxqs,
+                               EF10CT_QUEUE_HANDLE_TYPE_RXQ);
 }
 
 static void efct_test_rxq_free(struct efx_auxdev_client *handle, int rxq_nr)
 {
-  efct_test_queue_free(&handle->tdev->free_rxqs, rxq_nr, "RXQ");
+  efct_test_queue_free(&handle->tdev->free_rxqs, rxq_nr,
+                       EF10CT_QUEUE_HANDLE_TYPE_RXQ);
 }
 
 

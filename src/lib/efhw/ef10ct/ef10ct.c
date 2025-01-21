@@ -386,8 +386,9 @@ ef10ct_nic_event_queue_enable(struct efhw_nic *nic,
                       MC_CMD_INIT_EVQ_V2_IN_COUNT_MODE_DIS);
   EFHW_MCDI_SET_DWORD(in, INIT_EVQ_V2_IN_COUNT_THRSHLD, 0);
 
-  EFHW_MCDI_SET_DWORD(in, INIT_EVQ_V2_IN_IRQ_NUM,
-                      ef10ct_evq->msi_context->irq->nic_nr);
+  if( (nic->devtype.variant != 'L') )
+    EFHW_MCDI_SET_DWORD(in, INIT_EVQ_V2_IN_IRQ_NUM,
+                        ef10ct_evq->msi_context->irq->nic_nr);
 
   rpc.cmd = MC_CMD_INIT_EVQ;
   rpc.inlen = sizeof(in);
@@ -465,11 +466,13 @@ int ef10ct_alloc_evq(struct efhw_nic *nic)
   if (evq < 0)
     return evq;
 
-  rc = ef10ct_alloc_irq(nic, evq);
-  if (rc < 0) {
-    EFHW_ERR("%s Failed to alloc irq for evq %d rc = %d", __func__, evq, rc);
-    ef10ct_free_evq(nic, evq);
-    return rc;
+  if( (nic->devtype.variant != 'L') ) {
+    rc = ef10ct_alloc_irq(nic, evq);
+    if (rc < 0) {
+      EFHW_ERR("%s Failed to alloc irq for evq %d rc = %d", __func__, evq, rc);
+      ef10ct_free_evq(nic, evq);
+      return rc;
+    }
   }
 
   return evq;
