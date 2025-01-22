@@ -89,6 +89,7 @@ void efct_filter_state_reserve_rxq(struct efct_filter_state *state, int rxq)
   EFHW_ASSERT(state->hw_filters_n > rxq);
   state->hw_filters[rxq].rxq = 0;
   state->hw_filters[rxq].refcount = 1;
+  state->hw_filters[rxq].drv_id = EFCT_HW_FILTER_DRV_ID_DUMMY;
 }
 
 

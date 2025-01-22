@@ -10,6 +10,7 @@
 #include <ci/efhw/nic.h>
 #include <ci/efhw/efct.h>
 #include <ci/efhw/ef10ct.h>
+#include <ci/efhw/efct_filters.h>
 
 #include "linux_resource_internal.h"
 #include "debugfs.h"
@@ -30,6 +31,8 @@ static int efct_debugfs_read_hw_filters(struct seq_file *file,
   for( i = 0; i < fs->hw_filters_n; i++ ) {
     filter = &fs->hw_filters[i];
     if( filter->refcount > 0 ) {
+      if( filter->drv_id == EFCT_HW_FILTER_DRV_ID_DUMMY)
+        continue;
       if( filter->remote_ip )
         snprintf(remote_ip_buf, sizeof(remote_ip_buf), "%pI4:%d ",
                  &filter->remote_ip, ntohs(filter->remote_port));

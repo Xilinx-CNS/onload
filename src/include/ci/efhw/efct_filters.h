@@ -15,6 +15,8 @@ struct efct_filter_insert_out {
 };
 struct efct_filter_state;
 
+#define EFCT_HW_FILTER_DRV_ID_DUMMY ((uint64_t)~0)
+
 typedef int (*drv_filter_insert)(const struct efct_filter_insert_in *in,
                                  struct efct_filter_insert_out *out);
 
