@@ -180,6 +180,16 @@ void efrm_pd_owner_ids_dtor(struct efrm_pd_owner_ids* owner_ids)
 }
 
 
+static int efhw_nic_buffer_table_min_order(struct efhw_nic *nic)
+{
+	/* It's required that the buffer table orders array is sorted, and is
+	 * enforced in efhw_nic_ctor with the policy being to refuse any NIC
+	 * where this isn't true. */
+	return (efhw_nic_buffer_table_orders_num(nic) == 0) ? 0 :
+		efhw_nic_buffer_table_orders(nic)[0];
+}
+
+
 /***********************************************************************/
 /* Stack ids */
 /***********************************************************************/
@@ -325,7 +335,7 @@ int efrm_pd_alloc(struct efrm_pd **pd_out, struct efrm_client *client_opt,
 	efrm_client_add_resource(client_opt, &pd->rs);
 
 	pd->os_data = efrm_pd_os_stats_ctor(pd);
-	pd->min_nic_order = 0;
+	pd->min_nic_order = efhw_nic_buffer_table_min_order(client_opt->nic);
 
 	pd->vport_handle = EFRM_PD_VPORT_ID_NONE;
 
@@ -414,7 +424,9 @@ EXPORT_SYMBOL(efrm_pd_owner_id);
 
 void efrm_pd_set_min_align(struct efrm_pd *pd, int alignment)
 {
-	pd->min_nic_order = __ffs((alignment) >> EFHW_NIC_PAGE_SHIFT);
+	pd->min_nic_order =
+		CI_MAX((int)(__ffs((alignment) >> EFHW_NIC_PAGE_SHIFT)),
+		       efhw_nic_buffer_table_min_order(pd->rs.rs_client->nic));
 }
 EXPORT_SYMBOL(efrm_pd_set_min_align);
 

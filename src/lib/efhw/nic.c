@@ -149,6 +149,28 @@ void efhw_nic_update_pci_info(struct efhw_nic *nic)
 	pci_dev_put(pci_dev);
 }
 
+static int efhw_nic_check_buffer_table_orders(struct efhw_nic *nic)
+{
+	const int *orders;
+	int i;
+
+	EFHW_ASSERT(nic->efhw_func);
+
+	orders = efhw_nic_buffer_table_orders(nic);
+
+	/* We assert here that the buffer table is ordered to ensure
+	 * correct behaviour for getting the minimum NIC order. */
+	for( i = 1; i < efhw_nic_buffer_table_orders_num(nic); i++ ) {
+		if( orders[i] < orders[i - 1] ) {
+			EFHW_ERR("%s: ERROR: EFHW NIC buffer table orders array for arch %d not sorted",
+				 __func__, nic->devtype.arch);
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
 /* make this separate from initialising data structure
 ** to allow this to be called at a later time once we can access PCI
 ** config space to find out what hardware we have
@@ -164,6 +186,11 @@ int efhw_nic_ctor(struct efhw_nic *nic,
 	EFHW_ASSERT(nic_res->efhw_ops);
 	nic->efhw_func = nic_res->efhw_ops;
 	nic->devtype = *dev_type;
+
+	rc = efhw_nic_check_buffer_table_orders(nic);
+	if( rc < 0 )
+		return rc;
+
 	nic->flags = 0;
 	nic->filter_flags = 0;
 	nic->resetting = 0;

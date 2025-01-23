@@ -348,7 +348,7 @@ struct efhw_func_ops {
 	/*! Find all page orders available on this NIC.
 	 * order uses EFHW_NIC_PAGE_SIZE as a base (i.e. EFHW_NIC_PAGE_SIZE
 	 * has order 0).
-	 * orders[] is array of size EFHW_NIC_PAGE_ORDERS_NUM.
+	 * orders[] is a sorted array of size EFHW_NIC_PAGE_ORDERS_NUM.
 	 * The real number of available orders is returned. */
 	const int *buffer_table_orders;
 	int buffer_table_orders_num;
