@@ -131,6 +131,10 @@ static int unix_server_listen(struct ef_shrub_server* server, const char *server
   if( rc < 0 )
     goto fail;
 
+  rc = chmod(server_addr, 0666);
+  if( rc < 0 )
+    goto fail;
+
   return listen(server->unix_server.listen, 32);
 
 fail:

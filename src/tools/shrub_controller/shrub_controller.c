@@ -132,7 +132,7 @@ int main(int argc, char* argv[]) {
 
    // Create the /run/onload directory
   if (stat(EF_SHRUB_SOCK_DIR_PATH, &st) == -1) {
-    rc = mkdir(EF_SHRUB_SOCK_DIR_PATH, 0700);
+    rc = mkdir(EF_SHRUB_SOCK_DIR_PATH, 0755);
     if( rc != 0 ) {
       fprintf(stderr, "failed to create '%s'\n", EF_SHRUB_SOCK_DIR_PATH);
       exit(1);
