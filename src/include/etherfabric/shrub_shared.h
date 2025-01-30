@@ -23,7 +23,7 @@
 typedef uint32_t ef_shrub_buffer_id;
 
 /* Protocol version, to check compatibility between client and server */
-#define EF_SHRUB_VERSION 2
+#define EF_SHRUB_VERSION 3
 
 /* An identifier that does not represent a buffer, used to indicate empty
  * slots in the FIFOs.
@@ -48,14 +48,43 @@ typedef uint32_t ef_shrub_buffer_id;
 #define EF_SHRUB_SOCK_DIR_LEN  12
 #define EF_SHRUB_SOCK_NAME_LEN 20
 
+/* This enum specifies the type of request being made to the shrub server. */
+enum ef_shrub_request_type {
+  EF_SHRUB_REQUEST_TOKEN,
+  EF_SHRUB_REQUEST_QUEUE,
+};
+
+/* This struct is sent with EF_SHRUB_REQUEST_TOKEN requests. */
+struct ef_shrub_token_request {
+};
+
+/* This struct contains the server response to EF_SHRUB_REQUEST_TOKEN. */
+struct ef_shrub_token_response {
+  /* Exclusive rxq token of the shrub server pd. */
+  uint64_t shared_rxq_token;
+};
+
 /* This structure is sent to the shrub server to request a queue. After which,
  * the server will send an ef_shrub_shared_metrics.
  */
 struct ef_shrub_queue_request {
+  /* Queue ID that the client intends to connect to */
+  uint64_t qid;
+};
+
+/* This struct is sent to the shrub server to make various requests. */
+struct ef_shrub_request {
   /* Client's protocol version, to check compatibility */
   uint64_t server_version;
-  /* Queue ID that the client intends to connect to */
-  int qid;
+  /* Tag to specify request type */
+  enum ef_shrub_request_type type;
+  /* Data required to be sent corresponding to a request type. */
+  union {
+    /* Shared rxq token request tagged by EF_SHRUB_REQUEST_TOKEN */
+    struct ef_shrub_token_request rxq_token;
+    /* Queue request tagged by EF_SHRUB_REQUEST_QUEUE. */
+    struct ef_shrub_queue_request queue;
+  } requests;
 };
 
 /* This structure is sent to each client immediately after accepting a

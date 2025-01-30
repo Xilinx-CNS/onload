@@ -562,57 +562,45 @@ static int server_alloc_queue_elems(struct ef_shrub_server *server,
   return 0;
 }
 
-static int server_request_received(struct ef_shrub_server* server, int socket)
+static int server_request_queue(struct ef_shrub_server* server, int socket,
+                                int qid)
 {
   struct ef_shrub_connection* connection;
-  struct ef_shrub_queue_request req;
   struct ef_shrub_queue* queue;
   struct ef_shrub_client_state* state;
   epoll_data_t epoll_data;
   int rc;
-  int i;
 
-  rc = recv(socket, &req, sizeof(req), 0);
-  if( rc < 0 ) {
-    rc = -errno;
-    goto fail;
-  }
-
-  if( req.server_version != EF_SHRUB_VERSION ) {
-    rc = -EPROTO;
-    goto fail;
-  }
-
-  queue = server->shrub_queues[req.qid];
+  queue = server->shrub_queues[qid];
   if( queue == NULL ) {
     rc = ef_shrub_queue_open(server->vi, &queue,
                              server->buffer_bytes, server->buffer_count,
-                             req.qid);
-    if(rc < 0)
-      goto fail;
-    server->shrub_queues[req.qid] = queue;
+                             qid);
+    if( rc < 0 )
+      return rc;
+    server->shrub_queues[qid] = queue;
   }
 
   connection = connection_alloc(queue);
-  if( connection == NULL ) {
-    rc = -1; /* TODO propogate connection_alloc's rc */
-    goto fail;
-  }
+  if( connection == NULL )
+    return -1; /* TODO propogate connection_alloc's rc */
 
   connection->socket = socket;
   rc = connection_send_metrics(queue, connection);
   if( rc < 0 )
-    goto fail2;
+    goto fail;
 
   epoll_data.ptr = connection;
   rc = unix_server_epoll_mod(server, socket, epoll_data);
   if( rc < 0 )
-    goto fail2;
+    goto fail;
+
   connection->next = queue->connections;
-  connection->qid = req.qid;
+  connection->qid = qid;
   queue->connections = connection;
 
   if ( queue->connection_count > 0 ) {
+    int i;
     state = (void*)((char*)connection->fifo + fifo_bytes(queue));
     i = state->server_fifo_index;
     while ( i != queue->fifo_index ) {
@@ -626,9 +614,49 @@ static int server_request_received(struct ef_shrub_server* server, int socket)
   queue->connection_count++;
   return 0;
 
-fail2:
+fail:
   connection->next = queue->closed_connections;
   queue->closed_connections = connection;
+  return rc;
+}
+
+static int server_request_received(struct ef_shrub_server* server, int socket)
+{
+  struct ef_shrub_request request;
+  int rc;
+
+  rc = recv(socket, &request, sizeof(request), 0);
+  if( rc < sizeof(request)) {
+    if(rc < 0)
+      rc = -errno;
+    else
+      rc = -EPROTO;
+
+    goto fail;
+  }
+
+  if( request.server_version != EF_SHRUB_VERSION ) {
+    rc = -EPROTO;
+    goto fail;
+  }
+
+  switch( request.type ) {
+  case EF_SHRUB_REQUEST_TOKEN:
+    rc = -EOPNOTSUPP;
+    goto fail;
+  case EF_SHRUB_REQUEST_QUEUE:
+    rc = server_request_queue(server, socket, request.requests.queue.qid);
+    if( rc < 0 )
+      goto fail;
+
+    break;
+  default:
+    rc = -EOPNOTSUPP;
+    goto fail;
+  }
+
+  return 0;
+
 fail:
   close(socket);
   return rc;

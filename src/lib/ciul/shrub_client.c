@@ -84,23 +84,33 @@ static int client_mmap(struct ef_shrub_client* client,
   return 0;
 }
 
-static int client_request_q(struct ef_shrub_client *client,
-                            const char* server_addr, int qid)
+static int client_send_request(int socket, struct ef_shrub_request *request)
+{
+  int rc = send(socket, request, sizeof(*request), 0);
+
+  if( rc < 0 )
+    return -errno;
+  if( rc < sizeof(*request) )
+    return -EIO;
+
+  return 0;
+}
+
+
+static int client_request_queue(struct ef_shrub_client *client,
+                                const char* server_addr, int qid)
 {
   int rc = 0;
-  struct ef_shrub_queue_request req;
+  struct ef_shrub_request request;
 
   rc = client_connect(client->socket, server_addr);
   if( rc < 0 )
     return rc;
 
-  req.server_version = EF_SHRUB_VERSION;
-  req.qid = qid;
-  rc = send(client->socket, &req, sizeof(req), 0);
-  if( rc < 0 )
-    rc = -errno;
-
-  return rc;
+  request.server_version = EF_SHRUB_VERSION;
+  request.type = EF_SHRUB_REQUEST_QUEUE;
+  request.requests.queue.qid = qid;
+  return client_send_request(client->socket, &request);
 }
 
 static void client_munmap(struct ef_shrub_client* client)
@@ -167,9 +177,9 @@ int ef_shrub_client_open(struct ef_shrub_client* client,
     goto fail_socket;
   client->socket = rc;
 
-  rc = client_request_q(client, server_addr, qid);
+  rc = client_request_queue(client, server_addr, qid);
   if( rc < 0 )
-    goto fail_request_q;
+    goto fail_request_queue;
 
   rc = client_recv_metrics(client, buffers);
   if( rc < 0 )
@@ -179,7 +189,7 @@ int ef_shrub_client_open(struct ef_shrub_client* client,
 
 fail_recv:
   client_munmap(client);
-fail_request_q:
+fail_request_queue:
   close(client->socket);
 fail_socket:
   return rc;
