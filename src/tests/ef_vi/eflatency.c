@@ -669,7 +669,6 @@ static const test_t* do_init(int ifindex, int mode,
 static void prepare(struct eflatency_vi* rx_vi)
 {
   int i;
-  rx_vi->needs_rx_post = ( rx_vi->vi.nic_type.arch != EF_VI_ARCH_EFCT );
   if( rx_vi->needs_rx_post ) {
     /* Ensure we leave space to allow ping/pong to unconditionally post a
      * buffer, which they do at the start of their loop.
@@ -720,6 +719,7 @@ int main(int argc, char* argv[])
   unsigned long rx_min_page_size;
   unsigned long min_page_size;
   unsigned long can_rx_poll;
+  unsigned long use_rx_ref;
   void* pkt_mem;
   int pkt_mem_bytes;
   int i;
@@ -891,6 +891,13 @@ int main(int argc, char* argv[])
     pb->dma_buf_addr = ef_memreg_dma_addr(memreg, i * BUF_SIZE);
     pb->dma_buf_addr += offsetof(struct pkt_buf, dma_buf);
   }
+
+
+  /* Default to descriptor style RX unless we can confirm support for RX_REF */
+  rx_vi.needs_rx_post = 1;
+  if( ef_vi_capabilities_get(driver_handle, rx_ifindex, EF_VI_CAP_RX_REF,
+                             &use_rx_ref) == 0 && use_rx_ref )
+    rx_vi.needs_rx_post = 0;
 
   prepare(&rx_vi);
 
