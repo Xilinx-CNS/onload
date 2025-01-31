@@ -84,10 +84,10 @@ void efhw_init_debugfs_efct(struct efhw_nic *nic)
   struct efhw_nic_efct *efct = (struct efhw_nic_efct *) nic->arch_extra;
 
   /* Create directory */
-  efct->debug_dir = debugfs_create_dir("efct", nic->debug_dir);
+  efct->debug_dir.dir = debugfs_create_dir("efct", nic->debug_dir.dir);
 
   /* Create files */
-  efrm_init_debugfs_files(efct->debug_dir, efhw_debugfs_efct_parameters, efct);
+  efrm_init_debugfs_files(&efct->debug_dir, efhw_debugfs_efct_parameters, efct);
 }
 
 /**
@@ -100,8 +100,7 @@ void efhw_fini_debugfs_efct(struct efhw_nic *nic)
 {
   struct efhw_nic_efct *efct = (struct efhw_nic_efct *) nic->arch_extra;
 
-  debugfs_remove_recursive(efct->debug_dir);
-  efct->debug_dir = NULL;
+  efrm_fini_debugfs_files(&efct->debug_dir);
 }
 
 #else /* !CONFIG_DEBUG_FS */

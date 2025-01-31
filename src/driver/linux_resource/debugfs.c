@@ -66,6 +66,16 @@ static struct file_operations efrm_debugfs_file_ops = {
   .release = single_release
 };
 
+static int efrm_debugfs_params_len(const struct efrm_debugfs_parameter *params)
+{
+  int len = 0;
+
+  while( params++->name )
+    ++len;
+
+  return len;
+}
+
 /* Functions for printing various types of parameter. */
 
 #define EFRM_READ_PARAM(name, format, type) \
@@ -117,45 +127,56 @@ int efrm_debugfs_read_devname(struct seq_file *file, const void *data)
 
 /**
  * efrm_init_debugfs_files - create parameter-files in a debugfs directory
- * @parent: Containing directory
+ * @debug_dir: Pointer to struct holding the containing directory
  * @params: Pointer to zero-terminated parameter definition array
  * @ref: Pointer passed to reader function
  *
  * Add parameter-files to the given debugfs directory.
  */
-void efrm_init_debugfs_files(struct dentry *parent,
+void efrm_init_debugfs_files(struct efrm_debugfs_dir *debug_dir,
                              const struct efrm_debugfs_parameter *params,
                              void *ref)
 {
-  struct efrm_debugfs_bound_param *binding;
+  struct efrm_debugfs_bound_param *bindings;
   unsigned int pos;
 
-  if (IS_ERR_OR_NULL(parent))
+  if (IS_ERR_OR_NULL(debug_dir->dir))
     return;
+
+  bindings = kmalloc(sizeof(*bindings) * efrm_debugfs_params_len(params),
+                     GFP_KERNEL);
+  if (!bindings)
+    goto err;
 
   for (pos = 0; params[pos].name; pos++) {
     struct dentry *entry;
 
-    binding = kmalloc(sizeof(*binding), GFP_KERNEL);
-    if (!binding)
-      goto err;
-    binding->param = &params[pos];
-    binding->ref = ref;
+    bindings[pos].param = &params[pos];
+    bindings[pos].ref = ref;
 
-    entry = debugfs_create_file(params[pos].name, S_IRUGO, parent, binding,
-                                &efrm_debugfs_file_ops);
+    entry = debugfs_create_file(params[pos].name, S_IRUGO, debug_dir->dir,
+                                &bindings[pos], &efrm_debugfs_file_ops);
     if (IS_ERR_OR_NULL(entry)) {
-      kfree(binding);
+      kfree(bindings);
       EFRM_ERR("%s failed, rc=%ld.\n", __FUNCTION__, PTR_ERR(entry));
       goto err;
     }
   }
 
+  debug_dir->bindings = bindings;
   return;
 
 err:
   while (pos--)
-    debugfs_lookup_and_remove(params[pos].name, parent);
+    debugfs_lookup_and_remove(params[pos].name, debug_dir->dir);
+}
+
+void efrm_fini_debugfs_files(struct efrm_debugfs_dir *debug_dir)
+{
+  kfree(debug_dir->bindings);
+  /* debugfs_remove is ok to pass ERR_OR_NULL here */
+  debugfs_remove_recursive(debug_dir->dir);
+  debug_dir->dir = NULL;
 }
 
 /**

@@ -525,6 +525,11 @@ struct efhw_func_ops {
 
 struct pci_dev;
 
+struct efrm_debugfs_dir {
+	struct dentry *dir;
+	void *bindings;
+};
+
 /*! */
 struct efhw_nic {
 	/*! zero base index in efrm_nic_tablep->nic array */
@@ -651,7 +656,7 @@ struct efhw_nic {
         /* TX datapath firmware variant */
         uint16_t tx_variant;
 
-	struct dentry *debug_dir;
+	struct efrm_debugfs_dir debug_dir;
 	struct dentry *rs_debug_dirs[EFRM_RESOURCE_NUM];
 
         /* arch-specific state */
