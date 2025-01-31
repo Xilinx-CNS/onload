@@ -95,7 +95,7 @@ struct efhw_nic_ef10ct {
     struct mutex lock;
   } vi_allocator;
   struct efct_filter_state filter_state;
-  struct dentry* debug_dir;
+  struct efrm_debugfs_dir debug_dir;
 };
 
 static inline u32 ef10ct_get_queue_num(u32 queue_handle)

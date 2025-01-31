@@ -113,8 +113,10 @@ extern int efrm_debugfs_read_string(struct seq_file *, const void *);
 }
 
 
-extern void efrm_init_debugfs_files(struct dentry *parent,
-                       const struct efrm_debugfs_parameter *params, void *ref);
+extern void efrm_init_debugfs_files(struct efrm_debugfs_dir *debug_dir,
+                       const struct efrm_debugfs_parameter *params,
+                       void *ref);
+extern void efrm_fini_debugfs_files(struct efrm_debugfs_dir *debug_dir);
 
 #endif /* CONFIG_DEBUG_FS */
 
