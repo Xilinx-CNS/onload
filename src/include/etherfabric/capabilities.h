@@ -179,6 +179,9 @@ enum ef_vi_capability {
   /** Ability to independently poll for RX */
   EF_VI_CAP_RX_POLL,
 
+  /** RX uses RX_REF events */
+  EF_VI_CAP_RX_REF,
+
   /** Maximum value of capabilities enumeration */
   EF_VI_CAP_MAX, /* Keep this last */
 };

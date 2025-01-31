@@ -346,6 +346,10 @@ int efch_capabilities_op(struct efch_capabilities_in* in,
     get_from_nic_flags(nic, NIC_FLAG_RX_POLL, out);
     break;
 
+  case EF_VI_CAP_RX_REF:
+    get_from_nic_flags(nic, NIC_FLAG_RX_REF, out);
+    break;
+
   default:
     out->support_rc = -ENOSYS;
     out->val = 0;

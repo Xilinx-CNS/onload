@@ -197,6 +197,8 @@ typedef union {
 
 
 /* --- NIC-feature flags --- */
+/* RX events are RX_REF, not RX */
+#define NIC_FLAG_RX_REF 0x1
 #define NIC_FLAG_BUG35388_WORKAROUND 0x80
 #define NIC_FLAG_MCAST_LOOP_HW 0x100
 #define NIC_FLAG_14BYTE_PREFIX 0x200
