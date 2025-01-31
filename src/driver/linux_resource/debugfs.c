@@ -20,16 +20,12 @@ struct efrm_debugfs_bound_param {
 
 
 #ifdef EFRM_NEED_DEBUGFS_LOOKUP_AND_REMOVE
+/* Compat for linux<5.19. */
 void debugfs_lookup_and_remove(const char *name, struct dentry *dir)
 {
-  struct qstr child_name = QSTR_INIT(name, strlen(name));
-  struct dentry *child;
+  struct dentry *child = debugfs_lookup(name, dir);
 
-  child = d_hash_and_lookup(dir, &child_name);
-  if (!IS_ERR_OR_NULL(child)) {
-    /* If it's a "regular" file, free its parameter binding */
-    if (S_ISREG(child->d_inode->i_mode))
-    kfree(child->d_inode->i_private);
+  if (child) {
     debugfs_remove(child);
     dput(child);
   }
