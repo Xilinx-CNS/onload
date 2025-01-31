@@ -265,10 +265,6 @@ extern int
 __ef_vi_capabilities_get(ef_driver_handle handle, int ifindex, int pd_id,
                          ef_driver_handle pd_dh, enum ef_vi_capability cap,
                          unsigned long* value);
-extern int
-ef_pd_capabilities_get(ef_driver_handle handle, ef_pd* pd,
-                       ef_driver_handle pd_dh, enum ef_vi_capability cap,
-                       unsigned long* value);
 
 extern unsigned ef_vi_evq_clear_stride(void);
 

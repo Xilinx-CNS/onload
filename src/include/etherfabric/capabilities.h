@@ -20,6 +20,7 @@ extern "C" {
 #endif
 
 #include <etherfabric/base.h>
+#include <etherfabric/pd.h>
 
 /*
  * List of capabilities that can be queried.
@@ -208,6 +209,28 @@ enum ef_vi_capability {
 extern int
 ef_vi_capabilities_get(ef_driver_handle handle, int ifindex,
                        enum ef_vi_capability cap, unsigned long* value);
+
+/*! \brief Get the value of the given capability on a specific ef_pd
+**
+** \param handle  The ef_driver_handle associated with the interface that you
+**                wish to query.
+** \param pd      The ef_pd that you wish to query.
+** \param pd_dh   The ef_driver_handle associated with the pd that you
+**                wish to query.
+** \param cap     The capability to get.
+** \param value   Pointer to location at which to store the value.
+**
+** \return 0 on success (capability is supported and value field is updated),
+           or a negative error code:\n
+**         -EOPNOTSUPP if the capability is not supported\n
+**         -ENOSYS if the API does not know how to retreive support for the
+**                 supplied capability\n
+**         other negative error if support could not be retrieved
+**/
+extern int
+ef_pd_capabilities_get(ef_driver_handle handle, ef_pd* pd,
+                       ef_driver_handle pd_dh, enum ef_vi_capability cap,
+                       unsigned long* value);
 
 
 /*! \brief Gets the maximum supported value of \ref ef_vi_capability
