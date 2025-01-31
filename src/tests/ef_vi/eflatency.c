@@ -559,27 +559,24 @@ static inline void rx_wait_poll_evq(struct eflatency_vi* vi)
 
 /**********************************************************************/
 
-static const test_t* do_init(int ifindex, int mode,
-                             struct eflatency_vi* latency_vi, void* pkt_mem,
-                             size_t pkt_mem_bytes)
+static const test_t* do_init(int mode, struct eflatency_vi* latency_vi,
+                             void* pkt_mem, size_t pkt_mem_bytes)
 {
   ef_vi* vi = &latency_vi->vi;
-  enum ef_pd_flags pd_flags = 0;
   ef_filter_spec filter_spec;
   enum ef_vi_flags vi_flags = cfg_vi_flags;
   int rc;
   const test_t* t;
   unsigned long capability_val;
 
-  TRY(ef_pd_alloc(&latency_vi->pd, driver_handle, ifindex, pd_flags));
-
   if( cfg_ctpio_no_poison )
     vi_flags |= EF_VI_TX_CTPIO_NO_POISON;
 
   /* Try with CTPIO first. */
   if( mode & MODE_CTPIO &&
-      ef_vi_capabilities_get(driver_handle, ifindex, EF_VI_CAP_CTPIO,
-                             &capability_val) == 0 && capability_val ) {
+      ef_pd_capabilities_get(driver_handle, &latency_vi->pd, driver_handle,
+                             EF_VI_CAP_CTPIO, &capability_val) == 0 &&
+                             capability_val ) {
     vi_flags |= EF_VI_TX_CTPIO;
     if( ef_vi_alloc_from_pd(vi, driver_handle, &latency_vi->pd, driver_handle,
                             -1, -1, -1, NULL, -1, vi_flags) == 0 )
@@ -590,8 +587,9 @@ static const test_t* do_init(int ifindex, int mode,
 
   /* Try with TX alternatives if CTPIO failed. */
   if( mode & MODE_ALT &&
-      ef_vi_capabilities_get(driver_handle, ifindex, EF_VI_CAP_TX_ALTERNATIVES,
-                             &capability_val) == 0 && capability_val ) {
+      ef_pd_capabilities_get(driver_handle, &latency_vi->pd, driver_handle,
+                             EF_VI_CAP_TX_ALTERNATIVES, &capability_val) == 0
+                             && capability_val ) {
     vi_flags |= EF_VI_TX_ALT;
     if( ef_vi_alloc_from_pd(vi, driver_handle, &latency_vi->pd, driver_handle,
                             -1, -1, -1, NULL, -1, vi_flags) == 0 ) {
@@ -835,15 +833,22 @@ int main(int argc, char* argv[])
   else if( strcmp(argv[0], "pong") != 0 )
     usage("Unknown command '%s'", argv[0]);
 
+  /* Open driver handle now, and allocate pds so we can determine caps */
   TRY(ef_driver_open(&driver_handle));
-  TRY(ef_vi_capabilities_get(driver_handle, rx_ifindex,
-                             EF_VI_CAP_MIN_BUFFER_MODE_SIZE, &rx_min_page_size));
+  TRY(ef_pd_alloc(&rx_vi.pd, driver_handle, rx_ifindex, 0));
+  if( tx_ifindex >= 0 )
+    TRY(ef_pd_alloc(&tx_vi.pd, driver_handle, tx_ifindex, 0));
+
+  TRY(ef_pd_capabilities_get(driver_handle, &rx_vi.pd, driver_handle,
+                             EF_VI_CAP_MIN_BUFFER_MODE_SIZE,
+                             &rx_min_page_size));
   if( tx_ifindex < 0 ) {
     min_page_size = rx_min_page_size;
   }
   else {
-    TRY(ef_vi_capabilities_get(driver_handle, tx_ifindex,
-                               EF_VI_CAP_MIN_BUFFER_MODE_SIZE, &min_page_size));
+    TRY(ef_pd_capabilities_get(driver_handle, &tx_vi.pd, driver_handle,
+                               EF_VI_CAP_MIN_BUFFER_MODE_SIZE,
+                               &min_page_size));
     min_page_size = CI_MAX(rx_min_page_size, min_page_size);
   }
 
@@ -867,18 +872,18 @@ int main(int argc, char* argv[])
   /* Initialize a VI and configure it to operate with the lowest latency
    * possible.  The return value specifies the test that the application must
    * run to use the VI in its configured mode. */
-  t = do_init(rx_ifindex, cfg_mode, &rx_vi, pkt_mem, pkt_mem_bytes);
+  t = do_init(cfg_mode, &rx_vi, pkt_mem, pkt_mem_bytes);
 
   if( tx_ifindex < 0 ) {
     tx_vi_ptr = &rx_vi;
   } else {
     /* mode really selects tx method */
-    t = do_init(tx_ifindex, cfg_mode, &tx_vi, pkt_mem, pkt_mem_bytes);
+    t = do_init(cfg_mode, &tx_vi, pkt_mem, pkt_mem_bytes);
     tx_vi_ptr = &tx_vi;
   }
 
   /* Test gives TX send method. Determine RX polling method */
-  if( ef_vi_capabilities_get(driver_handle, rx_ifindex,
+  if( ef_pd_capabilities_get(driver_handle, &rx_vi.pd, driver_handle,
                              EF_VI_CAP_RX_POLL,
                              &can_rx_poll) == 0 && can_rx_poll )
     rx_wait = rx_wait_poll_rx;
@@ -895,8 +900,9 @@ int main(int argc, char* argv[])
 
   /* Default to descriptor style RX unless we can confirm support for RX_REF */
   rx_vi.needs_rx_post = 1;
-  if( ef_vi_capabilities_get(driver_handle, rx_ifindex, EF_VI_CAP_RX_REF,
-                             &use_rx_ref) == 0 && use_rx_ref )
+  if( ef_pd_capabilities_get(driver_handle, &rx_vi.pd, driver_handle,
+                             EF_VI_CAP_RX_REF, &use_rx_ref) == 0 &&
+                             use_rx_ref )
     rx_vi.needs_rx_post = 0;
 
   prepare(&rx_vi);
