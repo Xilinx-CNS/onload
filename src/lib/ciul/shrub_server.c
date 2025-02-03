@@ -620,6 +620,27 @@ fail:
   return rc;
 }
 
+static int server_request_token(struct ef_shrub_server *server,
+                                       int socket)
+{
+  struct ef_shrub_token_response response = {0};
+  int rc;
+
+  response.shared_rxq_token = 0;
+  rc = send(socket, &response, sizeof(response), 0);
+  if( rc < 0 )
+    return -errno;
+  if( rc < sizeof(response) )
+    return -EIO;
+  /* Client will connect again once it has an rxq to attach to. Remove it from
+   * the epoll set */
+  rc = close(socket);
+  if( rc < 0 )
+    return -errno;
+
+  return 0;
+}
+
 static int server_request_received(struct ef_shrub_server* server, int socket)
 {
   struct ef_shrub_request request;
@@ -632,32 +653,32 @@ static int server_request_received(struct ef_shrub_server* server, int socket)
     else
       rc = -EPROTO;
 
-    goto fail;
+    goto out_close;
   }
 
   if( request.server_version != EF_SHRUB_VERSION ) {
     rc = -EPROTO;
-    goto fail;
+    goto out_close;
   }
 
   switch( request.type ) {
   case EF_SHRUB_REQUEST_TOKEN:
-    rc = -EOPNOTSUPP;
-    goto fail;
+    rc = server_request_token(server, socket);
+    goto out_close;
   case EF_SHRUB_REQUEST_QUEUE:
     rc = server_request_queue(server, socket, request.requests.queue.qid);
     if( rc < 0 )
-      goto fail;
+      goto out_close;
 
     break;
   default:
     rc = -EOPNOTSUPP;
-    goto fail;
+    goto out_close;
   }
 
   return 0;
 
-fail:
+out_close:
   close(socket);
   return rc;
 }

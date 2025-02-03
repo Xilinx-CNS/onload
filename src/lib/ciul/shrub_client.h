@@ -20,6 +20,20 @@ struct ef_shrub_client
   struct ef_shrub_client_state* state;
 };
 
+/* Request shared rxq token from shrub server
+ *
+ * server_addr: The address for the server, typically a filesystem path
+ * response:    Response from the server containing shared rxq token
+ *
+ * Returns zero on success, or negative error codes including
+ *  -ECONNREFUSED server is not listening
+ *  -EPERM        user does not have permission to connect to the address
+ *
+ * This function will block while communicating with the server.
+ */
+int ef_shrub_client_request_token(const char *server_addr,
+                                  struct ef_shrub_token_response *response);
+
 /* Open a connection to a server.
  *
  * client:      pointer to the structure for managing the connection

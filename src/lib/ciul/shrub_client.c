@@ -164,6 +164,48 @@ static int client_recv_metrics(struct ef_shrub_client* client, void* buffers)
   return 0;
 }
 
+static int client_request_token(int sock, const char *server_addr)
+{
+  struct ef_shrub_request request = {0};
+  int rc;
+
+  rc = client_connect(sock, server_addr);
+  if( rc )
+    return rc;
+
+  request.server_version = EF_SHRUB_VERSION;
+  request.type = EF_SHRUB_REQUEST_TOKEN;
+  return client_send_request(sock, &request);
+}
+
+int ef_shrub_client_request_token(const char *server_addr,
+                                  struct ef_shrub_token_response *response)
+{
+  int sock;
+  int rc;
+
+  rc = client_socket();
+  if( rc < 0 )
+    return rc;
+
+  sock = rc;
+  rc = client_request_token(sock, server_addr);
+  if( rc < 0 )
+    goto out;
+
+  rc = recv(sock, response, sizeof(*response), 0);
+  if( rc < 0 )
+    rc = -errno;
+  else if( rc < sizeof(*response) )
+    rc = -EPROTO;
+  else
+    rc = 0;
+
+out:
+  close(sock);
+  return rc;
+}
+
 int ef_shrub_client_open(struct ef_shrub_client* client,
                          void* buffers,
                          const char* server_addr,
