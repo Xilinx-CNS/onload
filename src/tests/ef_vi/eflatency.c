@@ -434,7 +434,6 @@ static const test_t x3_ctpio_test = {
 };
 
 
-
 /**********************************************************************/
 
 /* Poll for events. Will always return as soon as RX event found,
@@ -634,11 +633,18 @@ static const test_t* do_init(int mode, struct eflatency_vi* latency_vi,
   init_udp_pkt(pkt_bufs[FIRST_TX_BUF]->dma_buf, cfg_payload_len);
   tx_frame_len = cfg_payload_len + HEADER_SIZE;
 
-  /* Other modes don't work with X3 */
-  if ( vi->nic_type.arch == EF_VI_ARCH_EFCT ) {
+  /* Some NICs only support CTPIO, if so, check we've selected it */
+  if( ef_pd_capabilities_get(driver_handle, &latency_vi->pd, driver_handle,
+                             EF_VI_CAP_CTPIO_ONLY, &capability_val) == 0 &&
+                             capability_val ) {
+    if( (vi_flags & EF_VI_TX_CTPIO) == 0 ) {
+      fprintf(stderr, "Failed to allocate VI with CTPIO, but CTPIO is only "
+                      "supported TX mode\n");
+      TEST(0);
+    }
     t = &x3_ctpio_test;
   }
-  /* First, try CTPIO. */
+  /* Otherwise, try CTPIO first. */
   else if ( vi_flags & EF_VI_TX_CTPIO ) {
     t = &ctpio_test;
   }
