@@ -198,6 +198,10 @@ static void ef10ct_check_for_flushes(struct work_struct *work)
   bool found_flush = false;
   int q_id;
   int i;
+  /* Flush complete events only reserve 8 bits for a queue id. This means that
+   * in order to free a valid queue handle, we will have to insert the queue
+   * type in the upper 8 bits of the handle. */
+  uint32_t queue_handle;
 
   /* In the case of a flush timeout this may have been rescheduled following
    * evq disable. In which case bail out now.
@@ -212,13 +216,10 @@ static void ef10ct_check_for_flushes(struct work_struct *work)
       found_flush = true;
       q_id = CI_QWORD_FIELD(*event, EFCT_FLUSH_QUEUE_ID);
       if(CI_QWORD_FIELD(*event, EFCT_FLUSH_TYPE) == EFCT_FLUSH_TYPE_TX) {
-        efhw_handle_txdmaq_flushed(evq->nic, q_id);
+        queue_handle = ef10ct_reconstruct_queue_handle(q_id,
+                                                  EF10CT_QUEUE_HANDLE_TYPE_TXQ);
+        efhw_handle_txdmaq_flushed(evq->nic, queue_handle);
       } else /* EFCT_FLUSH_TYPE_RX */ {
-        uint32_t queue_handle;
-
-        /* Flush complete events only reserve 8 bits for a queue id. This means
-         * that in order to free a valid queue handle, we will have to insert
-         * the queue type in the upper 8 bits of the handle. */
         queue_handle = ef10ct_reconstruct_queue_handle(q_id,
                                                   EF10CT_QUEUE_HANDLE_TYPE_RXQ);
         ef10ct_free_rxq(evq->nic, queue_handle);
