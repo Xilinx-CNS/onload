@@ -2553,9 +2553,11 @@ ci_inline ci_uint32 ci_ip_time_freq_hz2tick(ci_netif* ni, ci_uint32 hz)
 ci_inline cicp_hwport_mask_t ci_netif_get_hwport_mask(ci_netif* ni)
 {
 #ifdef __KERNEL__
-  return ni->tx_hwport_mask | ni->rx_hwport_mask;
+  return ni->tx_hwport_mask | ni->rx_hwport_mask |
+         ni->multiarch_hwport_mask;
 #else
-  return ni->state->tx_hwport_mask | ni->state->rx_hwport_mask;
+  return ni->state->tx_hwport_mask | ni->state->rx_hwport_mask |
+         ni->state->multiarch_hwport_mask;
 #endif
 }
 

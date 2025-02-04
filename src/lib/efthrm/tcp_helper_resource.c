@@ -2407,6 +2407,7 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
    */
   ns->tx_hwport_mask = ni->tx_hwport_mask;
   ns->rx_hwport_mask = ni->rx_hwport_mask;
+  ns->multiarch_hwport_mask = ni->multiarch_hwport_mask;
   memset(ns->intf_i_to_hwport, 0, sizeof(ns->intf_i_to_hwport));
   memcpy(ns->hwport_to_intf_i, ni->hwport_to_intf_i,
          sizeof(ns->hwport_to_intf_i));
@@ -2905,6 +2906,7 @@ static int oo_get_nics(tcp_helper_resource_t* trs, int ifindices_len)
   int rc, i, intf_i;
   ci_hwport_id_t hwport;
   cicp_hwport_mask_t hwport_mask, whitelist_mask, llct_hwports;
+  cicp_hwport_mask_t multiarch_hwport_mask = 0;
   cicp_hwport_mask_t tx_hwport_mask, rx_hwport_mask;
 
   efrm_nic_set_clear(&ni->nic_set);
@@ -2951,14 +2953,16 @@ static int oo_get_nics(tcp_helper_resource_t* trs, int ifindices_len)
   rx_hwport_mask = hwport_mask;
 
   /* If there are LLCT hwports (and therefore multiarch NICs), the TX and RX
-   * hwports in this stack are going to be different.  We need to recompute
-   * them depending on the user-supplied configuration. */
+   * hwports in this stack might be different.  We need to recompute them
+   * depending on the user-supplied configuration. */
   llct_hwports = oo_get_llct_hwports(hwport_mask);
   if( llct_hwports ) {
     cicp_hwport_mask_t ff_hwports = oo_get_ff_hwports(hwport_mask,
                                                       llct_hwports);
     cicp_hwport_mask_t non_multiarch_hwports;
-    non_multiarch_hwports = hwport_mask & ~(llct_hwports | ff_hwports);
+
+    multiarch_hwport_mask = llct_hwports | ff_hwports;
+    non_multiarch_hwports = hwport_mask & ~multiarch_hwport_mask;
 
     /* Recompute TX hwports. */
     if( NI_OPTS(ni).multiarch_tx_datapath == EF_MULTIARCH_DATAPATH_FF )
@@ -2980,7 +2984,24 @@ static int oo_get_nics(tcp_helper_resource_t* trs, int ifindices_len)
     }
   }
 
-  /* Some hwports might end up being unselected. */
+  /* There are no multiarch hwports if there are no LLCT hwports. */
+  ci_assert_impl(!llct_hwports, !multiarch_hwport_mask);
+
+  /* There is no fine-grained hwport control without multiarch NICs. */
+  ci_assert_impl(!multiarch_hwport_mask, (tx_hwport_mask == hwport_mask) &&
+                                         (rx_hwport_mask == hwport_mask));
+
+  /* The user cannot select all datapaths for TX in multiarch NICs. */
+  ci_assert_impl(multiarch_hwport_mask, tx_hwport_mask != hwport_mask);
+
+  /* Cannot end up with more hwports than discovered earlier. */
+  ci_assert_le(tx_hwport_mask, hwport_mask);
+  ci_assert_le(rx_hwport_mask, hwport_mask);
+  ci_assert_le(multiarch_hwport_mask, hwport_mask);
+
+  /* This includes only hwports for datapaths that are in use.  We can find the
+   * full set of hwports for NICs in use later with the multiarch_hwport_mask,
+   * which also includes the unused datapath hwports. */
   hwport_mask = tx_hwport_mask | rx_hwport_mask;
 
   if( ifindices_len < 0 ) {
@@ -3035,6 +3056,7 @@ static int oo_get_nics(tcp_helper_resource_t* trs, int ifindices_len)
   }
   ni->tx_hwport_mask = tx_hwport_mask;
   ni->rx_hwport_mask = rx_hwport_mask;
+  ni->multiarch_hwport_mask = multiarch_hwport_mask;
   return 0;
 
  fail:

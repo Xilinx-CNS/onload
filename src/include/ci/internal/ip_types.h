@@ -134,6 +134,11 @@ struct ci_netif_s {
   /* hwports accelerated by the stack */
   cicp_hwport_mask_t   tx_hwport_mask;
   cicp_hwport_mask_t   rx_hwport_mask;
+
+  /* Multiarch hwports to use where we want to disambiguate them from
+   * aggregated interfaces. */
+  cicp_hwport_mask_t    multiarch_hwport_mask;
+
   ci_int8              hwport_to_intf_i[CI_CFG_MAX_HWPORTS];
   ci_int8              intf_i_to_hwport[CI_CFG_MAX_INTERFACES];
   /* These uid_t are in the kernel init namespace */

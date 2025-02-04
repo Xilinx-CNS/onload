@@ -47,11 +47,18 @@ enum {
    * them in the same enum. */
   XNSO0_IFINDEX,
   XNSO1_IFINDEX,
+
+  /* A heterogenous bond with a regular (one hwport) and a multiarch
+   * (two hwports) NICs. */
+  BONDO0_IFINDEX,
 };
 
 enum {
   ETHO0_HWPORTS = 0x01,
-  ETHO1_HWPORTS = 0x02 | 0x04,
+
+  ETHO1_FF_HWPORT = 0x02,
+  ETHO1_LL_HWPORT = 0x04,
+  ETHO1_HWPORTS = ETHO1_FF_HWPORT | ETHO1_LL_HWPORT,
 
   XNSO0_HWPORTS = 0x08,
   XNSO1_HWPORTS = 0x10,
@@ -538,13 +545,15 @@ static void test_cross_namespace_routing(void)
   cp_unit_netif_mock_destroy(&ni);
 }
 
-static void test_scope(void)
+
+static void test_nic_acceleratable(void)
 {
   struct cp_session s;
   init_session(&s, NULL);
 
   ci_netif ni;
   cp_unit_netif_mock(&ni, &s, NULL);
+  ni.state->multiarch_hwport_mask = ETHO1_HWPORTS;
 
   const char mac1[] = {0x00, 0x0f, 0x53, 0x00, 0x00, 0x00};
   const char mac2[] = {0x00, 0x0f, 0x53, 0x00, 0x00, 0x01};
@@ -554,16 +563,111 @@ static void test_scope(void)
   cp_unit_nl_handle_link_msg(&s, RTM_NEWLINK, ETHO1_IFINDEX, ETHO1_HWPORTS,
                              "ethO1", mac2);
 
+  /* A regular nic has two addresses: localhost and non-localhost. */
   cp_unit_nl_handle_addr_msg(&s, A("198.18.0.0"), ETHO0_IFINDEX, 16,
                              RT_SCOPE_HOST);
 
-  cp_unit_nl_handle_addr_msg(&s, A("198.19.0.0"), ETHO1_IFINDEX, 16,
+  cp_unit_nl_handle_addr_msg(&s, A("198.19.0.0"), ETHO0_IFINDEX, 16,
+                             RT_SCOPE_SITE);
+
+  /* A multiarch nic has one address. */
+  cp_unit_nl_handle_addr_msg(&s, A("10.0.0.0"), ETHO1_IFINDEX, 16,
                              RT_SCOPE_UNIVERSE);
 
   cmp_ok(cicp_user_addr_is_local_efab(&ni, ASH("198.18.0.0")), "==", 0,
          "localhost is not acceleratable");
   cmp_ok(cicp_user_addr_is_local_efab(&ni, ASH("198.19.0.0")), "==", 1,
-         "any scope larger than localhost is acceleratable");
+         "site scope is acceleratable");
+  cmp_ok(cicp_user_addr_is_local_efab(&ni, ASH("10.0.0.0")), "==", 1,
+         "universe scope is acceleratable");
+
+  /* Let's use only the full-featured datapath of a multiarch nic. */
+  ni.state->tx_hwport_mask = ni.state->rx_hwport_mask = ETHO1_FF_HWPORT;
+
+  cmp_ok(cicp_user_addr_is_local_efab(&ni, ASH("198.19.0.0")), "==", 0,
+         "unselected nic makes its non-localhost address not acceleratable");
+  cmp_ok(cicp_user_addr_is_local_efab(&ni, ASH("10.0.0.0")), "==", 1,
+         "one datapath of a multiarch nic is still acceleratable");
+
+  cp_unit_netif_mock_destroy(&ni);
+}
+
+
+static void test_bond_acceleratable(void)
+{
+  struct cp_session s;
+  init_session(&s, NULL);
+
+  ci_netif ni;
+  cp_unit_netif_mock(&ni, &s, NULL);
+  ni.state->multiarch_hwport_mask = ETHO1_HWPORTS;
+
+  const char mac0[] = {0x00, 0x0f, 0x53, 0x00, 0x00, 0x00};
+  const char mac1[] = {0x00, 0x0f, 0x53, 0x00, 0x00, 0x01};
+  const char mac2[] = {0x00, 0x0f, 0x53, 0x00, 0x00, 0x02};
+
+  /* Create a bond. */
+  cp_unit_nl_handle_team_link_msg(&s, RTM_NEWLINK, BONDO0_IFINDEX,
+                                  "bondO0", mac0);
+  cp_team_set_mode(&s, BONDO0_IFINDEX, CICP_BOND_MODE_ACTIVE_BACKUP,
+                   0 /* hash policy */);
+
+  /* Add a regular nic. */
+  cp_unit_nl_handle_teamslave_link_msg(&s, RTM_NEWLINK, ETHO0_IFINDEX,
+                                       "ethO0", mac1);
+
+  cp_populate_llap_hwports(&s, ETHO0_IFINDEX,
+                           cp_hwport_mask_first(ETHO0_HWPORTS),
+                           (ci_uint64) -1);
+
+  cicp_rowid_t port_id = cp_team_port_add(&s, BONDO0_IFINDEX, ETHO0_IFINDEX);
+  ok(CICP_ROWID_IS_VALID(port_id), "add first port");
+
+  cp_team_slave_update_flags(&s, port_id, CICP_BOND_ROW_FLAG_UP,
+                             CICP_BOND_ROW_FLAG_UP);
+
+  /* Add a multiarch nic. */
+  cp_unit_nl_handle_teamslave_link_msg(&s, RTM_NEWLINK, ETHO1_IFINDEX,
+                                       "ethO1", mac2);
+
+  cp_populate_llap_hwports(&s, ETHO1_IFINDEX,
+                           cp_hwport_mask_first(ETHO1_FF_HWPORT),
+                           (ci_uint64) -1);
+
+  cp_populate_llap_hwports(&s, ETHO1_IFINDEX,
+                           cp_hwport_mask_first(ETHO1_LL_HWPORT),
+                           (ci_uint64) -1);
+
+  port_id = cp_team_port_add(&s, BONDO0_IFINDEX, ETHO1_IFINDEX);
+  ok(CICP_ROWID_IS_VALID(port_id), "add second port");
+
+  cp_team_slave_update_flags(&s, port_id, CICP_BOND_ROW_FLAG_UP,
+                             CICP_BOND_ROW_FLAG_UP);
+
+  /* Add a new bond address. */
+  cp_unit_nl_handle_addr_msg(&s, A("10.0.0.0"), BONDO0_IFINDEX, 16,
+                             RT_SCOPE_UNIVERSE);
+
+  /* Tests. */
+  cmp_ok(cicp_user_addr_is_local_efab(&ni, ASH("10.0.0.0")), "==", 1,
+         "bond must be acceleratable");
+
+  ni.state->tx_hwport_mask = ni.state->rx_hwport_mask = ETHO1_FF_HWPORT;
+  cmp_ok(cicp_user_addr_is_local_efab(&ni, ASH("10.0.0.0")), "==", 0,
+         "bond without a regular nic is not acceleratable");
+
+  ni.state->tx_hwport_mask = ni.state->rx_hwport_mask = ETHO0_HWPORTS | ETHO1_FF_HWPORT;
+  cmp_ok(cicp_user_addr_is_local_efab(&ni, ASH("10.0.0.0")), "==", 1,
+         "bond with two nics without one datapath is still acceleratable");
+
+  ni.state->tx_hwport_mask = ni.state->rx_hwport_mask = ETHO0_HWPORTS;
+
+  /* If the Onload users unselect a multiarch nic, the multiarch_hwport_mask
+   * must be unset.  See oo_get_nics(). */
+  ni.state->multiarch_hwport_mask = 0;
+
+  cmp_ok(cicp_user_addr_is_local_efab(&ni, ASH("10.0.0.0")), "==", 0,
+         "bond without a multiarch nic is not acceleratable");
 
   cp_unit_netif_mock_destroy(&ni);
 }
@@ -580,7 +684,8 @@ int main(void)
 #ifdef CAN_TEST_ONLOAD_CPLANE_CALLS
   test_user_retrieve();
   test_cross_namespace_routing();
-  test_scope();
+  test_nic_acceleratable();
+  test_bond_acceleratable();
 #endif
 
   done_testing();
