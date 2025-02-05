@@ -3,6 +3,7 @@
 #define _GNU_SOURCE 1
 
 #include <etherfabric/vi.h>
+#include <etherfabric/capabilities.h>
 #include "utils.h"
 #include <ci/app.h>
 
@@ -513,4 +514,56 @@ int parse_interface(const char* s, int* ifindex_out)
     if( sscanf(s, "%d%c", ifindex_out, &dummy) != 1 )
       return 0;
   return 1;
+}
+
+
+int parse_interface_with_flags(const char* s, int* ifindex_out,
+                               enum ef_pd_flags *pd_flags_out,
+                               ef_driver_handle driver_handle)
+{
+  char *flags, ifname[IF_NAMESIZE];
+  unsigned long cap;
+  int rc;
+
+  strncpy(ifname, s, IF_NAMESIZE);
+
+  flags = strchr(s, '/');
+  if( flags ) {
+    int idx = (flags - s) / sizeof(char);
+    ifname[idx] = '\0';
+    flags++;
+  }
+
+  if( ! parse_interface(ifname, ifindex_out) )
+    return 0;
+
+  rc = ef_vi_capabilities_get(driver_handle, *ifindex_out,
+                              EF_VI_CAP_EXTRA_DATAPATHS, &cap);
+  if( rc != 0 || ! ( cap & EF_VI_EXTRA_DATAPATH_LLCT ) ) {
+    *pd_flags_out &= ~EF_PD_LLCT;
+    if( flags )
+      fprintf(stderr,
+              "WARNING: interface %d is not multi-arch, ignoring flag '%s'\n",
+              *ifindex_out, flags);
+    return 1;
+  }
+
+  if( flags ) {
+    if( strncmp("llct", flags, 5) == 0 ) {
+      *pd_flags_out |= EF_PD_LLCT;
+    } else if( strncmp("ff", flags, 3) == 0 ) {
+      *pd_flags_out &= ~EF_PD_LLCT;
+    } else {
+      errno = EINVAL;
+      return 0;
+    }
+  }
+
+  return 1;
+}
+
+
+const char* get_pd_datapath_string(ef_pd *pd)
+{
+  return (pd->pd_flags & EF_PD_LLCT) ? "llct" : "ff";
 }

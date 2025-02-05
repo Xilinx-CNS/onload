@@ -25,6 +25,7 @@
 #include <stddef.h>
 #include <endian.h>
 
+#include <etherfabric/pd.h>
 
 #ifndef MAP_HUGETLB
 /* Not always defined in glibc headers.  If the running kernel does not
@@ -148,5 +149,9 @@ extern int my_getaddrinfo(const char* host, const char* port,
 extern int parse_long(char* s, long min_val, long max_val, long* out);
 extern int parse_host(const char* s, struct in_addr* ip_out);
 extern int parse_interface(const char* s, int* ifindex_out);
+extern int parse_interface_with_flags(const char* s, int* ifindex_out,
+                                      enum ef_pd_flags *pd_flags_out,
+                                      ef_driver_handle driver_handle);
+extern const char* get_pd_datapath_string(ef_pd *pd);
 
 #endif  /* __UTILS_H__ */

@@ -56,6 +56,8 @@ enum mode {
 };
 static unsigned         cfg_mode = MODE_DEFAULT;
 static enum ef_vi_flags cfg_vi_flags = 0;
+static enum ef_pd_flags cfg_rx_pd_flags = EF_PD_LLCT;
+static enum ef_pd_flags cfg_tx_pd_flags = EF_PD_LLCT;
 
 
 #define N_RX_BUFS	256u
@@ -695,6 +697,10 @@ static CI_NORETURN usage(const char* fmt, ...)
   }
   fprintf(stderr, "\nusage:\n");
   fprintf(stderr, "  eflatency [options] <ping|pong> <interface> [<tx_interface>]\n");
+  fprintf(stderr, "\npositional arguments:\n");
+  fprintf(stderr, "  <interface>         - the interface to send over, may\n");
+  fprintf(stderr, "                        append /ff or /llct to request\n");
+  fprintf(stderr, "                        a specific datapath\n");
   fprintf(stderr, "\noptions:\n");
   fprintf(stderr, "  -n <iterations>     - set number of iterations\n");
   fprintf(stderr, "  -s <message-size>   - set udp payload size. Accepts Python slices\n");
@@ -815,12 +821,18 @@ int main(int argc, char* argv[])
   argc -= optind;
   argv += optind;
 
+  /* Open driver handle now, so we can determine caps */
+  TRY(ef_driver_open(&driver_handle));
+
   if( argc != 2 && argc != 3 )
     usage(NULL);
-  if( ! parse_interface(argv[1], &rx_ifindex) )
+  if( ! parse_interface_with_flags(argv[1], &rx_ifindex, &cfg_rx_pd_flags,
+                                   driver_handle) )
     usage("Unable to parse RX interface '%s': %s", argv[1], strerror(errno));
 
-  if( argc == 3 && ! parse_interface(argv[2], &tx_ifindex) )
+  if( argc == 3 &&
+      ! parse_interface_with_flags(argv[2], &tx_ifindex, &cfg_tx_pd_flags,
+                                   driver_handle) )
     usage("Unable to parse TX interface '%s': %s", argv[2], strerror(errno));
 
   if( cfg_payload_len > MAX_UDP_PAYLEN || cfg_payload_end > MAX_UDP_PAYLEN ) {
@@ -839,11 +851,9 @@ int main(int argc, char* argv[])
   else if( strcmp(argv[0], "pong") != 0 )
     usage("Unknown command '%s'", argv[0]);
 
-  /* Open driver handle now, and allocate pds so we can determine caps */
-  TRY(ef_driver_open(&driver_handle));
-  TRY(ef_pd_alloc(&rx_vi.pd, driver_handle, rx_ifindex, 0));
+  TRY(ef_pd_alloc(&rx_vi.pd, driver_handle, rx_ifindex, cfg_rx_pd_flags));
   if( tx_ifindex >= 0 )
-    TRY(ef_pd_alloc(&tx_vi.pd, driver_handle, tx_ifindex, 0));
+    TRY(ef_pd_alloc(&tx_vi.pd, driver_handle, tx_ifindex, cfg_tx_pd_flags));
 
   TRY(ef_pd_capabilities_get(driver_handle, &rx_vi.pd, driver_handle,
                              EF_VI_CAP_MIN_BUFFER_MODE_SIZE,
@@ -935,7 +945,8 @@ int main(int argc, char* argv[])
                     cfg_payload_step);
         fprintf(yaml_fp, "iterations: %d\n", cfg_iter);
         fprintf(yaml_fp, "warmups: %d\n", cfg_warmups);
-        fprintf(yaml_fp, "test: %s\n", t->name);
+        fprintf(yaml_fp, "tx_mode: %s\n", t->name);
+        fprintf(yaml_fp, "rx_mode: %s\n", get_pd_datapath_string(&rx_vi.pd));
         fprintf(yaml_fp, "vi_flags: 0x%x\n", (unsigned)cfg_vi_flags);
         fprintf(yaml_fp, "ping_or_pong: %s\n", ping ? "ping" : "pong");
         if( ping )
@@ -952,7 +963,8 @@ int main(int argc, char* argv[])
   printf("# iterations: %d\n", cfg_iter);
   printf("# warmups: %d\n", cfg_warmups);
   printf("# frame len: %d\n", tx_frame_len);
-  printf("# mode: %s\n", t->name);
+  printf("# TX mode: %s\n", t->name);
+  printf("# RX mode: %s\n", get_pd_datapath_string(&rx_vi.pd));
   if( ping )
     printf("paylen\tmean\tmin\t50%%\t95%%\t99%%\tmax\n");
 
