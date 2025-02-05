@@ -940,6 +940,17 @@ void tcp_helper_get_filter_params(tcp_helper_resource_t* trs, int hwport,
 {
   int intf_i;
   ci_assert_lt((unsigned) hwport, CI_CFG_MAX_HWPORTS);
+
+  /* This is a suitable hwport for us if we have a VI available for RX. We
+   * might not if we don't know about this interface at all, for example it's
+   * been explicitly excluded, or it appeared after stack creation.
+   * Alternatively we might know about it, but don't want to use it for RX,
+   * which can apply with multipath NICs where RX and TX can be asymmetric. */
+
+  /* Not using this port for rx */
+  if( (trs->netif.state->rx_hwport_mask & (1 << hwport)) == 0 )
+    return;
+
   if( (intf_i = trs->netif.hwport_to_intf_i[hwport]) >= 0 ) {
     ef_vi* vi = &trs->netif.nic_hw[intf_i].vi;
     *vi_id = EFAB_VI_RESOURCE_INSTANCE(tcp_helper_vi(trs, intf_i));
