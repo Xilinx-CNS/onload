@@ -515,7 +515,7 @@ oo_deferred_arp_failed(ci_netif *ni, int af, ci_ip_pkt_fmt* pkt)
   cicp_pkt_complete_fake(ni, pkt);
 }
 
-/* Try to send one deferrred packet.  Returns TRUE if sent. */
+/* Try to send one deferred packet.  Returns TRUE if sent. */
 int oo_deferred_send_one(ci_netif *ni, struct oo_deferred_pkt* dpkt)
 {
   struct oo_cplane_handle *cp =
@@ -628,7 +628,7 @@ int oo_deferred_send_one(ci_netif *ni, struct oo_deferred_pkt* dpkt)
   return 1;
 }
 
-/* Try to send all deferrred packets.  Returns TRUE if all sent. */
+/* Try to send all deferred packets.  Returns TRUE if all sent. */
 int oo_deferred_send(ci_netif *ni)
 {
   int ret = 1;
