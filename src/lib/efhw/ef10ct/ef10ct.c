@@ -1103,8 +1103,8 @@ struct filter_insert_params {
 };
 
 
-static int get_rxq_from_mask(struct efhw_nic *nic,
-                             const struct cpumask *mask, bool exclusive)
+static int get_rxq_num_from_mask(struct efhw_nic *nic,
+                                 const struct cpumask *mask, bool exclusive)
 {
   int rc;
 
@@ -1137,6 +1137,12 @@ static int get_rxq_from_mask(struct efhw_nic *nic,
     }
 
     mutex_unlock(&ef10ct->rxq[rxq_num].bind_lock);
+
+    /* This needs to use queue number as visible to the upper layers rather
+     * than the MCDI handle, as it's not going straight to the HW but being
+     * used as part of the queue selection process, which operates on host
+     * side handles. */
+    rc = rxq_num;
   }
 
   return rc;
@@ -1147,7 +1153,7 @@ static int select_rxq(struct filter_insert_params *params, uint64_t rxq_in)
 {
   struct efhw_nic_ef10ct *ef10ct = params->nic->arch_extra;
   bool anyqueue, loose, exclusive;
-  int rxq = -1; /* ignored on failure, but initialised for logging */
+  int rxq_num = -1; /* ignored on failure, but initialised for logging */
   int rc = 0;
 
   anyqueue = params->flags & EFHW_FILTER_F_ANY_RXQ;
@@ -1161,30 +1167,30 @@ static int select_rxq(struct filter_insert_params *params, uint64_t rxq_in)
       rc = -EINVAL;
       goto out;
     }
-    rxq = rxq_in;
+    rxq_num = rxq_in;
   }
   else {
     if( params->mask )
-      rxq = get_rxq_from_mask(params->nic, params->mask, exclusive);
+      rxq_num = get_rxq_num_from_mask(params->nic, params->mask, exclusive);
   }
 
   /* Failed to get an rxq matching our cpumask, so allow fallback to any cpu
    * if allowed */
-  if( rxq < 0 && loose )
-    rxq = get_rxq_from_mask(params->nic, cpu_online_mask, exclusive);
+  if( rxq_num < 0 && loose )
+    rxq_num = get_rxq_num_from_mask(params->nic, cpu_online_mask, exclusive);
 
-  if( rxq < 0 ) {
+  if( rxq_num < 0 ) {
     EFHW_WARN("%s: Unable to find the queue ID for given mask, flags= %d\n",
               __func__, params->flags);
-    rc = rxq;
+    rc = rxq_num;
     goto out;
   }
 
  out:
-  EFHW_TRACE("%s: any: %d loose: %d exclusive: %d rxq_in: %llu rc: %d rxq: %d",
-             __func__, anyqueue, loose, exclusive, rxq_in, rc, rxq);
+  EFHW_TRACE("%s: any: %d loose: %d exclusive: %d rxq_in: %llu rc: %d rxq: %x",
+             __func__, anyqueue, loose, exclusive, rxq_in, rc, rxq_num);
 
-  return rc < 0 ? rc : rxq;
+  return rc < 0 ? rc : rxq_num;
 }
 
 
@@ -1194,6 +1200,7 @@ static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in_data,
   int rc;
   struct filter_insert_params *params = (struct filter_insert_params*)
                                         in_data->drv_opaque;
+  int rxq;
   int rxq_num;
 
   EFHW_MCDI_DECLARE_BUF(in, MC_CMD_FILTER_OP_IN_LEN);
@@ -1205,18 +1212,17 @@ static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in_data,
     .outbuf = (u32*)&out,
     .outlen = MC_CMD_FILTER_OP_OUT_LEN,
   };
-  int rxq;
-  rxq = select_rxq(params, in_data->filter->ring_cookie);
-  if( rxq < 0 )
-    return rxq;
+  rxq_num = select_rxq(params, in_data->filter->ring_cookie);
+  if( rxq_num < 0 )
+    return rxq_num;
 
   /* Various parts of the efvi user/kernel interface assume that the qid can fit
    * within 8 bits. This precludes us from using the full 32 bit queue handle
    * that we got from firmware without breaking existing apps. Instead, extract
    * the queue number from the handle and reconstruct the queue handle again
    * when it is needed. */
-  rxq_num = ef10ct_get_queue_num(rxq);
   EFHW_ASSERT(rxq_num < 256);
+  rxq = ef10ct_reconstruct_queue_handle(rxq_num, EF10CT_QUEUE_HANDLE_TYPE_RXQ);
 
   EFHW_MCDI_INITIALISE_BUF(in);
   EFHW_MCDI_INITIALISE_BUF(out);
