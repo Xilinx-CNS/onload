@@ -958,6 +958,10 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
     ef10ct->rxq[rxq_num].buffer_pages = pages;
     ef10ct->rxq[rxq_num].n_buffer_pages = params->n_hugepages;
   }
+  else {
+    ef10ct->rxq[rxq_num].buffer_pages = NULL;
+    ef10ct->rxq[rxq_num].n_buffer_pages = 0;
+  }
 
   flush_delayed_work(&ef10ct->evq[ef10ct_get_queue_num(evq)].check_flushes);
 
