@@ -57,7 +57,11 @@ int efch_capabilities_op(struct efch_capabilities_in* in,
     uint64_t nic_flags_mask = NIC_FLAG_LLCT;
     uint64_t nic_flags = 0;
 
-    if( in->cap & EF_VI_CAP_F_LLCT )
+    /* If we are looking up the properties of an LLCT NIC then we should
+     * include the LLCT flag, but we should avoid doing this if we are checking
+     * what datapaths are supported to avoid returning -ENODEV. Really, this is
+     * a user error, but it will surely lead to confusion otherwise. */
+    if( masked_cap != EF_VI_CAP_EXTRA_DATAPATHS && in->cap & EF_VI_CAP_F_LLCT )
       nic_flags |= NIC_FLAG_LLCT;
 
     /* Query by ifindex. */
@@ -357,6 +361,44 @@ int efch_capabilities_op(struct efch_capabilities_in* in,
   case EF_VI_CAP_RX_REF:
     get_from_nic_flags(nic, NIC_FLAG_RX_REF, out);
     break;
+
+  case EF_VI_CAP_EXTRA_DATAPATHS: {
+    struct efrm_client* llct_client = NULL;
+    unsigned int ifindex = in->ifindex;
+
+    out->support_rc = 0;
+    out->val = 0;
+
+    if( ifindex < 0 ) {
+      /* This function is documented as for diagnostic/logging purposes only,
+       * so lets warn the user if they do this that it's ill advised. */
+      EFCH_ERR("%s: WARNING: checking EF_VI_CAP_EXTRA_DATAPATHS should be done by ifindex, not pd!",
+               __FUNCTION__);
+      if( (ifindex = efrm_client_get_ifindex(client)) < 0 ) {
+        out->support_rc = -ENODEV;
+        out->val = 0;
+        break;
+      }
+    }
+
+    /* Try to find an LLCT client on this ifindex, and use presence of this to
+     * indicate support of the LLCT datapath. */
+    if( (rc = efrm_client_get(ifindex, NIC_FLAG_LLCT, NIC_FLAG_LLCT, NULL,
+                              NULL, &llct_client)) < 0 ) {
+      if( rc != -ENODEV ) {
+        out->support_rc = rc;
+        out->val = 0;
+      }
+    } else {
+      efrm_client_put(llct_client);
+      out->support_rc = 0;
+      out->val |= EF_VI_EXTRA_DATAPATH_LLCT;
+    }
+
+    rc = out->support_rc;
+
+    break;
+  }
 
   default:
     out->support_rc = -ENOSYS;

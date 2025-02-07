@@ -68,6 +68,7 @@ static const char* names[EF_VI_CAP_MAX + 1] = {
   [EF_VI_CAP_RX_FILTER_MAC_IP4_PROTO] = "MAC + IPv4 protocol RX filters",
   [EF_VI_CAP_RX_POLL] = "Ability to independently poll for RX",
   [EF_VI_CAP_RX_REF] = "VI uses RX_REF events",
+  [EF_VI_CAP_EXTRA_DATAPATHS] = "Supported extra datapaths (see enum ef_vi_extra_datapaths)",
   [EF_VI_CAP_MAX] = "Unknown",
 };
 

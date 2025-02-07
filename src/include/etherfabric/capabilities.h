@@ -183,6 +183,9 @@ enum ef_vi_capability {
   /** RX uses RX_REF events */
   EF_VI_CAP_RX_REF,
 
+  /** Supported extra datapaths (see enum ef_vi_extra_datapaths) */
+  EF_VI_CAP_EXTRA_DATAPATHS,
+
   /** Maximum value of capabilities enumeration */
   EF_VI_CAP_MAX, /* Keep this last */
 };
@@ -195,6 +198,14 @@ enum ef_vi_capability_flags {
 
   /** The bitset of all available flags */
   EF_VI_CAP_F_ALL = EF_VI_CAP_F_LLCT,
+};
+
+
+/*! \brief Values returned by EF_VI_CAP_EXTRA_DATAPATHS */
+enum ef_vi_extra_datapaths {
+  /** This interface supports the LLCT datapath, which should be selected by
+  ** supplying the EF_PD_LLCT PD flag at PD allocation time. */
+  EF_VI_EXTRA_DATAPATH_LLCT = (1 << 0),
 };
 
 
