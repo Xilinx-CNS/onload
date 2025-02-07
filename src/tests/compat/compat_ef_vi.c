@@ -141,6 +141,8 @@ CI_BUILD_ASSERT(__builtin_offsetof(struct ci_resource_op_s, u.vi_ts_format.out_t
 CI_BUILD_ASSERT(__builtin_offsetof(struct ci_resource_op_s, u.rxq_refresh.superbufs) == 8);
 CI_BUILD_ASSERT(__builtin_offsetof(struct ci_resource_op_s, u.rxq_refresh.current_mappings) == 16);
 CI_BUILD_ASSERT(__builtin_offsetof(struct ci_resource_op_s, u.rxq_refresh.max_superbufs) == 24);
+CI_BUILD_ASSERT(__builtin_offsetof(struct ci_resource_op_s, u.pd_excl_rxq_tok_get.token) == 8);
+CI_BUILD_ASSERT(__builtin_offsetof(struct ci_resource_op_s, u.shared_rxq_tok_set.token) == 8);
 
 CI_BUILD_ASSERT(sizeof(union ci_filter_add_u) == 120);
 CI_BUILD_ASSERT(__builtin_offsetof(union ci_filter_add_u, in.in_len) == 0);

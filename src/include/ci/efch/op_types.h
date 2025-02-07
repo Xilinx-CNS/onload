@@ -225,6 +225,8 @@ typedef struct ci_resource_op_s {
 # define                CI_RSOP_FILTER_QUERY            0x8C
 # define                CI_RSOP_VI_DESIGN_PARAMETERS    0x8D
 # define                CI_RSOP_RX_BUFFER_POST          0x8E
+# define                CI_RSOP_PD_EXCL_RXQ_TOKEN_GET   0x8F
+# define                CI_RSOP_SHARED_RXQ_TOKEN_SET    0x90
 
   union {
     struct {
@@ -345,6 +347,12 @@ typedef struct ci_resource_op_s {
       /*bool*/uint8_t   sentinel;
       /*bool*/uint8_t   rollover;
     } buffer_post;
+    struct {
+      unsigned token;
+    } pd_excl_rxq_tok_get;
+    struct {
+      unsigned token;
+    } shared_rxq_tok_set;
   } u CI_ALIGN(8);
 } ci_resource_op_t;
 

@@ -18,6 +18,7 @@
 #include "shrub_pool.h"
 #include "logging.h"
 #include "bitfield.h"
+#include "driver_access.h"
 
 #include <stdlib.h>
 #include <stdbool.h>
@@ -84,6 +85,7 @@ struct ef_shrub_server {
   size_t buffer_count;
   /* Array of size res->vi.efct_rxqs.max_qs. */
   struct ef_shrub_queue** shrub_queues;
+  unsigned pd_excl_rxq_tok;
 };
 
 /* Unix server operations */
@@ -620,13 +622,23 @@ fail:
   return rc;
 }
 
-static int server_request_token(struct ef_shrub_server *server,
-                                       int socket)
+static int server_init_pd_excl_rxq_tok(struct ef_shrub_server *server)
+{
+  ci_resource_op_t op = {};
+  int rc = 0;
+  op.op = CI_RSOP_PD_EXCL_RXQ_TOKEN_GET;
+  op.id = efch_make_resource_id(server->vi->vi_resource_id);
+  rc = ci_resource_op(server->vi->dh, &op);
+  server->pd_excl_rxq_tok = op.u.pd_excl_rxq_tok_get.token;
+  return rc;
+}
+
+static int server_request_token(struct ef_shrub_server *server, int socket)
 {
   struct ef_shrub_token_response response = {0};
   int rc;
 
-  response.shared_rxq_token = 0;
+  response.shared_rxq_token = server->pd_excl_rxq_tok;
   rc = send(socket, &response, sizeof(response), 0);
   if( rc < 0 )
     return -errno;
@@ -774,12 +786,18 @@ int ef_shrub_server_open(struct ef_vi* vi,
   if(rc < 0)
     goto fail_queues_alloc;
 
+  rc = server_init_pd_excl_rxq_tok(server);
+  if( rc )
+    goto fail_init_pd_token;
+
   server->buffer_count = buffer_count;
   server->buffer_bytes = buffer_bytes;
 
   *server_out = server;
   return 0;
 
+fail_init_pd_token:
+  free(server->shrub_queues);
 fail_queues_alloc:
   unix_server_fini(server);
 fail_unix_server_init:
@@ -812,6 +830,7 @@ void ef_shrub_server_close(struct ef_shrub_server* server)
     ef_shrub_queue_close(server->shrub_queues[qid]);
   }
 
+  free(server->shrub_queues);
   server->vi->efct_rxqs.ops->cleanup(server->vi);
   unix_server_fini(server);
   free(server);

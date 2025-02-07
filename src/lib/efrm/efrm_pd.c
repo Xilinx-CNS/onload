@@ -80,6 +80,10 @@ struct efrm_pd {
 
 	/* cookie used to claim exclusive ownership of an efct RXQ. */
 	unsigned exclusive_rxq_token; 
+	/* Cookie to attach to a shared RXQ. If the client is attached to a
+	 * shrub server, this will be the server's exclusive_rxq_token. If not,
+	 * this will default to %EFHW_PD_NON_EXC_TOKEN */
+	unsigned shared_rxq_token;
 
 	/* serializes remapping of buffers on NIC reset */
 	struct mutex remap_lock;
@@ -250,6 +254,12 @@ unsigned efrm_pd_exclusive_rxq_token_get(struct efrm_pd *pd)
 }
 EXPORT_SYMBOL(efrm_pd_exclusive_rxq_token_get);
 
+void efrm_pd_shared_rxq_token_set(struct efrm_pd *pd, unsigned token)
+{
+	pd->shared_rxq_token = token;
+}
+EXPORT_SYMBOL(efrm_pd_shared_rxq_token_set);
+
 /***********************************************************************/
 
 int efrm_pd_alloc(struct efrm_pd **pd_out, struct efrm_client *client_opt,
@@ -306,6 +316,7 @@ int efrm_pd_alloc(struct efrm_pd **pd_out, struct efrm_client *client_opt,
 	spin_lock_bh(&pd_manager->rm.rm_lock);
 	instance = pd_manager->next_instance++;
 	pd->exclusive_rxq_token = pd_manager->next_instance;
+	pd->shared_rxq_token = EFHW_PD_NON_EXC_TOKEN;
 
 	if (!use_buffer_table) {
 		pd->owner_id = OWNER_ID_PHYS_MODE;

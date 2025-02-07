@@ -484,6 +484,18 @@ static int efch_vi_post_superbuf(struct efrm_vi *virs, ci_resource_op_t *op)
   return rc;
 }
 
+static void efch_excl_rxq_tok_get(struct efrm_vi *virs, ci_resource_op_t *op)
+{
+  unsigned token = efrm_pd_exclusive_rxq_token_get(virs->pd);
+
+  op->u.pd_excl_rxq_tok_get.token = token;
+}
+
+static void efch_shared_rxq_tok_set(struct efrm_vi *virs, ci_resource_op_t *op)
+{
+  efrm_pd_shared_rxq_token_set(virs->pd, op->u.shared_rxq_tok_set.token);
+}
+
 static int
 efch_vi_rm_rsops(efch_resource_t* rs, ci_resource_table_t* rt,
                  ci_resource_op_t* op, int* copy_out)
@@ -626,6 +638,15 @@ efch_vi_rm_rsops(efch_resource_t* rs, ci_resource_table_t* rt,
 
     case CI_RSOP_RX_BUFFER_POST:
       rc = efch_vi_post_superbuf(virs, op);
+      break;
+    case CI_RSOP_PD_EXCL_RXQ_TOKEN_GET:
+      efch_excl_rxq_tok_get(virs, op);
+      rc = 0;
+      *copy_out = 1;
+      break;
+    case CI_RSOP_SHARED_RXQ_TOKEN_SET:
+      efch_shared_rxq_tok_set(virs, op);
+      rc = 0;
       break;
 
     default:
