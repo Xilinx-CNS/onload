@@ -25,7 +25,7 @@ static int __ef_tok_eq(const char* tok, size_t tok_len, const char* tmpl)
     return l == tok_len && ! strncmp(tok, tmpl, l);
 }
 
-static enum ef_pd_flags __ef_env2flags(enum ef_pd_flags flags)
+enum ef_pd_flags ef_pd_flags_from_env(enum ef_pd_flags flags)
 {
     const char* s = getenv("EF_VI_PD_FLAGS");
     if( s == NULL )
@@ -61,7 +61,7 @@ static int __ef_pd_alloc(ef_pd* pd, ef_driver_handle pd_dh,
   ci_resource_alloc_t ra;
   int rc;
 
-  flags = __ef_env2flags(flags);
+  flags = ef_pd_flags_from_env(flags);
 
   if( flags & EF_PD_VF )
     flags |= EF_PD_PHYS_MODE;

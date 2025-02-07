@@ -277,4 +277,6 @@ extern unsigned ef_vi_evq_clear_stride(void);
 extern int ef_vi_compat_init(ef_vi*);
 extern void ef_vi_compat_free(ef_vi*);
 
+extern enum ef_pd_flags ef_pd_flags_from_env(enum ef_pd_flags flags);
+
 #endif  /* __CI_EF_VI_INTERNAL_H__ */
