@@ -51,10 +51,18 @@ int efch_capabilities_op(struct efch_capabilities_in* in,
   struct efrm_client* client = NULL;
   struct efhw_nic* nic;
   struct efrm_resource* pd = NULL;
+  uint32_t masked_cap = (in->cap & ~EF_VI_CAP_F_ALL);
 
   if( in->ifindex >= 0 ) {
+    uint64_t nic_flags_mask = NIC_FLAG_LLCT;
+    uint64_t nic_flags = 0;
+
+    if( in->cap & EF_VI_CAP_F_LLCT )
+      nic_flags |= NIC_FLAG_LLCT;
+
     /* Query by ifindex. */
-    if ((rc = efrm_client_get(in->ifindex, 0, 0, NULL, NULL, &client)) < 0) {
+    if ((rc = efrm_client_get(in->ifindex, nic_flags, nic_flags_mask, NULL,
+                              NULL, &client)) < 0) {
       EFCH_ERR("%s: ERROR: ifindex=%d rc=%d", __FUNCTION__,
                in->ifindex, rc);
       goto out;
@@ -75,7 +83,7 @@ int efch_capabilities_op(struct efch_capabilities_in* in,
   }
 
 
-  switch( in->cap ) {
+  switch( masked_cap ) {
 
   case EF_VI_CAP_PIO:
     get_from_nic_flags(nic, NIC_FLAG_PIO, out);

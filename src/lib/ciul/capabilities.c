@@ -78,12 +78,16 @@ __ef_vi_capabilities_get(ef_driver_handle handle, int ifindex, int pd_id,
                          unsigned long* value)
 {
   int rc;
-  ci_capabilities_op_t op;
+  ci_capabilities_op_t op = (ci_capabilities_op_t) { 0 };
+
+  /* The capability flags steal the top bits of the capability number, so there
+   * must not be any overlap. */
+  EF_VI_BUILD_ASSERT((EF_VI_CAP_MAX & EF_VI_CAP_F_ALL) == 0);
 
   /* Can't specify a PD and an ifindex. */
-  EF_VI_ASSERT(pd_id < 0 || ifindex < 0);
+  EF_VI_ASSERT((ifindex >= 0 && pd_id < 0) || (pd_id >= 0 && ifindex < 0));
 
-  if( cap < EF_VI_CAP_MAX ) {
+  if( (cap & ~EF_VI_CAP_F_ALL) < EF_VI_CAP_MAX ) {
     op.cap_in.ifindex = ifindex;
     if( ifindex < 0 ) {
       op.cap_in.pd_id = efch_make_resource_id(pd_id);
@@ -106,10 +110,26 @@ __ef_vi_capabilities_get(ef_driver_handle handle, int ifindex, int pd_id,
 }
 
 
+int ef_vi_capabilities_get_from_pd_flags(ef_driver_handle handle,
+                                         int ifindex,
+                                         enum ef_pd_flags pd_flags,
+                                         enum ef_vi_capability cap,
+                                         unsigned long* value)
+{
+  pd_flags = ef_pd_flags_from_env(pd_flags);
+
+  if( pd_flags & EF_PD_LLCT )
+    cap |= EF_VI_CAP_F_LLCT;
+
+  return __ef_vi_capabilities_get(handle, ifindex, -1, -1, cap, value);
+}
+
+
 int ef_vi_capabilities_get(ef_driver_handle handle, int ifindex,
                            enum ef_vi_capability cap, unsigned long* value)
 {
-  return __ef_vi_capabilities_get(handle, ifindex, -1, -1, cap, value);
+  return ef_vi_capabilities_get_from_pd_flags(handle, ifindex, EF_PD_DEFAULT,
+                                              cap, value);
 }
 
 

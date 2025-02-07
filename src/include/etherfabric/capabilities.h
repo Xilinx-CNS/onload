@@ -188,6 +188,16 @@ enum ef_vi_capability {
 };
 
 
+/*! \brief Flags to modify a capability lookup */
+enum ef_vi_capability_flags {
+  /** Lookup the capability of the LLCT datapath, valid for ifindex lookups */
+  EF_VI_CAP_F_LLCT = 0x80000000,
+
+  /** The bitset of all available flags */
+  EF_VI_CAP_F_ALL = EF_VI_CAP_F_LLCT,
+};
+
+
 /*! \brief Get the value of the given capability
 **
 ** \param handle  The ef_driver_handle associated with the interface that you
@@ -200,7 +210,7 @@ enum ef_vi_capability {
 ** \param value   Pointer to location at which to store the value.
 **
 ** \return 0 on success (capability is supported and value field is updated),
-           or a negative error code:\n
+**         or a negative error code:\n
 **         -EOPNOTSUPP if the capability is not supported\n
 **         -ENOSYS if the API does not know how to retreive support for the
 **                 supplied capability\n
@@ -221,7 +231,7 @@ ef_vi_capabilities_get(ef_driver_handle handle, int ifindex,
 ** \param value   Pointer to location at which to store the value.
 **
 ** \return 0 on success (capability is supported and value field is updated),
-           or a negative error code:\n
+**         or a negative error code:\n
 **         -EOPNOTSUPP if the capability is not supported\n
 **         -ENOSYS if the API does not know how to retreive support for the
 **                 supplied capability\n
@@ -231,6 +241,34 @@ extern int
 ef_pd_capabilities_get(ef_driver_handle handle, ef_pd* pd,
                        ef_driver_handle pd_dh, enum ef_vi_capability cap,
                        unsigned long* value);
+
+/*! \brief Get the value of the given capability for a specific ef_pd without
+**         having to allocate the ef_pd.
+**
+** \param handle   The ef_driver_handle associated with the interface that you
+**                 wish to query.
+** \param ifindex  The index of the interface that you wish to query. You can
+**                 use if_nametoindex() to obtain this. This should be the
+**                 underlying physical interface, rather than a bond, VLAN, or
+**                 similar.
+** \param pd_flags The PD flags that would be used to allocate the ef_pd to
+**                 lookup the capability on.
+** \param cap      The capability to get.
+** \param value    Pointer to location at which to store the value.
+**
+** \return 0 on success (capability is supported and value field is updated),
+**         or a negative error code:\n
+**         -EOPNOTSUPP if the capability is not supported\n
+**         -ENOSYS if the API does not know how to retreive support for the
+**                 supplied capability\n
+**         other negative error if support could not be retrieved
+**/
+extern int
+ef_vi_capabilities_get_from_pd_flags(ef_driver_handle handle,
+                                     int ifindex,
+                                     enum ef_pd_flags pd_flags,
+                                     enum ef_vi_capability cap,
+                                     unsigned long* value);
 
 
 /*! \brief Gets the maximum supported value of \ref ef_vi_capability
