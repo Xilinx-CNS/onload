@@ -755,6 +755,8 @@ typedef struct {
 
   /** Sequential counter of buffers posted to the NIC queue */
   uint32_t sbseq;
+  uint32_t superbuf_pkts;
+  unsigned config_generation;
 } ef_vi_efct_rxq_state;
 
 /*! \brief State of RX descriptor ring
@@ -776,6 +778,8 @@ typedef struct {
   uint16_t  last_desc_i;                        /* ef10 only */
   /** Credit for packed stream handling (7000-series only) */
   uint16_t  rx_ps_credit_avail;                 /* ef10 only */
+
+  uint64_t efct_active_qs;                         /* efct only */
   ef_vi_efct_rxq_ptr rxq_ptr[EF_VI_MAX_EFCT_RXQS]; /* efct only */
   ef_vi_efct_rxq_state efct_state[EF_VI_MAX_EFCT_RXQS]; /* efct only */
 } ef_vi_rxq_state;

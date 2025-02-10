@@ -20,7 +20,6 @@
 
 struct efct_ubufs_rxq
 {
-  uint32_t superbuf_pkts;
   struct ef_shrub_client shrub_client;
 
   /* Buffer memory region */
@@ -35,7 +34,6 @@ struct efct_ubufs_rxq
 struct efct_ubufs
 {
   ef_vi_efct_rxq_ops ops;
-  uint64_t active_qs;
   unsigned nic_fifo_limit;
   ef_pd* pd;
   ef_driver_handle pd_dh;
@@ -364,13 +362,14 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
 void efct_ubufs_attach_internal(ef_vi* vi, int ix, int qid, unsigned n_superbufs)
 {
   unsigned id;
-  struct efct_ubufs* ubufs = get_ubufs(vi);
+  ef_vi_rxq_state* qs = &vi->ep_state->rxq;
 
   for( id = 0; id < n_superbufs; ++id )
     efct_rx_sb_free_push(vi, ix, id);
 
-  ubufs->q[ix].superbuf_pkts = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
-  ubufs->active_qs |= 1 << ix;
+  qs->efct_state[ix].config_generation = 1; /* force an initial refresh */
+  qs->efct_state[ix].superbuf_pkts = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
+  qs->efct_active_qs |= 1 << ix;
   efct_vi_start_rxq(vi, ix, qid);
   post_buffers(vi, ix);
 }
@@ -384,8 +383,8 @@ static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd,
   return -EOPNOTSUPP;
 #else
   int ix;
-  struct efct_ubufs* ubufs = get_ubufs(vi);
   struct efct_ubufs_rxq* rxq;
+  ef_vi_rxq_state* qs;
   int rc;
 
   EF_VI_ASSERT(qid < vi->efct_rxqs.max_qs);
@@ -393,7 +392,8 @@ static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd,
   ix = efct_vi_find_free_rxq(vi, qid);
   if( ix < 0 )
     return ix;
-  rxq = &ubufs->q[ix];
+  rxq = &get_ubufs(vi)->q[ix];
+  qs = &vi->ep_state->rxq;
 
   rc = efct_ubufs_init_rxq_resource(vi, qid, n_superbufs);
   if( rc < 0 ) {
@@ -411,9 +411,8 @@ static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd,
     return rc;
   }
 
-  rxq->superbuf_pkts = rxq->shrub_client.state->metrics.buffer_bytes / EFCT_PKT_STRIDE;
-
-  ubufs->active_qs |= 1 << ix;
+  qs->efct_state[ix].superbuf_pkts = rxq->shrub_client.state->metrics.buffer_bytes / EFCT_PKT_STRIDE;
+  qs->efct_active_qs |= 1 << ix;
   
   rc = efct_vi_sync_rxq(vi, ix, qid);
   if ( rc < 0 ) {
@@ -491,9 +490,10 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
 
   for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
     ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[i];
+    ef_vi_efct_rxq_state* qs = &vi->ep_state->rxq.efct_state[i];
     rxq->qid = -1;
-    rxq->live.superbuf_pkts = &ubufs->q[i].superbuf_pkts;
-    rxq->live.config_generation = &rxq->config_generation;
+    rxq->live.superbuf_pkts = &qs->superbuf_pkts;
+    rxq->live.config_generation = &qs->config_generation;
     /* NOTE: we don't need to store the latest time sync event in
      * rxq->live.time_sync as efct only uses it to get the clock
      * status (set/in-sync) which ef10ct provides in RX packet
@@ -521,7 +521,7 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
     ubufs->ops.post = efct_ubufs_post_kernel;
 #endif
 
-  vi->efct_rxqs.active_qs = &ubufs->active_qs;
+  vi->efct_rxqs.active_qs = &vi->ep_state->rxq.efct_active_qs;
   vi->efct_rxqs.ops = &ubufs->ops;
 
   return 0;
