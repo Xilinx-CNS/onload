@@ -181,7 +181,7 @@ static void ef10ct_free_rxq(struct efhw_nic *nic, int qid)
   EFHW_TRACE("%s: qid %x", __func__, qid);
 
   rxq_num = ef10ct_get_queue_num(qid);
-  mutex_lock(&ef10ct->rxq[rxq_num].bind_lock);
+  EFHW_ASSERT(mutex_is_locked(&ef10ct->rxq[rxq_num].bind_lock));
   EFHW_ASSERT(ef10ct->rxq[rxq_num].state == EF10CT_RXQ_STATE_FREEING);
 
   AUX_PRE(dev, edev, cli, nic, rc);
@@ -189,13 +189,13 @@ static void ef10ct_free_rxq(struct efhw_nic *nic, int qid)
   AUX_POST(dev, edev, cli, nic, rc);
 
   ef10ct->rxq[rxq_num].state = EF10CT_RXQ_STATE_FREE;
-  mutex_unlock(&ef10ct->rxq[rxq_num].bind_lock);
 }
 
 static int ef10ct_check_for_flushes_common(struct efhw_nic_ef10ct_evq *evq)
 {
   unsigned offset = evq->next;
   ci_qword_t *event = &evq->base[offset];
+  struct efhw_nic_ef10ct *ef10ct;
   bool found_flush = false;
   int q_id;
   int i;
@@ -223,7 +223,10 @@ static int ef10ct_check_for_flushes_common(struct efhw_nic_ef10ct_evq *evq)
       } else /* EFCT_FLUSH_TYPE_RX */ {
         queue_handle = ef10ct_reconstruct_queue_handle(q_id,
                                                   EF10CT_QUEUE_HANDLE_TYPE_RXQ);
+        ef10ct = evq->nic->arch_extra;
+        mutex_lock(&ef10ct->rxq[q_id].bind_lock);
         ef10ct_free_rxq(evq->nic, queue_handle);
+        mutex_unlock(&ef10ct->rxq[q_id].bind_lock);
         /* RXQ flush is not reported upwards. The HW RXQ is managed within
          * efhw. */
       }
@@ -1269,7 +1272,8 @@ static int get_rxq_num_from_mask(struct efhw_nic *nic,
 }
 
 
-static int select_rxq(struct filter_insert_params *params, uint64_t rxq_in)
+static int select_rxq(struct filter_insert_params *params, uint64_t rxq_in,
+                      int *allocated)
 {
   struct efhw_nic_ef10ct *ef10ct = params->nic->arch_extra;
   bool anyqueue, loose, exclusive;
@@ -1290,14 +1294,18 @@ static int select_rxq(struct filter_insert_params *params, uint64_t rxq_in)
     rxq_num = rxq_in;
   }
   else {
-    if( params->mask )
+    if( params->mask ) {
       rxq_num = get_rxq_num_from_mask(params->nic, params->mask, exclusive);
+      *allocated = true;
+    }
   }
 
   /* Failed to get an rxq matching our cpumask, so allow fallback to any cpu
    * if allowed */
-  if( rxq_num < 0 && loose )
+  if( rxq_num < 0 && loose ) {
     rxq_num = get_rxq_num_from_mask(params->nic, cpu_online_mask, exclusive);
+    *allocated = true;
+  }
 
   if( rxq_num < 0 ) {
     EFHW_WARN("%s: Unable to find the queue ID for given mask, flags= %d\n",
@@ -1317,11 +1325,14 @@ static int select_rxq(struct filter_insert_params *params, uint64_t rxq_in)
 static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in_data,
                                   struct efct_filter_insert_out *out_data)
 {
-  int rc;
   struct filter_insert_params *params = (struct filter_insert_params*)
                                         in_data->drv_opaque;
-  int rxq;
+  struct efhw_nic_ef10ct_rxq *ef10ct_rxq;
+  struct efhw_nic_ef10ct *ef10ct;
+  int allocated = 0;
   int rxq_num;
+  int rxq;
+  int rc;
 
   EFHW_MCDI_DECLARE_BUF(in, MC_CMD_FILTER_OP_IN_LEN);
   EFHW_MCDI_DECLARE_BUF(out, MC_CMD_FILTER_OP_OUT_LEN);
@@ -1332,7 +1343,7 @@ static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in_data,
     .outbuf = (u32*)&out,
     .outlen = MC_CMD_FILTER_OP_OUT_LEN,
   };
-  rxq_num = select_rxq(params, in_data->filter->ring_cookie);
+  rxq_num = select_rxq(params, in_data->filter->ring_cookie, &allocated);
   if( rxq_num < 0 )
     return rxq_num;
 
@@ -1343,6 +1354,9 @@ static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in_data,
    * when it is needed. */
   EFHW_ASSERT(rxq_num < 256);
   rxq = ef10ct_reconstruct_queue_handle(rxq_num, EF10CT_QUEUE_HANDLE_TYPE_RXQ);
+
+  ef10ct = params->nic->arch_extra;
+  ef10ct_rxq = &ef10ct->rxq[rxq_num];
 
   EFHW_MCDI_INITIALISE_BUF(in);
   EFHW_MCDI_INITIALISE_BUF(out);
@@ -1359,10 +1373,15 @@ static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in_data,
     out_data->filter_handle = id_low & 0xffff;
   }
 
-  /* Free rxq on filter insert failure */
-  if (rc < 0) {
+  /* Free rxq on filter insert failure if this is a newly allocated rxq */
+  if (rc < 0 && allocated) {
+    mutex_lock(&ef10ct_rxq->bind_lock);
+    /* Claim that we are now in the FREEING state, rather than making the
+     * check in ef10ct_free_rxq too broad to be useful. */
+    ef10ct_rxq->state = EF10CT_RXQ_STATE_FREEING;
     EFHW_ERR("%s filter insert failed. Freeing rxq = %d", __func__, rxq);
     ef10ct_free_rxq(params->nic, rxq);
+    mutex_unlock(&ef10ct_rxq->bind_lock);
   }
 
   return rc;
