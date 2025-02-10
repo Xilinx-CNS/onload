@@ -8219,6 +8219,14 @@ int efab_tcp_helper_efct_superbuf_config_refresh(
                           op->max_superbufs);
 }
 
+int efab_tcp_helper_efct_superbuf_post(tcp_helper_resource_t* trs,
+                                       oo_efct_superbuf_post_t* op)
+{
+  tcp_helper_post_superbuf(ci_netif_vi(&trs->netif, op->intf_i),
+                           op->qid, op->sbid, op->sentinel);
+  return 0;
+}
+
 int efab_tcp_helper_pkt_buf_map(tcp_helper_resource_t* trs,
                                 oo_pkt_buf_map_t* arg)
 {

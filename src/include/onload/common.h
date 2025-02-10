@@ -288,6 +288,13 @@ typedef struct {
 } oo_efct_superbuf_config_refresh_t;
 
 typedef struct {
+  uint32_t intf_i;
+  uint32_t qid;
+  uint32_t sbid;
+  uint32_t sentinel;
+} oo_efct_superbuf_post_t;
+
+typedef struct {
   ci_uint64     offset;
   ci_user_ptr_t addr;
 } oo_pkt_buf_map_t;

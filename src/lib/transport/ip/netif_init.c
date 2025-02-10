@@ -1949,6 +1949,16 @@ static int oo_efct_superbuf_config_refresh(ef_vi* vi, int qid)
   return oo_resource_op(vi->dh, OO_IOC_EFCT_SUPERBUF_CONFIG_REFRESH, &op);
 }
 
+static void oo_efct_superbuf_post(ef_vi* vi, int qid, int sbid, bool sentinel)
+{
+  oo_efct_superbuf_post_t op;
+  op.intf_i = vi->efct_rxqs.ops->user_data;
+  op.qid = qid;
+  op.sbid = sbid;
+  op.sentinel = sentinel;
+  oo_resource_op(vi->dh, OO_IOC_EFCT_SUPERBUF_POST, &op);
+  // FIXME should we detect errors?
+}
 
 static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
                       int vi_io_offset, int vi_efct_shm_offset,
@@ -1988,6 +1998,8 @@ static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
     } else if( NI_OPTS(ni).multiarch_rx_datapath != EF_MULTIARCH_DATAPATH_FF &&
                nsn->vi_arch == EFHW_ARCH_EF10CT ) {
       rc = efct_ubufs_init_internal(vi);
+      /* TODO support direct buffer posting when allowed */
+      vi->efct_rxqs.ops->post = oo_efct_superbuf_post;
     }
     if( rc < 0 )
       return rc;

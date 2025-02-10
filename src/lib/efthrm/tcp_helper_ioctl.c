@@ -998,6 +998,13 @@ oo_efct_superbuf_config_refresh_rsop(ci_private_t *priv, void *op)
   return efab_tcp_helper_efct_superbuf_config_refresh(priv->thr, op);
 }
 
+static int oo_efct_superbuf_config_post_rsop(ci_private_t *priv, void *op)
+{
+  if (priv->thr == NULL)
+    return -EINVAL;
+  return efab_tcp_helper_efct_superbuf_post(priv->thr, op);
+}
+
 static int
 oo_pkt_buf_map_rsop(ci_private_t* priv, void *arg)
 {
@@ -1601,6 +1608,7 @@ oo_operations_table_t oo_operations[] = {
 
   op(OO_IOC_AF_XDP_KICK, oo_af_xdp_kick_rsop),
   op(OO_IOC_EFCT_SUPERBUF_CONFIG_REFRESH,oo_efct_superbuf_config_refresh_rsop),
+  op(OO_IOC_EFCT_SUPERBUF_POST, oo_efct_superbuf_config_post_rsop),
   op(OO_IOC_PKT_BUF_MMAP, oo_pkt_buf_map_rsop),
   op(OO_IOC_DESIGN_PARAMETERS, oo_design_parameters_rsop),
 
