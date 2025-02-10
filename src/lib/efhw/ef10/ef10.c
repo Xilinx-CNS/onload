@@ -465,6 +465,8 @@ static int _ef10_nic_check_capabilities(struct efhw_nic *nic,
   if (out_size >= MC_CMD_GET_CAPABILITIES_V2_OUT_LEN) {
     nic->pio_num = EFHW_MCDI_WORD(out, GET_CAPABILITIES_V3_OUT_NUM_PIO_BUFFS);
     nic->pio_size = EFHW_MCDI_WORD(out, GET_CAPABILITIES_V3_OUT_SIZE_PIO_BUFF);
+    if( nic->pio_num > 0 )
+      *capability_flags |= NIC_FLAG_PIO;
     flags = EFHW_MCDI_DWORD(out, GET_CAPABILITIES_V3_OUT_FLAGS2);
     if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_TX_VFIFO_ULL_MODE_LBN))
       *capability_flags |= NIC_FLAG_TX_ALTERNATIVES;
@@ -598,7 +600,7 @@ ef10_nic_tweak_hardware(struct efhw_nic *nic)
   /* No need to set RX_USR_BUF_SIZE for ef10, it's done per-descriptor */
 
   /* Some capabilities are always present on ef10 */
-  nic->flags |= NIC_FLAG_PIO | NIC_FLAG_HW_MULTICAST_REPLICATION |
+  nic->flags |= NIC_FLAG_HW_MULTICAST_REPLICATION |
                 NIC_FLAG_PHYS_MODE | NIC_FLAG_BUFFER_MODE | NIC_FLAG_VPORTS |
                 NIC_FLAG_RX_MCAST_REPLICATION | NIC_FLAG_USERSPACE_PRIME |
                 NIC_FLAG_SHARED_PD;
