@@ -26,7 +26,6 @@
 struct efct_kbufs_rxq
 {
   unsigned resource_id;
-  uint64_t* current_mappings;
 };
 #endif
 
@@ -35,7 +34,6 @@ struct efct_kbufs
   ef_vi_efct_rxq_ops ops;
   struct efab_efct_rxq_uk_shm_base* shm;
 #ifndef __KERNEL__
-  uintptr_t refresh_user;
   struct efct_kbufs_rxq q[EF_VI_MAX_EFCT_RXQS];
 #endif
 };
@@ -51,16 +49,6 @@ static const struct efct_kbufs* const_kbufs(const ef_vi* vi)
 }
 
 #ifndef __KERNEL__
-void efct_kbufs_get_refresh_params(ef_vi* vi, int qid,
-                                   uintptr_t* user,
-                                   const void** superbufs,
-                                   const void** mappings)
-{
-  *user = get_kbufs(vi)->refresh_user;
-  *superbufs = vi->efct_rxqs.q[qid].superbuf;
-  *mappings = get_kbufs(vi)->q[qid].current_mappings;
-}
-
 static int efct_kbufs_refresh(ef_vi* vi, int qid)
 {
   ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[qid];
@@ -70,7 +58,7 @@ static int efct_kbufs_refresh(ef_vi* vi, int qid)
   op.op = CI_RSOP_RXQ_REFRESH;
   op.id = efch_make_resource_id(kbq->resource_id);
   op.u.rxq_refresh.superbufs = (uintptr_t)rxq->superbuf;
-  op.u.rxq_refresh.current_mappings = (uintptr_t)kbq->current_mappings;
+  op.u.rxq_refresh.current_mappings = (uintptr_t)rxq->mappings;
   op.u.rxq_refresh.max_superbufs = CI_EFCT_MAX_SUPERBUFS;
   return ci_resource_op(vi->dh, &op);
 }
@@ -258,7 +246,7 @@ static void efct_kbufs_cleanup_internal(ef_vi* vi)
 #ifdef __KERNEL__
   kfree(get_kbufs(vi));
 #else
-  free(get_kbufs(vi)->q[0].current_mappings);
+  free((void*)vi->efct_rxqs.q[0].mappings);
   free(get_kbufs(vi));
 #endif
 }
@@ -275,8 +263,6 @@ static void efct_kbufs_cleanup(ef_vi* vi)
 
 int efct_kbufs_init_internal(ef_vi* vi,
                              struct efab_efct_rxq_uk_shm_base *shm,
-                             int (*refresh)(ef_vi* vi, int qid),
-                             uintptr_t refresh_user,
                              void* space)
 {
   struct efct_kbufs* rxqs;
@@ -299,8 +285,6 @@ int efct_kbufs_init_internal(ef_vi* vi,
   if( rxqs == NULL )
     goto fail_alloc;
 
-  rxqs->refresh_user = refresh_user;
-
   mappings = malloc(mappings_bytes);
   if( mappings == NULL ) {
     free(rxqs);
@@ -315,7 +299,7 @@ int efct_kbufs_init_internal(ef_vi* vi,
     rxq->qid = shm->q[i].qid;
 #ifndef __KERNEL__
     rxqs->q[i].resource_id = EFCH_RESOURCE_ID_PRI_ARG(efch_resource_id_none());
-    rxqs->q[i].current_mappings = mappings + i * CI_EFCT_MAX_HUGEPAGES;
+    rxq->mappings = mappings + i * CI_EFCT_MAX_HUGEPAGES;
 #endif
     rxq->live.superbuf_pkts = &shm->q[i].superbuf_pkts;
     rxq->live.config_generation = &shm->q[i].config_generation;
@@ -328,7 +312,6 @@ int efct_kbufs_init_internal(ef_vi* vi,
   rxqs->ops.free = efct_kbufs_free;
   rxqs->ops.attach = efct_kbufs_attach;
   rxqs->ops.prime = efct_kbufs_prime;
-  rxqs->ops.refresh = refresh;
   rxqs->ops.cleanup = efct_kbufs_cleanup_internal;
 
   vi->efct_rxqs.active_qs = &shm->active_qs;
@@ -357,11 +340,12 @@ int efct_kbufs_init(ef_vi* vi)
     return rc;
   }
 
-  rc = efct_kbufs_init_internal(vi, p, efct_kbufs_refresh, 0, NULL);
+  rc = efct_kbufs_init_internal(vi, p, NULL);
   if( rc )
     ci_resource_munmap(vi->dh, get_kbufs(vi)->shm,
                        CI_ROUND_UP(CI_EFCT_SHM_BYTES(EF_VI_MAX_EFCT_RXQS),
                                    CI_PAGE_SIZE));
+  vi->efct_rxqs.ops->refresh = efct_kbufs_refresh;
   vi->efct_rxqs.ops->cleanup = efct_kbufs_cleanup;
   return rc;
 }

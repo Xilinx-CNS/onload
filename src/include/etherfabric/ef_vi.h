@@ -865,6 +865,7 @@ typedef struct {
 #else
   /** contiguous area of superbuf memory */
   const char* superbuf;
+  const void* mappings;
 #endif
 } ef_vi_efct_rxq;
 
@@ -894,6 +895,8 @@ typedef struct {
   int  (*prime)(struct ef_vi*, ef_driver_handle dh);
   /** De-allocate internal resources */
   void (*cleanup)(struct ef_vi*);
+  /** Arbitrary user data available when overriding these operations */
+  uintptr_t user_data;
 } ef_vi_efct_rxq_ops;
 
 /*! \brief The collection of EFCT RX queue accessors

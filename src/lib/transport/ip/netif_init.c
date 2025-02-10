@@ -1941,17 +1941,11 @@ static int netif_tcp_helper_mmap(ci_netif* ni)
 static int oo_efct_superbuf_config_refresh(ef_vi* vi, int qid)
 {
   oo_efct_superbuf_config_refresh_t op;
-  uintptr_t intf_i;
-  const void* superbufs;
-  const void* mappings;
-
-  efct_kbufs_get_refresh_params(vi, qid, &intf_i, &superbufs, &mappings);
-
-  op.intf_i = intf_i;
+  op.intf_i = vi->efct_rxqs.ops->user_data;
   op.qid = qid;
   op.max_superbufs = CI_EFCT_MAX_SUPERBUFS;
-  CI_USER_PTR_SET(op.superbufs, superbufs);
-  CI_USER_PTR_SET(op.current_mappings, mappings);
+  CI_USER_PTR_SET(op.superbufs, vi->efct_rxqs.q[qid].superbuf);
+  CI_USER_PTR_SET(op.current_mappings, vi->efct_rxqs.q[qid].mappings);
   return oo_resource_op(vi->dh, OO_IOC_EFCT_SUPERBUF_CONFIG_REFRESH, &op);
 }
 
@@ -1990,13 +1984,15 @@ static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
     if( nsn->vi_arch == EFHW_ARCH_EFCT ) {
       rc = efct_kbufs_init_internal(vi,
                         (void*)((char*)ni->efct_shm_ptr + vi_efct_shm_offset),
-                        oo_efct_superbuf_config_refresh, nic_i, NULL);
+                        NULL);
     } else if( NI_OPTS(ni).multiarch_rx_datapath != EF_MULTIARCH_DATAPATH_FF &&
                nsn->vi_arch == EFHW_ARCH_EF10CT ) {
       rc = efct_ubufs_init_internal(vi);
     }
     if( rc < 0 )
       return rc;
+    vi->efct_rxqs.ops->refresh = oo_efct_superbuf_config_refresh;
+    vi->efct_rxqs.ops->user_data = nic_i;
   }
   ef_vi_set_ts_format(vi, nsn->ts_format);
   ef_vi_init_rx_timestamping(vi, nsn->rx_ts_correction);
