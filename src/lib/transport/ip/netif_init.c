@@ -2048,6 +2048,7 @@ unsigned ci_netif_build_future_intf_mask(ci_netif* ni)
 #ifdef OO_HAS_POLL_IN_KERNEL
        ! ni->nic_hw[nic_i].poll_in_kernel &&
 #endif
+        ef_vi_receive_capacity(vi) != 0 &&
         ~ef_vi_flags(vi) & EF_VI_RX_EVENT_MERGE &&
         vi->nic_type.arch != EF_VI_ARCH_EF100 &&
         /* TODO AF_XDP future detection is not currently supported */
