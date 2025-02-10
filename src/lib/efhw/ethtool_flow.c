@@ -359,7 +359,6 @@ void ethtool_flow_to_mcdi_op(ci_dword_t *buf, int rxq,
 
     match_fields |= EFHW_MCDI_MATCH_FIELD_BIT(IP_PROTO);
 
-    EFHW_ASSERT(filter->m_u.usr_ip4_spec.proto == 0); /* proto mask must be 0 */
     EFHW_MCDI_SET_WORD(buf, FILTER_OP_IN_IP_PROTO,
                        filter->h_u.usr_ip4_spec.proto);
     break;

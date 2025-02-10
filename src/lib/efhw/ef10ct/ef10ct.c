@@ -1357,6 +1357,29 @@ static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in_data,
 
   ef10ct = params->nic->arch_extra;
   ef10ct_rxq = &ef10ct->rxq[rxq_num];
+  /* If we are attaching to an existing queue, check the state of it before
+   * performing an op. */
+  if (!allocated) {
+    mutex_lock(&ef10ct_rxq->bind_lock);
+    /* If we are trying to install a filter onto this rxq, but it is pending a
+     * flush complete then return an error now rather than installing a filter.
+     */
+    if (ef10ct_rxq->state == EF10CT_RXQ_STATE_FREEING) {
+      mutex_unlock(&ef10ct_rxq->bind_lock);
+      EFHW_ERR("%s Tried to insert a filter on rxq %d, but it is being freed.",
+                __func__, rxq_num);
+      return -EBUSY;
+    } else if (ef10ct_rxq->state == EF10CT_RXQ_STATE_FREE) {
+      mutex_unlock(&ef10ct_rxq->bind_lock);
+      EFHW_ERR("%s Tried installing a filter on an unallocated rxq %d",
+               __func__, rxq_num);
+      return -EBUSY;
+    }
+    /* If we are binding to an existing rxq and it isn't beeing freed, then
+     * there must be atleast one user. */
+    EFHW_ASSERT(ef10ct_rxq->ref_count > 0);
+    mutex_unlock(&ef10ct_rxq->bind_lock);
+  }
 
   EFHW_MCDI_INITIALISE_BUF(in);
   EFHW_MCDI_INITIALISE_BUF(out);
