@@ -474,21 +474,12 @@ static int _ef10_nic_check_capabilities(struct efhw_nic *nic,
       *capability_flags |= NIC_FLAG_TX_CTPIO;
     if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_EVENT_CUT_THROUGH_LBN))
       *capability_flags |= NIC_FLAG_EVENT_CUT_THROUGH;
-
-    /* Huntington NICs with some firmware versions incorrectly
-     * report that they do not support RX cut-through. */
-    if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_CUT_THROUGH_LBN) ||
-        nic->devtype.variant == 'A' )
+    if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_CUT_THROUGH_LBN))
       *capability_flags |= NIC_FLAG_RX_CUT_THROUGH;
   }
   else {
-    /* We hard code these values, as lack of support for get caps
-     * V2 implies we're on Torino.
-     */
-    EFHW_ASSERT( nic->devtype.variant == 'A' );
-    nic->pio_num = 16;
-    nic->pio_size = 2048;
-    *capability_flags |= NIC_FLAG_RX_CUT_THROUGH;
+    EFHW_ERR("%s: ERROR: Unexpectedly failed to read NIC capabilities",
+             __FUNCTION__);
   }
 
   if (out_size >= MC_CMD_GET_CAPABILITIES_V3_OUT_LEN) {
@@ -713,33 +704,14 @@ int ef10_mcdi_cmd_event_queue_enable(struct efhw_nic *nic,
   EFHW_MCDI_SET_DWORD(in, INIT_EVQ_IN_TMR_LOAD, 0);
   EFHW_MCDI_SET_DWORD(in, INIT_EVQ_IN_TMR_RELOAD, 0);
 
-  if( nic->devtype.arch == EFHW_ARCH_EF10 && nic->devtype.variant == 'A' ) {
-    /* TX merging is needed for good throughput with small
-     * packets.  TX and RX event merging must be requested
-     * together (or not at all). Event cut through reduces latency,
-     * but is incompatible with RX event merging.  Enabling event
-     * cut through causes firmware to disables RX event merging. So
-     * by requesting all three we get what we want: Event cut
-     * through and tx event merging.
-     */
-    EFHW_MCDI_POPULATE_DWORD_3(in, INIT_EVQ_IN_FLAGS,
-    INIT_EVQ_IN_FLAG_CUT_THRU, enable_cut_through ? 1 : 0,
-    INIT_EVQ_IN_FLAG_RX_MERGE, 1,
-    INIT_EVQ_IN_FLAG_TX_MERGE, 1);
-  }
-  else {
-    /* No such restrictions on Medford, we can ask for
-     * what we actually want.
-     *
-     * On Medford we must explicitly request a timer if we are
-     * not interrupting (we'll get one anyway if we are).
-     */
-    EFHW_MCDI_POPULATE_DWORD_4(in, INIT_EVQ_IN_FLAGS,
-    INIT_EVQ_IN_FLAG_USE_TIMER, enable_timer ? 1 : 0,
-    INIT_EVQ_IN_FLAG_CUT_THRU, enable_cut_through ? 1 : 0,
-    INIT_EVQ_IN_FLAG_RX_MERGE, enable_rx_merging ? 1 : 0,
-    INIT_EVQ_IN_FLAG_TX_MERGE, 1);
-  }
+  /* We must explicitly request a timer if we are
+   * not interrupting (we'll get one anyway if we are).
+   */
+  EFHW_MCDI_POPULATE_DWORD_4(in, INIT_EVQ_IN_FLAGS,
+  INIT_EVQ_IN_FLAG_USE_TIMER, enable_timer ? 1 : 0,
+  INIT_EVQ_IN_FLAG_CUT_THRU, enable_cut_through ? 1 : 0,
+  INIT_EVQ_IN_FLAG_RX_MERGE, enable_rx_merging ? 1 : 0,
+  INIT_EVQ_IN_FLAG_TX_MERGE, 1);
 
   EFHW_MCDI_SET_DWORD(in, INIT_EVQ_IN_TMR_MODE,
                       MC_CMD_INIT_EVQ_IN_TMR_MODE_DIS);
