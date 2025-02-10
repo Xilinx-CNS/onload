@@ -569,12 +569,18 @@ int ef_vi_filter_add(ef_vi *vi, ef_driver_handle dh, const ef_filter_spec *fs,
     if ( fs->flags & EF_FILTER_FLAG_EXCLUSIVE_RXQ )
       flags |= CI_FILTER_FLAG_EXCLUSIVE_RXQ;
 
+    if ( fs->flags & EF_FILTER_FLAG_SHRUB_SHARED )
+      shared_mode = true;
+
+    if( vi->efct_rxqs.ops && vi->efct_rxqs.ops->pre_attach ) {
+      rc = vi->efct_rxqs.ops->pre_attach(vi, shared_mode);
+      if( rc )
+        return rc;
+    }
+
     rc = ef_filter_add(dh, vi->vi_resource_id, rxq_no, fs, flags, &cookie, &rxq);
     if( rc < 0 )
       return rc;
-
-    if ( fs->flags & EF_FILTER_FLAG_SHRUB_SHARED )
-      shared_mode = true;
 
     if( filter_cookie_out )
       *filter_cookie_out = cookie;

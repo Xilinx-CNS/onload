@@ -888,6 +888,8 @@ typedef struct {
   void (*free)(struct ef_vi*, int ix, int sbid);
   /** Post a buffer to the hardware FIFO (called internally) */
   void (*post)(struct ef_vi*, int ix, int sbid, bool sentinel);
+  /** To be called before inserting a filter. */
+  int (*pre_attach)(struct ef_vi*, bool shared_mode);
   /** Attach a queue */
   int  (*attach)(struct ef_vi*,
                  int qid,

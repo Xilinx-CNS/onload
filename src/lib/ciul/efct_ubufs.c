@@ -37,6 +37,7 @@ struct efct_ubufs
   unsigned nic_fifo_limit;
   ef_pd* pd;
   ef_driver_handle pd_dh;
+  bool is_shrub_token_set;
 
   struct efct_ubufs_rxq q[EF_VI_MAX_EFCT_RXQS];
 };
@@ -423,6 +424,38 @@ static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd,
 #endif
 }
 
+static int efct_ubufs_pre_attach(ef_vi* vi, bool shared_mode)
+{
+#ifdef __KERNEL__
+  BUG();
+  return -EOPNOTSUPP;
+#else
+  struct ef_shrub_token_response response;
+  struct efct_ubufs *ubufs;
+  int rc = 0;
+
+  if( !shared_mode )
+    return 0;
+
+  ubufs = get_ubufs(vi);
+  if( !ubufs->is_shrub_token_set ) {
+    rc = ef_shrub_client_request_token(EF_SHRUB_CONTROLLER_PATH, &response);
+    if( rc )
+      return rc;
+
+    ci_resource_op_t op = {};
+    op.op = CI_RSOP_SHARED_RXQ_TOKEN_SET;
+    op.id = efch_make_resource_id(vi->vi_resource_id);
+    op.u.shared_rxq_tok_set.token = response.shared_rxq_token;
+    rc = ci_resource_op(vi->dh, &op);
+    if( !rc )
+      ubufs->is_shrub_token_set = true;
+  }
+
+  return rc;
+#endif /* __KERNEL__ */
+}
+
 static int efct_ubufs_attach(ef_vi* vi,
                              int qid,
                              int fd,
@@ -538,10 +571,12 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
   ubufs->nic_fifo_limit = 128;
   ubufs->pd = pd;
   ubufs->pd_dh = pd_dh;
+  ubufs->is_shrub_token_set = false;
 
   ubufs->ops.free = efct_ubufs_free;
   ubufs->ops.next = efct_ubufs_next;
   ubufs->ops.available = efct_ubufs_available;
+  ubufs->ops.pre_attach = efct_ubufs_pre_attach;
   ubufs->ops.attach = efct_ubufs_attach;
   ubufs->ops.refresh = efct_ubufs_refresh;
   ubufs->ops.prime = efct_ubufs_prime;
