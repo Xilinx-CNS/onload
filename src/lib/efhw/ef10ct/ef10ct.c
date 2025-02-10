@@ -1047,7 +1047,8 @@ ef10ct_nic_shared_rxq_refresh(struct efhw_nic *nic, int hwqid,
     struct oo_hugetlb_page *hpage = &rxq->buffer_pages[i];
     unsigned long rc;
 
-    rc = vm_mmap(hpage->filp, superbufs, CI_HUGEPAGE_SIZE, PROT_READ,
+    /* we need write access so that userland can poison buffers when posting */
+    rc = vm_mmap(hpage->filp, superbufs, CI_HUGEPAGE_SIZE, PROT_READ | PROT_WRITE,
                  MAP_FIXED | MAP_SHARED | MAP_POPULATE | MAP_HUGETLB | MAP_HUGE_2MB,
                  oo_hugetlb_page_offset(hpage->page));
     if( IS_ERR((void*)rc) )
