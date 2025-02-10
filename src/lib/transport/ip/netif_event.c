@@ -1949,7 +1949,9 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
   ci_assert_equal(NI_OPTS(ni).poll_in_kernel, 0);
 #endif
 
-  if( evq->nic_type.arch == EF_VI_ARCH_EFCT ) {
+  // TODO EF10CT
+  if( evq->nic_type.arch == EF_VI_ARCH_EFCT ||
+      evq->nic_type.arch == EF_VI_ARCH_EF10CT ) {
     dma = efct_vi_rx_future_peek(evq);
     if( dma == NULL )
       return 0;

@@ -2710,7 +2710,8 @@ ci_inline ci_ip_pkt_fmt* ci_netif_intf_next_rx_pkt(ci_netif* ni, ef_vi* vi)
   int id;
   oo_pkt_p pp;
 
-  ci_assert(vi->nic_type.arch != EF_VI_ARCH_EFCT);
+  ci_assert(vi->nic_type.arch != EF_VI_ARCH_EFCT &&
+            vi->nic_type.arch != EF_VI_ARCH_EF10CT);
 
   id = ef_vi_next_rx_rq_id(vi);
   OO_PP_INIT(ni, pp, id);
@@ -2739,7 +2740,9 @@ ci_netif_intf_rx_future(ci_netif* ni, int intf_i, const uint32_t* poison)
     return poison;
 
   vi = ci_netif_vi(ni, intf_i);
-  if( vi->nic_type.arch == EF_VI_ARCH_EFCT ) {
+  /* TODO less clumsy check for EFCT datapath */
+  if( vi->nic_type.arch == EF_VI_ARCH_EFCT ||
+      vi->nic_type.arch == EF_VI_ARCH_EF10CT) {
     volatile const uint32_t* p = efct_vi_rx_future_peek(vi);
     return p ? p : poison;
   }
