@@ -829,12 +829,6 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
   ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[qid];
   int i;
 
-  if( efct_rxq_need_rollover(rxq_ptr) )
-    if( rx_rollover(vi, qid) < 0 )
-      /* ef_eventq_poll() has historically never been able to fail, so we
-       * maintain that policy */
-      return 0;
-
   if( efct_rxq_need_config(rxq) ) {
     unsigned new_generation = OO_ACCESS_ONCE(*rxq->live.config_generation);
     /* We have to use the live config_generation from before we started
@@ -853,6 +847,12 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
     }
     rxq->config_generation = new_generation;
   }
+
+  if( efct_rxq_need_rollover(rxq_ptr) )
+    if( rx_rollover(vi, qid) < 0 )
+      /* ef_eventq_poll() has historically never been able to fail, so we
+       * maintain that policy */
+      return 0;
 
   /* Avoid crossing a superbuf in a single poll. Otherwise we'd need to check
    * for rollover after each packet. */
