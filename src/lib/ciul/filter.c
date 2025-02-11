@@ -19,6 +19,7 @@
 #include <stdbool.h>
 #include <netinet/ether.h>
 #include <etherfabric/internal/efct_uk_api.h>
+#include <ci/efhw/common.h>
 
 
 enum ef_filter_type {
@@ -538,6 +539,29 @@ static int ef_filter_del(ef_driver_handle dh, int resource_id,
   return ci_resource_op(dh, &op);
 }
 
+static int ef_vi_select_rxq_attach_type(ef_vi *vi, const ef_filter_spec *fs,
+                                        unsigned *flags, bool *shared_mode_out)
+{
+  *shared_mode_out = !(vi->nic_type.nic_flags &
+                       EFHW_VI_NIC_EXCL_RXQ_ATTACH_IS_DEFAULT);
+
+  if ( (fs->flags & EF_FILTER_FLAG_EXCLUSIVE_RXQ) &&
+       (fs->flags & EF_FILTER_FLAG_SHARED_RXQ) ) {
+    ef_log("%s: Invalid filter flags - requesting both an exclusive and shared rxq",
+           __func__);
+    return -EINVAL;
+  }
+
+  if( fs->flags & EF_FILTER_FLAG_SHARED_RXQ ) {
+    *shared_mode_out = true;
+  } else if ( fs->flags & EF_FILTER_FLAG_EXCLUSIVE_RXQ || !*shared_mode_out) {
+    *flags |= CI_FILTER_FLAG_EXCLUSIVE_RXQ;
+    *shared_mode_out = false;
+  }
+
+  return 0;
+}
+
 int ef_vi_filter_add(ef_vi *vi, ef_driver_handle dh, const ef_filter_spec *fs,
 		     ef_filter_cookie *filter_cookie_out)
 {
@@ -547,7 +571,7 @@ int ef_vi_filter_add(ef_vi *vi, ef_driver_handle dh, const ef_filter_spec *fs,
     ef_filter_cookie cookie;
     unsigned flags = 0;
     int rxq_no = 0;
-    bool shared_mode = false;
+    bool shared_mode;
 
     if( vi->efct_rxqs.active_qs ) {
 
@@ -566,11 +590,9 @@ int ef_vi_filter_add(ef_vi *vi, ef_driver_handle dh, const ef_filter_spec *fs,
         flags |= CI_FILTER_FLAG_ANY_RXQ;
     }
 
-    if ( fs->flags & EF_FILTER_FLAG_EXCLUSIVE_RXQ )
-      flags |= CI_FILTER_FLAG_EXCLUSIVE_RXQ;
-
-    if ( fs->flags & EF_FILTER_FLAG_SHRUB_SHARED )
-      shared_mode = true;
+    rc = ef_vi_select_rxq_attach_type(vi, fs, &flags, &shared_mode);
+    if( rc )
+      return rc;
 
     if( vi->efct_rxqs.ops && vi->efct_rxqs.ops->pre_attach ) {
       rc = vi->efct_rxqs.ops->pre_attach(vi, shared_mode);

@@ -92,7 +92,7 @@ static int cfg_exit_pkts = -1;
 static int cfg_register_mcast;
 static int cfg_discard = -1;
 static bool cfg_exclusive = false;
-static bool cfg_x4_shared_mode = false;
+static bool cfg_shared = false;
 static int cfg_qid = -1;
 
 
@@ -530,7 +530,7 @@ static __attribute__ ((__noreturn__)) void usage(void)
   fprintf(stderr, "  -D <num> set specific discard mask. For specifics of possible discard masks,"
                               "look at the enum defined for ef_vi_rx_discard_err_flags.\n");
   fprintf(stderr, "  -x       require an exclusive RX queue\n");
-  fprintf(stderr, "  -4       use shared shrub controller\n");
+  fprintf(stderr, "  -s       Request a shared RX queue\n");
   fprintf(stderr, "  -q       request specific qid\n");
   exit(1);
 }
@@ -545,7 +545,7 @@ int main(int argc, char* argv[])
   struct in_addr sa_mcast;
   int c, sock;
 
-  while( (c = getopt (argc, argv, "dtVL:vmbefF:n:jD:x4q:")) != -1 )
+  while( (c = getopt (argc, argv, "dtVL:vmbefF:n:jD:xsq:")) != -1 )
     switch( c ) {
     case 'd':
       cfg_hexdump = 1;
@@ -589,8 +589,8 @@ int main(int argc, char* argv[])
     case 'x':
       cfg_exclusive = true;
       break;
-    case '4':
-      cfg_x4_shared_mode = true; //todo allow flexible unix socket path locations
+    case 's':
+      cfg_shared = true;
       break;
     case 'q':
       cfg_qid = atoi(optarg);
@@ -708,10 +708,17 @@ int main(int argc, char* argv[])
     ef_filter_spec filter_spec;
 
     int filter_flags = EF_FILTER_FLAG_NONE;
+
+    if( cfg_exclusive && cfg_shared ) {
+      LOGE("ERROR: Cannot request both an exclusive and shared queue");
+      exit(1);
+    }
+
     if ( cfg_exclusive )
       filter_flags = EF_FILTER_FLAG_EXCLUSIVE_RXQ;
-    if ( cfg_x4_shared_mode )
-      filter_flags = EF_FILTER_FLAG_SHRUB_SHARED;
+
+    if ( cfg_shared )
+      filter_flags = EF_FILTER_FLAG_SHARED_RXQ;
 
     if( filter_parse(&filter_spec, argv[0], &sa_mcast, filter_flags) != 0 ) {
       LOGE("ERROR: Bad filter spec '%s'\n", argv[0]);

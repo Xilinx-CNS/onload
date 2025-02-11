@@ -126,6 +126,8 @@ typedef union {
 #define EFHW_VI_NIC_RX_SHARED           0x04  /*! RX filters are lower bound */
 #define EFHW_VI_NIC_RX_MCAST_REPLICATION 0x08 /*! RX mcast replication */
 #define EFHW_VI_NIC_IRQ                 0x10  /*! onload IRQ */
+/* NIC attaches to an exclusive RXQ by default */
+#define EFHW_VI_NIC_EXCL_RXQ_ATTACH_IS_DEFAULT 0x20
 
 /* Types of hardware filter */
 /* Each of these values implicitly selects scatter filters on B0 - or in
@@ -253,6 +255,8 @@ typedef union {
 #define NIC_FLAG_LLCT 0x100000000000000LL
 /* Can poll for RX independently of other events */
 #define NIC_FLAG_RX_POLL 0x200000000000000LL
+/* NIC attaches to an exclusive RXQ by default */
+#define NIC_FLAG_EXCL_RXQ_ATTACH_IS_DEFAULT 0x400000000000000LL
 
 /* Filter type flags */
 #define NIC_FILTER_FLAG_RX_TYPE_IP_LOCAL 0x1

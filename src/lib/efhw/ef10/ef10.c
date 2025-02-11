@@ -603,7 +603,7 @@ ef10_nic_tweak_hardware(struct efhw_nic *nic)
   nic->flags |= NIC_FLAG_HW_MULTICAST_REPLICATION |
                 NIC_FLAG_PHYS_MODE | NIC_FLAG_BUFFER_MODE | NIC_FLAG_VPORTS |
                 NIC_FLAG_RX_MCAST_REPLICATION | NIC_FLAG_USERSPACE_PRIME |
-                NIC_FLAG_SHARED_PD;
+                NIC_FLAG_SHARED_PD | NIC_FLAG_EXCL_RXQ_ATTACH_IS_DEFAULT;
 
   /* Determine what the filtering capabilies are */
   ef10_nic_check_supported_filters(nic);

@@ -442,8 +442,8 @@ enum ef_filter_flags {
   /** The flag below is intended to be used by the ef_filter_spec_init() function.
   **
   **  If set, this will attempt to reserve the use of a hardware receive_queue for a
-  **  singular application. This is useful only for X3 supported hardware as
-  **  other cards do not use shared queues.
+  **  singular application. This is useful for X3 as it defaults to using shared
+  **  queues.
   **
   **  Exclusivity is defined by the following properties:
   **    1) Other applications will be unable to snoop on traffic filtered to this
@@ -479,8 +479,11 @@ enum ef_filter_flags {
   **
   */
   EF_FILTER_FLAG_EXCLUSIVE_RXQ     = 0x4,
-  /* TODO FILL THIS OUT (if this is the right thing to do) */
-  EF_FILTER_FLAG_SHRUB_SHARED      = 0x8,
+  /** If set, the hardware receive queue may be shared by other applications.
+   ** This is useful for the X4 express datapath as it defaults to using
+   ** exclusive queues but is capable of sharing RXQs.
+   */
+  EF_FILTER_FLAG_SHARED_RXQ        = 0x8,
 };
 
 /*! \brief Specification of a filter */
