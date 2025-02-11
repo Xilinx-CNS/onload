@@ -56,7 +56,8 @@ extern int tcp_helper_vi_hw_drop_filter_supported(tcp_helper_resource_t* trs,
 
 extern void tcp_helper_get_filter_params(tcp_helper_resource_t* trs,
                                          int hwport, int* vi_id, int* rxq,
-                                         unsigned *flags);
+                                         unsigned *flags,
+                                         unsigned *exclusive_rxq_token);
 
 /* Executed after any hardware filter add. Used by efct to bring up a new rxq
  * if one has been added */

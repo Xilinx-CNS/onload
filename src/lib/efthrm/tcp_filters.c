@@ -131,6 +131,7 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
   int drop = (src_flags & OO_HW_SRC_FLAG_DROP) &&
              ! cluster; /* drop not supported for RSS - use proper filter */
   unsigned insert_flags = 0;
+  unsigned exclusive_rxq_token = EFHW_PD_NON_EXC_TOKEN;
 
   if( ! kernel_redirect )
     ci_assert_nequal(oofilter->trs == NULL, oofilter->thc == NULL);
@@ -142,7 +143,7 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
     vi_id = tcp_helper_cluster_vi_base(oofilter->thc, hwport);
   else
     tcp_helper_get_filter_params(oofilter->trs, hwport, &vi_id, &rxq,
-                                 &insert_flags);
+                                 &insert_flags, &exclusive_rxq_token);
 
   if( vi_id  >= 0 ) {
     int flags = EFX_FILTER_FLAG_RX_SCATTER;
@@ -288,7 +289,8 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
     }
     if( replace )
       insert_flags |= EFHW_FILTER_F_REPLACE;
-    rc = efrm_filter_insert(get_client(hwport), &spec, &rxq, EFHW_PD_NON_EXC_TOKEN,
+    rc = efrm_filter_insert(get_client(hwport), &spec, &rxq,
+                            exclusive_rxq_token,
                             cluster || kernel_redirect ? NULL :
                                               &oofilter->trs->filter_irqmask,
                             insert_flags);

@@ -948,11 +948,13 @@ int tcp_helper_vi_hw_drop_filter_supported(tcp_helper_resource_t* trs,
     return -1;
 }
 
-
 void tcp_helper_get_filter_params(tcp_helper_resource_t* trs, int hwport,
-                                  int* vi_id, int* rxq, unsigned *flags)
+                                  int* vi_id, int* rxq, unsigned *flags,
+                                  unsigned *exclusive_rxq_token)
 {
   int intf_i;
+  struct efrm_pd *pd;
+
   ci_assert_lt((unsigned) hwport, CI_CFG_MAX_HWPORTS);
 
   /* This is a suitable hwport for us if we have a VI available for RX. We
@@ -968,6 +970,8 @@ void tcp_helper_get_filter_params(tcp_helper_resource_t* trs, int hwport,
   if( (intf_i = trs->netif.hwport_to_intf_i[hwport]) >= 0 ) {
     ef_vi* vi = &trs->netif.nic_hw[intf_i].vi;
     *vi_id = EFAB_VI_RESOURCE_INSTANCE(tcp_helper_vi(trs, intf_i));
+    pd = efrm_vi_get_pd(tcp_helper_vi(trs, intf_i));
+    *exclusive_rxq_token = efrm_pd_shared_rxq_token_get(pd);
     if( NI_OPTS_TRS(trs).shared_rxq_num >= 0 ) {
       *rxq = NI_OPTS_TRS(trs).shared_rxq_num;
       *flags |= EFHW_FILTER_F_PREF_RXQ;

@@ -56,7 +56,8 @@ int tcp_helper_vi_hw_drop_filter_supported(tcp_helper_resource_t* trs,
 
 void tcp_helper_get_filter_params(tcp_helper_resource_t* trs,
                                   int hwport, int* vi_id, int* rxq,
-                                  unsigned *flags)
+                                  unsigned *flags,
+                                  unsigned *exclusive_rxq_token)
 {
   *vi_id = tcp_helper_hwport_to_stack_id(trs, hwport);
 }

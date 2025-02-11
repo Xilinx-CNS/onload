@@ -39,7 +39,8 @@ extern int tcp_helper_vi_hw_drop_filter_supported(tcp_helper_resource_t* trs,
 
 extern void tcp_helper_get_filter_params(tcp_helper_resource_t* trs,
                                          int hwport, int* vi_id, int* rxq,
-                                         unsigned *flags);
+                                         unsigned *flags,
+                                         unsigned *exclusive_rxq_token);
 
 int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
                                const struct efx_filter_spec* spec, int rxq,
