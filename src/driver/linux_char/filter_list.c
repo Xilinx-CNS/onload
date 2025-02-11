@@ -164,7 +164,7 @@ static int efch_filter_insert(struct efrm_resource *rs, struct efrm_pd *pd,
   /* This is the default exclusive token for non-exclusive applications.
    * By doing so, we can ensure queues that are already non-exclusive
    * cannot be used for exclusive purposes. */
-  unsigned exclusive_rxq_token = EFHW_PD_NON_EXC_TOKEN;
+  unsigned exclusive_rxq_token = efrm_pd_shared_rxq_token_get(pd);
 
   if ( flags & EFHW_FILTER_F_EXCL_RXQ )
     exclusive_rxq_token = efrm_pd_exclusive_rxq_token_get(pd);

@@ -139,6 +139,8 @@ efrm_pd_exclusive_rxq_token_get(struct efrm_pd *pd);
 extern void
 efrm_pd_shared_rxq_token_set(struct efrm_pd *pd, unsigned token);
 
+extern unsigned
+efrm_pd_shared_rxq_token_get(struct efrm_pd *pd);
 
 /* Return true if this PD is using a non-default vport. */
 extern int

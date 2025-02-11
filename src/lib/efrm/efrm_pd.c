@@ -260,6 +260,13 @@ void efrm_pd_shared_rxq_token_set(struct efrm_pd *pd, unsigned token)
 }
 EXPORT_SYMBOL(efrm_pd_shared_rxq_token_set);
 
+unsigned efrm_pd_shared_rxq_token_get(struct efrm_pd *pd)
+{
+	return pd->shared_rxq_token;
+}
+EXPORT_SYMBOL(efrm_pd_shared_rxq_token_get);
+
+
 /***********************************************************************/
 
 int efrm_pd_alloc(struct efrm_pd **pd_out, struct efrm_client *client_opt,
