@@ -219,6 +219,10 @@ efrm_vi_irq_free(struct efrm_interrupt_vector *vec)
 	EFRM_ASSERT(name);
 	if (name != default_irq_name)
 		kfree(name);
+
+	efhw_nic_irq_free(vec->nic, vec->channel, vec->irq);
+	vec->channel = IRQ_NOTCONNECTED;
+	vec->irq = IRQ_NOTCONNECTED;
 }
 
 
@@ -250,34 +254,54 @@ static void efrm_interrupt_vector_release(struct efrm_interrupt_vector *vec)
 static int
 efrm_interrupt_vector_choose(struct efrm_nic *nic, struct efrm_vi *virs)
 {
-	struct efrm_interrupt_vector *vec = NULL, *least_used_vec = NULL;
+	struct efrm_interrupt_vector *current_vec = NULL, *selected_vec = NULL;
+	uint32_t irq, channel;
 	int rc;
 
 	mutex_lock(&nic->irq_list_lock);
-	list_for_each_entry(vec, &nic->irq_list, link) {
-		/* The num_vis could be changing under our feet, but it's not
-		 * worth locking each vector to prevent this. */
-		if (least_used_vec == NULL ||
-		    vec->num_vis < least_used_vec->num_vis)
-			least_used_vec = vec;
-		if (vec->num_vis == 0)
-			break;
+	rc = efhw_nic_irq_alloc(&nic->efhw_nic, &channel, &irq);
+	if (rc < 0) {
+		/* IRQ allocation failed. Find the least used vector of those
+		 * that have already been allocated.*/
+		struct efrm_interrupt_vector *least_used_vec = NULL;
+		list_for_each_entry(current_vec, &nic->irq_list, link) {
+			/* The num_vis could be changing under our feet, but
+			 * it's not worth locking each vector to prevent this.
+			 */
+			if (least_used_vec == NULL ||
+				current_vec->num_vis < least_used_vec->num_vis)
+				least_used_vec = current_vec;
+			if (current_vec->num_vis == 0)
+				break;
+		}
+		selected_vec = least_used_vec;
+	} else {
+		/* IRQ allocation succeeded. Find an unconnected vector and
+		 * update it with the new irq and channel values. */
+		list_for_each_entry(current_vec, &nic->irq_list, link) {
+			if (current_vec->irq == IRQ_NOTCONNECTED) {
+				selected_vec = current_vec;
+				selected_vec->irq = irq;
+				selected_vec->channel = channel;
+				break;
+			}
+		}
 	}
 	mutex_unlock(&nic->irq_list_lock);
 
-	EFRM_ASSERT(least_used_vec);
+	EFRM_ASSERT(selected_vec);
 
-	rc = efrm_interrupt_vector_acquire(least_used_vec);
+	rc = efrm_interrupt_vector_acquire(selected_vec);
 
 	if (rc >= 0) {
-		virs->vec = least_used_vec;
-		spin_lock(&least_used_vec->vi_irq_lock);
-		list_add(&virs->irq_link, &least_used_vec->vi_list);
-		spin_unlock(&least_used_vec->vi_irq_lock);
+		virs->vec = selected_vec;
+		spin_lock(&selected_vec->vi_irq_lock);
+		list_add(&virs->irq_link, &selected_vec->vi_list);
+		spin_unlock(&selected_vec->vi_irq_lock);
 		/* Move the vector to the end of the list in order to
 		 * discourage re-use. */
 		mutex_lock(&nic->irq_list_lock);
-		list_move_tail(&least_used_vec->link, &nic->irq_list);
+		list_move_tail(&selected_vec->link, &nic->irq_list);
 		mutex_unlock(&nic->irq_list_lock);
 	}
 
@@ -294,9 +318,7 @@ int efrm_interrupt_vectors_ctor(struct efrm_nic *nic,
 
 	count = 0;
 	for (range = 0; range < res_dim->irq_n_ranges; ++range)
-		for (index = 0; index < res_dim->irq_ranges[range].irq_range;
-		     ++index)
-			++count;
+		count += res_dim->irq_ranges[range].irq_range;
 
 	if (count == 0) {
 		nic->irq_vectors_buffer = NULL;
@@ -316,9 +338,9 @@ int efrm_interrupt_vectors_ctor(struct efrm_nic *nic,
 			spin_lock_init(&vec->vi_irq_lock);
 			mutex_init(&vec->vec_acquire_lock);
 			INIT_LIST_HEAD(&vec->vi_list);
-			vec->irq = res_dim->irq_ranges[range].irq_base + index;
-			/* TODO: This will have to be changed for ef10ct */
-			vec->channel = vec->irq;
+			/* irq/channel are provided by efhw_nic_irq_alloc */
+			vec->irq = IRQ_NOTCONNECTED;
+			vec->channel = IRQ_NOTCONNECTED;
 			vec->nic = &nic->efhw_nic;
 			vec->num_vis = 0;
 			list_add_tail(&vec->link, &nic->irq_list);
@@ -363,7 +385,7 @@ static int efrm_vi_request_irq(struct efhw_nic *nic, struct efrm_vi *virs)
 {
 	int rc;
 
-	/* TODO EF10CT */
+	/* EF10CT test driver does not support interrupts */
 	if( (nic->devtype.arch == EFHW_ARCH_EF10CT) )
 		return 0;
 
