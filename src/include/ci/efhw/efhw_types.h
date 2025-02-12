@@ -554,6 +554,14 @@ struct efhw_func_ops {
 			   unsigned handle);
 	/*! Unlink any previously linked piobuf from a specific txq */
 	int (*piobuf_unlink)(struct efhw_nic* nic, unsigned txq);
+
+  /*-------------- interrupts ------------------------ */
+
+	/*! Allocate an interrupt */
+	int (*irq_alloc)(struct efhw_nic *nic, uint32_t *channel, 
+			 uint32_t *irq);
+	/*! Free an interrupt */
+	void (*irq_free)(struct efhw_nic *nic, uint32_t channel, uint32_t irq);
 };
 
 

@@ -318,3 +318,11 @@
 #define efhw_nic_piobuf_unlink(nic, txq) \
 	((nic)->efhw_func->piobuf_unlink ? \
 	 (nic)->efhw_func->piobuf_unlink((nic), (txq)) : -EINVAL)
+
+/*-------------- interrupts ------------ */
+#define efhw_nic_irq_alloc(nic, channel, irq) \
+	((nic)->efhw_func->irq_alloc ? \
+	 (nic)->efhw_func->irq_alloc((nic), (channel), (irq)) : -EOPNOTSUPP)
+#define efhw_nic_irq_free(nic, channel, irq) \
+	((nic)->efhw_func->irq_free ? \
+	 (nic)->efhw_func->irq_free((nic), (channel), (irq)) : -EOPNOTSUPP)
