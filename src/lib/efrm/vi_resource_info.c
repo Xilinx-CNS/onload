@@ -106,7 +106,7 @@ int efrm_vi_get_channel(struct efrm_vi *virs)
 	struct efrm_nic *nic = efrm_nic(virs->rs.rs_client->nic);
 	/* interrupt is managed by us. */
 	if (virs->vec != NULL)
-		return virs->vec->irq;
+		return virs->vec->channel;
 	/* interrupt is managed by net driver. */
 	return virs->net_drv_wakeup_channel >= 0 ?
 		virs->net_drv_wakeup_channel :

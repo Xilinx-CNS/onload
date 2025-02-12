@@ -317,7 +317,8 @@ int efrm_interrupt_vectors_ctor(struct efrm_nic *nic,
 			mutex_init(&vec->vec_acquire_lock);
 			INIT_LIST_HEAD(&vec->vi_list);
 			vec->irq = res_dim->irq_ranges[range].irq_base + index;
-			vec->channel = channel;
+			/* TODO: This will have to be changed for ef10ct */
+			vec->channel = vec->irq;
 			vec->nic = &nic->efhw_nic;
 			vec->num_vis = 0;
 			list_add_tail(&vec->link, &nic->irq_list);
