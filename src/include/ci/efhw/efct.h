@@ -253,6 +253,12 @@ struct efhw_nic_efct {
   struct efct_filter_state filter_state;
   struct dentry* debug_dir;
 #endif
+  struct {
+    struct efhw_stack_allocator alloc;
+#ifdef __KERNEL__
+    struct mutex lock;
+#endif
+  } irq_allocator;
 };
 
 #if CI_HAVE_EFCT_AUX

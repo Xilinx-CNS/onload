@@ -523,6 +523,42 @@ efct_nic_release_hardware(struct efhw_nic* nic)
  *
  *--------------------------------------------------------------------*/
 
+static bool efct_accept_irq_constraints(int instance, void* arg) {
+  return true;
+}
+
+static int
+efct_nic_irq_alloc(struct efhw_nic *nic, uint32_t *channel, uint32_t *irq)
+{
+  struct efhw_nic_efct *efct = nic->arch_extra;
+  int rc;
+
+  mutex_lock(&efct->irq_allocator.lock);
+  rc = efhw_stack_alloc(&efct->irq_allocator.alloc, efct_accept_irq_constraints,
+                   NULL);
+  if (rc >= 0) {
+    *irq = rc;
+    /* efct nics don't really use channel properly, so return irq again */
+    *channel = rc;
+  }
+  mutex_unlock(&efct->irq_allocator.lock);
+
+  return rc;
+}
+
+static void
+efct_nic_irq_free(struct efhw_nic *nic, uint32_t channel, uint32_t irq)
+{
+  struct efhw_nic_efct *efct = nic->arch_extra;
+
+  /* efct doesn't use channel properly, so channel should equal irq */
+  EFHW_ASSERT(channel == irq);
+
+  mutex_lock(&efct->irq_allocator.lock);
+  efhw_stack_free(&efct->irq_allocator.alloc, irq);
+  mutex_unlock(&efct->irq_allocator.lock);
+}
+
 /* This function will enable the given event queue with the requested
  * properties.
  */
@@ -1167,6 +1203,8 @@ struct efhw_func_ops efct_char_functional_units = {
   .shared_rxq_refresh = efct_nic_shared_rxq_refresh,
   .shared_rxq_refresh_kernel = efct_nic_shared_rxq_refresh_kernel,
   .shared_rxq_request_wakeup = efct_nic_shared_rxq_request_wakeup,
+  .irq_alloc = efct_nic_irq_alloc,
+  .irq_free = efct_nic_irq_free,
 };
 
 #endif

@@ -294,6 +294,36 @@ static int efct_devtype_init(struct xlnx_efct_device *edev,
   return 0;
 }
 
+static int efct_init_irq_state(struct efhw_nic_efct *efct,
+                               struct xlnx_efct_irq_resources *res_dim)
+{
+  uint32_t irq_n = 0, range, index;
+  int *irqs;
+  int i = 0;
+
+  for (range = 0; range < res_dim->n_ranges; ++range)
+    irq_n += res_dim->irq_ranges[range].range;
+
+  EFHW_ASSERT(irq_n > 0);
+  irqs = kmalloc(irq_n * sizeof(irqs[0]), GFP_KERNEL);
+  if (irqs == NULL)
+    return -ENOMEM;
+
+  for (range = 0; range < res_dim->n_ranges; ++range)
+    for (index = 0; index < res_dim->irq_ranges[range].range; ++index)
+      irqs[i++] = res_dim->irq_ranges[range].vector + index;
+
+  mutex_init(&efct->irq_allocator.lock);
+
+  return efhw_stack_allocator_ctor(&efct->irq_allocator.alloc, irqs, irq_n);
+}
+
+static void efct_fini_irq_state(struct efhw_nic_efct *efct)
+{
+  efhw_stack_allocator_dtor(&efct->irq_allocator.alloc);
+  mutex_destroy(&efct->irq_allocator.lock);
+}
+
 static int efct_resource_init(struct xlnx_efct_device *edev,
                               struct xlnx_efct_client *client,
                               struct efhw_nic_efct *efct,
@@ -356,6 +386,10 @@ static int efct_resource_init(struct xlnx_efct_device *edev,
       res_dim->irq_ranges[i].irq_base = val.irq_res->irq_ranges[i].vector;
       res_dim->irq_ranges[i].irq_range = val.irq_res->irq_ranges[i].range;
   }
+
+  rc = efct_init_irq_state(efct, val.irq_res);
+  if (rc < 0)
+    return rc;
 
   res_dim->irq_prime_reg = val.irq_res->int_prime;
 
@@ -462,13 +496,13 @@ int efct_probe(struct auxiliary_device *auxdev,
 
   rc = efct_vi_allocator_ctor(efct, &res_dim);
   if( rc < 0 )
-    goto fail2;
+    goto fail3;
 
   rtnl_lock();
   rc = efrm_nic_add(client, &auxdev->dev, &dev_type, net_dev, &lnic,
                     &res_dim, 0);
   if( rc < 0 )
-    goto fail3;
+    goto fail4;
 
   nic = &lnic->efrm_nic.efhw_nic;
   nic->mtu = net_dev->mtu + ETH_HLEN;
@@ -484,9 +518,11 @@ int efct_probe(struct auxiliary_device *auxdev,
 
   return 0;
 
- fail3:
+ fail4:
   rtnl_unlock();
   efct_vi_allocator_dtor(efct);
+ fail3:
+  efct_fini_irq_state(efct);
  fail2:
   edev->ops->close(client);
  fail1:
@@ -554,6 +590,8 @@ void efct_remove(struct auxiliary_device *auxdev)
   efrm_nic_reset_suspend(nic);
   ci_atomic32_or(&nic->resetting, NIC_RESETTING_FLAG_UNPLUGGED);
   rtnl_unlock();
+
+  efct_fini_irq_state(efct);
 
   efct_vi_allocator_dtor(efct);
   /* mind we might still expect callbacks from close() context
