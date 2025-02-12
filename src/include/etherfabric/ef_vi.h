@@ -875,14 +875,14 @@ typedef struct {
 */
 typedef struct {
   /** Indicates whether a buffer is available in the queue */
-  bool (*available)(const struct ef_vi*, int qid);
+  bool (*available)(const struct ef_vi*, int ix);
   /** Acquire the next buffer in a queue.
    ** \returns superbuf id or negative error code, plus metadata via pointers */
-  int  (*next)(struct ef_vi*, int qid, bool* sentinel, unsigned* seq);
+  int  (*next)(struct ef_vi*, int ix, bool* sentinel, unsigned* seq);
   /** Free a buffer acquired from next() */
-  void (*free)(struct ef_vi*, int qid, int sbid);
+  void (*free)(struct ef_vi*, int ix, int sbid);
   /** Post a buffer to the hardware FIFO (called internally) */
-  void (*post)(struct ef_vi*, int qid, int sbid, bool sentinel);
+  void (*post)(struct ef_vi*, int ix, int sbid, bool sentinel);
   /** Attach a queue */
   int  (*attach)(struct ef_vi*,
                  int qid,
@@ -890,7 +890,7 @@ typedef struct {
                  unsigned n_superbufs,
                  bool shared_mode);
   /** Refresh the internal config; called if config_generation changes */
-  int  (*refresh)(struct ef_vi*, int qid);
+  int  (*refresh)(struct ef_vi*, int ix);
   /** Prime the virtual interface's queues (both rx and tx) */
   int  (*prime)(struct ef_vi*, ef_driver_handle dh);
   /** De-allocate internal resources */

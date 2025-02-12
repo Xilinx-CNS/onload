@@ -111,11 +111,11 @@ static int pkt_id_to_rxq_ix(uint32_t pkt_id)
 }
 
 struct efct_rx_descriptor*
-efct_rx_desc_for_sb(ef_vi* vi, uint32_t qid, uint32_t sbid)
+efct_rx_desc_for_sb(ef_vi* vi, uint32_t ix, uint32_t sbid)
 {
   ef_vi_rxq* q = &vi->vi_rxq;
   struct efct_rx_descriptor* desc = q->descriptors;
-  return desc + ((qid * CI_EFCT_MAX_SUPERBUFS) | sbid);
+  return desc + ((ix * CI_EFCT_MAX_SUPERBUFS) | sbid);
 }
 
 static bool efct_rxq_is_active(const ef_vi_efct_rxq* rxq)

@@ -241,20 +241,20 @@ extern int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh) EF_VI_H
 extern int efct_superbufs_reserve(ef_vi* vi, void* space);
 extern void efct_superbufs_cleanup(ef_vi* vi);
 
-struct efct_rx_descriptor* efct_rx_desc_for_sb(ef_vi* vi, uint32_t qid, uint32_t sbid);
-static inline void efct_rx_sb_free_push(ef_vi* vi, uint32_t qid, uint32_t sbid)
+struct efct_rx_descriptor* efct_rx_desc_for_sb(ef_vi* vi, uint32_t ix, uint32_t sbid);
+static inline void efct_rx_sb_free_push(ef_vi* vi, uint32_t ix, uint32_t sbid)
 {
-  ef_vi_efct_rxq_state* state = &vi->ep_state->rxq.efct_state[qid];
-  efct_rx_desc_for_sb(vi, qid, sbid)->sbid_next = state->free_head;
+  ef_vi_efct_rxq_state* state = &vi->ep_state->rxq.efct_state[ix];
+  efct_rx_desc_for_sb(vi, ix, sbid)->sbid_next = state->free_head;
   state->free_head = sbid;
 }
 
-static inline const void* efct_superbuf_access(const ef_vi* vi, int qid, size_t sbid)
+static inline const void* efct_superbuf_access(const ef_vi* vi, int ix, size_t sbid)
 {
 #ifdef __KERNEL__
-  return vi->efct_rxqs.q[qid].superbufs[sbid];
+  return vi->efct_rxqs.q[ix].superbufs[sbid];
 #else
-  return vi->efct_rxqs.q[qid].superbuf + sbid * EFCT_RX_SUPERBUF_BYTES;
+  return vi->efct_rxqs.q[ix].superbuf + sbid * EFCT_RX_SUPERBUF_BYTES;
 #endif
 }
 

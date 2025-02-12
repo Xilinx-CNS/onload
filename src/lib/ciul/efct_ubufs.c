@@ -51,14 +51,14 @@ static const struct efct_ubufs* const_ubufs(const ef_vi* vi)
   return CI_CONTAINER(struct efct_ubufs, ops, vi->efct_rxqs.ops);
 }
 
-static bool rxq_is_local(const ef_vi* vi, int qid)
+static bool rxq_is_local(const ef_vi* vi, int ix)
 {
-  return const_ubufs(vi)->q[qid].shrub_client.buffers == NULL;
+  return const_ubufs(vi)->q[ix].shrub_client.buffers == NULL;
 }
 
-static void update_filled(ef_vi* vi, int qid)
+static void update_filled(ef_vi* vi, int ix)
 {
-  ef_vi_efct_rxq_state* state = &vi->ep_state->rxq.efct_state[qid];
+  ef_vi_efct_rxq_state* state = &vi->ep_state->rxq.efct_state[ix];
 
   while( state->fifo_count_hw != 0 ) {
     const char* buffer;
@@ -81,8 +81,8 @@ static void update_filled(ef_vi* vi, int qid)
     EF_VI_ASSERT(vi->efct_rxqs.meta_offset == 0);
 
     EF_VI_ASSERT(state->fifo_tail_hw != -1 ); /* implied by count_hw > 0 */
-    desc = efct_rx_desc_for_sb(vi, qid, state->fifo_tail_hw);
-    buffer = efct_superbuf_access(vi, qid, state->fifo_tail_hw);
+    desc = efct_rx_desc_for_sb(vi, ix, state->fifo_tail_hw);
+    buffer = efct_superbuf_access(vi, ix, state->fifo_tail_hw);
     header = (const ci_qword_t*)(buffer + EFCT_RX_SUPERBUF_BYTES - EFCT_PKT_STRIDE);
 
     if( CI_QWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL) != desc->sentinel )
@@ -108,15 +108,15 @@ static void poison_superbuf(char *sbuf)
   wmb();
 }
 
-static void post_buffers(ef_vi* vi, int qid)
+static void post_buffers(ef_vi* vi, int ix)
 {
-  ef_vi_efct_rxq_state* state = &vi->ep_state->rxq.efct_state[qid];
+  ef_vi_efct_rxq_state* state = &vi->ep_state->rxq.efct_state[ix];
   unsigned limit = get_ubufs(vi)->nic_fifo_limit;
 
   while( state->free_head != -1 && state->fifo_count_hw < limit ) {
     int16_t id = state->free_head;
-    const ci_qword_t* header = efct_superbuf_access(vi, qid, id);
-    struct efct_rx_descriptor* desc = efct_rx_desc_for_sb(vi, qid, id);
+    const ci_qword_t* header = efct_superbuf_access(vi, ix, id);
+    struct efct_rx_descriptor* desc = efct_rx_desc_for_sb(vi, ix, id);
 
     state->free_head = desc->sbid_next;
     desc->sbid_next = -1;
@@ -134,20 +134,20 @@ static void post_buffers(ef_vi* vi, int qid)
       state->fifo_tail_sw = id;
 
     if( state->fifo_head != -1 )
-      efct_rx_desc_for_sb(vi, qid, state->fifo_head)->sbid_next = id;
+      efct_rx_desc_for_sb(vi, ix, state->fifo_head)->sbid_next = id;
 
     state->fifo_head = id;
     state->fifo_count_hw++;
     state->fifo_count_sw++;
 
-    vi->efct_rxqs.ops->post(vi, qid, id, desc->sentinel);
+    vi->efct_rxqs.ops->post(vi, ix, id, desc->sentinel);
   }
 }
 
-static int efct_ubufs_next_shared(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq)
+static int efct_ubufs_next_shared(ef_vi* vi, int ix, bool* sentinel, unsigned* sbseq)
 {
-  struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[qid];
-  ef_vi_efct_rxq_state* state = &vi->ep_state->rxq.efct_state[qid];
+  struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[ix];
+  ef_vi_efct_rxq_state* state = &vi->ep_state->rxq.efct_state[ix];
 
   ef_shrub_buffer_id id;
   int rc = ef_shrub_client_acquire_buffer(&rxq->shrub_client, &id, sentinel);
@@ -158,20 +158,20 @@ static int efct_ubufs_next_shared(ef_vi* vi, int qid, bool* sentinel, unsigned* 
   return id;
 }
 
-static int efct_ubufs_next_local(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq)
+static int efct_ubufs_next_local(ef_vi* vi, int ix, bool* sentinel, unsigned* sbseq)
 {
-  ef_vi_efct_rxq_state* state = &vi->ep_state->rxq.efct_state[qid];
+  ef_vi_efct_rxq_state* state = &vi->ep_state->rxq.efct_state[ix];
   struct efct_rx_descriptor* desc;
   int id;
 
-  update_filled(vi, qid);
-  post_buffers(vi, qid);
+  update_filled(vi, ix);
+  post_buffers(vi, ix);
 
   if( state->fifo_count_sw == 0 )
     return -EAGAIN;
 
   id = state->fifo_tail_sw;
-  desc = efct_rx_desc_for_sb(vi, qid, id);
+  desc = efct_rx_desc_for_sb(vi, ix, id);
   state->fifo_tail_sw = desc->sbid_next;
   state->fifo_count_sw--;
   *sbseq = state->sbseq++;
@@ -179,62 +179,62 @@ static int efct_ubufs_next_local(ef_vi* vi, int qid, bool* sentinel, unsigned* s
   return id;
 }
 
-static int efct_ubufs_next(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq)
+static int efct_ubufs_next(ef_vi* vi, int ix, bool* sentinel, unsigned* sbseq)
 {
-  if( rxq_is_local(vi, qid) )
-    return efct_ubufs_next_local(vi, qid, sentinel, sbseq);
+  if( rxq_is_local(vi, ix) )
+    return efct_ubufs_next_local(vi, ix, sentinel, sbseq);
   else
-    return efct_ubufs_next_shared(vi, qid, sentinel, sbseq);
+    return efct_ubufs_next_shared(vi, ix, sentinel, sbseq);
 }
 
-static void efct_ubufs_free_local(ef_vi* vi, int qid, int sbid)
+static void efct_ubufs_free_local(ef_vi* vi, int ix, int sbid)
 {
   /* Order is important: make sure the hardware tail is advanced beyond this
    * buffer before freeing it; free it before attempting to post more. */
-  update_filled(vi, qid);
-  efct_rx_sb_free_push(vi, qid, sbid);
-  post_buffers(vi, qid);
+  update_filled(vi, ix);
+  efct_rx_sb_free_push(vi, ix, sbid);
+  post_buffers(vi, ix);
 }
 
-static void efct_ubufs_free_shared(ef_vi* vi, int qid, int sbid)
+static void efct_ubufs_free_shared(ef_vi* vi, int ix, int sbid)
 {
-  struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[qid];
+  struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[ix];
   ef_shrub_client_release_buffer(&rxq->shrub_client, sbid);
 }
 
-static void efct_ubufs_free(ef_vi* vi, int qid, int sbid)
+static void efct_ubufs_free(ef_vi* vi, int ix, int sbid)
 {
-  if( rxq_is_local(vi, qid) )
-    efct_ubufs_free_local(vi, qid, sbid);
+  if( rxq_is_local(vi, ix) )
+    efct_ubufs_free_local(vi, ix, sbid);
   else
-    efct_ubufs_free_shared(vi, qid, sbid);
+    efct_ubufs_free_shared(vi, ix, sbid);
 }
 
-static bool efct_ubufs_local_available(const ef_vi* vi, int qid)
+static bool efct_ubufs_local_available(const ef_vi* vi, int ix)
 {
-  return vi->ep_state->rxq.efct_state[qid].fifo_count_sw != 0;
+  return vi->ep_state->rxq.efct_state[ix].fifo_count_sw != 0;
 }
 
-static bool efct_ubufs_shared_available(const ef_vi* vi, int qid)
+static bool efct_ubufs_shared_available(const ef_vi* vi, int ix)
 {
-  const struct efct_ubufs_rxq* rxq = &const_ubufs(vi)->q[qid];
+  const struct efct_ubufs_rxq* rxq = &const_ubufs(vi)->q[ix];
   return ef_shrub_client_buffer_available(&rxq->shrub_client);
 }
 
-static bool efct_ubufs_available(const ef_vi* vi, int qid)
+static bool efct_ubufs_available(const ef_vi* vi, int ix)
 {
-  if( rxq_is_local(vi, qid) )
-    return efct_ubufs_local_available(vi, qid);
+  if( rxq_is_local(vi, ix) )
+    return efct_ubufs_local_available(vi, ix);
   else
-    return efct_ubufs_shared_available(vi, qid);
+    return efct_ubufs_shared_available(vi, ix);
 }
 
 #ifndef __KERNEL__
-static void efct_ubufs_post_direct(ef_vi* vi, int qid, int sbid, bool sentinel)
+static void efct_ubufs_post_direct(ef_vi* vi, int ix, int sbid, bool sentinel)
 {
-  ef_addr addr = ef_memreg_dma_addr(&get_ubufs(vi)->q[qid].memreg,
+  ef_addr addr = ef_memreg_dma_addr(&get_ubufs(vi)->q[ix].memreg,
                                     sbid * EFCT_RX_SUPERBUF_BYTES);
-  struct efct_ubufs_rxq *rxq = &get_ubufs(vi)->q[qid];
+  struct efct_ubufs_rxq *rxq = &get_ubufs(vi)->q[ix];
 
   ci_qword_t qword;
   CI_POPULATE_QWORD_3(qword,
@@ -245,16 +245,16 @@ static void efct_ubufs_post_direct(ef_vi* vi, int qid, int sbid, bool sentinel)
   *rxq->rx_post_buffer_reg = qword.u64[0];
 }
 
-static void efct_ubufs_post_kernel(ef_vi* vi, int qid, int sbid, bool sentinel)
+static void efct_ubufs_post_kernel(ef_vi* vi, int ix, int sbid, bool sentinel)
 {
-  ef_addr addr = ef_memreg_dma_addr(&get_ubufs(vi)->q[qid].memreg,
+  ef_addr addr = ef_memreg_dma_addr(&get_ubufs(vi)->q[ix].memreg,
                                     sbid * EFCT_RX_SUPERBUF_BYTES);
 
   ci_resource_op_t op = {};
 
   op.op = CI_RSOP_RX_BUFFER_POST;
   op.id = efch_make_resource_id(vi->vi_resource_id);
-  op.u.buffer_post.qid = vi->efct_rxqs.q[qid].qid;
+  op.u.buffer_post.qid = vi->efct_rxqs.q[ix].qid;
   op.u.buffer_post.user_addr = (uint64_t)addr;
   op.u.buffer_post.sentinel = sentinel;
   op.u.buffer_post.rollover = 0; // TBD support for rollover?
