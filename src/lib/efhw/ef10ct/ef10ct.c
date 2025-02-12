@@ -242,91 +242,6 @@ static void ef10ct_check_for_flushes(struct work_struct *work)
   }
 }
 
-/* stub definition */
-static irqreturn_t ef10ct_irq_handler(int irq, void *dev_id)
-{
-  return IRQ_HANDLED;
-}
-
-static int ef10ct_alloc_irq(struct efhw_nic *nic, int evq) {
-  struct efx_auxdev_client* cli;
-  struct efx_auxdev* edev;
-  struct device *dev;
-  struct efx_auxdev_irq *auxdev_irq;
-  struct efhw_nic_ef10ct_msi_context *msi_context;
-  struct efhw_nic_ef10ct *ef10ct;
-  struct efhw_nic_ef10ct_evq *ef10ct_evq;
-  int rc = 0, aux_rc;
-  int evq_num = ef10ct_get_queue_num(evq);
-
-  AUX_PRE(dev, edev, cli, nic, aux_rc);
-  auxdev_irq = edev->llct_ops->irq_alloc(cli);
-  AUX_POST(dev, edev, cli, nic, aux_rc);
-
-  if (IS_ERR(auxdev_irq)) {
-    rc = PTR_ERR(auxdev_irq);
-    goto fail;
-  }
-
-  msi_context = kzalloc(sizeof(*msi_context), GFP_KERNEL);
-  if (msi_context == NULL) {
-    rc = -ENOMEM;
-    goto fail_alloc;
-  }
-
-  msi_context->irq = auxdev_irq;
-  /* TODO: Better naming */
-  snprintf(msi_context->name, sizeof(msi_context->name), "ef10ct-%d", evq_num);
-
-  ef10ct = nic->arch_extra;
-  ef10ct_evq = &ef10ct->evq[evq_num];
-  ef10ct_evq->msi_context = msi_context;
-
-  rc = request_irq(auxdev_irq->os_vector, ef10ct_irq_handler, 0,
-                   msi_context->name, msi_context);
-  if (rc < 0) {
-    goto fail_request;
-  }
-
-  return rc;
-
-fail_request:
-  kfree(msi_context);
-  ef10ct_evq->msi_context = NULL;
-fail_alloc:
-  AUX_PRE(dev, edev, cli, nic, aux_rc);
-  edev->llct_ops->irq_free(cli, auxdev_irq);
-  AUX_POST(dev, edev, cli, nic, aux_rc);
-fail:
-  EFHW_ERR("%s irq allocation failed rc = %d", __func__, rc);
-
-  return rc;
-}
-
-static void ef10ct_free_irq(struct efhw_nic *nic, int evq) {
-  struct efx_auxdev_client* cli;
-  struct efx_auxdev* edev;
-  struct device *dev;
-  struct efhw_nic_ef10ct_msi_context *msi_context;
-  struct efhw_nic_ef10ct *ef10ct;
-  struct efhw_nic_ef10ct_evq *ef10ct_evq;
-  int aux_rc;
-  int evq_num = ef10ct_get_queue_num(evq);
-
-  ef10ct = nic->arch_extra;
-  ef10ct_evq = &ef10ct->evq[evq_num];
-  msi_context = ef10ct_evq->msi_context;
-  ef10ct_evq->msi_context = NULL;
-
-  free_irq(msi_context->irq->os_vector, msi_context);
-
-  AUX_PRE(dev, edev, cli, nic, aux_rc);
-  edev->llct_ops->irq_free(cli, msi_context->irq);
-  AUX_POST(dev, edev, cli, nic, aux_rc);
-
-  kfree(msi_context);
-}
-
 static int ef10ct_irq_alloc(struct efhw_nic *nic, uint32_t *channel,
                             uint32_t *irq)
 {
@@ -477,7 +392,7 @@ ef10ct_nic_event_queue_enable(struct efhw_nic *nic,
 
   if( (nic->devtype.variant != 'L') )
     EFHW_MCDI_SET_DWORD(in, INIT_EVQ_V2_IN_IRQ_NUM,
-                        ef10ct_evq->msi_context->irq->nic_nr);
+                        efhw_params->wakeup_channel);
 
   rpc.cmd = MC_CMD_INIT_EVQ;
   rpc.inlen = sizeof(in);
@@ -546,23 +461,10 @@ int ef10ct_alloc_evq(struct efhw_nic *nic)
   struct efx_auxdev* edev;
   struct device *dev;
   int evq;
-  int rc;
 
   AUX_PRE(dev, edev, cli, nic, evq);
   evq = edev->llct_ops->channel_alloc(cli);
   AUX_POST(dev, edev, cli, nic, evq);
-
-  if (evq < 0)
-    return evq;
-
-  if( (nic->devtype.variant != 'L') ) {
-    rc = ef10ct_alloc_irq(nic, evq);
-    if (rc < 0) {
-      EFHW_ERR("%s Failed to alloc irq for evq %d rc = %d", __func__, evq, rc);
-      ef10ct_free_evq(nic, evq);
-      return rc;
-    }
-  }
 
   return evq;
 }
@@ -573,9 +475,6 @@ void ef10ct_free_evq(struct efhw_nic *nic, int evq)
   struct efx_auxdev* edev;
   struct device *dev;
   int rc = 0;
-
-  if( (nic->devtype.variant != 'L') )
-    ef10ct_free_irq(nic, evq);
 
   AUX_PRE(dev, edev, cli, nic, rc);
   edev->llct_ops->channel_free(cli, evq);

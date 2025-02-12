@@ -14,12 +14,6 @@
 
 extern struct efhw_func_ops ef10ct_char_functional_units;
 
-/* stub definition */
-struct efhw_nic_ef10ct_msi_context {
-  struct efx_auxdev_irq *irq;
-  char name[IFNAMSIZ + 6];
-};
-
 #define EF10CT_EVQ_DUMMY_MAX 1024
 #define EF10CT_EVQ_NO_TXQ -1
 struct efhw_nic_ef10ct_evq {
@@ -30,7 +24,6 @@ struct efhw_nic_ef10ct_evq {
   unsigned capacity;
   unsigned next;
   int txq;
-  struct efhw_nic_ef10ct_msi_context *msi_context;
 };
 
 /** enum_nic_ef10ct_rxq_state - Current state of the rxq.
