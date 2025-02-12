@@ -327,6 +327,82 @@ static void ef10ct_free_irq(struct efhw_nic *nic, int evq) {
   kfree(msi_context);
 }
 
+static int ef10ct_irq_alloc(struct efhw_nic *nic, uint32_t *channel,
+                            uint32_t *irq)
+{
+  struct efx_auxdev_irq *auxdev_irq;
+  struct efhw_nic_ef10ct *ef10ct;
+  struct efx_auxdev_client* cli;
+  struct efx_auxdev* edev;
+  struct device *dev;
+  void *xa_res;
+  int rc = 0;
+
+  ef10ct = nic->arch_extra;
+  mutex_lock(&ef10ct->irq_lock);
+
+  AUX_PRE(dev, edev, cli, nic, rc);
+  auxdev_irq = edev->llct_ops->irq_alloc(cli);
+  AUX_POST(dev, edev, cli, nic, rc);
+
+  if (rc < 0) /* rc may be updated in AUX_PRE */
+    goto out;
+
+  if (IS_ERR(auxdev_irq)) {
+    rc = PTR_ERR(auxdev_irq);
+    goto out;
+  }
+
+  xa_res = xa_store(&ef10ct->irqs, auxdev_irq->os_vector, auxdev_irq, GFP_KERNEL);
+  if (xa_is_err(xa_res)) {
+    EFHW_ERR("%s: Failed to store auxdev_irq for irq %u. errno = %u",
+             __func__, auxdev_irq->os_vector, xa_err(xa_res));
+    AUX_PRE(dev, edev, cli, nic, rc);
+    edev->llct_ops->irq_free(cli, auxdev_irq);
+    AUX_POST(dev, edev, cli, nic, rc);
+    rc = xa_err(xa_res);
+    goto out;
+  }
+  EFHW_ASSERT(!xa_res);
+
+  *channel = auxdev_irq->nic_nr;
+  *irq = auxdev_irq->os_vector;
+  rc = 0;
+
+out:
+  mutex_unlock(&ef10ct->irq_lock);
+  return rc;
+}
+
+static void ef10ct_irq_free(struct efhw_nic *nic, uint32_t channel,
+                            uint32_t irq)
+{
+  struct efx_auxdev_irq *auxdev_irq;
+  struct efhw_nic_ef10ct *ef10ct;
+  struct efx_auxdev_client* cli;
+  struct efx_auxdev* edev;
+  struct device *dev;
+  int rc = 0;
+
+  ef10ct = nic->arch_extra;
+  mutex_lock(&ef10ct->irq_lock);
+
+  auxdev_irq = xa_erase(&ef10ct->irqs, irq);
+
+  if (auxdev_irq == NULL) {
+    EFHW_ERR("%s: Failed to retrieve auxdev_irq for irq %u", __func__, irq);
+    goto out;
+  }
+
+  AUX_PRE(dev, edev, cli, nic, rc);
+  edev->llct_ops->irq_free(cli, auxdev_irq);
+  AUX_POST(dev, edev, cli, nic, rc);
+  EFHW_ASSERT(!rc); /* rc may be updated in AUX_PRE */
+
+out:
+  mutex_unlock(&ef10ct->irq_lock);
+}
+
 
 /* FIXME EF10CT
  * Need to handle timesync and credits
@@ -1679,6 +1755,8 @@ struct efhw_func_ops ef10ct_char_functional_units = {
   .shared_rxq_unbind = ef10ct_shared_rxq_unbind,
   .shared_rxq_refresh = ef10ct_nic_shared_rxq_refresh,
   .shared_rxq_refresh_kernel = ef10ct_nic_shared_rxq_refresh_kernel,
+  .irq_alloc = ef10ct_irq_alloc,
+  .irq_free = ef10ct_irq_free,
 };
 
 #endif

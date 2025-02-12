@@ -110,22 +110,13 @@ static int ef10ct_resource_init(struct efx_auxdev *edev,
     mutex_init(&ef10ct->rxq[i].bind_lock);
   }
 
-  res_dim->irq_n_ranges = 0;
-#if 0
-  rc = edev->llct_ops->base_ops->get_param(client, EFX_AUXILIARY_IRQ_RESOURCES,
-                                           &val);
-  if( rc < 0 )
-    return rc;
-
-  res_dim->irq_n_ranges = val.irq_res->n_ranges;
-  EFRM_ASSERT(res_dim->irq_n_ranges <= IRQ_N_RANGES_MAX);
-  for( i = 0; i < res_dim->irq_n_ranges; i++ ) {
-      res_dim->irq_ranges[i].irq_base = val.irq_res->irq_ranges[i].vector;
-      res_dim->irq_ranges[i].irq_range = val.irq_res->irq_ranges[i].range;
-  }
-
-  res_dim->irq_prime_reg = val.irq_res->int_prime;
-#endif
+  /* Claim we have a single IRQ range so that efrm can pre-allocate memory for
+   * tracking irq uses. */
+  res_dim->irq_n_ranges = 1;
+  res_dim->irq_ranges[0].irq_base = 0;
+  res_dim->irq_ranges[0].irq_range = EF10CT_EVQ_DUMMY_MAX;
+  xa_init(&ef10ct->irqs);
+  mutex_init(&ef10ct->irq_lock);
 
   /* Shared evqs for rx vis. Need at least one for suppressed events */
   /* TODO: determine how many more to add for interrupt affinity */
@@ -139,6 +130,8 @@ static int ef10ct_resource_init(struct efx_auxdev *edev,
   return 0;
 
 fail2:
+  mutex_destroy(&ef10ct->irq_lock);
+  xa_destroy(&ef10ct->irqs);
   vfree(ef10ct->rxq);
 fail1:
   vfree(ef10ct->evq);
@@ -342,9 +335,11 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
 {
   struct efx_auxdev *edev = to_efx_auxdev(auxdev);
   struct efx_auxdev_client *client;
+  struct efhw_nic_ef10ct *ef10ct;
+  struct efx_auxdev_irq *entry;
   struct linux_efhw_nic *lnic;
   struct efhw_nic* nic;
-  struct efhw_nic_ef10ct *ef10ct;
+  unsigned long index;
   int i;
 
   EFRM_TRACE("%s: %s", __func__, dev_name(&auxdev->dev));
@@ -371,6 +366,15 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
   /* Disable/free all shared evqs */
   for(i = 0; i < ef10ct->shared_n; i++)
     ef10ct_nic_free_shared_evq(nic, i);
+
+  /* Free any remaining irqs */
+  xa_for_each(&ef10ct->irqs, index, entry) {
+    if (!entry)
+      continue;
+    edev->llct_ops->irq_free(client, entry);
+  }
+  xa_destroy(&ef10ct->irqs);
+  mutex_destroy(&ef10ct->irq_lock);
 
   lnic->drv_device = NULL;
   /* Wait for all in-flight driverlink calls to finish.  Since we
