@@ -73,7 +73,8 @@ struct ef10ct_shared_kernel_evq {
   int evq_id;
   struct efhw_nic_ef10ct_evq *evq;
   struct efhw_iopages iopages;
-  /* Some kind of interrupt stuff? */
+  uint32_t irq;
+  uint32_t channel;
 };
 
 enum ef10ct_queue_handle_type {

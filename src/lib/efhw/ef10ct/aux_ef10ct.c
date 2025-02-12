@@ -182,28 +182,35 @@ static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid)
 
   ef10ct_evq = &ef10ct->evq[evq_num];
 
+  rc = efhw_nic_irq_alloc(nic, &shared_evq->channel, &shared_evq->irq);
+  if (rc < 0)
+    goto fail2;
+
   rc = efhw_iopages_alloc(nic, &shared_evq->iopages, page_order, 1, 0);
   if( rc )
-    goto fail2;
+    goto fail3;
 
   params.evq = evq_num;
   params.n_pages = 1 << page_order;
   params.evq_size = (params.n_pages << PAGE_SHIFT) / sizeof(efhw_event_t);
   params.dma_addrs = shared_evq->iopages.dma_addrs;
   params.virt_base = shared_evq->iopages.ptr;
-  /* Wakeup stuff is ignored */
+  params.wakeup_channel = shared_evq->channel;
+  /* FIXME EF10CT: irq is left unused */
   /* Do we care about flags? */
 
   rc = efhw_nic_event_queue_enable(nic, &params);
   if( rc < 0 )
-    goto fail3;
+    goto fail4;
 
   shared_evq->evq_id = evq_id;
   shared_evq->evq = &ef10ct->evq[evq_num];
   return 0;
 
-fail3:
+fail4:
   efhw_iopages_free(nic, &shared_evq->iopages);
+fail3:
+  efhw_nic_irq_free(nic, shared_evq->channel, shared_evq->irq);
 fail2:
   ef10ct_free_evq(nic, evq_id);
 fail1:
@@ -224,6 +231,7 @@ static void ef10ct_nic_free_shared_evq(struct efhw_nic *nic, int qid)
 
   ef10ct_free_evq(nic, shared_evq->evq_id);
   efhw_iopages_free(nic, &shared_evq->iopages);
+  efhw_nic_irq_free(nic, shared_evq->channel, shared_evq->irq);
 
   /* Just to be safe */
   memset(shared_evq, 0, sizeof(*shared_evq));
