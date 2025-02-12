@@ -1592,10 +1592,11 @@ static int tcp_helper_superbuf_config_refresh(ef_vi* vi, int qid)
   return efrm_rxq_refresh_kernel(vi->dh, rxq->qid, rxq->superbufs);
 }
 
-static void tcp_helper_post_superbuf(ef_vi* vi, int qid, int sbid, bool sentinel)
+static void tcp_helper_post_superbuf(ef_vi* vi, int ix, int sbid, bool sentinel)
 {
-  resource_size_t addr = (resource_size_t)vi->efct_rxqs.q[qid].superbufs[sbid];
-  efhw_nic_post_superbuf(vi->dh, qid, addr, sentinel, false, -1);
+  ef_vi_efct_rxq *rxq = &vi->efct_rxqs.q[ix];
+  resource_size_t addr = (resource_size_t)rxq->superbufs[sbid];
+  efhw_nic_post_superbuf(vi->dh, rxq->qid, addr, sentinel, false, -1);
   // FIXME should we check/handle errors?
 }
 
