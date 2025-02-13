@@ -174,7 +174,7 @@ efct_disttag() {
 }
 echo -n $(efct_disttag)
 )}
-%global efct_build_requires kernel-module-xilinx-efct-%{efct_disttag}-%{kernel} >= 1.5.3.0
+%global efct_build_requires kernel-module-xilinx-efct-%{efct_disttag}-%{kernel} >= 1.6.6.0
 BuildRequires:    %{efct_build_requires}
 %endif
 
