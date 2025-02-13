@@ -1261,6 +1261,8 @@ typedef struct ef_vi {
   struct internal_ops {
     /** Configure based on hardware design parameters */
     int (*design_parameters)(struct ef_vi*, struct efab_nic_design_parameters*);
+    /** A filter is about to be added to the given VI */
+    int (*pre_filter_add)(struct ef_vi*, bool shared_mode);
     /** A filter has just been added to the given VI */
     int (*post_filter_add)(struct ef_vi*, const struct ef_filter_spec* fs,
                            const struct ef_filter_cookie* cookie, int rxq,

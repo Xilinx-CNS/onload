@@ -594,8 +594,8 @@ int ef_vi_filter_add(ef_vi *vi, ef_driver_handle dh, const ef_filter_spec *fs,
     if( rc )
       return rc;
 
-    if( vi->efct_rxqs.ops && vi->efct_rxqs.ops->pre_attach ) {
-      rc = vi->efct_rxqs.ops->pre_attach(vi, shared_mode);
+    if( vi->internal_ops.pre_filter_add ) {
+      rc = vi->internal_ops.pre_filter_add(vi, shared_mode);
       if( rc )
         return rc;
     }
