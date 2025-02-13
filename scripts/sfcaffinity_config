@@ -467,10 +467,9 @@ def rxq_get_irq(ethx, rxq):
 
 def rxq_set_affinity(ethx, rxq, cpumask):
     assert type(ethx) is EthInterface
-    assert isint(rxq)
     assert isint(cpumask)
     irq = rxq_get_irq(ethx, rxq)
-    info("%s: bind rxq %d (irq %d) to core %s" % \
+    info("%s: bind rxq %s (irq %d) to core %s" % \
          (ethx, rxq, irq, mask.to_comma_sep_list(cpumask)));
     affinity.irq_set_affinity(irq, cpumask)
     return
@@ -538,34 +537,67 @@ def rxq_check_affinity(ethx, rxq):
 
 
 def rxq_show(ethx, rxq):
-    irq = rxq_get_irq(ethx, rxq)
+    try:
+        irq = rxq_get_irq(ethx, rxq)
+    except:
+        return None
     irq_m = irq_get_cpumask(irq)
     irq_cscm = mask.int_to_comma_sep_hex(irq_m, minlen=True)
     irq_pid = affinity.irq_get_pid(irq)
     if irq_pid > 0:
         irq_pid_m = pid_get_cpumask(irq_pid)
         irq_pid_cscm = mask.int_to_comma_sep_hex(irq_pid_m, minlen=True)
-        out("%s rxq%d irq=%d irqaffinity=%s pid=%d pidaffinity=%s" %
+        out("%s rxq%s irq=%d irqaffinity=%s pid=%d pidaffinity=%s" %
             (ethx, rxq, irq, irq_cscm, irq_pid, irq_pid_cscm))
     else:
-        out("%s rxq%d irq=%d irqaffinity=%s" %
+        out("%s rxq%s irq=%d irqaffinity=%s" %
             (ethx, rxq, irq, irq_cscm))
 
 
 def interface_bind_rxqs(ethx, q_to_cpu):
     assert type(q_to_cpu) is list
+    used_cpus = []
     for (rxq, cpu) in enumerate(q_to_cpu):
         if rxq >= ethx.n_rxqs():
             break
         rxq_set_affinity(ethx, rxq, 1 << cpu)
+        used_cpus.append(cpu)
+    try:
+        if global_options.ptp == "use":
+            core_ids = numa_core_ids(ethx, q_to_cpu)
+            # find the remaining cores left and pin the PTP interrupt to the next availble core
+            # check if the core is already used or not
+            if global_options.cores is not None:
+                cores_mask = affinity.mask.to_int(global_options.cores)
+                cores_list = affinity.mask.to_int_list(cores_mask)
+                # # In topology file, the script changes the given cores list from cores option
+                remaining_ids = [x for x in cores_list if x not in used_cpus]
+            else:
+                # check if any cores left in the all cores available in the system.
+                remaining_ids = [x for x in core_ids if x not in used_cpus]
 
+            #if there are no cores left then pin the PTP core to the rxq0 core
+            if len(remaining_ids)==0:
+                irq = rxq_get_irq(ethx, 0)
+                irq_m = irq_get_cpumask(irq)
+                ptp_core_m = irq_m
+            else:
+                ptp_core_m = 1<<remaining_ids[0]
+            rxq_set_affinity(ethx, "ptp", ptp_core_m)
+        elif global_options.ptp:
+            rxq_set_affinity(ethx, "ptp", 1 << int(global_options.ptp))
+    except Exception as e:
+        err("%s: PTP interrupt is not pinned due to Error:%s" % (ethx,e))
+        pass
 
 def interface_show(ethx):
     out("%s ifindex=%d" % (ethx, ethx.ifindex()))
     if ethx.driver() != 'sfc':
         return
     out("%s n_rxqs=%d" % (ethx, ethx.n_rxqs()))
-    for rxq in range(ethx.n_rxqs()):
+    all_irqs=[*range(ethx.n_rxqs())]
+    all_irqs.append("ptp")
+    for rxq in all_irqs:
         rxq_show(ethx, rxq)
     if sfc_affinity_intf_is_registered(ethx):
         cpu2rxq = sfc_affinity_get_cpu2rxq(ethx)
@@ -646,6 +678,8 @@ def cores_spread_over(topology, core_groups):
 
 
 def choose_core_ids(n_irqs, topology, interrupt_topology):
+    if global_options.ptp is not None:
+        n_irqs=n_irqs+1
     if n_irqs == len(interrupt_topology.real_cores):
         strategy = "One interrupt per real core"
         core_ids = interrupt_topology.real_core_ids
@@ -850,8 +884,6 @@ def cmd_auto(args):
                   "mappings")
     options, args = op.parse_args(args=args)
     args, interfaces = choose_interfaces(args)
-    if args:
-        fail("auto: %s is not a supported network interface" % args[0])
 
     irqbalance_stop_if_necessary()
 
@@ -955,6 +987,10 @@ def do_stuff(args):
 def main():
     op = optparse.OptionParser(usage=usage_str)
     op.disable_interspersed_args()
+
+    op.add_option("--ptp", dest='ptp',
+                  action="store",
+                  help="Pin the PTP interrupt. Option takes a core number or 'use' for automatic core selection")
     op.add_option("-p", "--packages", dest='packages',
                   action="store",
                   help="Restrict set of cores to given package(s)")
