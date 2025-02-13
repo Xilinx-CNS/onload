@@ -238,8 +238,9 @@ int ef_vi_compat_init_ef10(ef_vi* vi)
 {
   int i;
 
-  /* We only care about a compat layer with efct */
-  if( vi->nic_type.arch != EF_VI_ARCH_EFCT )
+  /* We only care about a compat layer with efct/ef10ct */
+  if( vi->nic_type.arch != EF_VI_ARCH_EFCT &&
+      vi->nic_type.arch != EF_VI_ARCH_EF10CT )
     return 0;
 
   EF_VI_ASSERT(vi->compat_data == NULL);

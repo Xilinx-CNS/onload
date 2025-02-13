@@ -114,6 +114,7 @@ static int check_nic_compatibility(unsigned vi_flags, enum ef_vi_arch ef_vi_arch
     return 0;
 
   case EF_VI_ARCH_EFCT:
+  case EF_VI_ARCH_EF10CT:
     if (vi_flags & EF_VI_RX_EVENT_MERGE) {
       LOGVV(ef_log("%s: ERROR: RX EVENT MERGE flag not supported"
                    " on EFCT architecture", __FUNCTION__));
