@@ -420,14 +420,24 @@ void ef_vi_init_out_flags(struct ef_vi* vi, unsigned flags)
 void ef_vi_reset_rxq(struct ef_vi* vi)
 {
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
+  ef_vi_efct_rxq_state* eqs;
+  int i;
   qs->posted = 0;
-  /* shared rxqs have their buffer posting managed elsewhere, not by the app,
-   * so let's make it look like the queue is constantly full. If we are using
-   * the ef10 compat layer, then we still need users to post descriptors */
-  if( vi->efct_rxqs.active_qs && ! ef_vi_is_compat_vi(vi, EF_VI_ARCH_EF10) )
-    qs->added = vi->vi_rxq.mask + 1;
-  else
+  if( vi->efct_rxqs.active_qs ) {
+    for( i = 0; i < EF_VI_MAX_EFCT_RXQS; ++i ) {
+      eqs = &vi->ep_state->rxq.efct_state[i];
+      eqs->free_head = eqs->fifo_head = -1;
+      eqs->fifo_tail_hw = eqs->fifo_tail_sw = -1;
+    }
+    /* shared rxqs have their buffer posting managed elsewhere, not by the app,
+     * so let's make it look like the queue is constantly full. If we are using
+     * the ef10 compat layer, then we still need users to post descriptors */
+    if( ! ef_vi_is_compat_vi(vi, EF_VI_ARCH_EF10) )
+      qs->added = vi->vi_rxq.mask + 1;
+  }
+  else {
     qs->added = 0;
+  }
   qs->removed = 0;
   qs->in_jumbo = 0;
   qs->bytes_acc = 0;

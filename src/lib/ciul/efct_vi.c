@@ -1660,9 +1660,6 @@ void efct_vi_init(ef_vi* vi)
 
   for( i = 0; i < EF_VI_MAX_EFCT_RXQS; ++i ) {
     ef_vi_efct_rxq* q = &vi->efct_rxqs.q[i];
-    ef_vi_efct_rxq_state* qs = &vi->ep_state->rxq.efct_state[i];
-
-    qs->free_head = qs->fifo_head = qs->fifo_tail_hw = qs->fifo_tail_sw = -1;
     q->live.superbuf_pkts = &q->config_generation;
   }
 }
