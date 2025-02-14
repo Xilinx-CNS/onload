@@ -64,7 +64,7 @@ void oo_pkt_calc_checksums(ci_netif* netif, ci_ip_pkt_fmt* pkt,
 
     host_iov[0] = tmp_iov;
   }
-  else { /* Assume UDP. */
+  else if( protocol == IPPROTO_UDP ) {
     struct udphdr* udp = (struct udphdr*) oo_ipx_data(af, pkt);
     struct iovec tmp_iov;
     uint8_t* new_base;
@@ -78,8 +78,6 @@ void oo_pkt_calc_checksums(ci_netif* netif, ci_ip_pkt_fmt* pkt,
      */
     if( ci_ipx_is_frag(af, ipx) )
       return;
-
-    ci_assert_equal(protocol, IPPROTO_UDP);
 
     /* The UDP header must be contained entirely in the first buffer. */
     ci_assert_ge(pkt->buf_len + pkt->pkt_start_off,
@@ -96,5 +94,9 @@ void oo_pkt_calc_checksums(ci_netif* netif, ci_ip_pkt_fmt* pkt,
     udp->check = ef_udp_checksum_ipx(af, ipx, udp, host_iov, pkt->n_buffers);
 
     host_iov[0] = tmp_iov;
+  }
+  else {
+    /* Nothing to do here - checksum already calculated by ci_icmp_send */
+    ci_assert_equal(protocol, IPPROTO_ICMP);
   }
 }
