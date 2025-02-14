@@ -685,6 +685,31 @@ static void prepare(struct eflatency_vi* rx_vi)
 }
 
 
+static void check_payload_len(int payload_len)
+{
+  if( payload_len > MAX_UDP_PAYLEN ) {
+    fprintf(stderr, "WARNING: UDP payload length %d is larger than standard "
+            "MTU\n", payload_len);
+  }
+}
+
+
+static void print_payload_len_array(FILE *out_stream, const char *prefix,
+                                    const char *suffix, const char *separator,
+                                    int *payload_lens, int n_payload_lens,
+                                    int value_offset)
+{
+  int i;
+
+  TEST(n_payload_lens > 0);
+
+  fprintf(out_stream, "%s%d", prefix, payload_lens[0] + value_offset);
+  for( i = 1; i < n_payload_lens; i++ )
+    fprintf(out_stream, "%s%d", separator, payload_lens[i] + value_offset);
+  fprintf(out_stream, "%s", suffix);
+}
+
+
 static CI_NORETURN usage(const char* fmt, ...)
 {
   if( fmt ) {
@@ -733,6 +758,8 @@ int main(int argc, char* argv[])
   void* pkt_mem;
   int pkt_mem_bytes;
   int i;
+  int *payload_lens = NULL;
+  int n_payload_lens = 0;
 
   printf("# ef_vi_version_str: %s\n", ef_vi_version_str());
 
@@ -758,14 +785,35 @@ int main(int argc, char* argv[])
       OPT_INT(optarg, cfg_iter);
       break;
     case 's': {
-      char* colon;
+      char *colon, *iter;
+
       OPT_INT(optarg, cfg_payload_len);
-      colon = strchr(optarg, ':');
-      if( colon ) {
+      if( (colon = strchr(optarg, ':')) ) {
         OPT_INT(colon + 1, cfg_payload_end);
         colon = strchr(colon + 1, ':');
         if( colon )
           OPT_INT(colon + 1, cfg_payload_step);
+      } else if( (iter = strchr(optarg, ',')) ) {
+        int payload_i;
+
+        /* Count the number of payloads and allocate space for them */
+        for( iter = optarg; *iter != '\0'; iter++ )
+          if( *iter == ',' )
+            n_payload_lens++;
+
+        n_payload_lens++;
+        payload_lens = calloc(n_payload_lens, sizeof(int));
+
+        /* Parse the payloads and store them in our array */
+        for( iter = optarg - 1, payload_i = 0; iter;
+             iter = strchr(iter + 1, ','), payload_i++ ) {
+          OPT_INT(iter + 1, payload_lens[payload_i]);
+          check_payload_len(payload_lens[payload_i]);
+        }
+        TEST(n_payload_lens > 0);
+        TEST(payload_i == n_payload_lens);
+
+        cfg_payload_len = payload_lens[0];
       } else {
         cfg_payload_end = cfg_payload_len;
       }
@@ -835,15 +883,15 @@ int main(int argc, char* argv[])
                                    driver_handle) )
     usage("Unable to parse TX interface '%s': %s", argv[2], strerror(errno));
 
-  if( cfg_payload_len > MAX_UDP_PAYLEN || cfg_payload_end > MAX_UDP_PAYLEN ) {
-    fprintf(stderr, "WARNING: UDP payload length %d is larger than standard "
-            "MTU\n", cfg_payload_len);
-  }
-  if( cfg_payload_step == 0 && cfg_payload_len != cfg_payload_end )
-    usage("Please provide payload step");
-  if( (cfg_payload_step < 0 && cfg_payload_end > cfg_payload_len) ||
-      (cfg_payload_step > 0 && cfg_payload_end < cfg_payload_len) ) {
-    usage("Max payload size not reachable from min");
+  check_payload_len(cfg_payload_len);
+  check_payload_len(cfg_payload_end);
+  if( ! payload_lens ) {
+    if( cfg_payload_step == 0 && cfg_payload_len != cfg_payload_end )
+      usage("Please provide payload step");
+    if( (cfg_payload_step < 0 && cfg_payload_end > cfg_payload_len) ||
+        (cfg_payload_step > 0 && cfg_payload_end < cfg_payload_len) ) {
+      usage("Max payload size not reachable from min");
+    }
   }
 
   if( strcmp(argv[0], "ping") == 0 )
@@ -937,12 +985,21 @@ int main(int argc, char* argv[])
         fprintf(yaml_fp, "datetime: %s", ctime(&testtime));
         fprintf(yaml_fp, "ef_vi_version_str: %s\n", ef_vi_version_str());
         fprintf(yaml_fp, "nics: [ %d, %d ]\n", rx_ifindex, tx_ifindex);
-        fprintf(yaml_fp, "udp_payload_len: { start: %d, end: %d, step: %d }\n",
-                    cfg_payload_len, cfg_payload_end, cfg_payload_step);
-        fprintf(yaml_fp, "frame_len: { start: %d, end: %d, step: %d }\n",
-                    tx_frame_len,
-                    tx_frame_len + (cfg_payload_end - cfg_payload_len),
-                    cfg_payload_step);
+        if( payload_lens ) {
+          print_payload_len_array(yaml_fp, "udp_payload_len: [ ", " ]\n", ", ",
+                                  payload_lens, n_payload_lens, 0);
+          print_payload_len_array(yaml_fp, "frame_len: [ ", " ]\n", ", ",
+                                  payload_lens, n_payload_lens,
+                                  tx_frame_len - cfg_payload_len);
+        } else {
+          fprintf(yaml_fp,
+                  "udp_payload_len: { start: %d, end: %d, step: %d }\n",
+                  cfg_payload_len, cfg_payload_end, cfg_payload_step);
+          fprintf(yaml_fp, "frame_len: { start: %d, end: %d, step: %d }\n",
+                  tx_frame_len,
+                  tx_frame_len + (cfg_payload_end - cfg_payload_len),
+                  cfg_payload_step);
+        }
         fprintf(yaml_fp, "iterations: %d\n", cfg_iter);
         fprintf(yaml_fp, "warmups: %d\n", cfg_warmups);
         fprintf(yaml_fp, "tx_mode: %s\n", t->name);
@@ -958,11 +1015,20 @@ int main(int argc, char* argv[])
   }
 
   printf("# NIC(s) %d %d\n", rx_ifindex, tx_ifindex);
-  printf("# udp payload len: %d:%d:%d\n", cfg_payload_len, cfg_payload_end,
-         cfg_payload_step);
+  if( payload_lens )
+    print_payload_len_array(stdout, "# udp payload len: ", "\n", ", ",
+                            payload_lens, n_payload_lens, 0);
+  else
+    printf("# udp payload len: %d:%d:%d\n", cfg_payload_len, cfg_payload_end,
+           cfg_payload_step);
   printf("# iterations: %d\n", cfg_iter);
   printf("# warmups: %d\n", cfg_warmups);
-  printf("# frame len: %d\n", tx_frame_len);
+  if( payload_lens )
+    print_payload_len_array(stdout, "# frame len: ", "\n", ", ",
+                            payload_lens, n_payload_lens,
+                            tx_frame_len - cfg_payload_len);
+  else
+    printf("# frame len: %d\n", tx_frame_len);
   printf("# TX mode: %s\n", t->name);
   printf("# RX mode: %s\n", get_pd_datapath_string(&rx_vi.pd));
   if( ping )
@@ -975,19 +1041,26 @@ int main(int argc, char* argv[])
     (ping ? generic_ping : generic_pong)(&rx_vi, tx_vi_ptr, rx_wait, t->send);
     if( t->cleanup != NULL )
       t->cleanup(&rx_vi.vi, &tx_vi_ptr->vi);
-    cfg_payload_len += cfg_payload_step;
-    if( cfg_payload_step < 0 ) {
-      if( cfg_payload_len <= cfg_payload_end )
+    if( payload_lens ) {
+      if (iters_run >= n_payload_lens)
+        break;
+      cfg_payload_len = payload_lens[iters_run];
+    } else {
+      cfg_payload_len += cfg_payload_step;
+      if( cfg_payload_step < 0 ) {
+        if( cfg_payload_len <= cfg_payload_end )
+          break;
+      }
+      else if( cfg_payload_len >= cfg_payload_end )
         break;
     }
-    else if( cfg_payload_len >= cfg_payload_end )
-      break;
     init_udp_pkt(pkt_bufs[FIRST_TX_BUF]->dma_buf, cfg_payload_len);
     tx_frame_len = cfg_payload_len + HEADER_SIZE;
   }
   if( ping && iters_run == 1 )
     printf("mean round-trip time: %.3lf usec\n", last_mean_latency_usec);
 
+  free(payload_lens);
   if( yaml_fp )
     fclose(yaml_fp);
   return 0;
