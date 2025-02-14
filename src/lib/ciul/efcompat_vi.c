@@ -10,12 +10,16 @@
 #include <etherfabric/efct_vi.h>
 #include <etherfabric/internal/efct_uk_api.h>
 #include <etherfabric/capabilities.h>
+#include <etherfabric/ef_vi.h>
+#include <etherfabric/checksum.h>
 #include <ci/efhw/common.h>
 #include <ci/tools/byteorder.h>
 #include <ci/tools/sysdep.h>
 #include <ci/net/ethernet.h>
 #include <stdlib.h>
 #include <emmintrin.h>
+#include <linux/ipv6.h>
+#include <string.h>
 
 struct efcompat_ts {
   uint32_t tv_sec : 32;
@@ -255,6 +259,159 @@ int ef_vi_compat_capability_get(enum ef_vi_capability cap,
 }
 
 
+static bool ethertype_is_vlan(uint16_t et)
+{
+  return (et == htons(0x8100));
+}
+
+/* Emulate checksum calculations to approximate a real ef10 NIC
+ *
+ * Requires all L3/4 headers are in the first IOV
+ * Returns 0 on success
+ * Returns -EBADMSG if first IOV is too short
+ */
+static int do_checksums(ef_vi* vi, struct iovec* iov, int iov_len)
+{
+  /* In the case where there is zero payload, the pointer to the
+   * "next field" may legitimately end up equal to `last`.
+   * However must ensure that code doesn't try to access `*last`
+   */
+  char* last = (char*)iov[0].iov_base + iov[0].iov_len;
+  ci_ether_hdr* eth = iov[0].iov_base;
+  uint16_t last_ether_type;
+  char* l3_header;
+  int num_vlans = 0;
+  uint8_t protocol = 0;
+  int l3_header_len = 0;
+  int af = AF_INET;
+
+  if( (vi->vi_flags & (EF_VI_TX_IP_CSUM_DIS | EF_VI_TX_TCPUDP_CSUM_DIS))
+      == (EF_VI_TX_IP_CSUM_DIS | EF_VI_TX_TCPUDP_CSUM_DIS) )
+    return 0;
+
+ vlans:
+  last_ether_type = *((char*)&(eth->ether_type) + ETH_VLAN_HLEN * num_vlans);
+  l3_header = (char*)eth + ETH_HLEN + ETH_VLAN_HLEN * num_vlans;
+  if( l3_header > last )
+    return -EBADMSG;
+  if( ethertype_is_vlan(last_ether_type) ) {
+    ++num_vlans;
+    goto vlans;
+  }
+
+  if( last_ether_type == htons(0x0800) ) {
+    struct iphdr* ip4 = (void*) l3_header;
+    if( (l3_header + sizeof(*ip4)) > last )
+      return -EBADMSG;
+    l3_header_len = ip4->ihl * 4;
+    if( (l3_header + l3_header_len) > last )
+      return -EBADMSG;
+
+    if( ! (vi->vi_flags & EF_VI_TX_IP_CSUM_DIS) )
+      ip4->check = ef_ip_checksum(ip4);
+    if( ip4->frag_off )
+      return 0; /* no higher layer header to check in this frag */
+    protocol = ip4->protocol;
+  }
+
+  if( last_ether_type == htons(0x86dd) ) {
+    struct ipv6hdr* ip6 = (void*) l3_header;
+    af = AF_INET6;
+    l3_header_len = sizeof(*ip6);
+    if( (l3_header + l3_header_len) > last )
+      return -EBADMSG;
+
+    /* fixme: should check for IPv6 extension headers before L4 header */
+    protocol = ip6->nexthdr;
+  }
+
+  if ( !(vi->vi_flags & EF_VI_TX_TCPUDP_CSUM_DIS) && protocol ) {
+    struct iovec tmp_iov = iov[0];
+    switch( protocol ) {
+    case IPPROTO_UDP:
+      {
+	struct udphdr* udp = (void*)(l3_header + l3_header_len);
+	if( ((char*)udp + sizeof(*udp)) > last )
+	  return -EBADMSG;
+	iov[0].iov_base = (void*)(udp + 1);
+	iov[0].iov_len -= ((char*)iov[0].iov_base -
+			   (char*)tmp_iov.iov_base);
+	udp->check = ef_udp_checksum_ipx(af, l3_header, udp, iov, iov_len);
+	break;
+      }
+    case IPPROTO_TCP:
+      {
+	struct tcphdr* tcp = (void*)(l3_header + l3_header_len);
+	if( ((char*)tcp + sizeof(*tcp)) > last )
+	  return -EBADMSG;
+	iov[0].iov_base = (void*)((uintptr_t) tcp + 4 * tcp->doff);
+	if( (char*)iov[0].iov_base > last )
+	  return -EBADMSG;
+	iov[0].iov_len -= ((char*)iov[0].iov_base -
+			   (char*)tmp_iov.iov_base);
+	tcp->check = ef_tcp_checksum_ipx(af, l3_header, tcp, iov, iov_len);
+	break;
+      }
+    default:
+      /* Assume no further checksum offload needed */
+      break;
+    }
+    iov[0] = tmp_iov;
+  }
+  return 0;
+}
+
+/* Emulate a DMA send of a single buffer. Note that the checksum fields of
+ * the packet buffer will be normally updated by this function */
+static int ef10compat_ef_vi_transmit(ef_vi* vi, ef_addr base, int len,
+				     ef_request_id dma_id)
+{
+  struct iovec iov = { .iov_base = (void*)base, .iov_len = len };
+  (void)do_checksums(vi, &iov, 1); /* ignore the return code and always send */
+
+  return vi->compat_data->underlying_ops.transmit(vi, base, len, dma_id);
+}
+
+/* Emulate a DMA send for an iov. Note that the checksum fields of the
+ * packet buffer will be normally updated by this function */
+static int ef10compat_ef_vi_transmitv(ef_vi* vi, const ef_iovec* iov,
+                                      int iov_len, ef_request_id dma_id)
+{
+  struct iovec host_iov[4];
+  int i, rc;
+
+  EF_VI_BUG_ON((iov_len <= 0));
+  EF_VI_BUG_ON(iov == NULL);
+
+  if( iov_len > 4 )
+    goto do_copy;
+  for( i=0; i < iov_len; ++i ) {
+    host_iov[i].iov_base = (void*)iov[i].iov_base;
+    host_iov[i].iov_len = iov[i].iov_len;
+  }
+
+  rc = do_checksums(vi, host_iov, iov_len);
+  if( rc == -EBADMSG )
+    goto do_copy;
+  return vi->compat_data->underlying_ops.transmitv(vi, iov, iov_len, dma_id);
+
+ do_copy:
+  {
+    char* b = vi->compat_data->arch.ef10.tx_dma_buf;
+    int len = 0;
+    for( i = 0; i < iov_len; ++i ) {
+      int copy_len = CI_MIN(2048 - len, iov[i].iov_len);
+      if( copy_len )
+        memcpy(b, (void*)iov[i].iov_base, copy_len);
+      b += copy_len;
+      len += copy_len;
+    }
+    return ef10compat_ef_vi_transmit(vi,
+                                     (ef_addr)vi->compat_data->arch.ef10.tx_dma_buf,
+                                     len, dma_id);
+  }
+}
+
 static void ef_vi_compat_init_ef10_ops(ef_vi* vi)
 {
   /* Intercept RX bits to convert RX_REF* events to RX* events */
@@ -262,6 +419,9 @@ static void ef_vi_compat_init_ef10_ops(ef_vi* vi)
   vi->ops.receive_push                = ef10compat_ef_vi_receive_push;
   vi->ops.receive_get_timestamp       = ef10compat_ef_vi_receive_get_timestamp;
   vi->ops.eventq_poll                 = ef10compat_ef_eventq_poll;
+  vi->ops.transmit                    = ef10compat_ef_vi_transmit;
+  vi->ops.transmitv                   = ef10compat_ef_vi_transmitv;
+  vi->ops.transmitv_init              = ef10compat_ef_vi_transmitv;
 
   /* All ops not explicitly set above here will remain the same, and any
    * support for them will be identical to the underlying efct support */
@@ -285,6 +445,12 @@ int ef_vi_compat_init_ef10(ef_vi* vi)
 
   vi->compat_data->underlying_arch = vi->nic_type.arch;
   vi->compat_data->underlying_ops = vi->ops;
+  vi->compat_data->arch.ef10.tx_dma_buf = malloc(2048);
+  if( ! vi->compat_data->arch.ef10.tx_dma_buf ) {
+    ef_log("ERROR: failed to allocate ef10 compat tx_dma_buf");
+    return -ENOMEM;
+  }
+
   vi->compat_data->arch.ef10.rx_descriptors =
     malloc(sizeof(ef_addr) * (vi->vi_rxq.mask + 1));
   if( ! vi->compat_data->arch.ef10.rx_descriptors ) {
@@ -343,6 +509,8 @@ void ef_vi_compat_free(ef_vi* vi)
 
   switch( vi->nic_type.arch ) {
   case EF_VI_ARCH_EF10:
+    free(vi->compat_data->arch.ef10.tx_dma_buf);
+    vi->compat_data->arch.ef10.tx_dma_buf = NULL;
     free(vi->compat_data->arch.ef10.rx_descriptors);
     vi->compat_data->arch.ef10.rx_descriptors = NULL;
     break;

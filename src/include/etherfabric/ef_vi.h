@@ -1304,6 +1304,8 @@ struct ef_vi_compat_data {
     struct {
       /** Queue of addresses in which we will store RX packets */
       ef_addr *rx_descriptors;
+      /** Temporary buffer for emulating DMA sends */
+      void *tx_dma_buf;
     } ef10;
   } arch;
 };
