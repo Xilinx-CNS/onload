@@ -13,7 +13,7 @@ RESOURCE_SRCS	:= resource_driver.c \
 	bt_stats.c port_sniff.c nondl_resource.c sysfs.c \
 	nondl_driver.c sfcaffinity.c nic_notifier.c \
 	aux_driver.c aux_efct.c efct_superbuf.c debugfs.c \
-	buddy.c stack_vi_allocator.c
+	buddy.c stack_allocator.c
 
 EFHW_SRCS	:= nic.c eventq.c af_xdp.c ethtool_rxclass.c \
 		ethtool_flow.c efct.c debugfs_nic.c debugfs_efct.c \

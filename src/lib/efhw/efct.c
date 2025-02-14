@@ -666,10 +666,10 @@ static int efct_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc,
 
   mutex_lock(&efct->vi_allocator.lock);
   if( evc->want_txq )
-    rc = efhw_stack_vi_alloc(&efct->vi_allocator.tx,
+    rc = efhw_stack_alloc(&efct->vi_allocator.tx,
                              efct_accept_tx_vi_constraints, efct);
   else
-    rc = efhw_stack_vi_alloc(&efct->vi_allocator.rx,
+    rc = efhw_stack_alloc(&efct->vi_allocator.rx,
                              efct_accept_rx_vi_constraints, efct);
   mutex_unlock(&efct->vi_allocator.lock);
 
@@ -689,9 +689,9 @@ static void efct_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis)
     /* If this vi is in the range [0..efct->evq_n) it has a txq */
     mutex_lock(&efct->vi_allocator.lock);
     if( instance < efct->evq_n )
-      efhw_stack_vi_free(&efct->vi_allocator.tx, instance);
+      efhw_stack_free(&efct->vi_allocator.tx, instance);
     else
-      efhw_stack_vi_free(&efct->vi_allocator.rx, instance);
+      efhw_stack_free(&efct->vi_allocator.rx, instance);
 
     mutex_unlock(&efct->vi_allocator.lock);
     efhw_nic_release_efct_device(nic, cli);

@@ -7,7 +7,7 @@
 #include <ci/efhw/efct.h>
 #include <ci/driver/ci_ef10ct.h>
 #include <ci/tools/sysdep.h>
-#include <ci/efhw/stack_vi_allocator.h>
+#include <ci/efhw/efhw_stack_allocator.h>
 #include <ci/efhw/mc_driver_pcol.h>
 #include <lib/efhw/mcdi_common.h>
 #include <linux/mutex.h>
@@ -93,7 +93,7 @@ struct efhw_nic_ef10ct {
   struct efx_auxiliary_client *client;
   struct efhw_nic *nic;
   struct {
-    struct efhw_stack_vi_allocator rx;
+    struct efhw_stack_allocator rx;
     struct mutex lock;
   } vi_allocator;
   struct efct_filter_state filter_state;

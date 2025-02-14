@@ -160,7 +160,7 @@ static int ef10ct_vi_allocator_ctor(struct efhw_nic_ef10ct *nic,
 
 static void ef10ct_vi_allocator_dtor(struct efhw_nic_ef10ct *nic)
 {
-  efhw_stack_vi_allocator_dtor(&nic->vi_allocator.rx);
+  efhw_stack_allocator_dtor(&nic->vi_allocator.rx);
 }
 
 static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid)

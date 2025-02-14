@@ -6,7 +6,7 @@
 #include <etherfabric/internal/efct_uk_api.h>
 #include <ci/driver/ci_efct.h>
 #include <ci/tools/sysdep.h>
-#include <ci/efhw/stack_vi_allocator.h>
+#include <ci/efhw/efhw_stack_allocator.h>
 
 /* Avoid dragging the full efhw_types.h header into the ZF unit test build. */
 #ifdef __KERNEL__
@@ -242,8 +242,8 @@ struct efhw_nic_efct {
   struct xlnx_efct_client *client;
   struct efhw_nic *nic;
   struct {
-    struct efhw_stack_vi_allocator tx;
-    struct efhw_stack_vi_allocator rx;
+    struct efhw_stack_allocator tx;
+    struct efhw_stack_allocator rx;
 #ifdef __KERNEL__
     struct mutex lock;
 #endif

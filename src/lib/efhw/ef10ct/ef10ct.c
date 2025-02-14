@@ -686,7 +686,7 @@ static int ef10ct_vi_alloc_sw(struct efhw_nic *nic,
     return -ENETDOWN;
 
   mutex_lock(&ef10ct->vi_allocator.lock);
-  rc = efhw_stack_vi_alloc(&ef10ct->vi_allocator.rx,
+  rc = efhw_stack_alloc(&ef10ct->vi_allocator.rx,
                            ef10ct_accept_rx_vi_constraints, ef10ct);
   mutex_unlock(&ef10ct->vi_allocator.lock);
 
@@ -733,7 +733,7 @@ static void ef10ct_vi_free_sw(struct efhw_nic *nic, int evq_num)
     struct efhw_nic_ef10ct* ef10ct = nic->arch_extra;
     /* If this vi is in the range [0..ef10ct->evq_n) it has a txq */
     mutex_lock(&ef10ct->vi_allocator.lock);
-    efhw_stack_vi_free(&ef10ct->vi_allocator.rx, evq_num);
+    efhw_stack_free(&ef10ct->vi_allocator.rx, evq_num);
     mutex_unlock(&ef10ct->vi_allocator.lock);
 
     efhw_nic_release_auxdev(nic, cli);

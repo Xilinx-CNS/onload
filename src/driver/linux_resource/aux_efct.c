@@ -368,10 +368,12 @@ static int efct_vi_allocator_ctor(struct efhw_nic_efct *nic,
   int rc = 0;
   /* tx vis are allocated in the range [res_dim->vi_min,efct->evq_n)
    * The space above this is used for virtual rx vis */
-  rc = efhw_stack_vi_allocator_ctor(&nic->vi_allocator.tx, res_dim->vi_min, nic->evq_n);
+  rc = efhw_stack_vi_allocator_ctor(&nic->vi_allocator.tx, res_dim->vi_min,
+                                    nic->evq_n);
   if(rc < 0)
     goto fail1;
-  rc = efhw_stack_vi_allocator_ctor(&nic->vi_allocator.rx, nic->evq_n, res_dim->vi_lim);
+  rc = efhw_stack_vi_allocator_ctor(&nic->vi_allocator.rx, nic->evq_n,
+                                    res_dim->vi_lim);
   if(rc < 0)
     goto fail2;
 
@@ -379,7 +381,7 @@ static int efct_vi_allocator_ctor(struct efhw_nic_efct *nic,
   return rc;
 
  fail2:
-  efhw_stack_vi_allocator_dtor(&nic->vi_allocator.tx);
+  efhw_stack_allocator_dtor(&nic->vi_allocator.tx);
  fail1:
   if (rc < 0) {
     EFRM_ERR("%s: efct_vi_allocator_ctor(%d, %d) "
@@ -391,8 +393,8 @@ static int efct_vi_allocator_ctor(struct efhw_nic_efct *nic,
 
 static void efct_vi_allocator_dtor(struct efhw_nic_efct *nic)
 {
-  efhw_stack_vi_allocator_dtor(&nic->vi_allocator.tx);
-  efhw_stack_vi_allocator_dtor(&nic->vi_allocator.rx);
+  efhw_stack_allocator_dtor(&nic->vi_allocator.tx);
+  efhw_stack_allocator_dtor(&nic->vi_allocator.rx);
 }
 
 int efct_probe(struct auxiliary_device *auxdev,
