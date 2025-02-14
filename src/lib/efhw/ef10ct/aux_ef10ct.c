@@ -117,6 +117,11 @@ static int ef10ct_resource_init(struct efx_auxdev *edev,
   res_dim->irq_ranges[0].irq_range = EF10CT_EVQ_DUMMY_MAX;
   xa_init(&ef10ct->irqs);
   mutex_init(&ef10ct->irq_lock);
+  rc = edev->llct_ops->base_ops->get_param(client, EFX_AUXILIARY_INT_PRIME,
+                                           &val);
+  if (rc < 0)
+    goto fail2;
+  res_dim->irq_prime_reg = val.iomem_addr;
 
   /* Shared evqs for rx vis. Need at least one for suppressed events */
   /* TODO: determine how many more to add for interrupt affinity */

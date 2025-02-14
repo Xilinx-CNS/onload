@@ -453,6 +453,17 @@ static void
 ef10ct_nic_wakeup_request(struct efhw_nic *nic, volatile void __iomem* io_page,
                           int vi_id, int rptr)
 {
+  ci_dword_t dwrptr;
+
+  __DWCHCK(ERF_HZ_READ_IDX);
+  __RANGECHCK(rptr, ERF_HZ_READ_IDX_WIDTH);
+  __RANGECHCK(vi_id, ERF_HZ_EVQ_ID_WIDTH);
+
+  CI_POPULATE_DWORD_2(dwrptr,
+                      ERF_HZ_EVQ_ID, vi_id,
+                      ERF_HZ_READ_IDX, rptr);
+  writel(dwrptr.u32[0], nic->int_prime_reg);
+  mmiowb();
 }
 
 int ef10ct_alloc_evq(struct efhw_nic *nic)
