@@ -25,7 +25,6 @@ EFX_HAVE_PCIE_TPH_GET_CPU_ST		symbol	pcie_tph_get_cpu_st	include/linux/pci-tph.h
 EFX_HAVE_NET_GRO_H			file				include/net/gro.h
 EFX_NEED_SKB_GRO_MAY_PULL              nsymbol  skb_gro_may_pull    include/net/gro.h
 EFX_HAVE_CSUM_LEVEL			symbol	csum_level		include/linux/skbuff.h
-EFX_HAVE_SKB_SYSTSTAMP			member	struct_skb_shared_hwtstamps	syststamp	include/linux/skbuff.h
 EFX_HAVE_HWTSTAMP_FLAGS         symbol	hwtstamp_flags		include/uapi/linux/net_tstamp.h
 EFX_HAVE_KERNEL_HWTSTAMP_CONFIG         symbol kernel_hwtstamp_config include/linux/net_tstamp.h
 EFX_HAVE_KERNEL_HWTSTAMP_CONFIG_IFR     member struct_kernel_hwtstamp_config ifr include/linux/net_tstamp.h
@@ -65,19 +64,10 @@ EFX_NEED_RTC_TIME64_TO_TM		nsymbol	rtc_time64_to_tm	include/linux/rtc.h
 EFX_NEED_SET_NORMALIZED_TIMESPEC	custom
 EFX_HAVE_OLD_ETHTOOL_GET_RXNFC		memtype	struct_ethtool_ops	get_rxnfc	include/linux/ethtool.h int (*)(struct net_device *, struct ethtool_rxnfc *, void *)
 EFX_HAVE_CPU_RMAP			file				include/linux/cpu_rmap.h
-EFX_HAVE_PTP_PF_NONE			symbol	PTP_PF_NONE		include/linux/ptp_clock.h include/uapi/linux/ptp_clock.h
 EFX_NEED_PTP_CLOCK_PPSUSR		custom
-EFX_USE_64BIT_PHC			member	struct_ptp_clock_info gettime64	include/linux/ptp_clock_kernel.h
-EFX_HAVE_PTP_GETCROSSTSTAMP		member	struct_ptp_clock_info getcrosststamp include/linux/ptp_clock_kernel.h
 EFX_NEED_KTIME_GET_SNAPSHOT		nsymbol	ktime_get_snapshot	include/linux/timekeeping.h
-EFX_HAVE_PTP_CLOCK_INFO_ADJFINE		member	struct_ptp_clock_info adjfine	include/linux/ptp_clock_kernel.h
-EFX_HAVE_PTP_CLOCK_INFO_ADJFREQ		member	struct_ptp_clock_info adjfreq	include/linux/ptp_clock_kernel.h
 EFX_HAVE_PTP_CLOCK_GETTIMEX64		member	struct_ptp_clock_info gettimex64	include/linux/ptp_clock_kernel.h
 EFX_NEED_SCALED_PPM_TO_PPB		nsymbol scaled_ppm_to_ppb		include/linux/ptp_clock_kernel.h
-EFX_NEED_PPS_SUB_TS			nsymbol pps_sub_ts		include/linux/pps_kernel.h
-EFX_NEED_PPS_EVENT_TIME			nsymbol	pps_event_time		include/linux/pps_kernel.h
-EFX_HAVE_PPS_EVENT_TIME_TIMESPEC	nmemtype	struct_pps_event_time	ts_real	include/linux/pps_kernel.h	struct timespec64
-EFX_NEED_PPS_GET_TS			nsymbol	pps_get_ts		include/linux/pps_kernel.h
 EFX_NEED_SKB_FRAG_OFF			nsymbol	skb_frag_off		include/linux/skbuff.h
 EFX_HAVE_ETHTOOL_GET_RXFH_INDIR	symbol	get_rxfh_indir	include/linux/ethtool.h
 EFX_HAVE_ETHTOOL_GET_RXFH_INDIR_SIZE	symbol	get_rxfh_indir_size	include/linux/ethtool.h
@@ -133,7 +123,6 @@ EFX_HAVE_SK_BUFF_LIST          symbol  sk_buff_list            include/linux/skb
 EFX_HAVE_NETDEV_XMIT_MORE	symbol	netdev_xmit_more	include/linux/netdevice.h
 EFX_HAVE_NDO_ADD_VXLAN_PORT	member	struct_net_device_ops	ndo_add_vxlan_port	include/linux/netdevice.h
 EFX_NEED_PAGE_REF_ADD		nfile				include/linux/page_ref.h
-EFX_HAVE_KTIME_UNION		custom
 EFX_NEED_HWMON_DEVICE_REGISTER_WITH_INFO	nsymbol	hwmon_device_register_with_info	include/linux/hwmon.h
 EFX_HAVE_NDO_UDP_TUNNEL_ADD	member	struct_net_device_ops	ndo_udp_tunnel_add	include/linux/netdevice.h
 EFX_HAVE_UDP_TUNNEL_NIC_INFO	symbol	udp_tunnel_nic_info	include/net/udp_tunnel.h
@@ -157,7 +146,7 @@ EFX_NEED_XDP_FLUSH	member	struct_net_device_ops	ndo_xdp_flush	include/linux/netd
 EFX_HAVE_XDP_PROG_ATTACHED	member	struct_netdev_bpf	prog_attached	include/linux/netdevice.h
 EFX_HAVE_XDP_PROG_ID	member	struct_netdev_bpf	prog_id	include/linux/netdevice.h
 EFX_HAVE_BPF_WARN_INVALID_XDP_ACTION_3PARAM	symtype	bpf_warn_invalid_xdp_action	include/linux/filter.h void(struct net_device *, struct bpf_prog *, u32)
-EFX_NEED_PAGE_FRAG_FREE	nsymbol	page_frag_free	include/linux/gfp.h
+EFX_NEED_PAGE_FRAG_FREE	nsymbol	page_frag_free	include/linux/gfp.h include/linux/page_frag_cache.h
 EFX_HAVE_FREE_PAGE_FRAG	symbol	__free_page_frag	include/linux/gfp.h
 EFX_NEED_VOID_SKB_PUT	nsymtype	skb_put	include/linux/skbuff.h	void *(struct sk_buff *, unsigned int)
 EFX_HAVE_ETHTOOL_LINKSETTINGS	symbol	ethtool_link_ksettings	include/linux/ethtool.h
@@ -350,20 +339,6 @@ void *f(struct page *p);
 void *f(struct page *p)
 {
 	return kmap_atomic(p);
-}
-"
-}
-
-function do_EFX_HAVE_KTIME_UNION
-{
-	defer_test_compile pos "
-#include <linux/ktime.h>
-
-void f(void);
-void f(void)
-{
-	ktime_t t;
-	t.tv64 = 0;
 }
 "
 }

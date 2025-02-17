@@ -302,7 +302,7 @@ struct efx_timespec {
 	__s32	tv_nsec;
 };
 
-/* Set/get hardware timestamp config, like SIOC{S,G}HWTSTAMP ****************/
+/* Obsolete (do not use) */
 #define EFX_TS_INIT 0xef12
 
 /* Obsolete (do not use) */
@@ -357,19 +357,11 @@ struct hwtstamp_config {
 
 #endif /* !__KERNEL__ */
 
-/* Set the NIC time clock offset ********************************************/
+/* Obsolete (do not use) */
 #define EFX_TS_SETTIME 0xef14
-struct efx_ts_settime {
-	struct efx_timespec ts;	/* In and out */
-	__u32 iswrite;		/* 1 == write, 0 == read (only) */
-};
 
-/* Adjust the NIC time frequency ********************************************/
+/* Obsolete (do not use) */
 #define EFX_TS_ADJTIME 0xef15
-struct efx_ts_adjtime {
-	__s64 adjustment;	/* Parts per billion, In and out */
-	__u32 iswrite;		/* 1 == write, 0 == read (only) */
-};
 
 /* Get the NIC-system time skew *********************************************/
 #define EFX_TS_SYNC 0xef16
@@ -448,20 +440,11 @@ struct efx_ts_set_domain_filter {
 	__u32 domain;                        /* Domain number to filter against */
 };
 
-/* Return a PPS timestamp ***************************************************/
+/* Obsolete (do not use) */
 #define EFX_TS_GET_PPS 0xef1c
-struct efx_ts_get_pps {
-	__u32 sequence;				/* seq. num. of assert event */
-	__u32 timeout;
-	struct efx_timespec sys_assert;		/* time of assert in system time */
-	struct efx_timespec nic_assert;		/* time of assert in nic time */
-	struct efx_timespec delta;		/* delta between NIC and system time */
-};
 
+/* Obsolete (do not use) */
 #define EFX_TS_ENABLE_HW_PPS 0xef1d
-struct efx_ts_hw_pps {
-	__u32 enable;
-};
 
 /* Reprogram the CPLD on an AOE NIC *****************************************/
 #define EFX_UPDATE_CPLD 0xef1e
@@ -567,8 +550,6 @@ union efx_ioctl_data {
 	struct efx_ethtool_rxnfc rxnfc;
 	struct efx_rxfh_indir rxfh_indir;
 	struct hwtstamp_config ts_init;
-	struct efx_ts_settime ts_settime;
-	struct efx_ts_adjtime ts_adjtime;
 	struct efx_ts_sync ts_sync;
 	struct efx_ts_set_sync_status ts_set_sync_status;
 	struct ethtool_ts_info ts_info;
@@ -577,8 +558,6 @@ union efx_ioctl_data {
 	struct efx_ts_set_vlan_filter ts_vlan_filter;
 	struct efx_ts_set_uuid_filter ts_uuid_filter;
 	struct efx_ts_set_domain_filter ts_domain_filter;
-	struct efx_ts_get_pps pps_event;
-	struct efx_ts_hw_pps pps_enable;
 	struct efx_update_cpld cpld;
 	struct efx_update_license key_stats;
 	struct efx_update_license2 key_stats2;

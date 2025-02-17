@@ -146,6 +146,13 @@ efx_ef10_select_tx_queue_overlay(struct efx_channel *channel,
 				 struct sk_buff *skb);
 #endif /* EFX_USE_OVERLAY_TX_CSUM */
 
+static bool ef10_has_dynamic_sensors(struct efx_nic *efx)
+{
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+
+	return efx_ef10_has_cap(nic_data->datapath_caps2, DYNAMIC_SENSORS);
+}
+
 static u8 *efx_ef10_mcdi_buf(struct efx_nic *efx, u8 bufid,
 			     dma_addr_t *dma_addr)
 {
@@ -5968,6 +5975,9 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 	.mtd_probe = efx_port_dummy_op_int,
 #endif
 #ifdef CONFIG_SFC_PTP
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+	.ptp_set_clock_info = efx_ef10_phc_set_clock_info,
+#endif
 	.ptp_write_host_time = efx_ef10_ptp_write_host_time,
 	.ptp_set_ts_config = efx_ef10_ptp_set_ts_config,
 #endif
@@ -6118,6 +6128,9 @@ const struct efx_nic_type efx_x4_vf_nic_type = {
 	.mtd_probe = efx_port_dummy_op_int,
 #endif
 #ifdef CONFIG_SFC_PTP
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+	.ptp_set_clock_info = efx_x4_phc_set_clock_info,
+#endif
 	.ptp_write_host_time = efx_ef10_ptp_write_host_time,
 	.ptp_set_ts_config = efx_ef10_ptp_set_ts_config,
 #endif
@@ -6172,6 +6185,7 @@ const struct efx_nic_type efx_x4_vf_nic_type = {
 			    1 << HWTSTAMP_FILTER_ALL,
 	.check_caps = ef10_check_caps,
 	.rx_recycle_ring_size = efx_ef10_recycle_ring_size,
+	.has_dynamic_sensors = ef10_has_dynamic_sensors,
 };
 #endif
 
@@ -6284,6 +6298,9 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.mtd_sync = efx_mcdi_mtd_sync,
 #endif
 #ifdef CONFIG_SFC_PTP
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+	.ptp_set_clock_info = efx_ef10_phc_set_clock_info,
+#endif
 	.ptp_write_host_time = efx_ef10_ptp_write_host_time,
 	.ptp_set_ts_sync_events = efx_ef10_ptp_set_ts_sync_events,
 	.ptp_set_ts_config = efx_ef10_ptp_set_ts_config,
@@ -6476,6 +6493,9 @@ const struct efx_nic_type efx_x4_nic_type = {
 	.mtd_sync = efx_mcdi_mtd_sync,
 #endif
 #ifdef CONFIG_SFC_PTP
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+	.ptp_set_clock_info = efx_x4_phc_set_clock_info,
+#endif
 	.ptp_write_host_time = efx_ef10_ptp_write_host_time,
 	.ptp_set_ts_sync_events = efx_ef10_ptp_set_ts_sync_events,
 	.ptp_set_ts_config = efx_ef10_ptp_set_ts_config,
@@ -6559,5 +6579,6 @@ const struct efx_nic_type efx_x4_nic_type = {
 			    1 << HWTSTAMP_FILTER_ALL,
 	.check_caps = ef10_check_caps,
 	.rx_recycle_ring_size = efx_ef10_recycle_ring_size,
+	.has_dynamic_sensors = ef10_has_dynamic_sensors,
 };
 

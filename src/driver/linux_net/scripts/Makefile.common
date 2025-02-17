@@ -79,6 +79,11 @@ $(obj)/.kpath: FORCE
 		$(if $(MMAKE_IN_KBUILD),,rm -f $(obj)/*.symvers;)	\
 	fi
 
+ifdef srctree
+define filechk_autocompat.h
+	$(src)/kernel_compat.sh -k $(srctree) -o "$(srctree)" $(if $(filter 1,$(V)),-v,-q)
+endef
+else
 ifdef KBUILD_SRC
 define filechk_autocompat.h
 	$(src)/kernel_compat.sh -k $(KBUILD_SRC) -o "$(CURDIR)" $(if $(filter 1,$(V)),-v,-q)
@@ -87,6 +92,7 @@ else
 define filechk_autocompat.h
 	$(src)/kernel_compat.sh -k "$(CURDIR)" -o "$(CURDIR)" $(if $(filter 1,$(V)),-v,-q)
 endef
+endif
 endif
 
 $(obj)/autocompat.h: $(obj)/.kpath $(src)/kernel_compat.sh $(TOPDIR)/scripts/kernel_compat_funcs.sh FORCE

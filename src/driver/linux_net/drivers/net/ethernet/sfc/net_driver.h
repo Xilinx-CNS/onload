@@ -92,7 +92,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.0.2.1002"
+#define EFX_DRIVER_VERSION	"6.0.2.1006"
 #endif
 
 #ifdef DEBUG
@@ -1478,7 +1478,6 @@ struct efx_mae;
  * @int_error_expire: Time at which error count will be expired
  * @irq_soft_enabled: Are IRQs soft-enabled? If not, IRQ handler will
  *	acknowledge but do nothing else.
- * @irq_status: Interrupt status buffer
  * @irq_level: IRQ level/index for IRQs not triggered by an event queue
  * @selftest_work: Work item for asynchronous self-test
  * @mtd_struct: A struct for holding combined mtd data for freeing
@@ -1718,7 +1717,6 @@ struct efx_nic {
 	unsigned long int_error_expire;
 
 	bool irq_soft_enabled;
-	struct efx_buffer irq_status;
 	unsigned long irq_level;
 	struct delayed_work selftest_work;
 
@@ -2174,6 +2172,7 @@ struct mae_mport_desc;
  * @mtd_sync: Wait for write-back to complete on MTD partition.  This
  *	also notifies the driver that a writer has finished using this
  *	partition.
+ * @ptp_set_clock_info: Set PTP hardware clock structure
  * @ptp_write_host_time: Send host time to MC as part of sync protocol
  * @ptp_set_ts_sync_events: Enable or disable sync events for inline RX
  *	timestamping, possibly only temporarily for the purposes of a reset.
@@ -2408,6 +2407,9 @@ struct efx_nic_type {
 	int (*mtd_sync)(struct mtd_info *mtd);
 #endif
 #ifdef CONFIG_SFC_PTP
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+	void (*ptp_set_clock_info)(struct efx_nic *efx);
+#endif
 	void (*ptp_write_host_time)(struct efx_nic *efx, u32 host_time);
 	int (*ptp_set_ts_sync_events)(struct efx_nic *efx, bool en, bool temp);
 	int (*ptp_set_ts_config)(struct efx_nic *efx,
@@ -2797,6 +2799,20 @@ efx_tx_queue_get_insert_buffer(const struct efx_tx_queue *tx_queue)
 	EFX_WARN_ON_ONCE_PARANOID(buffer->unmap_len);
 
 	return buffer;
+}
+
+static inline int efx_phc_set_clock_info(struct efx_nic *efx)
+{
+#ifdef CONFIG_SFC_PTP
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+	if (efx->type->ptp_set_clock_info) {
+		efx->type->ptp_set_clock_info(efx);
+		return 0;
+	}
+#endif
+#endif
+
+	return -EOPNOTSUPP;
 }
 
 #endif /* EFX_NET_DRIVER_H */

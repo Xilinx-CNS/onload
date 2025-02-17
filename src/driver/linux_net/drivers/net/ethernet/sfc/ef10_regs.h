@@ -26,6 +26,7 @@
  * <min-rev> is the first revision to which the definition applies:
  *
  *     D: Huntington A0
+ *     I: Medford 4
  *
  * If the definition has been changed or removed in later revisions
  * then <max-rev> is the last revision to which the definition applies;
@@ -435,5 +436,26 @@
 #define ES_DZ_RX_PREFIX_PKTLEN_OFST 8
 #define ES_DZ_RX_PREFIX_TSTAMP_OFST 10
 #define ES_DZ_RX_PREFIX_SIZE 14
+
+/* PTP Time Registers */
+#define ER_IZ_THE_TIME 0x00000840
+#define ER_IZ_THE_TIME_STEP 8192
+#define ER_IZ_THE_TIME_ROWS 2048
+#define ERF_IZ_THE_TIME_QNS_LBN 0
+#define ERF_IZ_THE_TIME_QNS_WIDTH 2
+#define ERF_IZ_THE_TIME_NANOS_LBN 2
+#define ERF_IZ_THE_TIME_NANOS_WIDTH 30
+#define ERF_IZ_THE_TIME_SECS_LBN 32
+#define ERF_IZ_THE_TIME_SECS_WIDTH 32
+
+#define ER_IZ_PTM_TIME 0x00000848
+#define ER_IZ_PTM_TIME_STEP 8192
+#define ER_IZ_PTM_TIME_ROWS 2048
+#define ERF_IZ_PTM_TIME_PTM_CLOCK_IS_SET_LBN 0
+#define ERF_IZ_PTM_TIME_PTM_CLOCK_IS_SET_WIDTH 1
+#define ERF_IZ_PTM_TIME_PTM_CLOCK_IN_SYNC_LBN 1
+#define ERF_IZ_PTM_TIME_PTM_CLOCK_IN_SYNC_WIDTH 1
+#define ERF_IZ_PTM_TIME_PTM_NANOS_LBN 2
+#define ERF_IZ_PTM_TIME_PTM_NANOS_WIDTH 62
 
 #endif /* EFX_EF10_REGS_H */
