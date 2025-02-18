@@ -1645,12 +1645,13 @@ static int initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
     rc = 0;
     if( nic->devtype.arch == EFHW_ARCH_EFCT ) {
       rc = efct_kbufs_init_internal(vi, vi_rs->efct_shm, NULL);
+      vi->efct_rxqs.ops->refresh = tcp_helper_superbuf_config_refresh;
     } else if( NI_OPTS(ni).multiarch_rx_datapath != EF_MULTIARCH_DATAPATH_FF &&
                nic->devtype.arch == EFHW_ARCH_EF10CT ) {
       rc = efct_ubufs_init_internal(vi);
       vi->efct_rxqs.ops->post = tcp_helper_post_superbuf;
+      vi->efct_rxqs.ops->refresh = tcp_helper_superbuf_config_refresh;
     }
-    vi->efct_rxqs.ops->refresh = tcp_helper_superbuf_config_refresh;
     if( rc < 0 )
       return rc;
   }
