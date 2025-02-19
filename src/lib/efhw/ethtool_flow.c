@@ -244,9 +244,11 @@ void ethtool_flow_to_mcdi_op(ci_dword_t *buf, int rxq,
 {
   bool multicast = false;
   uint32_t match_fields = 0;
+  uint32_t base_flow_type = (filter->flow_type & ~(FLOW_EXT | FLOW_MAC_EXT));
   EFHW_BUILD_ASSERT(sizeof(match_fields) == MC_CMD_FILTER_OP_IN_MATCH_FIELDS_LEN);
 
-  switch (filter->flow_type & ~(FLOW_EXT | FLOW_MAC_EXT)) {
+  /* Ignore any VLAN or MAC options to start with. We'll add those later. */
+  switch (base_flow_type) {
   case TCP_V4_FLOW:
   case UDP_V4_FLOW:
     match_fields |= EFHW_MCDI_MATCH_FIELD_BIT(ETHER_TYPE);
@@ -254,8 +256,8 @@ void ethtool_flow_to_mcdi_op(ci_dword_t *buf, int rxq,
 
     match_fields |= EFHW_MCDI_MATCH_FIELD_BIT(IP_PROTO);
     EFHW_MCDI_SET_WORD(buf, FILTER_OP_IN_IP_PROTO,
-                       filter->flow_type == UDP_V4_FLOW ? IPPROTO_UDP :
-                                                          IPPROTO_TCP);
+                       base_flow_type == UDP_V4_FLOW ? IPPROTO_UDP :
+                                                       IPPROTO_TCP);
 
     if (filter->m_u.tcp_ip4_spec.ip4src) {
       match_fields |= EFHW_MCDI_MATCH_FIELD_BIT(SRC_IP);
@@ -270,7 +272,7 @@ void ethtool_flow_to_mcdi_op(ci_dword_t *buf, int rxq,
                           filter->m_u.tcp_ip4_spec.ip4dst);
 
       /* Check for multicast */
-      if (filter->flow_type == UDP_V4_FLOW &&
+      if (base_flow_type == UDP_V4_FLOW &&
           ipv4_is_multicast(filter->h_u.udp_ip4_spec.ip4dst))
         multicast = true;
     }
@@ -296,8 +298,8 @@ void ethtool_flow_to_mcdi_op(ci_dword_t *buf, int rxq,
 
     match_fields |= EFHW_MCDI_MATCH_FIELD_BIT(IP_PROTO);
     EFHW_MCDI_SET_WORD(buf, FILTER_OP_IN_IP_PROTO,
-                       filter->flow_type == UDP_V6_FLOW ? IPPROTO_UDP :
-                                                          IPPROTO_TCP);
+                       base_flow_type == UDP_V6_FLOW ? IPPROTO_UDP :
+                                                       IPPROTO_TCP);
 
     if (ipv6_addr_non_null(filter->m_u.tcp_ip6_spec.ip6src)) {
       match_fields |= EFHW_MCDI_MATCH_FIELD_BIT(SRC_IP);
@@ -314,7 +316,7 @@ void ethtool_flow_to_mcdi_op(ci_dword_t *buf, int rxq,
                            filter->m_u.tcp_ip6_spec.ip6dst);
 
       /* Check for multicast */
-      if (filter->flow_type == UDP_V6_FLOW &&
+      if (base_flow_type == UDP_V6_FLOW &&
           filter->h_u.udp_ip6_spec.ip6dst[0] == 0xff)
         multicast = true;
     }
@@ -444,14 +446,15 @@ void ethtool_flow_to_mcdi_op(ci_dword_t *buf, int rxq,
   }
 
   if (filter->flow_type & FLOW_EXT) {
-    if (filter->m_ext.vlan_etype) {
+    if (filter->m_ext.vlan_tci) {
       match_fields |= EFHW_MCDI_MATCH_FIELD_BIT(OUTER_VLAN);
       EFHW_MCDI_SET_WORD(buf, FILTER_OP_IN_OUTER_VLAN,
-                         filter->h_ext.vlan_etype & filter->m_ext.vlan_etype);
+                         filter->h_ext.vlan_tci & filter->m_ext.vlan_tci);
     }
 
-    EFHW_ASSERT(filter->m_ext.vlan_tci == 0);
-    EFHW_ASSERT(filter->m_ext.data == 0);
+    EFHW_ASSERT(filter->m_ext.vlan_etype == 0);
+    EFHW_ASSERT(filter->m_ext.data[0] == 0);
+    EFHW_ASSERT(filter->m_ext.data[1] == 0);
   }
 
   EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_OP, MC_CMD_FILTER_OP_IN_OP_INSERT);
