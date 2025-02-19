@@ -56,13 +56,13 @@ void efrm_debugfs_add_rs(struct efrm_resource *rs,
 		EFRM_ASSERT(parent_rs->rs_client);
 		EFRM_ASSERT(parent_rs->rs_client->nic);
 		EFRM_ASSERT(parent_rs->rs_client->nic == rs->rs_client->nic);
-		parent = parent_rs->debug_dir;
+		parent = parent_rs->debug_dir.dir;
 		rs_debug_dirs = parent_rs->rs_debug_dirs;
 	}
 	else {
 		/* No parent, use nic debug_dir */
 		struct efhw_nic *nic = rs->rs_client->nic;
-		parent = nic->debug_dir;
+		parent = nic->debug_dir.dir;
 		rs_debug_dirs = nic->rs_debug_dirs;
 	}
 
@@ -73,7 +73,7 @@ void efrm_debugfs_add_rs(struct efrm_resource *rs,
 			return;
 	}
 	snprintf(name, sizeof(name), "%d", id);
-	rs->debug_dir = debugfs_create_dir(name, rs_debug_dirs[rs->rs_type]);
+	rs->debug_dir.dir = debugfs_create_dir(name, rs_debug_dirs[rs->rs_type]);
 }
 
 /**
@@ -82,10 +82,8 @@ void efrm_debugfs_add_rs(struct efrm_resource *rs,
  */
 void efrm_debugfs_remove_rs(struct efrm_resource *rs)
 {
-	/* debugfs_remove is ok to pass ERR_OR_NULL here */
-	debugfs_remove_recursive(rs->debug_dir);
+	efrm_fini_debugfs_files(&rs->debug_dir);
 	memset(rs->rs_debug_dirs, 0, sizeof(rs->rs_debug_dirs));
-	rs->debug_dir = NULL;
 }
 
 /**
@@ -98,7 +96,7 @@ void efrm_debugfs_add_rs_files(struct efrm_resource *rs,
 	                       const struct efrm_debugfs_parameter *parameters,
 	                       void *ref)
 {
-	efrm_init_debugfs_files(rs->debug_dir, parameters, ref);
+	efrm_init_debugfs_files(&rs->debug_dir, parameters, ref);
 }
 #else /* !CONFIG_DEBUG_FS */
 void efrm_debugfs_add_rs(struct efrm_resource *rs,

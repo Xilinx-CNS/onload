@@ -70,7 +70,7 @@ struct efrm_resource {
 	struct efrm_client *rs_client;
 	struct list_head rs_client_link;
 	struct list_head rs_manager_link;
-	struct dentry *debug_dir;
+	struct efrm_debugfs_dir debug_dir;
 	/* debugfs folders for any resources that sit beneath this in
 	 * resource debug folder hierarchy. */
 	struct dentry *rs_debug_dirs[EFRM_RESOURCE_NUM];
