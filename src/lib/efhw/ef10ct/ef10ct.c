@@ -1390,7 +1390,9 @@ static int
 ef10ct_filter_query(struct efhw_nic *nic, int filter_id,
                     struct efhw_filter_info *info)
 {
-  return -EOPNOTSUPP;
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+
+  return efct_filter_query(&ef10ct->filter_state, filter_id, info);
 }
 
 
