@@ -434,7 +434,6 @@ static void efct_tx_handle_event(ef_vi* vi, ci_qword_t event, ef_event* ev_out,
     uint32_t timesync_seconds;
 
     EF_VI_ASSERT(vi->vi_flags & EF_VI_TX_TIMESTAMPS);
-    EF_VI_ASSERT(CI_QWORD_FIELD(event, EFCT_TX_EVENT_TIMESTAMP_STATUS) == 1);
     ptstamp = CI_QWORD_FIELD64(event, EFCT_TX_EVENT_PARTIAL_TSTAMP);
     ptstamp_seconds = ptstamp >> 32;
     timesync_seconds = (vi->ep_state->evq.sync_timestamp_major & 0xFF);
