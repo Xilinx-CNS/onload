@@ -190,10 +190,8 @@ static void ef10ct_free_rxq(struct efhw_nic *nic, int qid)
   mutex_unlock(&ef10ct->rxq[rxq_num].bind_lock);
 }
 
-static void ef10ct_check_for_flushes(struct work_struct *work)
+static int ef10ct_check_for_flushes_common(struct efhw_nic_ef10ct_evq *evq)
 {
-  struct efhw_nic_ef10ct_evq *evq = 
-    container_of(work, struct efhw_nic_ef10ct_evq, check_flushes.work);
   unsigned offset = evq->next;
   ci_qword_t *event = &evq->base[offset];
   bool found_flush = false;
@@ -208,7 +206,7 @@ static void ef10ct_check_for_flushes(struct work_struct *work)
    * evq disable. In which case bail out now.
    */
   if( atomic_read(&evq->queues_flushing) < 0 )
-    return;
+    return 0;
 
   for(i = 0; i < evq->capacity; i++) {
     offset = offset + 1 >= evq->capacity ? 0 : offset + 1;
@@ -235,11 +233,37 @@ static void ef10ct_check_for_flushes(struct work_struct *work)
     event = &evq->base[offset];
   }
 
-  if( !found_flush || !atomic_dec_and_test(&evq->queues_flushing) ) {
+  if( !found_flush || !atomic_dec_and_test(&evq->queues_flushing) )
+    return -EAGAIN;
+
+  return 0;
+}
+
+static void ef10ct_check_for_flushes_polled(struct work_struct *work)
+{
+  struct efhw_nic_ef10ct_evq *evq;
+  int rc;
+
+  evq = container_of(work, struct efhw_nic_ef10ct_evq,
+                     check_flushes_polled.work);
+
+  rc = ef10ct_check_for_flushes_common(evq);
+  if (rc == -EAGAIN) {
     EFHW_ERR("%s: WARNING: No flush found, scheduling delayed work",
              __FUNCTION__);
-    schedule_delayed_work(&evq->check_flushes, 100);
+    schedule_delayed_work(&evq->check_flushes_polled, 100);
   }
+}
+
+static void ef10ct_check_for_flushes_irq(struct work_struct *work)
+{
+  struct efhw_nic_ef10ct_evq *evq;
+
+  evq = container_of(work, struct efhw_nic_ef10ct_evq,
+                     check_flushes_irq.work);
+
+  ef10ct_check_for_flushes_common(evq);
+  efhw_nic_wakeup_request(evq->nic, NULL, evq->queue_num, evq->next);
 }
 
 static int ef10ct_irq_alloc(struct efhw_nic *nic, uint32_t *channel,
@@ -405,8 +429,12 @@ ef10ct_nic_event_queue_enable(struct efhw_nic *nic,
     ef10ct_evq->nic = nic;
     ef10ct_evq->base = efhw_params->virt_base;
     ef10ct_evq->capacity = efhw_params->evq_size;
+    ef10ct_evq->queue_num = evq_num;
     atomic_set(&ef10ct_evq->queues_flushing, 0);
-    INIT_DELAYED_WORK(&ef10ct_evq->check_flushes, ef10ct_check_for_flushes);
+    INIT_DELAYED_WORK(&ef10ct_evq->check_flushes_polled,
+                      ef10ct_check_for_flushes_polled);
+    INIT_DELAYED_WORK(&ef10ct_evq->check_flushes_irq,
+                      ef10ct_check_for_flushes_irq);
   }
 
   return rc;
@@ -436,7 +464,8 @@ ef10ct_nic_event_queue_disable(struct efhw_nic *nic,
    * still be a work item scheduled. We want to avoid it rescheduling if so.
    */
   atomic_set(&ef10ct_evq->queues_flushing, -1);
-  cancel_delayed_work_sync(&ef10ct_evq->check_flushes);
+  cancel_delayed_work_sync(&ef10ct_evq->check_flushes_polled);
+  cancel_delayed_work_sync(&ef10ct_evq->check_flushes_irq);
 
   EFHW_MCDI_INITIALISE_BUF(in);
   EFHW_MCDI_SET_DWORD(in, FINI_EVQ_IN_INSTANCE, evq_id);
@@ -823,7 +852,6 @@ static int ef10ct_fini_rxq(struct efhw_nic *nic, int rxq_num)
   ef10ct_evq = &ef10ct->evq[ef10ct_get_queue_num(evq_id)];
 
   atomic_inc(&ef10ct_evq->queues_flushing);
-  schedule_delayed_work(&ef10ct_evq->check_flushes, 0);
 
   return rc;
 }
@@ -834,6 +862,7 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
 {
   EFHW_MCDI_DECLARE_BUF(in, MC_CMD_INIT_RXQ_V5_IN_LEN);
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  struct efhw_nic_ef10ct_evq *ef10ct_evq;
   int rxq_num = params->qid;
   int rxq_handle;
   int evq;
@@ -966,7 +995,8 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
     ef10ct->rxq[rxq_num].n_buffer_pages = 0;
   }
 
-  flush_delayed_work(&ef10ct->evq[ef10ct_get_queue_num(evq)].check_flushes);
+  ef10ct_evq = &ef10ct->evq[ef10ct_get_queue_num(evq)];
+  flush_delayed_work(&ef10ct_evq->check_flushes_polled);
 
   EFHW_ASSERT(ef10ct->rxq[rxq_num].evq == -1);
   ef10ct->rxq[rxq_num].evq = evq;
@@ -1128,7 +1158,7 @@ ef10ct_flush_tx_dma_channel(struct efhw_nic *nic,
   rc = ef10ct_fw_rpc(nic, &rpc);
 
   atomic_inc(&ef10ct_evq->queues_flushing);
-  schedule_delayed_work(&ef10ct_evq->check_flushes, 0);
+  schedule_delayed_work(&ef10ct_evq->check_flushes_polled, 0);
 
   return rc;
 }

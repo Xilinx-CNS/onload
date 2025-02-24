@@ -168,6 +168,33 @@ static void ef10ct_vi_allocator_dtor(struct efhw_nic_ef10ct *nic)
   efhw_stack_allocator_dtor(&nic->vi_allocator.rx);
 }
 
+static irqreturn_t ef10ct_irq_handler(int irq, void *dev)
+{
+  struct ef10ct_shared_kernel_evq *shared_evq = dev;
+  struct efhw_nic_ef10ct_evq *evq = shared_evq->evq;
+
+  if (shared_evq->irq != irq)
+    return IRQ_NONE;
+
+  schedule_delayed_work(&evq->check_flushes_irq, 0);
+
+  return IRQ_HANDLED;
+}
+
+static int ef10ct_init_shared_irq(struct ef10ct_shared_kernel_evq *evq)
+{
+  /* FIXME EF10CT: Better interrupt naming */
+  snprintf(evq->name, sizeof(evq->name), "ef10ct-%d",
+           ef10ct_get_queue_num(evq->evq_id));
+
+  return request_irq(evq->irq, ef10ct_irq_handler, 0, evq->name, evq);
+}
+
+static void ef10ct_fini_shared_irq(struct ef10ct_shared_kernel_evq *evq)
+{
+  free_irq(evq->irq, evq);
+}
+
 static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
@@ -180,7 +207,7 @@ static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid)
   evq_id = ef10ct_alloc_evq(nic);
   if(evq_id < 0) {
     rc = evq_id;
-    goto fail1;
+    goto fail_alloc_evq;
   }
   evq_num = ef10ct_get_queue_num(evq_id);
   EFHW_ASSERT(evq_num <= ef10ct->evq_n);
@@ -189,11 +216,18 @@ static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid)
 
   rc = efhw_nic_irq_alloc(nic, &shared_evq->channel, &shared_evq->irq);
   if (rc < 0)
-    goto fail2;
+    goto fail_alloc_irq;
+
+  shared_evq->evq_id = evq_id;
+  shared_evq->evq = &ef10ct->evq[evq_num];
+
+  rc = ef10ct_init_shared_irq(shared_evq);
+  if (rc < 0)
+    goto fail_init_irq;
 
   rc = efhw_iopages_alloc(nic, &shared_evq->iopages, page_order, 1, 0);
   if( rc )
-    goto fail3;
+    goto fail_iopages_alloc;
 
   params.evq = evq_num;
   params.n_pages = 1 << page_order;
@@ -201,24 +235,25 @@ static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid)
   params.dma_addrs = shared_evq->iopages.dma_addrs;
   params.virt_base = shared_evq->iopages.ptr;
   params.wakeup_channel = shared_evq->channel;
-  /* FIXME EF10CT: irq is left unused */
   /* Do we care about flags? */
 
   rc = efhw_nic_event_queue_enable(nic, &params);
   if( rc < 0 )
-    goto fail4;
+    goto fail_evq_enable;
 
-  shared_evq->evq_id = evq_id;
-  shared_evq->evq = &ef10ct->evq[evq_num];
+  efhw_nic_wakeup_request(nic, NULL, evq_num, 0);
+
   return 0;
 
-fail4:
+fail_evq_enable:
   efhw_iopages_free(nic, &shared_evq->iopages);
-fail3:
+fail_iopages_alloc:
+  ef10ct_fini_shared_irq(shared_evq);
+fail_init_irq:
   efhw_nic_irq_free(nic, shared_evq->channel, shared_evq->irq);
-fail2:
+fail_alloc_irq:
   ef10ct_free_evq(nic, evq_id);
-fail1:
+fail_alloc_evq:
   return rc;
 }
 
@@ -236,6 +271,7 @@ static void ef10ct_nic_free_shared_evq(struct efhw_nic *nic, int qid)
 
   ef10ct_free_evq(nic, shared_evq->evq_id);
   efhw_iopages_free(nic, &shared_evq->iopages);
+  ef10ct_fini_shared_irq(shared_evq);
   efhw_nic_irq_free(nic, shared_evq->channel, shared_evq->irq);
 
   /* Just to be safe */

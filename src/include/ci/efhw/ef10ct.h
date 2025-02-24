@@ -19,11 +19,13 @@ extern struct efhw_func_ops ef10ct_char_functional_units;
 struct efhw_nic_ef10ct_evq {
   struct efhw_nic *nic;
   atomic_t queues_flushing;
-  struct delayed_work check_flushes;
+  struct delayed_work check_flushes_polled;
+  struct delayed_work check_flushes_irq;
   ci_qword_t *base;
   unsigned capacity;
   unsigned next;
   int txq;
+  unsigned queue_num;
 };
 
 /** enum_nic_ef10ct_rxq_state - Current state of the rxq.
@@ -68,6 +70,7 @@ struct ef10ct_shared_kernel_evq {
   struct efhw_iopages iopages;
   uint32_t irq;
   uint32_t channel;
+  char name[IFNAMSIZ + 6];
 };
 
 enum ef10ct_queue_handle_type {
