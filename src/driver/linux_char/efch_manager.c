@@ -300,8 +300,9 @@ efch_resource_op(ci_resource_table_t* rt,
     goto done;
   }
 
-  EFCH_TRACE("%s: id="EFCH_RESOURCE_ID_FMT" op=0x%x",
-             __FUNCTION__, EFCH_RESOURCE_ID_PRI_ARG(op->id), op->op);
+  if (op->op != CI_RSOP_RX_BUFFER_POST)
+    EFCH_TRACE("%s: id="EFCH_RESOURCE_ID_FMT" op=0x%x",
+               __FUNCTION__, EFCH_RESOURCE_ID_PRI_ARG(op->id), op->op);
   if (op->op == CI_RSOP_DUMP) {
     efch_resource_dump(rs);
     rc = 0;
@@ -310,8 +311,11 @@ efch_resource_op(ci_resource_table_t* rt,
   } else {
     rc = rs->rs_ops->rm_rsops(rs, rt, op, copy_out);
   }
-  EFCH_TRACE("%s: id="EFCH_RESOURCE_ID_FMT" op=0x%x rc=%d",
-             __FUNCTION__, EFCH_RESOURCE_ID_PRI_ARG(op->id), op->op, rc);
+  /* We isolate the buffer post resource OP because its very common for ef10ct
+   * and logging to dmesg for every call slows things down significantly. */
+  if (rc != 0 || op->op != CI_RSOP_RX_BUFFER_POST)
+    EFCH_TRACE("%s: id="EFCH_RESOURCE_ID_FMT" op=0x%x rc=%d",
+               __FUNCTION__, EFCH_RESOURCE_ID_PRI_ARG(op->id), op->op, rc);
 done:
   return rc;
 }
