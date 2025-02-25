@@ -39,9 +39,8 @@ static int parse_opts(int argc, char* argv[]);
 #define DEFAULT_PAYLOAD_SIZE  28
 #define LOCAL_PORT            12345
 
-static ef_vi              vi;
-static ef_driver_handle   dh;
-static int                tx_frame_len;
+#define CI_MIN(x,y) (((x) < (y)) ? (x) : (y))
+
 static int                cfg_local_port = LOCAL_PORT;
 static int                cfg_payload_len = DEFAULT_PAYLOAD_SIZE;
 static int                cfg_iter = 10;
@@ -52,23 +51,24 @@ static int                cfg_disable_tx_push;
 static int                cfg_use_vf;
 static int                cfg_max_batch = 8192;
 static int                cfg_vlan = -1;
+static bool               cfg_ctpio = false;
 static int                n_sent;
 static int                n_pushed;
 static int                ifindex;
 
-static void handle_completions(void)
+static void handle_completions(ef_vi *vi)
 {
   ef_request_id ids[EF_VI_TRANSMIT_BATCH];
   ef_event      evs[EVENT_BATCH_SIZE];
   int           n_ev, i, j, n_unbundled = 0;
 
-  n_ev = ef_eventq_poll(&vi, evs, sizeof(evs) / sizeof(evs[0]));
+  n_ev = ef_eventq_poll(vi, evs, sizeof(evs) / sizeof(evs[0]));
   if( n_ev > 0 ) {
     for( i = 0; i < n_ev; ++i ) {
       switch( EF_EVENT_TYPE(evs[i]) ) {
       case EF_EVENT_TYPE_TX:
         /* One TX event can signal completion of multiple TXs */
-        n_unbundled = ef_vi_transmit_unbundle(&vi, &evs[i], ids);
+        n_unbundled = ef_vi_transmit_unbundle(vi, &evs[i], ids);
         for ( j = 0; j < n_unbundled; ++j )
           TEST(ids[j] == n_sent + j);
         n_sent += n_unbundled;
@@ -81,8 +81,36 @@ static void handle_completions(void)
   /* No events yet is entirely acceptable */
 }
 
-static inline
-int send_more_packets(int desired, ef_vi* vi, ef_addr dma_buf_addr) {
+static
+int send_more_packets_ctpio(int desired, ef_vi* vi, const void* host_buf_addr,
+                            ef_addr dma_buf_addr, int tx_frame_len)
+{
+  int i;
+  int to_send = CI_MIN(cfg_max_batch, desired);
+  int space = ef_vi_transmit_space_bytes(vi);
+
+  to_send = CI_MIN(to_send, space / tx_frame_len);
+
+  /* This is sending the same packet buffer over and over again.
+   * a real application would usually send new data. */
+  for( i = 0; i < to_send; ++i ) {
+    ef_vi_transmit_ctpio(vi, host_buf_addr, tx_frame_len,
+                         EF_VI_CTPIO_CT_THRESHOLD_SNF);
+    /* Also post a fallback */
+    int rc = ef_vi_transmit_ctpio_fallback(vi, dma_buf_addr, tx_frame_len,
+                                           n_pushed + i);
+    if( rc == -EAGAIN )
+      break;
+    TRY(rc);
+  }
+
+  return i;
+}
+
+static
+int send_more_packets_dma(int desired, ef_vi* vi, const void* host_buf_addr,
+                          ef_addr dma_buf_addr, int tx_frame_len)
+{
   int i;
   int to_send = cfg_max_batch < desired ? cfg_max_batch : desired;
 
@@ -106,15 +134,18 @@ int send_more_packets(int desired, ef_vi* vi, ef_addr dma_buf_addr) {
 
 int main(int argc, char* argv[])
 {
-
+  ef_vi vi;
+  ef_driver_handle dh;
   ef_pd pd;
   ef_memreg mr;
   void* p;
   ef_addr dma_buf_addr;
   enum ef_pd_flags pd_flags = EF_PD_DEFAULT;
   enum ef_vi_flags vi_flags = EF_VI_FLAGS_DEFAULT;
-  unsigned long min_page_size;
+  unsigned long min_page_size, ctpio_only;
   size_t alloc_size;
+  int tx_frame_len;
+  int (*send_more_packets)(int, ef_vi*, const void*, ef_addr, int);
 
   TRY(parse_opts(argc, argv));
 
@@ -132,8 +163,16 @@ int main(int argc, char* argv[])
   /* Initialize and configure hardware resources */
   TRY(ef_driver_open(&dh));
   TRY(ef_pd_alloc(&pd, dh, ifindex, pd_flags));
+
+  if ( !ef_pd_capabilities_get(dh, &pd, dh, EF_VI_CAP_CTPIO_ONLY, &ctpio_only)
+       && ctpio_only )
+    cfg_ctpio = true; /* Only supports CTPIO, so always use it */
+  if( cfg_ctpio )
+    vi_flags |= EF_VI_TX_CTPIO;
+
   TRY(ef_vi_alloc_from_pd(&vi, dh, &pd, dh, -1, 0, -1, NULL, -1, vi_flags));
 
+  printf("send_method=%s\n", cfg_ctpio ? "CTPIO" : "DMA");
   printf("txq_size=%d\n", ef_vi_transmit_capacity(&vi));
   printf("rxq_size=%d\n", ef_vi_receive_capacity(&vi));
   printf("evq_size=%d\n", ef_eventq_capacity(&vi));
@@ -164,12 +203,19 @@ int main(int argc, char* argv[])
   /* Prepare packet contents */
   tx_frame_len = init_udp_pkt(p, cfg_payload_len, &vi, dh, cfg_vlan, 1);
 
+  /* Select TX method */
+  if( cfg_ctpio )
+    send_more_packets = send_more_packets_ctpio;
+  else
+    send_more_packets = send_more_packets_dma;
+
   /* Continue until all sends are complete */
   while( n_sent < cfg_iter ) {
     /* Try to push up to the requested iterations, likely fewer get sent */
-    n_pushed += send_more_packets(cfg_iter - n_pushed, &vi, dma_buf_addr);
+    n_pushed += send_more_packets(cfg_iter - n_pushed, &vi, p,
+                                  dma_buf_addr, tx_frame_len);
     /* Check for transmit complete */
-    handle_completions();
+    handle_completions(&vi);
     if( cfg_usleep )
       usleep(cfg_usleep);
   }
@@ -192,6 +238,7 @@ void usage(void)
   fprintf(stderr, "  -s                  - microseconds to sleep between batches\n");
   fprintf(stderr, "  -v                  - use a VF\n");
   fprintf(stderr, "  -V <vlan>           - vlan to send to (interface must have an IP)\n");
+  fprintf(stderr, "  -c                  - use CTPIO for sends\n");
   fprintf(stderr, "\n");
   fprintf(stderr, "e.g.:\n");
   fprintf(stderr, "  - Send pkts to 239.1.2.3:1234 from eth2:\n"
@@ -204,7 +251,7 @@ static int parse_opts(int argc, char *argv[])
 {
   int c;
 
-  while((c = getopt(argc, argv, "n:m:s:B:l:V:bptvx")) != -1)
+  while((c = getopt(argc, argv, "n:m:s:B:l:V:bptvxc")) != -1)
     switch( c ) {
     case 'n':
       cfg_iter = atoi(optarg);
@@ -235,6 +282,9 @@ static int parse_opts(int argc, char *argv[])
       break;
     case 'v':
       cfg_use_vf = 1;
+      break;
+    case 'c':
+      cfg_ctpio = true;
       break;
     case '?':
       usage();
