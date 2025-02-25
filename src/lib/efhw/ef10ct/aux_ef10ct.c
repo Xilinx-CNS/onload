@@ -293,10 +293,13 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
   if( rc < 0 )
     goto fail2;
 
+  rtnl_lock();
   rc = efrm_nic_add(client, &auxdev->dev, &dev_type, val.net_dev, &lnic,
                     &res_dim, 0);
-  if( rc < 0 )
+  if( rc < 0 ) {
+    rtnl_unlock();
     goto fail3;
+  }
 
   nic = &lnic->efrm_nic.efhw_nic;
   nic->mtu = val.net_dev->mtu + ETH_HLEN;
@@ -306,6 +309,7 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
   ef10ct->nic = nic;
 
   efrm_notify_nic_probe(nic, val.net_dev);
+  rtnl_unlock();
 
   /* Init shared evqs for use with rx vis. */
   for( i = 0; i < ef10ct->shared_n; i++ ) {
@@ -358,6 +362,7 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
 
   ef10ct = nic->arch_extra;
 
+  rtnl_lock();
   efrm_notify_nic_remove(nic);
 
   /* flush all outstanding dma queues */
@@ -377,6 +382,7 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
   /* Absent hardware is treated as a protracted reset. */
   efrm_nic_reset_suspend(nic);
   ci_atomic32_or(&nic->resetting, NIC_RESETTING_FLAG_UNPLUGGED);
+  rtnl_unlock();
 
   ef10ct_vi_allocator_dtor(ef10ct);
   /* mind we might still expect callbacks from close() context
