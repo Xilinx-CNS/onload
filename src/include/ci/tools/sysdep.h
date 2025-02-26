@@ -77,6 +77,24 @@ typedef ci_int32 ci_kerr_t; /* range of OS kernel-mode return codes */
 #define PTR_ERR_OR_ZERO(ptr) (IS_ERR(ptr) ? PTR_ERR(ptr) : 0)
 #define ERR_PTR(err) ((void*)(uintptr_t)(long)(err))
 
+#ifndef unsafe_memcpy
+#define unsafe_memcpy(dst, src, bytes, justification) memcpy(dst, src, bytes)
+#endif
+
+#ifndef unsafe_memmove
+/* Unlike unsafe_memcpy(), kernel does not provide unsafe_memmove(). */
+#ifdef __KERNEL__
+#define unsafe_memmove(dst, src, bytes, justification) \
+	__underlying_memmove(dst, src, bytes)
+#ifndef __underlying_memmove
+/* __underlying_memmove() was undefined in linux<5.18. */
+#define __underlying_memmove __builtin_memmove
+#endif /* __underlying_memmove */
+#else
+#define unsafe_memmove(dst, src, bytes, justification) memmove(dst, src, bytes)
+#endif /* __KERNEL__ */
+#endif /* ! unsafe_memmove */
+
 /**********************************************************************
  * Compiler and processor dependencies.
  */
