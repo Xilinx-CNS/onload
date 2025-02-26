@@ -655,14 +655,12 @@ int efab_tcp_helper_create_os_sock(ci_private_t *priv)
   sock = get_linux_socket(ep);
 
   /* Copy F_SETOWN_EX, F_SETSIG to the new file */
-#ifdef F_SETOWN_EX
   if(efrm_file_f_owner(priv->_filp)->pid != 0) {
     rcu_read_lock();
     __f_setown(sock->file, efrm_file_f_owner(priv->_filp)->pid,
                efrm_file_f_owner(priv->_filp)->pid_type, 1);
     rcu_read_unlock();
   }
-#endif
   efrm_file_f_owner(sock->file)->signum =
                                efrm_file_f_owner(priv->_filp)->signum;
 
