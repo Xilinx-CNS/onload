@@ -144,10 +144,10 @@ void efhw_init_debugfs_nic(struct efhw_nic *nic)
            nic->net_dev->name);
 
   /* Create directory */
-  nic->debug_dir = debugfs_create_dir(dir_name, efrm_debug_nics);
+  nic->debug_dir.dir = debugfs_create_dir(dir_name, efrm_debug_nics);
 
   /* Create files */
-  efrm_init_debugfs_files(nic->debug_dir, efhw_debugfs_nic_parameters, nic);
+  efrm_init_debugfs_files(&nic->debug_dir, efhw_debugfs_nic_parameters, nic);
 }
 
 /**
@@ -158,8 +158,7 @@ void efhw_init_debugfs_nic(struct efhw_nic *nic)
  */
 void efhw_fini_debugfs_nic(struct efhw_nic *nic)
 {
-  debugfs_remove_recursive(nic->debug_dir);
-  nic->debug_dir = NULL;
+  efrm_fini_debugfs_files(&nic->debug_dir);
   memset(nic->rs_debug_dirs, 0, sizeof(nic->rs_debug_dirs));
 }
 
