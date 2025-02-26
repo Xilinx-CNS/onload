@@ -2,9 +2,42 @@
 /* X-SPDX-Copyright-Text: Copyright (C) 2024, Advanced Micro Devices, Inc. */
 
 #include <ci/efhw/efhw_types.h>
+#include <ci/driver/efab/hardware.h>
 #include <kernel_utils/iobufset.h>
 
 #include "sw_buffer_table.h"
+
+struct efhw_sw_bt_entry {
+  union {
+    struct page *page;     /*!< Linux compound page */
+    dma_addr_t dma_addr;   /*!< DMA mapped address */
+  } entry;
+};
+
+struct efhw_sw_bt_entries {
+  int n_bufs;                /*!< number of entries */
+  struct efhw_sw_bt_entry *entries;
+};
+
+int efhw_sw_bt_entries_init(struct efhw_sw_bt_entries **out, int n_entries)
+{
+  struct efhw_sw_bt_entries *entries;
+
+  entries = kzalloc(sizeof(struct efhw_sw_bt_entries), GFP_KERNEL);
+  if( !entries )
+    return -ENOMEM;
+
+  entries->n_bufs = n_entries;
+  entries->entries = kzalloc(sizeof(struct efhw_sw_bt_entry) * n_entries,
+                             GFP_KERNEL);
+  if( !entries->entries ) {
+    kfree(entries);
+    return -ENOMEM;
+  }
+
+  *out = entries;
+  return 0;
+}
 
 struct efhw_sw_bt* efhw_sw_bt_by_owner(struct efhw_nic* nic, int owner_id)
 {
@@ -28,6 +61,8 @@ int efhw_sw_bt_alloc(struct efhw_nic *nic, int owner, int order,
 
   if( bt == NULL )
     return -ENODEV;
+
+  bt->map_type = efhw_nic_buffer_map_type(nic);
 
   /* We reserve some bits of the handle to store the order, needed later to
    * calculate the address of each entry within the block. This limits the
@@ -61,8 +96,8 @@ int efhw_sw_bt_alloc(struct efhw_nic *nic, int owner, int order,
     bt->block_capacity = bt->block_count + 1;
   }
 
-  rc = oo_iobufset_init(&bt->blocks[bt->block_count],
-                        EFHW_BUFFER_TABLE_BLOCK_SIZE << order);
+  rc = efhw_sw_bt_entries_init(&bt->blocks[bt->block_count],
+                               EFHW_BUFFER_TABLE_BLOCK_SIZE << order);
   if( rc < 0 ) {
     kfree(block);
     bt->blocks[bt->block_count] = NULL;
@@ -85,8 +120,10 @@ static void release_bt(struct efhw_nic* nic, int owner)
     return;
 
   for( i = 0; i < bt->block_count; i++ )
-    if( bt->blocks[i] != NULL )
-      oo_iobufset_kfree(bt->blocks[i]);
+    if( bt->blocks[i] != NULL ) {
+      kfree(bt->blocks[i]->entries);
+      kfree(bt->blocks[i]);
+    }
   kfree(bt->blocks);
   memset(bt, 0, sizeof(*bt));
 }
@@ -103,7 +140,7 @@ int efhw_sw_bt_set(struct efhw_nic *nic, struct efhw_buffer_table_block *block,
                    int first_entry, int n_entries, dma_addr_t *dma_addrs)
 {
   int i, owner, order;
-  long page, block_idx;
+  size_t entry, block_idx;
   struct efhw_sw_bt* bt;
 
   owner = block->btb_hw.ef10.handle >> 8;
@@ -111,6 +148,10 @@ int efhw_sw_bt_set(struct efhw_nic *nic, struct efhw_buffer_table_block *block,
   bt = efhw_sw_bt_by_owner(nic, owner);
   if( bt == NULL )
     return -ENODEV;
+
+  /* We require the same order for all blocks in the table */
+  EFHW_ASSERT(bt->order == 0 || bt->order == order);
+  bt->order = order;
 
   /* We are mapping between two address types.
    *
@@ -133,34 +174,64 @@ int efhw_sw_bt_set(struct efhw_nic *nic, struct efhw_buffer_table_block *block,
 
   block_idx = (block->btb_vaddr >> PAGE_SHIFT) /
               (EFHW_BUFFER_TABLE_BLOCK_SIZE << order);
-  page = first_entry;
+  entry = first_entry;
 
   if( block_idx >= bt->block_count )
     return -EINVAL;
 
-  if( page + n_entries >= oo_iobufset_npages(bt->blocks[block_idx]))
+  if( entry + n_entries >= bt->blocks[block_idx]->n_bufs )
     return -EINVAL;
 
-  for( i = 0; i < n_entries; ++i ) {
-    struct page *p = pfn_to_page(dma_addrs[i] >> PAGE_SHIFT);
-    bt->blocks[block_idx]->pages[page + i] = p;
-    bt->used_page_count += 1 << order;
+  switch( bt->map_type ) {
+  case EFHW_PAGE_MAP_PHYS:
+    for( i = 0; i < n_entries; ++i ) {
+      struct page *p = pfn_to_page(dma_addrs[i] >> PAGE_SHIFT);
+      bt->blocks[block_idx]->entries[entry + i].entry.page = p;
+      EFHW_ASSERT(compound_order(p) == bt->order);
+    }
+    break;
+  case EFHW_PAGE_MAP_DMA:
+    for( i = 0; i < n_entries; ++i )
+      bt->blocks[block_idx]->entries[entry + i].entry.dma_addr = dma_addrs[i];
+    break;
+  default:
+    EFHW_ASSERT(false);
+    return -EINVAL;
   }
+
+  bt->used_page_count += (1 << order) * n_entries;
 
   return 0;
 }
 
 unsigned long efhw_sw_bt_get_pfn(struct efhw_sw_bt *table, long index)
 {
-  /* This assumes that the order is the same for all blocks */
-  int order = compound_order(table->blocks[0]->pages[0]);
+  int order = table->order;
   long btb_size = EFHW_BUFFER_TABLE_BLOCK_SIZE << order;
   int btb_index = index / btb_size;
+  struct efhw_sw_bt_entry *entries = table->blocks[btb_index]->entries;
+  size_t offset = index % btb_size << PAGE_SHIFT;
 
+  EFRM_ASSERT(table->map_type == EFHW_PAGE_MAP_PHYS);
   EFRM_ASSERT(btb_index < table->block_count);
 
-  return oo_iobufset_pfn(table->blocks[btb_index],
-                         index % btb_size << PAGE_SHIFT);
+  return page_to_pfn(entries[offset >> PAGE_SHIFT >> order].entry.page) +
+                     ((offset >> PAGE_SHIFT) & ((1 << order) - 1));
+}
+
+dma_addr_t efhw_sw_bt_get_dma_addr(struct efhw_sw_bt *table, long index)
+{
+  int order = table->order;
+  long btb_size = EFHW_BUFFER_TABLE_BLOCK_SIZE << order;
+  int btb_index = index / btb_size;
+  struct efhw_sw_bt_entry *entries = table->blocks[btb_index]->entries;
+  size_t offset = index % btb_size << PAGE_SHIFT;
+
+  EFRM_ASSERT(table->map_type == EFHW_PAGE_MAP_DMA);
+  EFRM_ASSERT(btb_index < table->block_count);
+
+ return entries[offset >> PAGE_SHIFT >> order].entry.dma_addr +
+                     (offset & ((1 << (PAGE_SHIFT + order)) - 1));
 }
 
 void efhw_sw_bt_clear(struct efhw_nic *nic,

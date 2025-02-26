@@ -5,6 +5,8 @@
 
 #define EFHW_MAX_SW_BTS 256
 
+struct efhw_sw_bt_entries;
+
 /* struct efhw_sw_bt is a buffer table implemented in software. It stores a set
  * of pages that are to be used by the nic, and allows for translation between
  * "pci" and "dma" addresses. ("pci" and "dma" don't actually mean pci and dma,
@@ -13,9 +15,13 @@
  * Used by nic architectures that don't have native support for buffer tables,
  * but who still want address translation capabilities. */
 struct efhw_sw_bt {
-  /* An array of arrays of pages. Each element in this array roughly corresponds
-   * to a `struct efhw_buffer_table_block`. */
-  struct oo_buffer_pages **blocks;
+  /* The mapping applied to the entries. */
+  enum efhw_page_map_type map_type;
+  /* The order of the entries */
+  int order;
+  /* An array of arrays of entries. Each element in this array roughly
+   * corresponds to a `struct efhw_buffer_table_block`. */
+  struct efhw_sw_bt_entries **blocks;
   /* How many buffer table blocks are currently being used */
   long block_count;
   /* Capacity of the blocks array */
@@ -53,6 +59,7 @@ int efhw_sw_bt_set(struct efhw_nic *nic, struct efhw_buffer_table_block *block,
 /* Returns the pfn of the page for a given virtual/"dma" addr.
  * `index` is the page number of the virtual address */
 unsigned long efhw_sw_bt_get_pfn(struct efhw_sw_bt *table, long index);
+dma_addr_t efhw_sw_bt_get_dma_addr(struct efhw_sw_bt *table, long index);
 
 /* Unsupported */
 void efhw_sw_bt_clear(struct efhw_nic *nic,

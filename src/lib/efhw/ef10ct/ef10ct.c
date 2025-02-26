@@ -1570,9 +1570,7 @@ translate_dma_address(struct efhw_nic *nic, resource_size_t dma_addr,
                       int owner_id)
 {
   struct efhw_sw_bt *sw_bt = efhw_sw_bt_by_owner(nic, owner_id);
-  uint64_t pfn = efhw_sw_bt_get_pfn(sw_bt, dma_addr >> PAGE_SHIFT);
-
-  return pfn << PAGE_SHIFT;
+  return efhw_sw_bt_get_dma_addr(sw_bt, dma_addr >> PAGE_SHIFT);
 }
 
 static int ef10ct_rxq_post_superbuf(struct efhw_nic *nic, int instance,
@@ -1580,7 +1578,7 @@ static int ef10ct_rxq_post_superbuf(struct efhw_nic *nic, int instance,
                                     bool sentinel, bool rollover, int owner_id)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
-  uint64_t phys_addr;
+  resource_size_t addr_to_post = dma_addr;
   ci_qword_t qword;
   volatile uint64_t *reg;
   int rxq_num = ef10ct_get_queue_num(instance);
@@ -1592,12 +1590,13 @@ static int ef10ct_rxq_post_superbuf(struct efhw_nic *nic, int instance,
     return -EINVAL;
 
   if( owner_id == -1 )
-    phys_addr = virt_to_phys((void*)dma_addr);
+    /* Not valid, but allow onload to work on systems without iommu for now */
+    addr_to_post = virt_to_phys((void*)dma_addr);
   else
-    phys_addr = translate_dma_address(nic, dma_addr, owner_id);
+    addr_to_post = translate_dma_address(nic, dma_addr, owner_id);
 
   CI_POPULATE_QWORD_3(qword,
-                      EFCT_TEST_PAGE_ADDRESS, phys_addr >> CI_PAGE_SHIFT,
+                      EFCT_TEST_PAGE_ADDRESS, addr_to_post >> CI_PAGE_SHIFT,
                       EFCT_TEST_SENTINEL_VALUE, sentinel,
                       EFCT_TEST_ROLLOVER, rollover);
 
