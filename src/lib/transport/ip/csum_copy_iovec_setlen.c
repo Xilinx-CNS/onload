@@ -23,7 +23,7 @@ ci_inline int do_copy_from_user(void* to, const void* from, int n_bytes
   if( addr_spc != CI_ADDR_SPC_KERNEL )
     return copy_from_user(to, from, n_bytes);
 #endif
-  memcpy(to, from, n_bytes);
+  unsafe_memcpy(to, from, n_bytes, "variable length dest struct");
   return 0;
 }
 
