@@ -64,10 +64,10 @@ static int ci_tcp_tx_merge_segment(ci_netif* ni, ci_ip_pkt_fmt* dest_pkt,
   if( do_copy ) {
     if( dest_pkt == src_pkt ) {
       /* Same packet: may be overlapping. */
-      memmove(dest, src, n);
+      unsafe_memmove(dest, src, n, "variable length dest struct");
     }
     else
-      memcpy(dest, src, n);
+      unsafe_memcpy(dest, src, n, "variable length dest struct");
   }
 
   dest_pkt->buf_len += n;

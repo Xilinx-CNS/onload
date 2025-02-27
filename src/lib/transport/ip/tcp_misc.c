@@ -1057,7 +1057,8 @@ static int ci_tcp_rx_pkt_coalesce(ci_netif* ni, ci_ip_pkt_queue* q,
   /* Move contents of packet to the beginning of the buffer. */
   if( oo_offbuf_ptr(pkt_buf) != pkt_payload ) {
     int n = (int)(oo_offbuf_ptr(pkt_buf) - pkt_payload);
-    memmove(pkt_payload, oo_offbuf_ptr(pkt_buf), oo_offbuf_left(pkt_buf));
+    unsafe_memmove(pkt_payload, oo_offbuf_ptr(pkt_buf), oo_offbuf_left(pkt_buf),
+                   "variable length dest struct");
     pkt_buf->off -= n;
     pkt_buf->end -= n;
     pkt_tcp->tcp_seq_be32 = CI_BSWAP_BE32(
