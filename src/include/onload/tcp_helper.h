@@ -326,10 +326,11 @@ typedef struct tcp_helper_resource_s {
   ci_dllink             thc_thr_link;
   /* bucket of rss hardware filter */
   int thc_rss_instance;
-  /* backing store for efct's mmappable hugepages */
-  struct oo_hugetlb_allocator* thc_efct_alloc;
   /* backing store for packet buffers */
   struct oo_hugetlb_allocator* thc_pktbuf_alloc;
+
+  /* backing store for efct's mmappable hugepages */
+  struct oo_hugetlb_allocator* trs_efct_alloc;
 
   ci_waitable_t         ready_list_waitqs[CI_CFG_N_READY_LISTS];
   ci_dllist             os_ready_lists[CI_CFG_N_READY_LISTS];
