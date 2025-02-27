@@ -178,7 +178,8 @@ static int efhw_nic_check_buffer_table_orders(struct efhw_nic *nic)
 int efhw_nic_ctor(struct efhw_nic *nic,
 		  const struct vi_resource_dimensions *nic_res,
 		  const struct efhw_device_type *dev_type,
-		  struct net_device *net_dev, struct device *dev)
+		  struct net_device *net_dev, struct device *dev,
+		  unsigned timer_quantum_ns)
 {
 	int rc;
 
@@ -197,8 +198,12 @@ int efhw_nic_ctor(struct efhw_nic *nic,
 	nic->int_prime_reg = 0;
 	nic->vi_irq_n_ranges = 0;
 	nic->mtu = 1500 + ETH_HLEN; /* ? + ETH_VLAN_HLEN */
-	/* Default: this will get overwritten if better value is known */
-	nic->timer_quantum_ns = 4968;
+
+	if( timer_quantum_ns )
+		nic->timer_quantum_ns = timer_quantum_ns;
+	else
+		nic->timer_quantum_ns = 4968;
+
 	nic->vi_min = nic_res->vi_min;
 	nic->vi_lim = nic_res->vi_lim;
 	nic->net_dev = net_dev;

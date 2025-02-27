@@ -55,9 +55,10 @@ extern int efhw_nondl_device_type_init(struct efhw_device_type *dt);
 
 /* Initialise fields that do not involve touching hardware. */
 extern int efhw_nic_ctor(struct efhw_nic *nic,
-			  const struct vi_resource_dimensions *nic_res,
-			  const struct efhw_device_type *dev_type,
-			  struct net_device *net_dev, struct device *dev);
+			 const struct vi_resource_dimensions *nic_res,
+			 const struct efhw_device_type *dev_type,
+			 struct net_device *net_dev, struct device *dev,
+			 unsigned timer_quantum_ns);
 extern void efhw_nic_update_pci_info(struct efhw_nic *nic);
 
 /*! Destruct NIC resources */

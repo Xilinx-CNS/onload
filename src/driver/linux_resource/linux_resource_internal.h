@@ -49,6 +49,18 @@
 extern void efrm_driverlink_unregister(void);
 
 extern int
+efrm_nic_create(void *drv_device, struct device *dev,
+		const struct efhw_device_type *dev_type,
+		struct net_device *net_dev,
+		struct linux_efhw_nic **lnic_inout,
+		const struct vi_resource_dimensions *,
+		unsigned timer_quantum_ns);
+extern void efrm_nic_destroy(struct linux_efhw_nic *lnic);
+
+extern int efrm_nic_register(struct linux_efhw_nic *lnic);
+
+/* Add = create (or reclaim) + register */
+extern int
 efrm_nic_add(void *drv_device, struct device *dev,
 	     const struct efhw_device_type *dev_type,
 	     struct net_device *net_dev,

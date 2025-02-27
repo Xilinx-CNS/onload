@@ -198,7 +198,8 @@ static int
 linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct device *dev,
 		    struct net_device *net_dev,
 		    const struct vi_resource_dimensions *res_dim,
-		    const struct efhw_device_type *dev_type)
+		    const struct efhw_device_type *dev_type,
+		    unsigned timer_quantum_ns)
 {
 	struct efhw_nic *nic = &lnic->efrm_nic.efhw_nic;
 	int rc;
@@ -208,7 +209,8 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct device *dev,
 		get_device(dev);
 	dev_hold(net_dev);
 
-	rc = efhw_nic_ctor(nic, res_dim, dev_type, net_dev, dev);
+	rc = efhw_nic_ctor(nic, res_dim, dev_type, net_dev, dev,
+			   timer_quantum_ns);
 	if (rc < 0)
 		goto fail1;
 	irq_ranges_init(nic, res_dim);
@@ -246,12 +248,15 @@ fail1:
  */
 static void
 linux_efrm_nic_reclaim(struct linux_efhw_nic *lnic,
+		       void *drv_device,
 		       struct device *dev,
 		       struct net_device *net_dev,
 		       const struct vi_resource_dimensions *res_dim,
-		       const struct efhw_device_type *dev_type)
+		       const struct efhw_device_type *dev_type,
+		       unsigned timer_quantum_ns)
 {
-	struct efhw_nic* nic = &lnic->efrm_nic.efhw_nic;
+	struct efrm_nic *efrm_nic = &lnic->efrm_nic;
+	struct efhw_nic* nic = &efrm_nic->efhw_nic;
 	struct device* old_dev;
 #ifndef NDEBUG
 	struct net_device* old_net_dev;
@@ -269,6 +274,16 @@ linux_efrm_nic_reclaim(struct linux_efhw_nic *lnic,
 	nic->net_dev = net_dev;
 	nic->pci_dev = res_dim->pci_dev;
 	spin_unlock_bh(&nic->pci_dev_lock);
+
+	/* Replace drv_device. */
+	lnic->drv_device = drv_device;
+
+	/* Tell NIC to spread wakeup events. */
+	efrm_nic->rss_channel_count = res_dim->rss_channel_count;
+
+	/* Overwrite if better value is known. */
+	if (timer_quantum_ns)
+		nic->timer_quantum_ns = timer_quantum_ns;
 
 	/* Tidy up old state. */
 	efrm_shutdown_resource_filter(old_dev);
@@ -326,6 +341,66 @@ int efrm_nic_get_accel_allowed(struct efhw_nic* nic)
 	return enabled;
 }
 
+static void efrm_nic_bringup(struct linux_efhw_nic *lnic)
+{
+	struct efrm_nic *efrm_nic = NULL;
+	struct efhw_nic *nic = NULL;
+	struct net_device *net_dev = NULL;
+	struct device *dev = NULL;
+	int count = 0, rc = 0;
+
+	efrm_nic = &lnic->efrm_nic;
+	nic = &efrm_nic->efhw_nic;
+
+	net_dev = nic->net_dev;
+	dev = nic->dev;
+
+	/* There is a race here: we need to clear [nic->resetting] so that
+	 * efhw_nic_init_hardware() can do MCDI, but that means that any
+	 * existing clients can also attempt MCDI, potentially before
+	 * efhw_nic_init_hardware() completes. NIC resets already suffer from
+	 * an equivalent race. TODO: Fix this, perhaps by introducing an
+	 * intermediate degree of resetting-ness during which we can do MCDI
+	 * but no-one else can. */
+	ci_wmb();
+	nic->resetting = 0;
+
+	/****************************************************/
+	/* hardware bringup                                 */
+	/****************************************************/
+	/* Detecting hardware can be a slightly unreliable process;
+	 * we want to make sure that we maximise our chances, so we
+	 * loop a few times until all is good. */
+	for (count = 0; count < max_hardware_init_repeats; count++) {
+		rc = efhw_nic_init_hardware(nic, &ev_handler, net_dev->dev_addr);
+		if (rc >= 0)
+			break;
+
+		/* pain */
+		EFRM_TRACE("%s hardware init failed (%d, attempt %d of %d)",
+			   dev && dev_name(dev) ? dev_name(dev) : "?",
+			   rc, count + 1, max_hardware_init_repeats);
+	}
+	if (rc < 0) {
+		/* Again, PCI VFs may be available. */
+		EFRM_ERR("%s: ERROR: hardware init failed rc=%d",
+			 dev && dev_name(dev) ? dev_name(dev) : "?", rc);
+	}
+	efrm_resource_manager_add_total(EFRM_RESOURCE_VI,
+					efrm_nic->max_vis);
+	efrm_resource_manager_add_total(EFRM_RESOURCE_PD,
+					efrm_nic->max_vis);
+
+	EFRM_NOTICE("%s index=%d ifindex=%d",
+		    dev ? (dev_name(dev) ? dev_name(dev) : "?") : net_dev->name,
+		    nic->index, net_dev->ifindex);
+
+	efrm_nic->dmaq_state.unplugging = 0;
+
+	efrm_nic_enable_post_reset(nic);
+	efrm_nic_post_reset(nic);
+}
+
 /****************************************************************************
  *
  * efrm_nic_add: add the NIC to the resource driver
@@ -353,120 +428,108 @@ efrm_nic_add(void *drv_device, struct device *dev,
 	     unsigned timer_quantum_ns)
 {
 	struct linux_efhw_nic *lnic = *lnic_inout;
-	struct efrm_nic *efrm_nic = NULL;
-	struct efhw_nic *nic = NULL;
-	int count = 0, rc = 0;
-	int constructed = 0;
-	int registered_nic = 0;
+	int rc = 0;
 
 	if (lnic != NULL) {
-		linux_efrm_nic_reclaim(lnic, dev, net_dev, res_dim,
-				       dev_type);
+		linux_efrm_nic_reclaim(lnic, drv_device, dev, net_dev, res_dim,
+				       dev_type, timer_quantum_ns);
+
 		/* We have now taken ownership of the state and should pull it
 		 * down on failure. */
-		constructed = registered_nic = 1;
 	}
 	else {
-		/* Allocate memory for the new adapter-structure. */
-		lnic = kmalloc(sizeof(*lnic), GFP_KERNEL);
-		if (lnic == NULL) {
-			EFRM_ERR("%s: ERROR: failed to allocate memory",
-				 __func__);
-			rc = -ENOMEM;
-			goto failed;
-		}
-		memset(lnic, 0, sizeof(*lnic));
-
-		/* OS specific hardware mappings */
-		rc = linux_efrm_nic_ctor(lnic, dev, net_dev, res_dim, dev_type);
+		rc = efrm_nic_create(drv_device, dev, dev_type, net_dev,
+				     &lnic, res_dim, timer_quantum_ns);
 		if (rc < 0) {
-			EFRM_ERR("%s: ERROR: linux_efrm_nic_ctor failed (%d)",
+			EFRM_ERR("%s: ERROR: efrm_nic_create failed (%d)",
 				 __func__, rc);
-			goto failed;
+			return rc;
 		}
-		constructed = 1;
 
 		/* Tell the driver about the NIC - this needs to be done before
-		   the resources managers get created below. Note we haven't
-		   initialised the hardware yet, and I don't like doing this
-		   before the perhaps unreliable hardware initialisation.
-		   However, there's quite a lot of code to review if we wanted
-		   to hardware init before bringing up the resource managers.
-		   */
+		 * the resources managers get created below. Note we haven't
+		 * initialised the hardware yet, and I don't like doing this
+		 * before the perhaps unreliable hardware initialisation.
+		 * However, there's quite a lot of code to review if we wanted
+		 * to hardware init before bringing up the resource managers.
+		 */
 		rc = efrm_driver_register_nic(&lnic->efrm_nic);
 		if (rc < 0) {
 			EFRM_ERR("%s: ERROR: efrm_driver_register_nic failed "
 				 "(%d)", __func__, rc);
 			goto failed;
 		}
-		registered_nic = 1;
+
+		*lnic_inout = lnic;
 	}
 
-	lnic->drv_device = drv_device;
-	efrm_nic = &lnic->efrm_nic;
-	nic = &efrm_nic->efhw_nic;
-
-	if( timer_quantum_ns )
-		nic->timer_quantum_ns = timer_quantum_ns;
-
-	/* There is a race here: we need to clear [nic->resetting] so that
-	 * efhw_nic_init_hardware() can do MCDI, but that means that any
-	 * existing clients can also attempt MCDI, potentially before
-	 * efhw_nic_init_hardware() completes. NIC resets already suffer from
-	 * an equivalent race. TODO: Fix this, perhaps by introducing an
-	 * intermediate degree of resetting-ness during which we can do MCDI
-	 * but no-one else can. */
-	ci_wmb();
-	nic->resetting = 0;
-
-	/****************************************************/
-	/* hardware bringup                                 */
-	/****************************************************/
-	/* Detecting hardware can be a slightly unreliable process;
-	   we want to make sure that we maximise our chances, so we
-	   loop a few times until all is good. */
-	for (count = 0; count < max_hardware_init_repeats; count++) {
-		rc = efhw_nic_init_hardware(nic, &ev_handler, net_dev->dev_addr);
-		if (rc >= 0)
-			break;
-
-		/* pain */
-		EFRM_TRACE("%s hardware init failed (%d, attempt %d of %d)",
-			   dev && dev_name(dev) ? dev_name(dev) : "?",
-			   rc, count + 1, max_hardware_init_repeats);
-	}
-	if (rc < 0) {
-		/* Again, PCI VFs may be available. */
-		EFRM_ERR("%s: ERROR: hardware init failed rc=%d",
-			 dev && dev_name(dev) ? dev_name(dev) : "?", rc);
-	}
-	efrm_resource_manager_add_total(EFRM_RESOURCE_VI,
-					efrm_nic->max_vis);
-	efrm_resource_manager_add_total(EFRM_RESOURCE_PD,
-					efrm_nic->max_vis);
-
-	/* Tell NIC to spread wakeup events. */
-	efrm_nic->rss_channel_count = res_dim->rss_channel_count;
-
-	EFRM_NOTICE("%s index=%d ifindex=%d",
-		    dev ? (dev_name(dev) ? dev_name(dev) : "?") : net_dev->name,
-		    nic->index, net_dev->ifindex);
-
-	efrm_nic->dmaq_state.unplugging = 0;
-
-	*lnic_inout = lnic;
-	efrm_nic_enable_post_reset(nic);
-	efrm_nic_post_reset(nic);
+	efrm_nic_bringup(lnic);
 
 	return 0;
 
 failed:
-	if (registered_nic)
-		efrm_driver_unregister_nic(efrm_nic);
-	if (constructed)
-		linux_efrm_nic_dtor(lnic);
-	kfree(lnic); /* safe in any case */
+	efrm_nic_destroy(lnic);
 	return rc;
+}
+
+int
+efrm_nic_create(void *drv_device, struct device *dev,
+		const struct efhw_device_type *dev_type,
+		struct net_device *net_dev,
+		struct linux_efhw_nic **lnic_inout,
+		const struct vi_resource_dimensions *res_dim,
+		unsigned timer_quantum_ns)
+{
+	struct linux_efhw_nic *lnic = *lnic_inout;
+	int rc = 0;
+
+	/* Allocate memory for the new adapter-structure. */
+	lnic = kzalloc(sizeof(*lnic), GFP_KERNEL);
+	if (lnic == NULL) {
+		EFRM_ERR("%s: ERROR: failed to allocate memory", __func__);
+		return -ENOMEM;
+	}
+
+	/* OS specific hardware mappings */
+	rc = linux_efrm_nic_ctor(lnic, dev, net_dev, res_dim, dev_type,
+				 timer_quantum_ns);
+	if (rc < 0) {
+		EFRM_ERR("%s: ERROR: linux_efrm_nic_ctor failed (%d)",
+			 __func__, rc);
+		goto failed;
+	}
+
+	lnic->drv_device = drv_device;
+
+	*lnic_inout = lnic;
+	return 0;
+
+failed:
+	kfree(lnic);
+	return rc;
+}
+
+void
+efrm_nic_destroy(struct linux_efhw_nic *lnic)
+{
+	linux_efrm_nic_dtor(lnic);
+	kfree(lnic);
+}
+
+int
+efrm_nic_register(struct linux_efhw_nic *lnic)
+{
+	/* Repeat the efrm_nic_add() workflow for the new NIC. */
+	int rc = efrm_driver_register_nic(&lnic->efrm_nic);
+	if (rc < 0) {
+		EFRM_ERR("%s: ERROR: efrm_driver_register_nic failed "
+			 "(%d)", __func__, rc);
+		return rc;
+	}
+
+	efrm_nic_bringup(lnic);
+
+	return 0;
 }
 
 

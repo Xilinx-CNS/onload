@@ -255,7 +255,7 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
   struct efhw_nic_ef10ct *ef10ct = NULL;
   struct vi_resource_dimensions res_dim = {};
   union efx_auxiliary_param_value val;
-  int rc, i;
+  int rc, i, shared_n = 0;
 
   if ( !efx_aux_abi_version_is_compat(edev->abi_version) ) {
     EFHW_ERR("Auxbus ABI version mismatch. %s requires %u.%u. Auxdev has %u.%u.",
@@ -300,16 +300,29 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
     goto fail2;
 
   rtnl_lock();
-  rc = efrm_nic_add(client, &auxdev->dev, &dev_type, val.net_dev, &lnic,
-                    &res_dim, 0);
-  if( rc < 0 ) {
-    rtnl_unlock();
+  rc = efrm_nic_create(client, &auxdev->dev, &dev_type, val.net_dev, &lnic,
+                       &res_dim, 0);
+  if( rc < 0 )
     goto fail3;
-  }
 
   nic = &lnic->efrm_nic.efhw_nic;
   nic->mtu = val.net_dev->mtu + ETH_HLEN;
   nic->arch_extra = ef10ct;
+
+  /* Init shared evqs for use with rx vis. */
+  for( i = 0; i < ef10ct->shared_n; i++ ) {
+    rc = ef10ct_nic_init_shared_evq(nic, i);
+    if( rc < 0 ) {
+      shared_n = i;
+      goto fail4;
+    }
+  }
+
+  shared_n = ef10ct->shared_n;
+
+  rc = efrm_nic_register(lnic);
+  if( rc < 0 )
+    goto fail4;
 
   /* Setting the nic here marks the device as ready for use. */
   ef10ct->nic = nic;
@@ -317,23 +330,18 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
   efrm_notify_nic_probe(nic, val.net_dev);
   rtnl_unlock();
 
-  /* Init shared evqs for use with rx vis. */
-  for( i = 0; i < ef10ct->shared_n; i++ ) {
-    rc = ef10ct_nic_init_shared_evq(nic, i);
-    if( rc < 0 )
-      goto fail4;
-  }
-
   efhw_init_debugfs_ef10ct(nic);
 
   return 0;
 
  fail4:
-  /* We failed evq reservation at `i`. Cleanup evqs in range [0..i) */
-  i--;
-  for(; i >= 0; i--)
+  /* Cleanup evqs in range [0..shared_n) where shared_n <= ef10ct->shared_n. */
+  for( i = 0; i < shared_n; i++ )
     ef10ct_nic_free_shared_evq(nic, i);
+
+  efrm_nic_destroy(lnic);
  fail3:
+  rtnl_unlock();
   ef10ct_vi_allocator_dtor(ef10ct);
  fail2:
   edev->llct_ops->base_ops->close(client);

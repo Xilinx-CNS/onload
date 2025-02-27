@@ -160,6 +160,8 @@ int efrm_nic_ctor(struct efrm_nic *efrm_nic,
 	INIT_LIST_HEAD(&efrm_nic->dmaq_state.q[EFHW_RXQ]);
 	INIT_LIST_HEAD(&efrm_nic->dmaq_state.q[EFHW_TXQ]);
 
+	efrm_nic->rss_channel_count = res_dim->rss_channel_count;
+
 	return 0;
 
 fail3:
