@@ -154,7 +154,8 @@ EFX_NEED_XDP_FLUSH	member	struct_net_device_ops	ndo_xdp_flush	include/linux/netd
 EFX_HAVE_XDP_PROG_ATTACHED	member	struct_netdev_bpf	prog_attached	include/linux/netdevice.h
 EFX_HAVE_XDP_PROG_ID	member	struct_netdev_bpf	prog_id	include/linux/netdevice.h
 EFX_HAVE_BPF_WARN_INVALID_XDP_ACTION_3PARAM	symtype	bpf_warn_invalid_xdp_action	include/linux/filter.h void(struct net_device *, struct bpf_prog *, u32)
-EFX_NEED_PAGE_FRAG_FREE	nsymbol	page_frag_free	include/linux/gfp.h
+EFX_HAVE_BPF_WARN_INVALID_XDP_ACTION_CONST	symtype	bpf_warn_invalid_xdp_action	include/linux/filter.h void(const struct net_device *, const struct bpf_prog *, u32)
+EFX_NEED_PAGE_FRAG_FREE	nsymbol	page_frag_free	include/linux/gfp.h include/linux/page_frag_cache.h
 EFX_HAVE_FREE_PAGE_FRAG	symbol	__free_page_frag	include/linux/gfp.h
 EFX_NEED_VOID_SKB_PUT	nsymtype	skb_put	include/linux/skbuff.h	void *(struct sk_buff *, unsigned int)
 EFX_HAVE_ETHTOOL_LINKSETTINGS	symbol	ethtool_link_ksettings	include/linux/ethtool.h

@@ -23,7 +23,7 @@ static int efx_tc_flow_block(enum tc_setup_type type, void *type_data,
 #endif
 
 static const struct rhashtable_params efx_tc_ct_zone_ht_params = {
-	.key_len	= offsetof(struct efx_tc_ct_zone, linkage),
+	.key_len	= sizeof_field(struct efx_tc_ct_zone, zone),
 	.key_offset	= 0,
 	.head_offset	= offsetof(struct efx_tc_ct_zone, linkage),
 };
