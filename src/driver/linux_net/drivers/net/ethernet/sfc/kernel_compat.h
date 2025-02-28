@@ -1241,6 +1241,11 @@ xdp_prepare_buff(struct xdp_buff *xdp, unsigned char *hard_start,
 }
 #endif
 
+#ifdef EFX_HAVE_BPF_WARN_INVALID_XDP_ACTION_CONST
+/* addition of 'const' changed the symtype but doesn't affect our use */
+#define EFX_HAVE_BPF_WARN_INVALID_XDP_ACTION_3PARAM
+#endif
+
 #ifdef EFX_NEED_VOID_SKB_PUT
 static inline void *efx_skb_put(struct sk_buff *skb, unsigned int len)
 {

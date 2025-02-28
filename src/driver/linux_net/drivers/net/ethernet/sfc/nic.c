@@ -346,13 +346,20 @@ struct efx_msi_context *efx_nic_alloc_irq(struct efx_probe_data *pd,
 	if (rc)
 		goto out_free;
 
+	pd->irqs_left--;
+	xa_unlock(&pd->irq_pool);
+
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_ALLOC_DYN)
 	irq = pci_irq_vector(pd->pci_dev, msi_context->index);
+	if (irq < 0) {
+		rc = irq;
+		xa_lock(&pd->irq_pool);
+		pd->irqs_left++;
+		goto out_free;
+	}
 #else
 	irq = pd->xentries[msi_context->index].vector;
 #endif
-	pd->irqs_left--;
-	xa_unlock(&pd->irq_pool);
 	*os_vector = irq;
 	return msi_context;
 
