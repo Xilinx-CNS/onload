@@ -125,6 +125,33 @@ static inline struct fown_struct* efrm_file_f_owner(struct file *file)
 #endif
 }
 
+
+static inline int
+oo_copy_file_owner(struct file *file_to, struct file *file_from)
+{
+#ifndef EFRM_F_OWNER_IS_VAL
+  /* linux 6.12 */
+  int rc;
+
+  if( efrm_file_f_owner(file_from) == NULL )
+    return 0;
+
+  rc = file_f_owner_allocate(file_to);
+  if( rc != 0 )
+    return rc;
+#endif
+
+  if(efrm_file_f_owner(file_from)->pid != 0) {
+    rcu_read_lock();
+    __f_setown(file_to, efrm_file_f_owner(file_from)->pid,
+               efrm_file_f_owner(file_from)->pid_type, 1);
+    rcu_read_unlock();
+  }
+  efrm_file_f_owner(file_to)->signum = efrm_file_f_owner(file_from)->signum;
+
+  return 0;
+}
+
 #ifdef EFRM_CLOEXEC_FILES_STRUCT
 /* linux 6.12+ */
 #define efrm_close_on_exec close_on_exec
