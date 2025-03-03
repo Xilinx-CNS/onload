@@ -177,6 +177,7 @@ EFRM_HAVE_FOLLOW_PTE symbol follow_pte include/linux/mm.h
 EFRM_HAVE_FOLLOW_PTE_VMA symtype follow_pte include/linux/mm.h int(struct vm_area_struct*, unsigned long, pte_t**, spinlock_t**)
 
 EFRM_HAVE_LINUX_TPH_H 			file	include/linux/pci-tph.h
+EFRM_HAVE_GET_FILE_RCU_FUNC symtype get_file_rcu include/linux/fs.h struct file*(struct file __rcu **)
 
 # TODO move onload-related stuff from net kernel_compat
 " | grep -E -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
