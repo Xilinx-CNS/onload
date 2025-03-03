@@ -116,9 +116,12 @@ obj-m := $(addsuffix /,$(DRIVER_SUBDIRS))
 
 AUTOCOMPAT := $(obj)/src/driver/linux_resource/autocompat.h
 LINUX_RESOURCE := $(src)/src/driver/linux_resource
+# Starting from linux-6.13 CURDIR is set to Onload build directory instead of
+# kernel source. Use objtree in this case.
+COMPAT_KPATH := $(if $(subst $(KBUILD_EXTMOD),,$(CURDIR)),$(CURDIR),$(objtree))
 $(AUTOCOMPAT): $(LINUX_RESOURCE)/kernel_compat.sh $(LINUX_RESOURCE)/kernel_compat_funcs.sh
 	@mkdir -p $(@D)
-	($< -k $(CURDIR) $(if $(filter 1,$(V)),-v,-q) > $@) || (rm -f $@ && false)
+	($< -k $(COMPAT_KPATH) $(if $(filter 1,$(V)),-v,-q) > $@) || (rm -f $@ && false)
 
 mkdirs:
 	@mkdir -p $(obj)/src/lib/efhw
@@ -251,7 +254,7 @@ $(scripts): $(KBUILDTOP)/driver/linux/%.sh: src/driver/linux/%.sh
 
 modules modules_install: $(OUTMAKEFILES)
 	$(Q)$(MAKE) -C $(KPATH) M=$(KBUILDTOP) \
-		"src=\$$(patsubst $(KBUILDTOP)%,$$PWD%,\$$(obj))" \
+		"src=\$$(patsubst $(KBUILDTOP)%,$$PWD%,\$$(realpath \$$(obj)))" \
 		"SRCPATH=$$PWD/src" \
 		'subdir-ccflags-y=$(subst ','\'',$(ONLOAD_CFLAGS))' \
 		MMAKE_IN_KBUILD=1 MMAKE_USE_KBUILD=1 MMAKE_NO_RULES=1 \
