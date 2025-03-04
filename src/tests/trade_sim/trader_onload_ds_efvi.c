@@ -350,6 +350,7 @@ static void ef_vi_init(struct client_state* cs)
   int ifindex;
   int64_t ctpio_mode;
   enum ef_vi_flags vi_flags = EF_VI_TX_CTPIO;
+  enum ef_pd_flags pd_flags = EF_PD_DEFAULT;
   if( cfg_ctpio_no_poison )
     vi_flags |= EF_VI_TX_CTPIO_NO_POISON;
 
@@ -357,7 +358,11 @@ static void ef_vi_init(struct client_state* cs)
   cs->pio_in_use = ! cfg_delegated;
   TRY( sock_get_ifindex(cs->tcp_sock, &ifindex) );
   TRY( ef_driver_open(&(cs->dh)) );
-  TRY( ef_pd_alloc(&(cs->pd), cs->dh, ifindex, EF_PD_DEFAULT) );
+  if( !ef_vi_capabilities_get(cs->dh, ifindex, EF_VI_CAP_EXTRA_DATAPATHS,
+			      &capability_val) &&
+      (capability_val & EF_VI_EXTRA_DATAPATH_EXPRESS) )
+    pd_flags |= EF_PD_EXPRESS; /* Prefer Express datapath if available */
+  TRY( ef_pd_alloc(&(cs->pd), cs->dh, ifindex, pd_flags) );
 
   /* If NIC supports CTPIO use it */
   if( ! cfg_pio_only &&
