@@ -9,11 +9,11 @@
  * Invoke with "--help" to see the options it supports.
  *
  * Example:
- * (host1)$ rx_timestamping
+ * (host1)$ EF_RX_TIMESTAMPING=2 rx_timestamping
  * UDP socket created, listening on port 9000
- * Selecting software timestamping mode.
+ * Selecting hardware timestamping mode.
  * (host2)$ echo payload | nc -u host1 9000
- * Packet 0 - 8 bytes timestamp 1395768726.443243000
+ * Packet 0 - 8 bytes timestamp timestamps 1460374944.990960465 ...
  */
 
 #include <unistd.h>
