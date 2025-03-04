@@ -55,7 +55,6 @@ struct configuration {
   char const*    cfg_ioctl;     /* e.g. eth6  - calls the ts enable ioctl */
   unsigned short cfg_port;      /* listen port */
   unsigned int   cfg_max_packets; /* Stop after this many (0=forever) */
-  int            cfg_templated; /* use templated send */
   int            cfg_ext;       /* Use extension API? Which one, v1 or v2? */
   bool           cfg_data;      /* Return a copy of TX packet.
                                  * Clears SOF_TIMESTAMPING_OPT_TSONLY */
@@ -88,7 +87,6 @@ void print_help(void)
          "\t--cmsg\tUse SOF_TIMESTAMPING_OPT_CMSG (off by default)\n"
 #ifdef ONLOADEXT_AVAILABLE
          "\t--stream\tSet ONLOAD_SOF_TIMESTAMPING_STREAM (proprietary format)\n"
-         "\t--templated\tUse templated sends.\n"
          "\t--ext\t\tUse extensions API rather than SO_TIMESTAMPING.\n"
          "\t--ext2\t\tUse extensions API v2 rather than SO_TIMESTAMPING.\n"
          "\t--rx\t\tTimestamp received packets.\n"
@@ -113,7 +111,6 @@ static void parse_options( int argc, char** argv, struct configuration* cfg )
     { "data", no_argument, 0, 'd' },
     { "cmsg", no_argument, 0, 'C' },
     { "stream", no_argument, 0, 's' },
-    { "templated", no_argument, 0, 'T' },
     { "ext", no_argument, 0, 'e' },
     { "ext2", no_argument, 0, 'E' },
     { "help", no_argument, 0, 'h' },
@@ -161,9 +158,6 @@ static void parse_options( int argc, char** argv, struct configuration* cfg )
         cfg->cfg_stream = true;
         break;
 #ifdef ONLOADEXT_AVAILABLE
-      case 'T':
-        cfg->cfg_templated = 1;
-        break;
       case 'e':
         cfg->cfg_ext = 1;
         break;
@@ -452,31 +446,6 @@ static void handle_time(struct msghdr* msg, struct configuration* cfg)
   }
 }
 
-#ifdef ONLOADEXT_AVAILABLE
-int templated_send(int handle, struct iovec* iov)
-{
-  onload_template_handle tmpl;
-  struct onload_template_msg_update_iovec update;
-
-  struct iovec initial;
-  initial.iov_base = iov->iov_base;
-  initial.iov_len = iov->iov_len;
-
-  update.otmu_base = iov->iov_base;
-  update.otmu_len = iov->iov_len;
-  update.otmu_offset = 0;
-  update.otmu_flags = 0;
-
-  /* Note: This is initialising, and then updating to the same values.
-   * A real application would update only a subset of the values, and
-   * usually with different values.
-   */
-  TRY( onload_msg_template_alloc(handle, &initial, 1, &tmpl, 0));
-  return onload_msg_template_update(handle, tmpl, &update, 1,
-                                    ONLOAD_TEMPLATE_FLAGS_SEND_NOW);
-}
-#endif
-
 /* Receive a packet, and echo back a response */
 int do_echo(int sock, unsigned int pkt_num, struct configuration* cfg)
 {
@@ -508,12 +477,7 @@ int do_echo(int sock, unsigned int pkt_num, struct configuration* cfg)
   /* echo back */
   msg.msg_controllen = 0;
   iov.iov_len = got;
-#ifdef ONLOADEXT_AVAILABLE
-  if ( cfg->cfg_templated )
-    TRY(templated_send(sock, &iov) );
-  else
-#endif
-    TRY(sendmsg(sock, &msg, 0));
+  TRY(sendmsg(sock, &msg, 0));
 
   return 0;
 }
