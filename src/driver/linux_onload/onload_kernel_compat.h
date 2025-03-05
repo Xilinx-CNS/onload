@@ -36,10 +36,18 @@ ci_call_usermodehelper(char *path, char **argv, char **envp, int wait);
 #endif
 
 
-#ifndef get_file_rcu
-/* Linux <= 4.0 */
-#define get_file_rcu(x) atomic_long_inc_not_zero(&(x)->f_count)
-#endif
+static inline struct file *ci_get_file_rcu(struct file **f)
+{
+#ifdef EFRM_HAVE_GET_FILE_RCU_FUNC
+  return get_file_rcu(f);
+#else
+  /* In linux < 6.7 get_file_rcu() was defined as a macro, like this:
+   * #define get_file_rcu(x) atomic_long_inc_not_zero(&(x)->f_count)
+   * Use the same implementation, but match new get_file_rcu() prototype. */
+  struct file *file = *f;
+  return atomic_long_inc_not_zero(&file->f_count) ? file : NULL;
+#endif /* EFRM_HAVE_GET_FILE_RCU_FUNC */
+}
 
 /* init_timer() was removed in Linux 4.15, with timer_setup()
  * replacing it */
