@@ -68,6 +68,12 @@
 #error "Unknown value for CI_CFG_PKT_BUF_SIZE"
 #endif
 
+#if CI_CFG_NIC_RESET_SUPPORT
+#define intfs_suspended(trs) ((trs)->intfs_suspended)
+#else
+#define intfs_suspended(trs) 0
+#endif
+
 /* Sentinel value indicating that an entry in the table of lists of ephemeral
  * ports is empty.  We can't use laddr field, because it may be IPv6, which
  * is unwieldy.  We use port_count field instead. */
@@ -187,6 +193,13 @@ static int efab_ipid_alloc(efab_ipid_cb_t* ipid);
 /* Release a block of IDs previosuly allocated through efab_ipid_alloc().
  * Base MUST be the base address returned by efab_ipid_alloc(). */
 static int efab_ipid_free(efab_ipid_cb_t* ipid, int base);
+
+static int
+efab_tcp_helper_iobufset_map(tcp_helper_resource_t* trs,
+                             struct oo_buffer_pages* pages,
+                             int n_hw_pages,
+                             struct oo_iobufset** all_out,
+                             uint64_t* hw_addrs, int* page_order);
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
 /*----------------------------------------------------------------------------
@@ -972,6 +985,48 @@ void tcp_helper_get_filter_params(tcp_helper_resource_t* trs, int hwport,
 }
 
 
+int tcp_helper_rxq_map(tcp_helper_resource_t* trs, int intf_i, int qix,
+                       int n_hugepages, const char** superbufs,
+                       ef_addr** hw_addrs)
+{
+  struct efrm_pd *pd = efrm_vi_get_pd(tcp_helper_vi(trs, intf_i));
+  struct tcp_helper_nic *nic = &trs->nic[intf_i];
+  struct oo_buffer_pages *oobp;
+  struct oo_iobufset* iobs;
+  int map_order;
+  int rc;
+  int i;
+
+  *hw_addrs = kmalloc(n_hugepages * sizeof(resource_size_t) * 512, GFP_KERNEL);
+  if( !*hw_addrs )
+    return -ENOMEM;
+
+  rc = oo_iobufset_init(&oobp, n_hugepages);
+  if( rc < 0 ) {
+    kfree(*hw_addrs);
+    *hw_addrs = NULL;
+    return -ENOMEM;
+  }
+
+  for( i = 0; i < n_hugepages; i++ ) {
+    ci_assert(virt_addr_valid(superbufs[i*2]));
+    oobp->pages[i] = virt_to_page(superbufs[i * 2]);
+  }
+
+  rc = oo_iobufset_resource_alloc(oobp, pd, &iobs, *hw_addrs,
+                                  intfs_suspended(trs) & (1 << intf_i),
+                                  &map_order);
+  if( rc < 0 ) {
+    kfree(*hw_addrs);
+    *hw_addrs = NULL;
+    oo_iobufset_kfree(oobp);
+  }
+
+  nic->thn_efct_iobs[qix] = iobs;
+  return rc;
+}
+
+
 int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
                                const struct efx_filter_spec* spec, int rxq,
                                bool replace)
@@ -987,6 +1042,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
   nic = efrm_client_get_nic(trs->nic[intf_i].thn_oo_nic->efrm_client);
   if( efhw_nic_max_shared_rxqs(nic) ) {
     struct efrm_vi* vi_rs = tcp_helper_vi(trs, intf_i);
+    ci_netif_state_nic_t* ni_nic = &trs->netif.state->nic[intf_i];
     ef_vi* vi = ci_netif_vi(&trs->netif, intf_i);
     int qix;
     int rc;
@@ -1014,6 +1070,13 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
     /* FIXME make this less clumsy */
     if( vi->nic_type.arch == EF_VI_ARCH_EF10CT ) {
       efrm_rxq_refresh_kernel(vi->dh, rxq, vi->efct_rxqs.q[qix].superbufs);
+      rc = tcp_helper_rxq_map(trs, intf_i, qix, hugepages,
+                              vi->efct_rxqs.q[qix].superbufs,
+                              &vi->efct_rxqs.q[qix].dma_addrs);
+      /* FIXME EF10CT sort out the error path here */
+      if( rc != 0 )
+        ci_log("%s: ERROR: tcp_helper_rxq_map failed (%d)", __func__, rc);
+      vi->owner_id = ni_nic->pd_owner;
       efct_ubufs_attach_internal(vi, qix, rxq, hugepages * CI_EFCT_SUPERBUFS_PER_PAGE);
     }
     else {
@@ -1599,9 +1662,10 @@ static void tcp_helper_post_superbuf(ef_vi* vi, int ix, int sbid, bool sentinel)
 {
   ef_vi_efct_rxq *rxq = &vi->efct_rxqs.q[ix];
   ef_vi_efct_rxq_state *efct_state = efct_get_rxq_state(vi, ix);
-  resource_size_t addr = (resource_size_t)rxq->superbufs[sbid];
+  resource_size_t dma_addr = rxq->dma_addrs[sbid * 256];
 
-  efhw_nic_post_superbuf(vi->dh, efct_state->qid, addr, sentinel, false, -1);
+  efhw_nic_post_superbuf(vi->dh, efct_state->qid, dma_addr, sentinel, false,
+                         vi->owner_id);
   // FIXME should we check/handle errors?
 }
 
@@ -1981,11 +2045,6 @@ static void vi_complete(void *completion_void)
   complete((struct completion *)completion_void);
 }
 
-#if CI_CFG_NIC_RESET_SUPPORT
-#define intfs_suspended(trs) ((trs)->intfs_suspended)
-#else
-#define intfs_suspended(trs) 0
-#endif
 
 static void release_pkts(tcp_helper_resource_t* trs)
 {
@@ -2030,6 +2089,8 @@ static void detach_efct_rxqs(tcp_helper_resource_t* trs)
       if( trs_nic->thn_efct_rxq[rxq_i] ) {
         efrm_rxq_release(trs_nic->thn_efct_rxq[rxq_i]);
         trs_nic->thn_efct_rxq[rxq_i] = NULL;
+        oo_iobufset_resource_release(trs_nic->thn_efct_iobs[rxq_i], 0);
+        trs_nic->thn_efct_iobs[rxq_i] = NULL;
       }
     }
   }
@@ -2038,6 +2099,7 @@ static void detach_efct_rxqs(tcp_helper_resource_t* trs)
 static void release_vi(tcp_helper_resource_t* trs)
 {
   int intf_i;
+  int i;
 
   /* Flush vis first to ensure our bufs won't be used any more */
   OO_STACK_FOR_EACH_INTF_I(&trs->netif, intf_i) {
@@ -2074,8 +2136,11 @@ static void release_vi(tcp_helper_resource_t* trs)
       efrm_ctpio_unmap_kernel(tcp_helper_vi(trs, intf_i),
                               trs_nic->thn_ctpio_io_mmap);
 #endif
-    if( vi->efct_rxqs.ops )
+    if( vi->efct_rxqs.ops ) {
       vi->efct_rxqs.ops->cleanup(vi);
+      for( i = 0; i < EF_VI_MAX_EFCT_RXQS; i++ )
+        kfree(vi->efct_rxqs.q[i].dma_addrs);
+    }
     efrm_vi_resource_release_flushed(tcp_helper_vi(trs, intf_i));
     trs->nic[intf_i].thn_vi_rs = NULL;
     CI_DEBUG_ZERO(ci_netif_vi(&trs->netif, intf_i));

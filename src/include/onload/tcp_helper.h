@@ -43,6 +43,7 @@ struct tcp_helper_nic {
   void*                thn_ctpio_io_mmap;
 #endif
   struct efrm_efct_rxq* thn_efct_rxq[EF_VI_MAX_EFCT_RXQS];
+  struct oo_iobufset*  thn_efct_iobs[EF_VI_MAX_EFCT_RXQS];
 };
 
 

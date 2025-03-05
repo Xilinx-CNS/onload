@@ -1589,10 +1589,7 @@ static int ef10ct_rxq_post_superbuf(struct efhw_nic *nic, int instance,
   if( reg == NULL )
     return -EINVAL;
 
-  if( owner_id == -1 )
-    /* Not valid, but allow onload to work on systems without iommu for now */
-    addr_to_post = virt_to_phys((void*)dma_addr);
-  else
+  if( owner_id > 0 )
     addr_to_post = translate_dma_address(nic, dma_addr, owner_id);
 
   CI_POPULATE_QWORD_3(qword, EFCT_RX_BUFFER_POST_ADDRESS,

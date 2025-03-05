@@ -867,6 +867,8 @@ typedef struct {
   const char* superbuf;
   const void* mappings;
 #endif
+  /* FIXME EF10CT to be removed */
+  ef_addr* dma_addrs;
 } ef_vi_efct_rxq;
 
 typedef void (*ef_vi_dump_log_fn_t)(void* log_fn_arg, const char* fmt, ...)
@@ -1054,6 +1056,8 @@ typedef struct ef_vi {
   unsigned                      vi_i;
   /** fd used for original initialisation */
   ef_driver_handle              dh;
+  /* FIXME EF10CT, this doesn't belong here */
+  int owner_id;
 
   /** The length of a receive buffer */
   unsigned                      rx_buffer_len;
