@@ -340,7 +340,7 @@ efab_tcp_helper_detach_file(tcp_helper_endpoint_t* ep,
   filp = ep->file_ptr;
   /* filp might be NULL if we raced with FD close, other than that
    * filp is still valid even if close completed concurrently thanks to rcu_lock */
-  if( filp == NULL || ! get_file_rcu(filp) ) {
+  if( filp == NULL || IS_ERR_OR_NULL(ci_get_file_rcu(&filp)) ) {
     /* filp is being freed concurrently, best to back off until it is completed */
     OO_DEBUG_TCPH(ci_log("%s: pid=%d fd=%d => is being freed", __FUNCTION__, pid, fd));
     CITP_STATS_NETIF_INC(&trs->netif, sock_attach_fd_detach_fail_soft);
