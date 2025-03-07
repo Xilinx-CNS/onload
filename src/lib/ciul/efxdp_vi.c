@@ -264,7 +264,25 @@ static void efxdp_ef_vi_receive_push(ef_vi* vi)
 static int efxdp_ef_vi_receive_get_timestamp(struct ef_vi* vi, const void* pkt,
                                              ef_precisetime* ts_out)
 {
-  return -EOPNOTSUPP;
+  const uint64_t ns_to_sec = 1000UL * 1000 * 1000;
+  const struct onload_xdp_rx_meta {
+#define ONLOAD_XDP_RX_META_TSTAMP 0x1
+    uint64_t flags;
+    uint64_t tstamp;
+  } *meta = pkt;
+
+  /* pkt points to start of packet data. meta precedes that */
+  meta--;
+  if (!(meta->flags & ONLOAD_XDP_RX_META_TSTAMP)) {
+    *ts_out = (ef_precisetime) { 0 };
+    return -ENODATA;
+  }
+
+  ts_out->tv_sec = meta->tstamp / ns_to_sec;
+  ts_out->tv_nsec = meta->tstamp % ns_to_sec;
+  ts_out->tv_nsec_frac = 0;
+  ts_out->tv_flags = 0;
+  return 0;
 }
 
 static void efxdp_ef_eventq_prime(ef_vi* vi)
