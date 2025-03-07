@@ -475,28 +475,37 @@ int efx_reflash_flash_firmware(struct efx_nic *efx, const struct firmware *fw)
 
 	devlink_flash_update_status_notify(devlink, "Checking update", NULL, 0, 0);
 
-	rc = efx_reflash_parse_firmware_data(fw, &type, &data_subtype, &data,
-					     &data_size);
-	if (rc) {
-		netif_err(efx, drv, efx->net_dev,
-			  "Firmware image validation check failed with error %d\n",
-			  rc);
-		goto out;
-	}
+	if (efx->type->flash_auto_partition) {
+		/* NIC wants entire FW file including headers;
+		 * FW will validate 'subtype' if there is one
+		 */
+		type = NVRAM_PARTITION_TYPE_AUTO;
+		data = fw->data;
+		data_size = fw->size;
+	} else {
+		rc = efx_reflash_parse_firmware_data(fw, &type, &data_subtype, &data,
+						     &data_size);
+		if (rc) {
+			netif_err(efx, drv, efx->net_dev,
+				  "Firmware image validation check failed with error %d\n",
+				  rc);
+			goto out;
+		}
 
-	rc = efx_mcdi_nvram_metadata(efx, type, &subtype, NULL, NULL, 0);
-	if (rc) {
-		netif_err(efx, drv, efx->net_dev,
-			  "Metadata query for NVRAM partition %#x failed with error %d\n",
-			  type, rc);
-		goto out;
-	}
+		rc = efx_mcdi_nvram_metadata(efx, type, &subtype, NULL, NULL, 0);
+		if (rc) {
+			netif_err(efx, drv, efx->net_dev,
+				  "Metadata query for NVRAM partition %#x failed with error %d\n",
+				  type, rc);
+			goto out;
+		}
 
-	if (subtype != data_subtype) {
-		netif_err(efx, drv, efx->net_dev,
-			  "Firmware image is not appropriate for this adapter");
-		rc = -EINVAL;
-		goto out;
+		if (subtype != data_subtype) {
+			netif_err(efx, drv, efx->net_dev,
+				  "Firmware image is not appropriate for this adapter");
+			rc = -EINVAL;
+			goto out;
+		}
 	}
 
 	rc = efx_mcdi_nvram_info(efx, type, &size, &erase_align, &write_align,
