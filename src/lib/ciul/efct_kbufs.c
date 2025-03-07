@@ -261,6 +261,24 @@ static void efct_kbufs_cleanup(ef_vi* vi)
 }
 #endif
 
+static void efct_kbufs_dump_stats(struct ef_vi* vi, ef_vi_dump_log_fn_t logger,
+                                  void* log_arg)
+{
+  int i;
+
+  for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
+    const struct efab_efct_rxq_uk_shm_q* q = &vi->efct_rxqs.shm->q[i];
+    if( ! q->superbuf_pkts )
+      continue;
+    logger(log_arg, "  rxq[%d]: hw=%d cfg=%u pkts=%u in=%u out=%u",
+           i, q->qid, q->config_generation, q->superbuf_pkts,
+           q->rxq.added - q->rxq.removed, q->freeq.added - q->freeq.removed);
+    logger(log_arg, "  rxq[%d]: nospc=%u full=%u nobufs=%u skipped=%u",
+           i, q->stats.no_rxq_space, q->stats.too_many_owned, q->stats.no_bufs,
+           q->stats.skipped_bufs);
+  }
+}
+
 int efct_kbufs_init_internal(ef_vi* vi,
                              struct efab_efct_rxq_uk_shm_base *shm,
                              void* space)
@@ -313,6 +331,7 @@ int efct_kbufs_init_internal(ef_vi* vi,
   rxqs->ops.attach = efct_kbufs_attach;
   rxqs->ops.prime = efct_kbufs_prime;
   rxqs->ops.cleanup = efct_kbufs_cleanup_internal;
+  rxqs->ops.dump_stats = efct_kbufs_dump_stats;
 
   vi->efct_rxqs.active_qs = &shm->active_qs;
   vi->efct_rxqs.ops = &rxqs->ops;

@@ -675,7 +675,6 @@ static void ci_netif_dump_vi(ci_netif* ni, int intf_i, oo_dump_log_fn_t logger,
 {
   ci_netif_state_nic_t* nic = &ni->state->nic[intf_i];
   ef_vi* vi = ci_netif_vi(ni, intf_i);
-  int i;
   const char *irq = "irq";
   const char *channel = "channel";
 
@@ -706,25 +705,14 @@ static void ci_netif_dump_vi(ci_netif* ni, int intf_i, oo_dump_log_fn_t logger,
   logger(log_arg, "  evq: sync_synced=%x sync_flags=%x",
          vi->ep_state->evq.sync_timestamp_synchronised,
          vi->ep_state->evq.sync_flags);
-  if( vi->efct_rxqs.shm ) {
-    for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
-      const struct efab_efct_rxq_uk_shm_q* q = &vi->efct_rxqs.shm->q[i];
-      if( ! q->superbuf_pkts )
-        continue;
-      logger(log_arg, "  rxq[%d]: hw=%d cfg=%u pkts=%u in=%u out=%u",
-             i, q->qid, q->config_generation, q->superbuf_pkts,
-             q->rxq.added - q->rxq.removed, q->freeq.added - q->freeq.removed);
-      logger(log_arg, "  rxq[%d]: nospc=%u full=%u nobufs=%u skipped=%u",
-             i, q->stats.no_rxq_space, q->stats.too_many_owned, q->stats.no_bufs,
-             q->stats.skipped_bufs);
-    }
-  }
-  else {
+  if( vi->efct_rxqs.ops )
+    vi->efct_rxqs.ops->dump_stats(vi, logger, log_arg);
+  else
     logger(log_arg, "  rxq: cap=%d lim=%d spc=%d level=%d total_desc=%d",
            ef_vi_receive_capacity(vi), ni->state->rxq_limit,
            ci_netif_rx_vi_space(ni, vi), ef_vi_receive_fill_level(vi),
            vi->ep_state->rxq.removed);
-  }
+
   logger(log_arg, "  txq: cap=%d lim=%d spc=%d level=%d pkts=%d oflow_pkts=%d",
          ef_vi_transmit_capacity(vi), ef_vi_transmit_capacity(vi),
          ef_vi_transmit_space(vi), ef_vi_transmit_fill_level(vi),

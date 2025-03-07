@@ -3,9 +3,9 @@
 #ifndef __ONLOAD_DRV_DUMP_TO_USER_H__
 #define __ONLOAD_DRV_DUMP_TO_USER_H__
 
+#include <etherfabric/ef_vi.h>
 
-typedef void (*oo_dump_log_fn_t)(void* log_fn_arg, const char* fmt, ...)
-  __attribute__((format(printf,2,3)));
+typedef ef_vi_dump_log_fn_t oo_dump_log_fn_t;
 
 typedef void (*oo_dump_fn_t)(void* oo_dump_fn_arg, oo_dump_log_fn_t log,
                              void* log_arg);

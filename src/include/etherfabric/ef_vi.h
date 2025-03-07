@@ -869,6 +869,9 @@ typedef struct {
 #endif
 } ef_vi_efct_rxq;
 
+typedef void (*ef_vi_dump_log_fn_t)(void* log_fn_arg, const char* fmt, ...)
+  __attribute__((format(printf,2,3)));
+
 /*! \brief EFCT RX buffer memory management operations
 **
 ** Users should not access this structure.
@@ -895,6 +898,7 @@ typedef struct {
   int  (*prime)(struct ef_vi*, ef_driver_handle dh);
   /** De-allocate internal resources */
   void (*cleanup)(struct ef_vi*);
+  void (*dump_stats)(struct ef_vi*, ef_vi_dump_log_fn_t logger, void* log_arg);
   /** Arbitrary user data available when overriding these operations */
   uintptr_t user_data;
 } ef_vi_efct_rxq_ops;

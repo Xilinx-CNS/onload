@@ -468,6 +468,39 @@ static void efct_ubufs_cleanup(ef_vi* vi)
 #endif
 }
 
+static void efct_ubufs_dump_stats(ef_vi* vi, ef_vi_dump_log_fn_t logger,
+                                  void* log_arg)
+{
+  const struct efct_ubufs* ubufs = const_ubufs(vi);
+  int ix;
+
+  for( ix = 0; ix < vi->efct_rxqs.max_qs; ++ix ) {
+    struct ef_shrub_client_state* client_state = ubufs->q[ix].shrub_client.state;
+    ef_vi_efct_rxq* efct_rxq = &vi->efct_rxqs.q[ix];
+    ef_vi_rxq_state* qs = &vi->ep_state->rxq;
+
+    if( *efct_rxq->live.superbuf_pkts != 0 ) {
+      logger(log_arg, "  rxq[%d]: hw=%d cfg=%u pkts=%u", ix,
+             efct_rxq->qid, efct_rxq->config_generation,
+             *efct_rxq->live.superbuf_pkts);
+      if( client_state ) {
+        logger(log_arg, "  rxq[%d]: server_fifo_size=%" CI_PRIu64
+               " server_fifo_idx=%" CI_PRIu64, ix,
+               client_state->metrics.server_fifo_size,
+               client_state->server_fifo_index);
+        logger(log_arg, "  rxq[%d]: client_fifo_size=%" CI_PRIu64
+               " client_fifo_idx=%" CI_PRIu64, ix,
+               client_state->metrics.client_fifo_size,
+               client_state->client_fifo_index);
+      } else {
+        logger(log_arg, "  rxq[%d]: fifo_count_hw=%" CI_PRIu16
+               " fifo_count_sw=%" CI_PRIu16, ix, qs->efct_state[ix].fifo_count_hw,
+               qs->efct_state[ix].fifo_count_sw);
+      }
+    }
+  }
+}
+
 int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
 {
   struct efct_ubufs* ubufs;
@@ -513,6 +546,7 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
   ubufs->ops.refresh = efct_ubufs_refresh;
   ubufs->ops.prime = efct_ubufs_prime;
   ubufs->ops.cleanup = efct_ubufs_cleanup;
+  ubufs->ops.dump_stats = efct_ubufs_dump_stats;
 
 #ifndef __KERNEL__
   if( vi->vi_flags & EF_VI_RX_PHYS_ADDR )

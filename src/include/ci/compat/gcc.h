@@ -63,6 +63,12 @@ typedef __u64                 ci_uintptr_t;
 # define CI_PRIx32            "x"
 # define CI_PRIX32            "X"
 
+# define CI_PRId16            "d"
+# define CI_PRIi16            "i"
+# define CI_PRIo16            "o"
+# define CI_PRIu16            "u"
+# define CI_PRIx16            "hx"
+
 #else
 
 # include <stdint.h>
@@ -89,6 +95,12 @@ typedef uintptr_t             ci_uintptr_t;
 # define CI_PRIu32            PRIu32
 # define CI_PRIx32            PRIx32
 # define CI_PRIX32            PRIX32
+
+# define CI_PRId16            PRId16
+# define CI_PRIi16            PRIi16
+# define CI_PRIo16            PRIo16
+# define CI_PRIu16            PRIu16
+# define CI_PRIx16            PRIx16
 
 #endif
 
