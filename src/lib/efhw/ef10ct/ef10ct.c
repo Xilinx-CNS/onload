@@ -1595,10 +1595,10 @@ static int ef10ct_rxq_post_superbuf(struct efhw_nic *nic, int instance,
   else
     addr_to_post = translate_dma_address(nic, dma_addr, owner_id);
 
-  CI_POPULATE_QWORD_3(qword,
-                      EFCT_TEST_PAGE_ADDRESS, addr_to_post >> CI_PAGE_SHIFT,
-                      EFCT_TEST_SENTINEL_VALUE, sentinel,
-                      EFCT_TEST_ROLLOVER, rollover);
+  CI_POPULATE_QWORD_3(qword, EFCT_RX_BUFFER_POST_ADDRESS,
+                      addr_to_post >> CI_PAGE_SHIFT,
+                      EFCT_RX_BUFFER_POST_SENTINEL, sentinel,
+                      EFCT_RX_BUFFER_POST_ROLLOVER, rollover);
 
   if ((nic->devtype.arch == EFHW_ARCH_EF10CT) &&
       (nic->devtype.variant == 'L'))
