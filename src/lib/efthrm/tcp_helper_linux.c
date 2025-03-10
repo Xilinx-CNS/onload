@@ -414,7 +414,7 @@ static unsigned efab_linux_tcp_helper_fop_poll_tcp(struct file* filp,
   efab_fop_poll__prime_if_needed(trs, tep_p,
                                  SOCK_POLL_AWAITING_EVENTS(mask, wait),
                                  enable_interrupts);
-  if( ! poll_does_not_wait(wait) && s->b.state == CI_TCP_CLOSED &&
+  if( wait && wait->_qproc && s->b.state == CI_TCP_CLOSED &&
       tep_p->os_socket  != NULL) {
     /* From the closed state, handover is possible.  We should add OS
      * socket waitqueue to the poll table.
