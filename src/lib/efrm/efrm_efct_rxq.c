@@ -201,7 +201,7 @@ static void free_rxq(struct efhw_efct_rxq *rxq)
 #endif
 
 int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix, bool timestamp_req,
-                   size_t n_hugepages,
+                   bool interrupt_req, size_t n_hugepages,
                    struct oo_hugetlb_allocator *hugetlb_alloc,
                    struct efrm_efct_rxq **rxq_out)
 {
@@ -212,6 +212,7 @@ int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix, bool timestamp_req,
 	struct efhw_shared_bind_params params = {
 		.qid = qid,
 		.timestamp_req = timestamp_req,
+		.interrupt_req = interrupt_req,
 		.n_hugepages = n_hugepages,
 		.hugetlb_alloc = hugetlb_alloc,
 		.shm = NULL,

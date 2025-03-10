@@ -16,7 +16,8 @@ extern struct efrm_resource* efrm_rxq_to_resource(struct efrm_efct_rxq *ext);
 extern struct efrm_efct_rxq* efrm_rxq_from_resource(struct efrm_resource *rs);
 
 extern int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix,
-                          bool timestamp_req, size_t n_hugepages,
+                          bool timestamp_req, bool interrupt_req,
+                          size_t n_hugepages,
                           struct oo_hugetlb_allocator *hugetlb_alloc,
                           struct efrm_efct_rxq **rxq_out);
 

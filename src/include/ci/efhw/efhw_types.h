@@ -153,6 +153,7 @@ struct efhw_efct_rxq;
 struct efhw_shared_bind_params {
 	int qid;
 	bool timestamp_req;
+	bool interrupt_req; /* EF10CT only */
 	size_t n_hugepages;
 	struct oo_hugetlb_allocator *hugetlb_alloc;
 	struct efab_efct_rxq_uk_shm_q *shm;

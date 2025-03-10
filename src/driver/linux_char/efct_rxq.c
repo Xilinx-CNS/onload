@@ -80,7 +80,7 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
   }
 
   rc = efrm_rxq_alloc(vi, alloc->in_qid, shm_ix,
-                      alloc->in_timestamp_req, alloc->in_n_hugepages,
+                      alloc->in_timestamp_req, false, alloc->in_n_hugepages,
                       hugetlb_alloc, &rxq);
   if( (alloc->in_flags & EFCH_EFCT_RXQ_FLAG_UBUF) == 0 )
     oo_hugetlb_allocator_put(hugetlb_alloc);

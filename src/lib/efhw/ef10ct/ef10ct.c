@@ -834,6 +834,8 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
   struct efx_auxdev_rpc rpc;
   void **post_buffer_addr;
   bool suppress_events = false;
+  bool real_evq = params->interrupt_req &&
+                  params->wakeup_instance < ef10ct->evq_n;
 
   EFHW_WARN("%s: evq 0x%x, rxq 0x%x", __func__, params->wakeup_instance,
             params->qid);
@@ -858,16 +860,24 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
   rxq_handle = ef10ct_reconstruct_queue_handle(rxq_num,
                                                EF10CT_QUEUE_HANDLE_TYPE_RXQ);
 
-  /* FIXME EF10CT the evq used here is not mapped to userspace, so isn't part
-   * of the higher level resource management. We need to decide what evq to
-   * attach to - a shared queue with rx event suppression, or a dedicated
-   * queue. Currently we only support using a single shared queue. When we
-   * start supporting onload with interrupts we'll need to be able to alloc
-   * and attach to an evq. */
-  EFHW_ASSERT(ef10ct->shared_n >= 1 );
-  evq = ef10ct->shared[0].evq_id;
-  EFHW_WARN("%s: Using shared evq 0x%x", __func__, evq);
-  suppress_events = true;
+  /* Choose which evq to bind this rxq to. */
+  if( !real_evq ) {
+    /* FIXME EF10CT the evq used here is not mapped to userspace, so isn't part
+     * of the higher level resource management. We need to decide which shared
+     * evq to attach to - one with rx event suppression, or not.
+     * Currently we only support using a single shared queue. In order to
+     * support interrupt driven onload for all rxqs we'll have to choose an
+     * appropriate evq. */
+    EFHW_ASSERT(ef10ct->shared_n >= 1 );
+    evq = ef10ct->shared[0].evq_id;
+    EFHW_WARN("%s: Using shared evq 0x%x", __func__, evq);
+    suppress_events = true;
+  }
+  else {
+    evq = ef10ct_reconstruct_queue_handle(params->wakeup_instance,
+                                          EF10CT_QUEUE_HANDLE_TYPE_EVQ);
+    EFHW_WARN("%s: Using non-shared evq 0x%x", __func__, evq);
+  }
 
   EFHW_MCDI_INITIALISE_BUF(in);
 
