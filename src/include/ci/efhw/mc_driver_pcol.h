@@ -5150,8 +5150,15 @@
  * indicating the current NIC time
  */
 #define          MC_CMD_PTP_OP_TIME_EVENT_SUBSCRIBE_V2 0x1c
+/* enum: For X4 and later NICs. Packet timestamps and time sync events have
+ * IS_SET and IN_SYNC flags, that indicates whether time is updated and if it
+ * is in sync with host. Once set, IN_SYNC flag is cleared by hardware after a
+ * software configurable time out. Host driver need to query what is set and
+ * what is maximum supported interval, this MCDI can be used to query these.
+ */
+#define          MC_CMD_PTP_OP_GET_SYNC_TIMEOUT 0x1d
 /* enum: Above this for future use. */
-#define          MC_CMD_PTP_OP_MAX 0x1d
+#define          MC_CMD_PTP_OP_MAX 0x1e
 
 /* MC_CMD_PTP_IN_ENABLE msgrequest */
 #define    MC_CMD_PTP_IN_ENABLE_LEN 16
@@ -5606,6 +5613,13 @@
 #define       MC_CMD_PTP_IN_SET_SYNC_STATUS_RESERVED0_LEN 4
 #define       MC_CMD_PTP_IN_SET_SYNC_STATUS_RESERVED1_OFST 20
 #define       MC_CMD_PTP_IN_SET_SYNC_STATUS_RESERVED1_LEN 4
+
+/* MC_CMD_PTP_IN_GET_SYNC_TIMEOUT msgrequest */
+#define    MC_CMD_PTP_IN_GET_SYNC_TIMEOUT_LEN 8
+/*            MC_CMD_PTP_IN_CMD_OFST 0 */
+/*            MC_CMD_PTP_IN_CMD_LEN 4 */
+/*            MC_CMD_PTP_IN_PERIPH_ID_OFST 4 */
+/*            MC_CMD_PTP_IN_PERIPH_ID_LEN 4 */
 
 /* MC_CMD_PTP_OUT msgresponse */
 #define    MC_CMD_PTP_OUT_LEN 0
