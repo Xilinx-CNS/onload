@@ -50,6 +50,7 @@ extern int test_sanity(void);
 extern int test_sanity_no5tuple(void);
 extern int test_multicast_sanity(void);
 extern int test_replication_sanity(void);
+extern int test_multipath_replication(void);
 extern int test_namespace_sanity(void);
 extern int test_namespace_macvlan_move(void);
 extern int test_llct_sanity(void);
