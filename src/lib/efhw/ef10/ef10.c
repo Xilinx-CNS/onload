@@ -874,10 +874,54 @@ ef10_mcdi_cmd_driver_event(struct efhw_nic *nic, uint64_t data, uint32_t evq)
 }
 
 
+#ifndef MC_CMD_PTP_OUT_TIME_EVENT_SUBSCRIBE_OUT_LEN
+#define MC_CMD_PTP_OUT_TIME_EVENT_SUBSCRIBE_OUT_LEN	\
+	MC_CMD_PTP_OUT_TIME_EVENT_SUBSCRIBE_LEN
+#endif
+
+
 static int
-_ef10_mcdi_cmd_ptp_time_event_subscribe(struct efhw_nic *nic, uint32_t evq,
-                                        unsigned* out_flags,
-                                        const char* caller)
+_ef10_mcdi_cmd_ptp_time_event_subscribe_v2(struct efhw_nic *nic, uint32_t evq,
+                                           unsigned* out_flags,
+                                           const char* caller)
+{
+  int rc;
+  size_t out_size;
+  int sync_flag = EFHW_VI_CLOCK_SYNC_STATUS;
+
+  EFHW_MCDI_DECLARE_BUF(in, MC_CMD_PTP_IN_TIME_EVENT_SUBSCRIBE_V2_LEN);
+  EFHW_MCDI_INITIALISE_BUF(in);
+
+  EFHW_MCDI_SET_DWORD(in, PTP_IN_OP, MC_CMD_PTP_OP_TIME_EVENT_SUBSCRIBE_V2);
+  EFHW_MCDI_SET_DWORD(in, PTP_IN_PERIPH_ID, 0);
+  EFHW_MCDI_SET_DWORD(in, PTP_IN_TIME_EVENT_SUBSCRIBE_V2_QUEUE_ID, evq);
+  EFHW_MCDI_POPULATE_DWORD_1(in, PTP_IN_TIME_EVENT_SUBSCRIBE_V2_FLAGS,
+    PTP_IN_TIME_EVENT_SUBSCRIBE_V2_REPORT_SYNC_STATUS, 1);
+
+  /* We try subscribing to time sync events and requesting the sync status, but
+   * this setting is global so must be set to the same value as was used in the
+   * first subscription request. In absence of a way to find out what that was,
+   * we try subscribing first requesting time sync and secondly without. */
+  rc = ef10_mcdi_rpc(nic, MC_CMD_PTP, sizeof(in), 0, &out_size, in, NULL);
+  if( rc < 0 ) {
+    sync_flag = 0;
+    EFHW_MCDI_POPULATE_DWORD_1(in, PTP_IN_TIME_EVENT_SUBSCRIBE_V2_FLAGS,
+      PTP_IN_TIME_EVENT_SUBSCRIBE_V2_REPORT_SYNC_STATUS, 0);
+    rc = ef10_mcdi_rpc(nic, MC_CMD_PTP, sizeof(in), 0, &out_size, in, NULL);
+  }
+
+  /* TODO: uncomment this when we can know which version to call */
+  /* MCDI_CHECK(MC_CMD_PTP_OUT_TIME_EVENT_SUBSCRIBE, rc, out_size, 0); */
+  if (rc == 0 && out_flags != NULL)
+    *out_flags |= sync_flag;
+  return rc;
+}
+
+
+static int
+_ef10_mcdi_cmd_ptp_time_event_subscribe_v1(struct efhw_nic *nic, uint32_t evq,
+                                           unsigned* out_flags,
+                                           const char* caller)
 {
   int rc;
   size_t out_size;
@@ -899,13 +943,25 @@ _ef10_mcdi_cmd_ptp_time_event_subscribe(struct efhw_nic *nic, uint32_t evq,
     rc = ef10_mcdi_rpc(nic, MC_CMD_PTP, sizeof(in), 0, &out_size, in, NULL);
   }
 
-#ifndef MC_CMD_PTP_OUT_TIME_EVENT_SUBSCRIBE_OUT_LEN
-#define MC_CMD_PTP_OUT_TIME_EVENT_SUBSCRIBE_OUT_LEN	\
-	MC_CMD_PTP_OUT_TIME_EVENT_SUBSCRIBE_LEN
-#endif
   MCDI_CHECK(MC_CMD_PTP_OUT_TIME_EVENT_SUBSCRIBE, rc, out_size, 0);
   if (rc == 0 && out_flags != NULL)
     *out_flags |= sync_flag;
+  return rc;
+}
+
+
+static int
+_ef10_mcdi_cmd_ptp_time_event_subscribe(struct efhw_nic *nic, uint32_t evq,
+                                        unsigned* out_flags,
+                                        const char* caller)
+{
+  int rc;
+
+  rc = _ef10_mcdi_cmd_ptp_time_event_subscribe_v2(nic, evq, out_flags, caller);
+  if( rc < 0 )
+    rc = _ef10_mcdi_cmd_ptp_time_event_subscribe_v1(nic, evq, out_flags,
+                                                    caller);
+
   return rc;
 }
 
