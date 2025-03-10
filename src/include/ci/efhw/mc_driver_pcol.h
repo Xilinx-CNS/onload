@@ -5145,8 +5145,13 @@
  * subscribers.
  */
 #define          MC_CMD_PTP_OP_SET_SYNC_STATUS 0x1b
+/* enum: X4 and later adapters should use this instead of
+ * PTP_OP_TIME_EVENT_SUBSCRIBE. Subscribe to receive periodic time events
+ * indicating the current NIC time
+ */
+#define          MC_CMD_PTP_OP_TIME_EVENT_SUBSCRIBE_V2 0x1c
 /* enum: Above this for future use. */
-#define          MC_CMD_PTP_OP_MAX 0x1c
+#define          MC_CMD_PTP_OP_MAX 0x1d
 
 /* MC_CMD_PTP_IN_ENABLE msgrequest */
 #define    MC_CMD_PTP_IN_ENABLE_LEN 16
@@ -5552,6 +5557,22 @@
 /* Event queue ID */
 #define       MC_CMD_PTP_IN_TIME_EVENT_UNSUBSCRIBE_QUEUE_OFST 12
 #define       MC_CMD_PTP_IN_TIME_EVENT_UNSUBSCRIBE_QUEUE_LEN 4
+
+/* MC_CMD_PTP_IN_TIME_EVENT_SUBSCRIBE_V2 msgrequest */
+#define    MC_CMD_PTP_IN_TIME_EVENT_SUBSCRIBE_V2_LEN 16
+/*            MC_CMD_PTP_IN_CMD_OFST 0 */
+/*            MC_CMD_PTP_IN_CMD_LEN 4 */
+/*            MC_CMD_PTP_IN_PERIPH_ID_OFST 4 */
+/*            MC_CMD_PTP_IN_PERIPH_ID_LEN 4 */
+/* Event queue ID */
+#define       MC_CMD_PTP_IN_TIME_EVENT_SUBSCRIBE_V2_QUEUE_ID_OFST 8
+#define       MC_CMD_PTP_IN_TIME_EVENT_SUBSCRIBE_V2_QUEUE_ID_LEN 4
+/* Space for flags. */
+#define       MC_CMD_PTP_IN_TIME_EVENT_SUBSCRIBE_V2_FLAGS_OFST 12
+#define       MC_CMD_PTP_IN_TIME_EVENT_SUBSCRIBE_V2_FLAGS_LEN 4
+#define       MC_CMD_PTP_IN_TIME_EVENT_SUBSCRIBE_V2_REPORT_SYNC_STATUS_OFST 12
+#define       MC_CMD_PTP_IN_TIME_EVENT_SUBSCRIBE_V2_REPORT_SYNC_STATUS_LBN 31
+#define       MC_CMD_PTP_IN_TIME_EVENT_SUBSCRIBE_V2_REPORT_SYNC_STATUS_WIDTH 1
 
 /* MC_CMD_PTP_IN_MANFTEST_PPS msgrequest */
 #define    MC_CMD_PTP_IN_MANFTEST_PPS_LEN 12
