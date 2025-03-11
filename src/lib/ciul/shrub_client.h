@@ -13,11 +13,8 @@
 /* Structure for managing a client instance */
 struct ef_shrub_client
 {
-  int socket;
-  void* buffers;
-  ef_shrub_buffer_id* server_fifo;
-  ef_shrub_buffer_id* client_fifo;
-  struct ef_shrub_client_state* state;
+  int      socket;
+  uint64_t mappings[EF_SHRUB_FD_COUNT + 1];
 };
 
 /* Request shared rxq token from shrub server
@@ -83,4 +80,11 @@ void ef_shrub_client_release_buffer(struct ef_shrub_client* client,
 
 /* Returns whether it is possible to acquire a new buffer. */
 bool ef_shrub_client_buffer_available(const struct ef_shrub_client* client);
+
+/* Access the client's shared state */
+static inline const struct ef_shrub_client_state*
+ef_shrub_client_get_state(const struct ef_shrub_client* client)
+{
+  return (void*)(client->mappings[EF_SHRUB_FD_COUNT]);
+}
 

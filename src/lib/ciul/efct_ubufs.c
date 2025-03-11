@@ -54,7 +54,7 @@ static const struct efct_ubufs* const_ubufs(const ef_vi* vi)
 
 static bool rxq_is_local(const ef_vi* vi, int ix)
 {
-  return const_ubufs(vi)->q[ix].shrub_client.buffers == NULL;
+  return const_ubufs(vi)->q[ix].shrub_client.mappings[0] == 0;
 }
 
 static void update_filled(ef_vi* vi, int ix)
@@ -412,7 +412,9 @@ static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd,
     return rc;
   }
 
-  qs->efct_state[ix].superbuf_pkts = rxq->shrub_client.state->metrics.buffer_bytes / EFCT_PKT_STRIDE;
+  qs->efct_state[ix].superbuf_pkts =
+    ef_shrub_client_get_state(&rxq->shrub_client)->metrics.buffer_bytes /
+      EFCT_PKT_STRIDE;
   qs->efct_active_qs |= 1 << ix;
   
   rc = efct_vi_sync_rxq(vi, ix, qid);
@@ -508,9 +510,10 @@ static void efct_ubufs_dump_stats(ef_vi* vi, ef_vi_dump_log_fn_t logger,
   int ix;
 
   for( ix = 0; ix < vi->efct_rxqs.max_qs; ++ix ) {
-    struct ef_shrub_client_state* client_state = ubufs->q[ix].shrub_client.state;
-    ef_vi_efct_rxq* efct_rxq = &vi->efct_rxqs.q[ix];
-    ef_vi_efct_rxq_state *efct_state = efct_get_rxq_state(vi, ix);
+    const struct ef_shrub_client* client = &ubufs->q[ix].shrub_client;
+    const struct ef_shrub_client_state* client_state = ef_shrub_client_get_state(client);
+    const ef_vi_efct_rxq* efct_rxq = &vi->efct_rxqs.q[ix];
+    const ef_vi_efct_rxq_state *efct_state = efct_get_rxq_state(vi, ix);
 
     if( *efct_rxq->live.superbuf_pkts != 0 ) {
       logger(log_arg, "  rxq[%d]: hw=%d cfg=%u pkts=%u", ix,
