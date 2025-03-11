@@ -65,30 +65,29 @@ static int client_connect(int client, const char* server_addr)
                  offsetof(struct sockaddr_un, sun_path) + path_len + 1);
 }
 
-static int client_mmap(uint64_t* mappings,
+static int client_mmap(uint64_t* mappings, int* files,
                        const struct ef_shrub_shared_metrics* metrics,
-                       void* buffers,
-                       int shared_fds[EF_SHRUB_FD_COUNT])
+                       void* buffers)
 {
   void* map;
   int flags = MAP_SHARED | MAP_POPULATE;
 
   map = mmap(buffers, map_size(metrics, EF_SHRUB_FD_BUFFERS), PROT_READ,
              flags | MAP_HUGETLB | MAP_FIXED,
-             shared_fds[EF_SHRUB_FD_BUFFERS], 0);
+             files[EF_SHRUB_FD_BUFFERS], 0);
   if( map == MAP_FAILED )
     return -errno;
   mappings[EF_SHRUB_FD_BUFFERS] = (uint64_t)map;
 
   map = mmap(NULL, map_size(metrics, EF_SHRUB_FD_SERVER_FIFO), PROT_READ, flags,
-             shared_fds[EF_SHRUB_FD_SERVER_FIFO], 0);
+             files[EF_SHRUB_FD_SERVER_FIFO], 0);
   if( map == MAP_FAILED )
     return -errno;
   mappings[EF_SHRUB_FD_SERVER_FIFO] = (uint64_t)map;
 
   map = mmap(NULL, map_size(metrics, EF_SHRUB_FD_CLIENT_FIFO),
              PROT_READ | PROT_WRITE, flags,
-             shared_fds[EF_SHRUB_FD_CLIENT_FIFO],
+             files[EF_SHRUB_FD_CLIENT_FIFO],
              metrics->client_fifo_offset);
   if( map == MAP_FAILED )
     return -errno;
@@ -113,23 +112,6 @@ static int client_send_request(int socket, struct ef_shrub_request *request)
   return 0;
 }
 
-
-static int client_request_queue(struct ef_shrub_client *client,
-                                const char* server_addr, int qid)
-{
-  int rc = 0;
-  struct ef_shrub_request request;
-
-  rc = client_connect(client->socket, server_addr);
-  if( rc < 0 )
-    return rc;
-
-  request.server_version = EF_SHRUB_VERSION;
-  request.type = EF_SHRUB_REQUEST_QUEUE;
-  request.requests.queue.qid = qid;
-  return client_send_request(client->socket, &request);
-}
-
 static void client_munmap(const uint64_t* mappings,
                           const struct ef_shrub_shared_metrics* metrics)
 {
@@ -139,13 +121,13 @@ static void client_munmap(const uint64_t* mappings,
       munmap((void*)mappings[i], map_size(metrics, i));
 }
 
-static int client_recv_metrics(struct ef_shrub_client* client, void* buffers)
+static int client_recv_metrics(struct ef_shrub_client* client, void* buffers,
+                               struct ef_shrub_shared_metrics* metrics)
 {
   int rc, i;
-  struct ef_shrub_shared_metrics metrics;
   struct iovec iov = {
-    .iov_base = &metrics,
-    .iov_len = sizeof(metrics)
+    .iov_base = metrics,
+    .iov_len = sizeof(*metrics)
   };
   int shared_fds[EF_SHRUB_FD_COUNT];
   char cmsg_buf[CMSG_SPACE(sizeof(shared_fds))];
@@ -160,7 +142,7 @@ static int client_recv_metrics(struct ef_shrub_client* client, void* buffers)
   rc = recvmsg(client->socket, &msg, 0);
   if( rc < 0 )
     return -errno;
-  if( rc != sizeof(metrics) || metrics.server_version != EF_SHRUB_VERSION )
+  if( rc != sizeof(*metrics) || metrics->server_version != EF_SHRUB_VERSION )
     return -EPROTO;
 
   cmsg = CMSG_FIRSTHDR(&msg);
@@ -171,13 +153,8 @@ static int client_recv_metrics(struct ef_shrub_client* client, void* buffers)
     return -EPROTO;
 
   memcpy(shared_fds, CMSG_DATA(cmsg), sizeof(shared_fds));
-  rc = client_mmap(client->mappings, &metrics, buffers, shared_fds);
   for( i = 0; i < EF_SHRUB_FD_COUNT; ++i )
-    close(shared_fds[i]);
-  if( rc < 0 ) {
-    client_munmap(client->mappings, &metrics);
-    return rc;
-  }
+    client->files[i] = shared_fds[i];
   return 0;
 }
 
@@ -228,7 +205,9 @@ int ef_shrub_client_open(struct ef_shrub_client* client,
                          const char* server_addr,
                          int qid)
 {
-  int rc;
+  int rc, i;
+  struct ef_shrub_shared_metrics metrics;
+  struct ef_shrub_request request = {};
   memset(client, 0, sizeof(*client));
 
   rc = client_socket();
@@ -236,16 +215,31 @@ int ef_shrub_client_open(struct ef_shrub_client* client,
     return rc;
   client->socket = rc;
 
-  rc = client_request_queue(client, server_addr, qid);
+  rc = client_connect(client->socket, server_addr);
   if( rc < 0 )
     goto fail_request;
 
-  rc = client_recv_metrics(client, buffers);
+  request.server_version = EF_SHRUB_VERSION;
+  request.type = EF_SHRUB_REQUEST_QUEUE;
+  request.requests.queue.qid = qid;
+  rc = client_send_request(client->socket, &request);
   if( rc < 0 )
     goto fail_request;
+
+  rc = client_recv_metrics(client, buffers, &metrics);
+  if( rc < 0 )
+    goto fail_request;
+
+  rc = client_mmap(client->mappings, client->files, &metrics, buffers);
+  if( rc < 0 )
+    goto fail_mmap;
 
   return 0;
 
+fail_mmap:
+  client_munmap(client->mappings, &metrics);
+  for( i = 0; i < EF_SHRUB_FD_COUNT; ++i )
+    close(client->files[i]);
 fail_request:
   close(client->socket);
   return rc;
@@ -253,7 +247,10 @@ fail_request:
 
 void ef_shrub_client_close(struct ef_shrub_client* client)
 {
+  int i;
   client_munmap(client->mappings, &get_state(client)->metrics);
+  for( i = 0; i < EF_SHRUB_FD_COUNT; ++i )
+    close(client->files[i]);
   close(client->socket);
 }
 #endif

@@ -14,6 +14,7 @@
 struct ef_shrub_client
 {
   int      socket;
+  int      files[EF_SHRUB_FD_COUNT];
   uint64_t mappings[EF_SHRUB_FD_COUNT + 1];
 };
 
