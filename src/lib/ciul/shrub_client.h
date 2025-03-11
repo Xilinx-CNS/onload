@@ -13,9 +13,9 @@
 /* Structure for managing a client instance */
 struct ef_shrub_client
 {
-  int      socket;
-  int      files[EF_SHRUB_FD_COUNT];
-  uint64_t mappings[EF_SHRUB_FD_COUNT + 1];
+  uintptr_t socket;
+  uintptr_t files[EF_SHRUB_FD_COUNT];
+  uint64_t  mappings[EF_SHRUB_FD_COUNT + 1];
 };
 
 /* Request shared rxq token from shrub server
