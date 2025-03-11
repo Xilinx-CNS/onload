@@ -1038,7 +1038,6 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
   int intf_i;
   struct efhw_nic* nic;
 
-  int hugepages = max(1, DIV_ROUND_UP(NI_OPTS_TRS(trs).rxq_size * EFCT_PKT_STRIDE, CI_HUGEPAGE_SIZE));
   ci_assert_lt((unsigned) hwport, CI_CFG_MAX_HWPORTS);
   if( (intf_i = trs->netif.hwport_to_intf_i[hwport]) < 0 )
     return 0;
@@ -1050,6 +1049,16 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
     ef_vi* vi = ci_netif_vi(&trs->netif, intf_i);
     int qix;
     int rc;
+    int hugepages = 0;
+
+    /* FIXME we need some way to determine which queues need shrub connections.
+     * For testing purposes, use the EF_LLCT_TEST_SHRUB option. */
+    bool shrub = vi->nic_type.arch == EF_VI_ARCH_EF10CT &&
+                 NI_OPTS_TRS(trs).llct_test_shrub;
+    if( ! shrub )
+      hugepages = max(1,
+                      DIV_ROUND_UP(NI_OPTS_TRS(trs).rxq_size * EFCT_PKT_STRIDE,
+                                   CI_HUGEPAGE_SIZE));
 
     if( vi_rs->q[EFHW_RXQ].capacity == 0 )   /* e.g. EF_RXQ_SIZE=0 */
       return 0;
@@ -1072,8 +1081,17 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
       return rc;
     }
 
-    /* FIXME make this less clumsy */
-    if( vi->nic_type.arch == EF_VI_ARCH_EF10CT ) {
+    if( shrub ) {
+      ci_log("%s: using shrub for queue %d", __func__, rxq);
+      rc = efct_ubufs_shared_attach_internal(vi, qix, rxq, vi->efct_rxqs.q[qix].superbufs);
+      if( rc < 0 ) {
+        if( rc != -EINTR )
+          ci_log("%s: ERROR: efct_ubufs_shared_attach_internal failed (%d)", __func__, rc);
+        efrm_rxq_release(trs->nic[intf_i].thn_efct_rxq[qix]);
+        return rc;
+      }
+    }
+    else if( vi->nic_type.arch == EF_VI_ARCH_EF10CT ) {
       efrm_rxq_refresh_kernel(vi->dh, rxq, vi->efct_rxqs.q[qix].superbufs);
       rc = tcp_helper_rxq_map(trs, intf_i, qix, hugepages,
                               vi->efct_rxqs.q[qix].superbufs,
@@ -1082,7 +1100,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
       if( rc != 0 )
         ci_log("%s: ERROR: tcp_helper_rxq_map failed (%d)", __func__, rc);
       vi->owner_id = ni_nic->pd_owner;
-      efct_ubufs_attach_internal(vi, qix, rxq, hugepages * CI_EFCT_SUPERBUFS_PER_PAGE);
+      efct_ubufs_local_attach_internal(vi, qix, rxq, hugepages * CI_EFCT_SUPERBUFS_PER_PAGE);
     }
     else {
       efct_vi_start_rxq(vi, qix, rxq);
@@ -8296,15 +8314,26 @@ int efab_tcp_helper_efct_superbuf_config_refresh(
                                         oo_efct_superbuf_config_refresh_t* op)
 {
   struct tcp_helper_nic* nic;
+  struct ef_vi* vi;
+  int rc;
+  uint64_t ubufs = op->superbufs.ptr;
+  uint64_t* umaps = CI_USER_PTR_GET(op->current_mappings);
+
   if( op->intf_i >= oo_stack_intf_max(&trs->netif) )
     return -EINVAL;
+  vi = ci_netif_vi(&trs->netif, op->intf_i);
+
+  rc = vi->efct_rxqs.ops->refresh_mappings(vi, op->qid, ubufs, umaps);
+  /* "not supported" means that the buffers aren't managed by ef_vi, so
+   * fall through and try to get them from efrm in that case. */
+  if( rc != -EOPNOTSUPP )
+    return rc;
+
   nic = &trs->nic[op->intf_i];
   if( op->qid >= ARRAY_SIZE(nic->thn_efct_rxq) ||
       ! nic->thn_efct_rxq[op->qid] )
     return -EINVAL;
-  return efrm_rxq_refresh(nic->thn_efct_rxq[op->qid],
-                          (unsigned long)CI_USER_PTR_GET(op->superbufs),
-                          CI_USER_PTR_GET(op->current_mappings),
+  return efrm_rxq_refresh(nic->thn_efct_rxq[op->qid], ubufs, umaps,
                           op->max_superbufs);
 }
 

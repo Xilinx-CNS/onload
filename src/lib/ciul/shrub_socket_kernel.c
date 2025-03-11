@@ -269,7 +269,7 @@ int ef_shrub_socket_mmap_user(uint64_t __user* user_mapping, uint64_t user_addr,
                               size_t size, uintptr_t file_, size_t offset,
                               int type)
 {
-  int prot, flag;
+  int prot, flag, rc;
   struct file* file = (struct file*)file_;
 
   switch( type ) {
@@ -293,7 +293,21 @@ int ef_shrub_socket_mmap_user(uint64_t __user* user_mapping, uint64_t user_addr,
   if( IS_ERR_VALUE(user_addr) )
     return PTR_ERR((void*)user_addr);
 
-  put_user(user_addr, user_mapping);
+  rc = put_user(user_addr, user_mapping);
+  if( rc < 0 )
+    goto fail;
+
+  if( type == EF_SHRUB_FD_CLIENT_FIFO ) {
+    rc = put_user(user_addr + size - sizeof(struct ef_shrub_client_state),
+                  user_mapping + 1);
+    if( rc < 0 )
+      goto fail;
+  }
+
   return 0;
+
+fail:
+  vm_munmap(user_addr, size);
+  return rc;
 }
 

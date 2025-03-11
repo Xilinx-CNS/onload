@@ -205,6 +205,12 @@ static int efct_kbufs_attach(ef_vi* vi,
 #endif
 }
 
+static int efct_kbufs_refresh_mappings(ef_vi*, int, uint64_t, uint64_t*)
+{
+  /* Buffers are managed by efrm */
+  return -EOPNOTSUPP;
+}
+
 static int efct_kbufs_prime(ef_vi* vi, ef_driver_handle dh)
 {
 #ifdef __KERNEL__
@@ -330,6 +336,7 @@ int efct_kbufs_init_internal(ef_vi* vi,
   rxqs->ops.next = efct_kbufs_next;
   rxqs->ops.free = efct_kbufs_free;
   rxqs->ops.attach = efct_kbufs_attach;
+  rxqs->ops.refresh_mappings = efct_kbufs_refresh_mappings;
   rxqs->ops.prime = efct_kbufs_prime;
   rxqs->ops.cleanup = efct_kbufs_cleanup_internal;
   rxqs->ops.dump_stats = efct_kbufs_dump_stats;

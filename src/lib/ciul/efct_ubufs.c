@@ -6,6 +6,7 @@
 #include <etherfabric/memreg.h>
 #include "ef_vi_internal.h"
 #include "shrub_client.h"
+#include "shrub_socket.h"
 #include "logging.h"
 
 #ifndef __KERNEL__
@@ -355,12 +356,12 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
     rxq->rx_post_buffer_reg = (volatile uint64_t *)p;
   }
 
-  efct_ubufs_attach_internal(vi, ix, qid, n_superbufs);
+  efct_ubufs_local_attach_internal(vi, ix, qid, n_superbufs);
   return ix;
 #endif
 }
 
-void efct_ubufs_attach_internal(ef_vi* vi, int ix, int qid, unsigned n_superbufs)
+void efct_ubufs_local_attach_internal(ef_vi* vi, int ix, int qid, unsigned n_superbufs)
 {
   unsigned id;
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
@@ -384,8 +385,6 @@ static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd,
   return -EOPNOTSUPP;
 #else
   int ix;
-  struct efct_ubufs_rxq* rxq;
-  ef_vi_rxq_state* qs;
   int rc;
 
   EF_VI_ASSERT(qid < vi->efct_rxqs.max_qs);
@@ -393,37 +392,43 @@ static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd,
   ix = efct_vi_find_free_rxq(vi, qid);
   if( ix < 0 )
     return ix;
-  rxq = &get_ubufs(vi)->q[ix];
-  qs = &vi->ep_state->rxq;
 
   rc = efct_ubufs_init_rxq_resource(vi, qid, n_superbufs);
   if( rc < 0 ) {
     LOGVV(ef_log("%s: efct_ubufs_init_rxq_resource rxq %d", __FUNCTION__, rc));
     return rc;
   }
-  rxq->resource_id = rc;
+  get_ubufs(vi)->q[ix].resource_id = rc;
   /* FIXME SCJ cleanup on failure */
 
-  rc = ef_shrub_client_open(&rxq->shrub_client,
-                            (void*)vi->efct_rxqs.q[ix].superbuf,
-                            EF_SHRUB_CONTROLLER_PATH, qid);
+  return efct_ubufs_shared_attach_internal(vi, ix, qid,
+                                           (void*)vi->efct_rxqs.q[ix].superbuf);
+#endif
+}
+
+int efct_ubufs_shared_attach_internal(ef_vi* vi, int ix, int qid, void* superbuf)
+{
+  int rc;
+  struct ef_shrub_client* client = &get_ubufs(vi)->q[ix].shrub_client;
+  ef_vi_rxq_state* qs = &vi->ep_state->rxq;
+
+  rc = ef_shrub_client_open(client, superbuf, EF_SHRUB_CONTROLLER_PATH, qid);
   if ( rc < 0 ) {
     LOG(ef_log("%s: ERROR initializing shrub client! rc=%d", __FUNCTION__, rc));
     return rc;
   }
 
+  qs->efct_state[ix].config_generation = 1; /* force an initial refresh */
   qs->efct_state[ix].superbuf_pkts =
-    ef_shrub_client_get_state(&rxq->shrub_client)->metrics.buffer_bytes /
-      EFCT_PKT_STRIDE;
+    ef_shrub_client_get_state(client)->metrics.buffer_bytes / EFCT_PKT_STRIDE;
   qs->efct_active_qs |= 1 << ix;
-  
+
   rc = efct_vi_sync_rxq(vi, ix, qid);
   if ( rc < 0 ) {
     LOG(ef_log("%s: ERROR syncing shrub_client to rxq! rc=%d", __FUNCTION__, rc));
     return rc;
   }
   return ix;
-#endif
 }
 
 static int efct_ubufs_pre_attach(ef_vi* vi, bool shared_mode)
@@ -478,27 +483,40 @@ static int efct_ubufs_prime(ef_vi* vi, ef_driver_handle dh)
   return -EOPNOTSUPP;
 }
 
-static int efct_ubufs_refresh(ef_vi* vi, int qid)
+static int efct_ubufs_refresh(ef_vi* vi, int ix)
 {
   /* Nothing to do */
   return 0;
 }
 
+static int efct_ubufs_refresh_mappings(ef_vi* vi, int ix,
+                                       uint64_t user_superbuf,
+                                       uint64_t* user_mappings)
+{
+  return ef_shrub_client_refresh_mappings(&get_ubufs(vi)->q[ix].shrub_client,
+                                          user_superbuf, user_mappings);
+}
+
 static void efct_ubufs_cleanup(ef_vi* vi)
 {
+  int i;
   struct efct_ubufs* ubufs = get_ubufs(vi);
+
   efct_superbufs_cleanup(vi);
+  for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
+    struct efct_ubufs_rxq* rxq = &ubufs->q[i];
+    if( ! rxq_is_local(vi, i) )
+      ef_shrub_client_close(&rxq->shrub_client);
+#ifndef __KERNEL__
+    ef_memreg_free(&rxq->memreg, vi->dh);
+    ci_resource_munmap(vi->dh, (void *)rxq->rx_post_buffer_reg,
+                       CI_ROUND_UP(sizeof(uint64_t), CI_PAGE_SIZE));
+#endif
+  }
 
 #ifdef __KERNEL__
   kfree(ubufs);
 #else
-  int i;
-  for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
-    struct efct_ubufs_rxq* rxq = &ubufs->q[i];
-    ef_memreg_free(&rxq->memreg, vi->dh);
-    ci_resource_munmap(vi->dh, (void *)rxq->rx_post_buffer_reg,
-                       CI_ROUND_UP(sizeof(uint64_t), CI_PAGE_SIZE));
-  }
   free(ubufs);
 #endif
 }
@@ -563,6 +581,9 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
 
     rxq->live.superbuf_pkts = &efct_state->superbuf_pkts;
     rxq->live.config_generation = &efct_state->config_generation;
+#ifndef __KERNEL__
+    rxq->mappings = ubufs->q[i].shrub_client.mappings;
+#endif
     /* NOTE: we don't need to store the latest time sync event in
      * rxq->live.time_sync as efct only uses it to get the clock
      * status (set/in-sync) which ef10ct provides in RX packet
@@ -582,6 +603,7 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
   ubufs->ops.pre_attach = efct_ubufs_pre_attach;
   ubufs->ops.attach = efct_ubufs_attach;
   ubufs->ops.refresh = efct_ubufs_refresh;
+  ubufs->ops.refresh_mappings = efct_ubufs_refresh_mappings;
   ubufs->ops.prime = efct_ubufs_prime;
   ubufs->ops.cleanup = efct_ubufs_cleanup;
   ubufs->ops.dump_stats = efct_ubufs_dump_stats;

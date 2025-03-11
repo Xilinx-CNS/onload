@@ -284,4 +284,10 @@ extern void ef_vi_compat_free(ef_vi*);
 
 extern enum ef_pd_flags ef_pd_flags_from_env(enum ef_pd_flags flags);
 
+struct ef_shrub_client;
+extern int
+ef_shrub_client_refresh_mappings(const struct ef_shrub_client* client,
+                                 uint64_t user_superbuf,
+                                 uint64_t* user_mappings);
+
 #endif  /* __CI_EF_VI_INTERNAL_H__ */

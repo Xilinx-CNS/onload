@@ -113,7 +113,8 @@ extern int efct_kbufs_init_internal(ef_vi* vi,
                                     struct efab_efct_rxq_uk_shm_base *shm,
                                     void* buffer_space);
 extern int efct_ubufs_init_internal(ef_vi* vi);
-extern void efct_ubufs_attach_internal(ef_vi* vi, int ix, int qid, unsigned bufs);
+extern void efct_ubufs_local_attach_internal(ef_vi* vi, int ix, int qid, unsigned bufs);
+extern int efct_ubufs_shared_attach_internal(ef_vi* vi, int ix, int qid, void* bufs);
 int efct_vi_find_free_rxq(ef_vi* vi, int qid);
 void efct_vi_start_rxq(ef_vi* vi, int ix, int qid);
 int efct_vi_sync_rxq(ef_vi* vi, int ix, int qid);

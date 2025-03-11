@@ -56,7 +56,27 @@ static int client_mmap(uint64_t* mappings, uintptr_t* files,
 
   mappings[EF_SHRUB_FD_COUNT] =
     mappings[EF_SHRUB_FD_CLIENT_FIFO] +
-      map_size(metrics, EF_SHRUB_FD_CLIENT_FIFO) - sizeof(*metrics);
+      map_size(metrics, EF_SHRUB_FD_CLIENT_FIFO) -
+        sizeof(struct ef_shrub_client_state);
+
+  return 0;
+}
+
+static int client_mmap_user(uint64_t* user_mappings, const uintptr_t* files,
+                            const struct ef_shrub_shared_metrics* metrics,
+                            uint64_t user_buffers)
+{
+  int i;
+  for( i = 0; i < EF_SHRUB_FD_COUNT; ++i ) {
+    int rc;
+    uint64_t user_addr = i == EF_SHRUB_FD_BUFFERS ? user_buffers : 0;
+    size_t offset = i == EF_SHRUB_FD_CLIENT_FIFO ? metrics->client_fifo_offset : 0;
+
+    rc = ef_shrub_socket_mmap_user(&user_mappings[i], user_addr,
+                                   map_size(metrics, i), files[i], offset, i);
+    if( rc < 0 )
+      return rc;
+  }
 
   return 0;
 }
@@ -146,6 +166,19 @@ void ef_shrub_client_close(struct ef_shrub_client* client)
 {
   client_munmap(client->mappings, client->files, &get_state(client)->metrics);
   ef_shrub_socket_close_socket(client->socket);
+}
+
+int ef_shrub_client_refresh_mappings(const struct ef_shrub_client* client,
+                                     uint64_t user_buffers,
+                                     uint64_t* user_mappings)
+{
+  const struct ef_shrub_client_state* state = ef_shrub_client_get_state(client);
+
+  if( state == NULL )
+    return -EOPNOTSUPP;
+
+  return client_mmap_user(user_mappings, client->files,
+                          &state->metrics, user_buffers);
 }
 
 int ef_shrub_client_acquire_buffer(struct ef_shrub_client* client,

@@ -898,6 +898,9 @@ typedef struct {
                  bool shared_mode);
   /** Refresh the internal config; called if config_generation changes */
   int  (*refresh)(struct ef_vi*, int ix);
+  /** Second stage of refreshment (mapping kernel to user) if required */
+  int  (*refresh_mappings)(struct ef_vi*, int ix,
+                           uint64_t user_buffers, uint64_t* user_mappings);
   /** Prime the virtual interface's queues (both rx and tx) */
   int  (*prime)(struct ef_vi*, ef_driver_handle dh);
   /** De-allocate internal resources */
