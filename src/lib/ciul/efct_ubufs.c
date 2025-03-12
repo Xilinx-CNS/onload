@@ -254,7 +254,7 @@ static void efct_ubufs_post_kernel(ef_vi* vi, int ix, int sbid, bool sentinel)
 
   op.op = CI_RSOP_RX_BUFFER_POST;
   op.id = efch_make_resource_id(vi->vi_resource_id);
-  op.u.buffer_post.qid = vi->efct_rxqs.q[ix].qid;
+  op.u.buffer_post.qid = efct_get_rxq_state(vi, ix)->qid;
   op.u.buffer_post.user_addr = (uint64_t)addr;
   op.u.buffer_post.sentinel = sentinel;
   op.u.buffer_post.rollover = 0; // TBD support for rollover?
@@ -477,11 +477,11 @@ static void efct_ubufs_dump_stats(ef_vi* vi, ef_vi_dump_log_fn_t logger,
   for( ix = 0; ix < vi->efct_rxqs.max_qs; ++ix ) {
     struct ef_shrub_client_state* client_state = ubufs->q[ix].shrub_client.state;
     ef_vi_efct_rxq* efct_rxq = &vi->efct_rxqs.q[ix];
-    ef_vi_rxq_state* qs = &vi->ep_state->rxq;
+    ef_vi_efct_rxq_state *efct_state = efct_get_rxq_state(vi, ix);
 
     if( *efct_rxq->live.superbuf_pkts != 0 ) {
       logger(log_arg, "  rxq[%d]: hw=%d cfg=%u pkts=%u", ix,
-             efct_rxq->qid, efct_rxq->config_generation,
+             efct_state->qid, efct_rxq->config_generation,
              *efct_rxq->live.superbuf_pkts);
       if( client_state ) {
         logger(log_arg, "  rxq[%d]: server_fifo_size=%" CI_PRIu64
@@ -494,8 +494,8 @@ static void efct_ubufs_dump_stats(ef_vi* vi, ef_vi_dump_log_fn_t logger,
                client_state->client_fifo_index);
       } else {
         logger(log_arg, "  rxq[%d]: fifo_count_hw=%" CI_PRIu16
-               " fifo_count_sw=%" CI_PRIu16, ix, qs->efct_state[ix].fifo_count_hw,
-               qs->efct_state[ix].fifo_count_sw);
+               " fifo_count_sw=%" CI_PRIu16, ix, efct_state->fifo_count_hw,
+               efct_state->fifo_count_sw);
       }
     }
   }
@@ -523,10 +523,10 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
 
   for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
     ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[i];
-    ef_vi_efct_rxq_state* qs = &vi->ep_state->rxq.efct_state[i];
-    rxq->qid = -1;
-    rxq->live.superbuf_pkts = &qs->superbuf_pkts;
-    rxq->live.config_generation = &qs->config_generation;
+    ef_vi_efct_rxq_state* efct_state = efct_get_rxq_state(vi, i);
+
+    rxq->live.superbuf_pkts = &efct_state->superbuf_pkts;
+    rxq->live.config_generation = &efct_state->config_generation;
     /* NOTE: we don't need to store the latest time sync event in
      * rxq->live.time_sync as efct only uses it to get the clock
      * status (set/in-sync) which ef10ct provides in RX packet

@@ -47,6 +47,7 @@
 #include "tcp_helper_resource.h"
 #include "tcp_helper_stats_dump.h"
 #include <kernel_utils/hugetlb.h>
+#include <lib/ciul/ef_vi_internal.h>
 
 #ifdef NDEBUG
 # define DEBUG_STR  ""
@@ -960,7 +961,7 @@ void tcp_helper_get_filter_params(tcp_helper_resource_t* trs, int hwport,
     }
     else if( vi->efct_rxqs.active_qs ) {
       if( *vi->efct_rxqs.active_qs & 1 ) {
-        *rxq = vi->efct_rxqs.q[0].qid;
+        *rxq = efct_get_rxq_state(vi, 0)->qid;
         *flags |= EFHW_FILTER_F_PREF_RXQ;
       }
       else {
@@ -1586,17 +1587,21 @@ static int allocate_vi(ci_netif* ni, struct vi_allocate_info* info)
 }
 
 
-static int tcp_helper_superbuf_config_refresh(ef_vi* vi, int qid)
+static int tcp_helper_superbuf_config_refresh(ef_vi* vi, int ix)
 {
-  ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[qid];
-  return efrm_rxq_refresh_kernel(vi->dh, rxq->qid, rxq->superbufs);
+  ef_vi_efct_rxq_state *efct_state = efct_get_rxq_state(vi, ix);
+  ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[ix];
+
+  return efrm_rxq_refresh_kernel(vi->dh, efct_state->qid, rxq->superbufs);
 }
 
 static void tcp_helper_post_superbuf(ef_vi* vi, int ix, int sbid, bool sentinel)
 {
   ef_vi_efct_rxq *rxq = &vi->efct_rxqs.q[ix];
+  ef_vi_efct_rxq_state *efct_state = efct_get_rxq_state(vi, ix);
   resource_size_t addr = (resource_size_t)rxq->superbufs[sbid];
-  efhw_nic_post_superbuf(vi->dh, rxq->qid, addr, sentinel, false, -1);
+
+  efhw_nic_post_superbuf(vi->dh, efct_state->qid, addr, sentinel, false, -1);
   // FIXME should we check/handle errors?
 }
 

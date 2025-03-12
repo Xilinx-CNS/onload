@@ -757,6 +757,8 @@ typedef struct {
   uint32_t sbseq;
   uint32_t superbuf_pkts;
   unsigned config_generation;
+  /** Hardware queue ID */
+  int qid;
 } ef_vi_efct_rxq_state;
 
 /*! \brief State of RX descriptor ring
@@ -854,8 +856,6 @@ typedef struct {
     const uint64_t* time_sync;
   } live;
 
-  /** Hardware queue ID */
-  int qid;
   /** Last known configuration generation to compare with live value.
     * Also used as a zero superbuf_pkts value if the queue is inactive. */
   uint32_t config_generation;

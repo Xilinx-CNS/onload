@@ -293,7 +293,7 @@ static struct efct_test* efct_test_init_rx_default(int q_max, int arch, int nic_
 
   for( i = 0; i < q_max; ++i ) {
     ef_vi_efct_rxq* q = &vi->efct_rxqs.q[i];
-    q->qid = i;
+    efct_get_rxq_state(vi, i)->qid = i;
     q->live.superbuf_pkts = &t->mock_rxqs.q[i].superbuf_pkts;
     q->live.config_generation = &t->mock_rxqs.q[i].config_generation;
     q->live.time_sync = &t->mock_rxqs.q[i].time_sync;

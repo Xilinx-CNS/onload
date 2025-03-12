@@ -258,6 +258,11 @@ static inline const void* efct_superbuf_access(const ef_vi* vi, int ix, size_t s
 #endif
 }
 
+static inline ef_vi_efct_rxq_state *efct_get_rxq_state(ef_vi *vi, int ix)
+{
+  return &vi->ep_state->rxq.efct_state[ix];
+}
+
 extern int ef_pd_cluster_free(ef_pd*, ef_driver_handle);
 
 extern void ef_vi_packed_stream_update_credit(ef_vi* vi);

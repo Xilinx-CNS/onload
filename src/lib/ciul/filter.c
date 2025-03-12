@@ -558,7 +558,7 @@ int ef_vi_filter_add(ef_vi *vi, ef_driver_handle dh, const ef_filter_spec *fs,
        */
       if( *vi->efct_rxqs.active_qs & 1 ) {
         flags |= CI_FILTER_FLAG_PREF_RXQ;
-        rxq_no = vi->efct_rxqs.q[0].qid;
+        rxq_no = efct_get_rxq_state(vi, 0)->qid;
       }
       
       /* If there is no preferred queue strategy, any should be fine so best hence let the driver choose. */

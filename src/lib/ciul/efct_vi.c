@@ -821,11 +821,12 @@ static inline uint16_t header_status_flags(const ci_oword_t *header)
   return flags;
 }
 
-static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
+static inline int efct_poll_rx(ef_vi* vi, int ix, ef_event* evs, int evs_len)
 {
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
-  ef_vi_efct_rxq_ptr* rxq_ptr = &qs->rxq_ptr[qid];
-  ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[qid];
+  ef_vi_efct_rxq_ptr* rxq_ptr = &qs->rxq_ptr[ix];
+  ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[ix];
+  int qid;
   int i;
 
   if( efct_rxq_need_config(rxq) ) {
@@ -834,7 +835,7 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
      * thinking, to deal with multiple successive refreshes correctly, but we
      * must write it after we're done, to deal with concurrent calls to
      * efct_rxq_check_event() */
-    if( vi->efct_rxqs.ops->refresh(vi, qid) < 0 ) {
+    if( vi->efct_rxqs.ops->refresh(vi, ix) < 0 ) {
 #ifndef __KERNEL__
       /* Update rxq's value even if the refresh_func fails, since retrying it
        * every poll is unlikely to be productive either. Except in
@@ -848,7 +849,7 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
   }
 
   if( efct_rxq_need_rollover(rxq_ptr) )
-    if( rx_rollover(vi, qid) < 0 )
+    if( rx_rollover(vi, ix) < 0 )
       /* ef_eventq_poll() has historically never been able to fail, so we
        * maintain that policy */
       return 0;
@@ -858,6 +859,7 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
   evs_len = CI_MIN(evs_len, (int)(rxq_ptr->superbuf_pkts -
                                   pkt_id_to_index_in_superbuf(rxq_ptr->meta_pkt)));
 
+  qid = qs->efct_state[ix].qid;
   for( i = 0; i < evs_len; ++i ) {
     const ci_oword_t* header;
     struct efct_rx_descriptor* desc;
@@ -903,12 +905,12 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
         EF_VI_ASSERT(nskipped <= desc->refcnt);
         desc->refcnt -= nskipped;
         if( desc->refcnt == 0 )
-          vi->efct_rxqs.ops->free(vi, qid, prev_sb);
+          vi->efct_rxqs.ops->free(vi, ix, prev_sb);
 
         break;
       }
 
-      efct_rx_discard(rxq->qid, pkt_id, discard_flags, header, &evs[i]);
+      efct_rx_discard(qid, pkt_id, discard_flags, header, &evs[i]);
     }
     else {
       /* For simplicity, require configuration for a fixed data offset.
@@ -924,7 +926,7 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
       /* q_id should technically be set to the queue label, however currently
        * we don't allow the label to be changed so it's always the hardware
        * qid */
-      evs[i].rx_ref.q_id = rxq->qid;
+      evs[i].rx_ref.q_id = qid;
       evs[i].rx_ref.filter_id = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_FILTER);
       evs[i].rx_ref.user = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_USER);
     }
@@ -1114,7 +1116,7 @@ int efct_vi_find_free_rxq(ef_vi* vi, int qid)
   int ix;
 
   for( ix = 0; ix < vi->efct_rxqs.max_qs; ++ix ) {
-    if( vi->efct_rxqs.q[ix].qid == qid )
+    if( efct_get_rxq_state(vi, ix)->qid == qid )
       return -EALREADY;
     if( ! efct_rxq_is_active(&vi->efct_rxqs.q[ix]) )
       return ix;
@@ -1127,7 +1129,7 @@ void efct_vi_start_rxq(ef_vi* vi, int ix, int qid)
   ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[ix];
   ef_vi_efct_rxq_ptr* rxq_ptr = &vi->ep_state->rxq.rxq_ptr[ix];
 
-  rxq->qid = qid;
+  efct_get_rxq_state(vi, ix)->qid = qid;
   rxq->config_generation = 0;
   rxq_ptr->superbuf_pkts = *rxq->live.superbuf_pkts;
   rxq_ptr->meta_pkt = rxq_ptr->superbuf_pkts + 1;
@@ -1152,7 +1154,7 @@ int efct_vi_sync_rxq(ef_vi *vi, int ix, int qid)
   rxq = &vi->efct_rxqs.q[ix];
   rxq_ptr = &vi->ep_state->rxq.rxq_ptr[ix];
 
-  rxq->qid = qid;
+  efct_get_rxq_state(vi, ix)->qid = qid;
   rxq->config_generation = *rxq->live.config_generation;
   rxq_ptr->superbuf_pkts = *rxq->live.superbuf_pkts;
   rxq_ptr->meta_offset = 0;

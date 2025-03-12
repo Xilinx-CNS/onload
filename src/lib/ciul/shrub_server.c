@@ -745,7 +745,8 @@ void ef_shrub_server_poll(struct ef_shrub_server* server)
   unix_server_poll(server);
   ci_bit_for_each_set(ix, (const ci_bits*)server->vi->efct_rxqs.active_qs,
                       server->vi->efct_rxqs.max_qs) {
-    int qid = server->vi->efct_rxqs.q[ix].qid;
+    int qid = efct_get_rxq_state(server->vi, ix)->qid;
+
     ef_shrub_queue_poll(server->vi,
                         server->shrub_queues[qid]);
   }
@@ -757,7 +758,8 @@ void ef_shrub_server_close(struct ef_shrub_server* server)
 
   ci_bit_for_each_set(ix, (const ci_bits*)server->vi->efct_rxqs.active_qs,
                       server->vi->efct_rxqs.max_qs) {
-    int qid = server->vi->efct_rxqs.q[ix].qid;
+    int qid = efct_get_rxq_state(server->vi, ix)->qid;
+
     ef_shrub_queue_close(server->shrub_queues[qid]);
   }
 

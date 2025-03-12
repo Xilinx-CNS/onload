@@ -314,7 +314,8 @@ int efct_kbufs_init_internal(ef_vi* vi,
 
   for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
     ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[i];
-    rxq->qid = shm->q[i].qid;
+
+    efct_get_rxq_state(vi, i)->qid = shm->q[i].qid;
 #ifndef __KERNEL__
     rxqs->q[i].resource_id = EFCH_RESOURCE_ID_PRI_ARG(efch_resource_id_none());
     rxq->mappings = mappings + i * CI_EFCT_MAX_HUGEPAGES;
