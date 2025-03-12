@@ -862,7 +862,6 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
 {
   EFHW_MCDI_DECLARE_BUF(in, MC_CMD_INIT_RXQ_V5_IN_LEN);
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
-  struct efhw_nic_ef10ct_evq *ef10ct_evq;
   int rxq_num = params->qid;
   int rxq_handle;
   int evq;
@@ -994,9 +993,6 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
     ef10ct->rxq[rxq_num].buffer_pages = NULL;
     ef10ct->rxq[rxq_num].n_buffer_pages = 0;
   }
-
-  ef10ct_evq = &ef10ct->evq[ef10ct_get_queue_num(evq)];
-  flush_delayed_work(&ef10ct_evq->check_flushes_polled);
 
   EFHW_ASSERT(ef10ct->rxq[rxq_num].evq == -1);
   ef10ct->rxq[rxq_num].evq = evq;
