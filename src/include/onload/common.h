@@ -440,6 +440,10 @@ struct oo_wakeup_eps {
 };
 #endif
 
+typedef struct {
+  ci_uint32 controller_id;
+} shrub_ioctl_data_t;
+
 
 /*----------------------------------------------------------------------------
  *

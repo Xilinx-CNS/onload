@@ -6,7 +6,7 @@
 #include <ci/internal/transport_config_opt.h>
 #include <linux/version.h>
 #include <onload/ioctl_base.h>
-#include <onload/ioctl_dshm.h>
+#include <onload/ioctl_shrub.h>
 #include <cplane/ioctl.h>
 
 
@@ -25,7 +25,7 @@
 /* OS-independent operations enum */
 enum {
   /* Debug ops */
-  OO_OP_DBG_GET_STACK_INFO = OO_OP_DSHM_END,
+  OO_OP_DBG_GET_STACK_INFO = OO_OP_SHRUB_END,
 #define OO_IOC_DBG_GET_STACK_INFO   OO_IOC_RW(DBG_GET_STACK_INFO, \
                                               ci_netif_info_t)
   OO_OP_DBG_WAIT_STACKLIST_UPDATE,

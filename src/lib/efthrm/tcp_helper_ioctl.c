@@ -22,6 +22,7 @@
 #include <onload/nic.h>
 #include "onload_kernel_compat.h"
 #include <onload/cplane_driver.h>
+#include <onload/shrub_spawner.h>
 #include <ci/efrm/vi_resource_manager.h>
 #include <ci/efrm/efrm_client.h>
 #include "oof_impl.h"
@@ -1510,11 +1511,11 @@ oo_operations_table_t oo_operations[] = {
   op(OO_IOC_CP_SELECT_INSTANCE, oo_cp_select_instance_rsop),
   op(OO_IOC_CP_INIT_KERNEL_MIBS, oo_cp_init_kernel_mibs_rsop),
   op(OO_IOC_CP_XDP_PROG_CHANGE, oo_cp_xdp_prog_change),
-
   /* include/onload/ioctl-dshm.h: */
   op(OO_IOC_DSHM_REGISTER, oo_dshm_register_rsop),
   op(OO_IOC_DSHM_LIST,     oo_dshm_list_rsop),
-
+  /* include/onload/ioctl_shrub.h: */
+  op(OO_IOC_SHRUB_SPAWN_SERVER,   oo_shrub_spawn_server),
   /* include/onload/ioctl.h: */
   op(OO_IOC_DBG_GET_STACK_INFO, efab_tcp_helper_get_info),
   op(OO_IOC_DBG_WAIT_STACKLIST_UPDATE, efab_tcp_helper_wait_stack_list_update),
