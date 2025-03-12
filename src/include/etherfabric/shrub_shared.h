@@ -18,12 +18,15 @@
 #ifndef __CI_CIUL_SHRUB_SHARED_H__
 #define __CI_CIUL_SHRUB_SHARED_H__
 
+#include <cplane/mib.h>
+
 /* Identifier for a buffer, an index into the shared buffer memory.
  * The MSB for the id corresponds to the sentinel for the buffer. */
 typedef uint32_t ef_shrub_buffer_id;
 
 /* Protocol version, to check compatibility between client and server */
 #define EF_SHRUB_VERSION 3
+#define SHRUB_ERR_INCOMPATIBLE_VERSION -1000
 
 /* An identifier that does not represent a buffer, used to indicate empty
  * slots in the FIFOs.
@@ -43,10 +46,35 @@ typedef uint32_t ef_shrub_buffer_id;
 #define EF_SHRUB_FD_COUNT       3
 
 /* Shrub unix socket address information */
+#define EF_SHRUB_DUMP_LOG_SIZE 40
 #define EF_SHRUB_SOCK_DIR_PATH "/run/onload/"
-#define EF_SHRUB_CONTROLLER_PATH EF_SHRUB_SOCK_DIR_PATH "controller"
-#define EF_SHRUB_SOCK_DIR_LEN  12
-#define EF_SHRUB_SOCK_NAME_LEN 20
+#define EF_SHRUB_DUMP_LOG_DIR "/var/log/"
+#define EF_SHRUB_CONTROLLER_PATH_FORMAT "%scontroller-%d/"
+#define EF_SHRUB_SHRUB_FORMAT "shrub-%d"
+#define EF_SHRUB_MAX_CONTROLLER 9999
+#define EF_SHRUB_MAX_SHRUB 9999
+#define EF_SHRUB_MAX_DIGITS 4
+#define EF_SHRUB_CONTROLLER_LEN (sizeof("controller-") + EF_SHRUB_MAX_DIGITS)
+#define EF_SHRUB_SHRUB_LEN (sizeof("shrub-") + EF_SHRUB_MAX_DIGITS)
+#define EF_SHRUB_NEGOTIATION_SOCKET "shrub_config"
+#define EF_SHRUB_SOCKET_DIR_LEN                                                \
+  (sizeof(EF_SHRUB_SOCK_DIR_PATH) + EF_SHRUB_CONTROLLER_LEN + sizeof("/"))
+#define EF_SHRUB_NEGOTIATION_SOCKET_LEN                                        \
+  (EF_SHRUB_SOCKET_DIR_LEN + sizeof(EF_SHRUB_NEGOTIATION_SOCKET))
+#define EF_SHRUB_SERVER_SOCKET_LEN                                             \
+  (EF_SHRUB_SOCKET_DIR_LEN + EF_SHRUB_SHRUB_LEN)
+#define EF_SHRUB_LOG_LEN                                                       \
+  (sizeof(EF_SHRUB_DUMP_LOG_DIR) + EF_SHRUB_CONTROLLER_LEN +                   \
+   EF_SHRUB_DUMP_LOG_SIZE + sizeof("/"))
+
+enum shrub_controller_command {
+  EF_SHRUB_CONTROLLER_DESTROY,
+  EF_SHRUB_CONTROLLER_CREATE_HWPORT,
+  EF_SHRUB_CONTROLLER_CREATE_IFINDEX,
+  EF_SHRUB_CONTROLLER_DUMP,
+};
+
+#define EF_SHRUB_TEMP_BC 2048 /* TODO remove EF_SHRUB_TEMP_DEFAULT_BUFFER_COUNT 2048 */
 
 /* This enum specifies the type of request being made to the shrub server. */
 enum ef_shrub_request_type {
@@ -123,5 +151,25 @@ struct ef_shrub_client_state
   struct ef_shrub_shared_metrics metrics;
 };
 
+typedef struct {
+  uint8_t controller_version;
+  uint8_t command;
+  union {
+    struct {
+      uint32_t buffer_count;
+      int ifindex;
+    } create_ifindex; /* EF_SHRUB_CONTROLLER_CREATE_IFINDEX */
+    struct {
+      uint32_t buffer_count;
+      cicp_hwport_mask_t hw_port;
+    } create_hwport; /* EF_SHRUB_CONTROLLER_CREATE_HWPORT */
+    struct {
+      int shrub_token_id;
+    } destroy; /* EF_SHRUB_CONTROLLER_DESTROY */
+    struct {
+      char file_name[EF_SHRUB_DUMP_LOG_SIZE];
+    } dump; /* EF_SHRUB_CONTROLLER_DUMP */
+  };
+} shrub_controller_request_t;
 #endif
 
