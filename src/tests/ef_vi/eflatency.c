@@ -429,13 +429,6 @@ static const test_t ctpio_test = {
   .cleanup = NULL,
 };
 
-static const test_t x3_ctpio_test = {
-  .name = "X3 CTPIO",
-  .send = ctpio_send,
-  .cleanup = NULL,
-};
-
-
 /**********************************************************************/
 
 /* Poll for events. Will always return as soon as RX event found,
@@ -644,7 +637,7 @@ static const test_t* do_init(int mode, struct eflatency_vi* latency_vi,
                       "supported TX mode\n");
       TEST(0);
     }
-    t = &x3_ctpio_test;
+    t = &ctpio_test;
   }
   /* Otherwise, try CTPIO first. */
   else if ( vi_flags & EF_VI_TX_CTPIO ) {
