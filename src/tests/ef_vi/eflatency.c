@@ -1003,7 +1003,8 @@ int main(int argc, char* argv[])
         fprintf(yaml_fp, "iterations: %d\n", cfg_iter);
         fprintf(yaml_fp, "warmups: %d\n", cfg_warmups);
         fprintf(yaml_fp, "tx_mode: %s\n", t->name);
-        fprintf(yaml_fp, "rx_mode: %s\n", get_pd_datapath_string(&rx_vi.pd));
+        fprintf(yaml_fp, "rx_event_type: %s\n",
+                use_rx_ref ? "EF_EVENT_TYPE_RX_REF" : "EF_EVENT_TYPE_RX");
         fprintf(yaml_fp, "vi_flags: 0x%x\n", (unsigned)cfg_vi_flags);
         fprintf(yaml_fp, "ping_or_pong: %s\n", ping ? "ping" : "pong");
         if( ping )
@@ -1030,7 +1031,8 @@ int main(int argc, char* argv[])
   else
     printf("# frame len: %d\n", tx_frame_len);
   printf("# TX mode: %s\n", t->name);
-  printf("# RX mode: %s\n", get_pd_datapath_string(&rx_vi.pd));
+  printf("# RX event type: %s\n",
+         use_rx_ref ? "EF_EVENT_TYPE_RX_REF" : "EF_EVENT_TYPE_RX");
   if( ping )
     printf("paylen\tmean\tmin\t50%%\t95%%\t99%%\tmax\n");
 

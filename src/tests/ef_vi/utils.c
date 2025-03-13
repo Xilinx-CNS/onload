@@ -561,9 +561,3 @@ int parse_interface_with_flags(const char* s, int* ifindex_out,
 
   return 1;
 }
-
-
-const char* get_pd_datapath_string(ef_pd *pd)
-{
-  return (pd->pd_flags & EF_PD_LLCT) ? "llct" : "ff";
-}
