@@ -717,8 +717,10 @@ static CI_NORETURN usage(const char* fmt, ...)
   fprintf(stderr, "  eflatency [options] <ping|pong> <interface> [<tx_interface>]\n");
   fprintf(stderr, "\npositional arguments:\n");
   fprintf(stderr, "  <interface>         - the interface to send over, may\n");
-  fprintf(stderr, "                        append /ff or /llct to request\n");
-  fprintf(stderr, "                        a specific datapath\n");
+  fprintf(stderr, "                        append /<flag>[,<flag>...] for:\n");
+  fprintf(stderr, "                        * llct - request LLCT datapath\n");
+  fprintf(stderr, "                        * ff - request FF datapath\n");
+  fprintf(stderr, "                        * phys - request physical addressing mode\n");
   fprintf(stderr, "\noptions:\n");
   fprintf(stderr, "  -n <iterations>     - set number of iterations\n");
   fprintf(stderr, "  -s <message-size>   - set udp payload size. Accepts Python slices\n");

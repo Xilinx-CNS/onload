@@ -517,11 +517,19 @@ int parse_interface(const char* s, int* ifindex_out)
 }
 
 
+static bool flag_token_eq(const char* token, const char* value, int value_len)
+{
+  return strncmp(value, token, value_len) == 0 &&
+         (token[value_len] == '\0' || token[value_len] == ',');
+}
+
+
 int parse_interface_with_flags(const char* s, int* ifindex_out,
                                enum ef_pd_flags *pd_flags_out,
                                ef_driver_handle driver_handle)
 {
   char *flags, ifname[IF_NAMESIZE];
+  bool requested_llct = false;
   unsigned long cap;
   int rc;
 
@@ -531,32 +539,45 @@ int parse_interface_with_flags(const char* s, int* ifindex_out,
   if( flags ) {
     int idx = (flags - s) / sizeof(char);
     ifname[idx] = '\0';
-    flags++;
+    if( getenv("EF_VI_PD_FLAGS") ) {
+      errno = EINVAL;
+      fprintf(stderr,
+              "ERROR: unable to use interface flags with EF_VI_PD_FLAGS\n");
+      return 0;
+    }
   }
 
   if( ! parse_interface(ifname, ifindex_out) )
     return 0;
 
+#define FLAG_DP_LLCT "llct"
+#define FLAG_DP_FF "ff"
+#define FLAG_PHYS_MODE "phys"
+  for( ; flags; flags = strchr(flags, ',') ) {
+    flags++;
+    if( flag_token_eq(FLAG_DP_LLCT, flags, strlen(FLAG_DP_LLCT)) ) {
+      *pd_flags_out |= EF_PD_LLCT;
+      requested_llct = true;
+    } else if( flag_token_eq(FLAG_DP_FF, flags, strlen(FLAG_DP_FF)) ) {
+      *pd_flags_out &= ~EF_PD_LLCT;
+      requested_llct = false;
+    } else if( flag_token_eq(FLAG_PHYS_MODE, flags, strlen(FLAG_PHYS_MODE)) ) {
+      *pd_flags_out |= EF_PD_PHYS_MODE;
+    } else {
+      errno = EINVAL;
+      fprintf(stderr, "ERROR: unrecognised interface flag '%s'\n", flags);
+      return 0;
+    }
+  }
+
   rc = ef_vi_capabilities_get(driver_handle, *ifindex_out,
                               EF_VI_CAP_EXTRA_DATAPATHS, &cap);
   if( rc != 0 || ! ( cap & EF_VI_EXTRA_DATAPATH_LLCT ) ) {
     *pd_flags_out &= ~EF_PD_LLCT;
-    if( flags )
+    if( requested_llct )
       fprintf(stderr,
-              "WARNING: interface %d is not multi-arch, ignoring flag '%s'\n",
-              *ifindex_out, flags);
-    return 1;
-  }
-
-  if( flags ) {
-    if( strncmp("llct", flags, 5) == 0 ) {
-      *pd_flags_out |= EF_PD_LLCT;
-    } else if( strncmp("ff", flags, 3) == 0 ) {
-      *pd_flags_out &= ~EF_PD_LLCT;
-    } else {
-      errno = EINVAL;
-      return 0;
-    }
+              "WARNING: interface %s is not multi-arch, ignoring llct flag\n",
+              ifname);
   }
 
   return 1;
