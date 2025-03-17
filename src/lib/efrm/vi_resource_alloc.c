@@ -1376,6 +1376,8 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 		efrm_vi_attr_set_wakeup_channel(&attr, wakeup_channel);
 	if (evq_virs == NULL)
 		efrm_vi_attr_set_want_interrupt(&attr);
+	efrm_vi_attr_set_queue_types(&attr, rxq_capacity != 0,
+	                             txq_capacity != 0);
 
 	if ((rc = efrm_vi_alloc(client, &attr, print_resource_warnings,
 				name, &virs)) < 0)
