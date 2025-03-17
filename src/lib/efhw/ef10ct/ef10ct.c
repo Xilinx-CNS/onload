@@ -453,7 +453,14 @@ static void
 ef10ct_nic_wakeup_request(struct efhw_nic *nic, volatile void __iomem* io_page,
                           int vi_id, int rptr)
 {
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   ci_dword_t dwrptr;
+
+  /* If we are using a dummy evq then return early. Posting an out of range evq
+   * value will lead to firmware crashes. wakeups for rxqs using a dummy evq
+   * should be handled via efhw_nic_shared_rxq_request_wakeup. */
+  if (vi_id >= ef10ct->evq_n)
+    return;
 
   __DWCHCK(ERF_HZ_READ_IDX);
   __RANGECHCK(rptr, ERF_HZ_READ_IDX_WIDTH);
