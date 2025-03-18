@@ -346,7 +346,7 @@ oo_create_fd(tcp_helper_resource_t* thr, oo_sp ep_id, int flags,
 
   if( _filp && *_filp ) {
     rcu_read_lock();
-    rc = get_file_rcu(*_filp);
+    rc = !IS_ERR_OR_NULL(ci_get_file_rcu(_filp));
     rcu_read_unlock();
     if( rc == 0 ) {
       OO_DEBUG_TCPH(ci_log("%s: fd=%d reuses file", __FUNCTION__, fd));
