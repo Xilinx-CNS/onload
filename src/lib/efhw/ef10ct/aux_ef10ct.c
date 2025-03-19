@@ -272,7 +272,7 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
   ef10ct->edev = edev;
 
   client = edev->llct_ops->base_ops->open(auxdev, &ef10ct_handler,
-                                          EFX_AUXDEV_ALL_EVENTS);
+                                          BIT(EFX_AUXDEV_EVENT_IN_RESET));
 
   EFRM_NOTICE("%s name %s", __func__, id->name);
 
