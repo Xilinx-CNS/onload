@@ -17,7 +17,7 @@
 static int ef10ct_handler(struct efx_auxdev_client *client,
                         const struct efx_auxdev_event *event)
 {
-  EFRM_TRACE("%s", __func__);
+  EFRM_TRACE("%s: ev %d", __func__, event->type);
   return 0;
 }
 
