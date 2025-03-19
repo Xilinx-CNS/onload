@@ -155,10 +155,10 @@ int efrm_nic_ctor(struct efrm_nic *efrm_nic,
 	efrm_nic->rx_sniff_rxq = EFRM_PORT_SNIFF_NO_OWNER;
 	efrm_nic->tx_sniff_rxq = EFRM_PORT_SNIFF_NO_OWNER;
 
-        mutex_init(&efrm_nic->dmaq_state.lock);
-        INIT_LIST_HEAD(&efrm_nic->dmaq_state.q[EFHW_EVQ]);
-        INIT_LIST_HEAD(&efrm_nic->dmaq_state.q[EFHW_RXQ]);
-        INIT_LIST_HEAD(&efrm_nic->dmaq_state.q[EFHW_TXQ]);
+	mutex_init(&efrm_nic->dmaq_state.lock);
+	INIT_LIST_HEAD(&efrm_nic->dmaq_state.q[EFHW_EVQ]);
+	INIT_LIST_HEAD(&efrm_nic->dmaq_state.q[EFHW_RXQ]);
+	INIT_LIST_HEAD(&efrm_nic->dmaq_state.q[EFHW_TXQ]);
 
 	return 0;
 
@@ -176,9 +176,9 @@ void efrm_nic_dtor(struct efrm_nic *efrm_nic)
 	/* Things have gone very wrong if there are any driver clients */
 	EFRM_ASSERT(list_empty(&efrm_nic->clients));
 
-        EFRM_ASSERT(list_empty(&efrm_nic->dmaq_state.q[EFHW_EVQ]));
-        EFRM_ASSERT(list_empty(&efrm_nic->dmaq_state.q[EFHW_RXQ]));
-        EFRM_ASSERT(list_empty(&efrm_nic->dmaq_state.q[EFHW_TXQ]));
+	EFRM_ASSERT(list_empty(&efrm_nic->dmaq_state.q[EFHW_EVQ]));
+	EFRM_ASSERT(list_empty(&efrm_nic->dmaq_state.q[EFHW_RXQ]));
+	EFRM_ASSERT(list_empty(&efrm_nic->dmaq_state.q[EFHW_TXQ]));
 
 	efrm_interrupt_vectors_dtor(efrm_nic);
 	efrm_pd_owner_ids_dtor(efrm_nic->owner_ids);

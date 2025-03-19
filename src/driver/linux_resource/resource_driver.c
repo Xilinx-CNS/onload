@@ -246,10 +246,10 @@ fail1:
  */
 static void
 linux_efrm_nic_reclaim(struct linux_efhw_nic *lnic,
-                       struct device *dev,
+		       struct device *dev,
 		       struct net_device *net_dev,
 		       const struct vi_resource_dimensions *res_dim,
-                       const struct efhw_device_type *dev_type)
+		       const struct efhw_device_type *dev_type)
 {
 	struct efhw_nic* nic = &lnic->efrm_nic.efhw_nic;
 	struct device* old_dev;

@@ -50,7 +50,7 @@ extern void efrm_driverlink_unregister(void);
 
 extern int
 efrm_nic_add(void *drv_device, struct device *dev,
-             const struct efhw_device_type *dev_type,
+	     const struct efhw_device_type *dev_type,
 	     struct net_device *net_dev,
 	     struct linux_efhw_nic **lnic_inout,
 	     const struct vi_resource_dimensions *,
@@ -89,11 +89,11 @@ void efrm_nondl_shutdown(void);
 
 int efrm_nondl_unregister_netdev(struct net_device *netdev);
 int efrm_nondl_register_netdev(struct net_device *netdev,
-                              unsigned int n_vis);
+			       unsigned int n_vis);
 
 
 void efrm_notify_nic_probe(const struct efhw_nic* nic,
-                           const struct net_device *netdev);
+			   const struct net_device *netdev);
 void efrm_notify_nic_remove(const struct efhw_nic* nic);
 
 extern int efrm_nic_set_accel_allowed(struct efhw_nic* nic,

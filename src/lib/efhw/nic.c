@@ -198,7 +198,7 @@ int efhw_nic_ctor(struct efhw_nic *nic,
 	nic->vi_irq_n_ranges = 0;
 	nic->mtu = 1500 + ETH_HLEN; /* ? + ETH_VLAN_HLEN */
 	/* Default: this will get overwritten if better value is known */
-	nic->timer_quantum_ns = 4968; 
+	nic->timer_quantum_ns = 4968;
 	nic->vi_min = nic_res->vi_min;
 	nic->vi_lim = nic_res->vi_lim;
 	nic->net_dev = net_dev;
