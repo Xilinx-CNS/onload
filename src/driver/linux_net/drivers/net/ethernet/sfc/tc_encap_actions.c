@@ -209,7 +209,8 @@ static int efx_bind_neigh(struct efx_nic *efx,
 				EFX_TC_ERR_MSG(efx, extack, "Failed to lookup route for encap");
 				goto out_free;
 			}
-			dev_hold(neigh->egdev = dst->dev);
+			netdev_hold(neigh->egdev = dst->dev, &neigh->dev_tracker,
+				    GFP_KERNEL_ACCOUNT);
 			neigh->ttl = ip6_dst_hoplimit(dst);
 			n = dst_neigh_lookup(dst, &flow6.daddr);
 			dst_release(dst);
@@ -223,7 +224,8 @@ static int efx_bind_neigh(struct efx_nic *efx,
 				EFX_TC_ERR_MSG(efx, extack, "Failed to lookup route for encap");
 				goto out_free;
 			}
-			dev_hold(neigh->egdev = rt->dst.dev);
+			netdev_hold(neigh->egdev = rt->dst.dev, &neigh->dev_tracker,
+				    GFP_KERNEL_ACCOUNT);
 			neigh->ttl = ip4_dst_hoplimit(&rt->dst);
 			n = dst_neigh_lookup(&rt->dst, &flow4.daddr);
 			ip_rt_put(rt);
@@ -233,7 +235,7 @@ static int efx_bind_neigh(struct efx_nic *efx,
 		if (!n) {
 			rc = -ENETUNREACH;
 			EFX_TC_ERR_MSG(efx, extack, "Failed to lookup neighbour for encap");
-			dev_put(neigh->egdev);
+			netdev_put(neigh->egdev, &neigh->dev_tracker);
 			goto out_free;
 		}
 		refcount_set(&neigh->ref, 1);
@@ -273,7 +275,7 @@ static void efx_free_neigh(struct efx_neigh_binder *neigh)
 	rhashtable_remove_fast(&efx->tc->neigh_ht, &neigh->linkage,
 			       efx_neigh_ht_params);
 	synchronize_rcu();
-	dev_put(neigh->egdev);
+	netdev_put(neigh->egdev, &neigh->dev_tracker);
 	put_net(neigh->net);
 	kfree(neigh);
 }

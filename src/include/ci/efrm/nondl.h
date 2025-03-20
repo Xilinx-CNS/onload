@@ -8,6 +8,7 @@
 #define __EFRM_NONDL_H__
 
 #include <linux/types.h>
+#include <ci/driver/kernel_compat.h>
 
 
 /* Non-driverlink network device.
@@ -43,6 +44,7 @@ struct efrm_nondl_device {
   /* Network device currently associated with this non-driverlink
    * device. */
   struct net_device *netdev;
+  netdevice_tracker netdev_tracker;
 
   /* Number of VIs we would like to create on this device. */
   unsigned int n_vis;
