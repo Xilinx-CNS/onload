@@ -139,6 +139,7 @@ EFX_HAVE_NDO_ADD_GENEVE_PORT	member	struct_net_device_ops	ndo_add_geneve_port	in
 EFX_HAVE_NETDEV_LLTX		nsymbol	NETIF_F_LLTX	include/linux/netdev_features.h
 EFX_HAVE_NETDEV_MTU_LIMITS	member	struct_net_device	max_mtu	include/linux/netdevice.h
 EFX_NEED_BOOL_NAPI_COMPLETE_DONE	nsymtype	napi_complete_done	include/linux/netdevice.h	bool (struct napi_struct *, int)
+EFX_HAVE_NETDEV_XDP_FEATURES	member	struct_net_device	xdp_features	include/linux/netdevice.h
 EFX_HAVE_XDP	symbol	netdev_bpf	include/linux/netdevice.h
 EFX_HAVE_XDP_OLD	symbol	netdev_xdp	include/linux/netdevice.h
 EFX_HAVE_XDP_TRACE	file	include/trace/events/xdp.h
