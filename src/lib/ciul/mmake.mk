@@ -51,6 +51,9 @@ LIB_SRCS	+=		\
 		shrub_server.c  \
 		shrub_socket.c  \
 		shrub_adapter.c \
+		shrub_queue.c   \
+		shrub_connection.c \
+		shrub_server_sockets.c \
 
 # librt is needed on old glibc, e.g. on RHEL 6
 MMAKE_DIR_LINKFLAGS	:= $(MMAKE_DIR_LINKFLAGS) -lrt
