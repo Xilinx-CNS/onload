@@ -266,6 +266,7 @@ int efx_ef100_init_datapath_caps(struct efx_nic *efx)
 	}
 	efx->num_mac_stats = MCDI_WORD(outbuf,
 				   GET_CAPABILITIES_V4_OUT_MAC_STATS_NUM_STATS);
+	efx->stats_dma_size = efx->num_mac_stats * sizeof(u64);
 	if (outlen >= MC_CMD_GET_CAPABILITIES_V10_OUT_LEN) {
 		efx->supported_bitmap =
 			MCDI_DWORD(outbuf,
@@ -577,7 +578,7 @@ int ef100_phy_probe(struct efx_nic *efx)
 	/* Push settings to the PHY. Failure is not fatal, the user can try to
 	 * fix it using ethtool.
 	 */
-	rc = efx_mcdi_port_reconfigure(efx);
+	rc = efx->type->reconfigure_port(efx);
 	if (rc && rc != -EPERM)
 		netif_warn(efx, drv, efx->net_dev,
 			   "could not initialise PHY settings\n");
@@ -887,8 +888,7 @@ static size_t ef100_update_stats(struct efx_nic *efx,
 				 struct rtnl_link_stats64 *core_stats)
 	__acquires(efx->stats_lock)
 {
-	__le64 *mc_stats = kmalloc_array(efx->num_mac_stats, sizeof(__le64),
-					 GFP_ATOMIC);
+	__le64 *mc_stats = kmalloc(efx->stats_dma_size, GFP_ATOMIC);
 	struct ef100_nic_data *nic_data = efx->nic_data;
 	DECLARE_BITMAP(mask, EF100_STAT_COUNT) = {};
 	u64 *stats = nic_data->stats;
@@ -1881,6 +1881,7 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.rx_recycle_ring_size = efx_ef100_recycle_ring_size,
 
 	.reconfigure_mac = ef100_reconfigure_mac,
+	.check_link_change = efx_mcdi_phy_poll,
 	.reconfigure_port = efx_mcdi_port_reconfigure,
 	.test_nvram = efx_mcdi_nvram_test_all,
 	.describe_stats = ef100_describe_stats,

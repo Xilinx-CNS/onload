@@ -714,7 +714,7 @@ int efx_nic_copy_stats(struct efx_nic *efx, __le64 *dest)
 		if (generation_end == EFX_MC_STATS_GENERATION_INVALID)
 			goto return_zeroes;
 		rmb();
-		memcpy(dest, dma_stats, efx->num_mac_stats * sizeof(__le64));
+		memcpy(dest, dma_stats, efx->stats_dma_size);
 		rmb();
 		generation_start = dma_stats[MC_CMD_MAC_GENERATION_START];
 		if (generation_end == generation_start)
@@ -725,7 +725,7 @@ int efx_nic_copy_stats(struct efx_nic *efx, __le64 *dest)
 	rc = -EIO;
 
 return_zeroes:
-	memset(dest, 0, efx->num_mac_stats * sizeof(u64));
+	memset(dest, 0, efx->stats_dma_size);
 	return rc;
 }
 

@@ -1048,28 +1048,6 @@ static int efx_ptp_get_timestamp_corrections(struct efx_nic *efx)
 	return 0;
 }
 
-static int efx_ptp_adapter_has_support(struct efx_nic *efx)
-{
-	MCDI_DECLARE_BUF(inbuf, MC_CMD_PTP_IN_READ_NIC_TIME_LEN);
-	MCDI_DECLARE_BUF_ERR(outbuf);
-	int rc;
-
-	MCDI_SET_DWORD(inbuf, PTP_IN_OP, MC_CMD_PTP_OP_READ_NIC_TIME);
-	MCDI_SET_DWORD(inbuf, PTP_IN_PERIPH_ID, 0);
-	rc = efx_mcdi_rpc_quiet(efx, MC_CMD_PTP, inbuf, sizeof(inbuf),
-				outbuf, sizeof(outbuf), NULL);
-	/* ENOSYS => the NIC doesn't support PTP.
-	 * EPERM => the NIC doesn't have a PTP license.
-	 */
-	if (rc == -ENOSYS || rc == -EPERM)
-		pci_info(efx->pci_dev, "no PTP support (rc=%d)\n", rc);
-	else if (rc)
-		efx_mcdi_display_error(efx, MC_CMD_PTP,
-				       MC_CMD_PTP_IN_READ_NIC_TIME_LEN,
-				       outbuf, sizeof(outbuf), rc);
-	return rc == 0;
-}
-
 /* Enable MCDI PTP support. */
 static int efx_ptp_enable(struct efx_nic *efx)
 {
@@ -1968,7 +1946,8 @@ static int efx_ptp_stop(struct efx_nic *efx)
 	if (ptp == NULL)
 		return 0;
 
-	rc = efx_ptp_disable(efx);
+	if (efx_nic_rev(efx) < EFX_REV_X4)
+		rc = efx_ptp_disable(efx);
 
 	efx_ptp_remove_filters(efx, &ptp->rxfilters_mcast);
 	efx_ptp_remove_filters(efx, &ptp->rxfilters_ucast);
@@ -2063,9 +2042,12 @@ static int efx_ptp_hw_pps_enable(struct efx_nic *efx, bool enable)
 	MCDI_SET_DWORD(inbuf, PTP_IN_PPS_ENABLE_OP,
 		       enable ? MC_CMD_PTP_ENABLE_PPS :
 				MC_CMD_PTP_DISABLE_PPS);
-	MCDI_SET_DWORD(inbuf, PTP_IN_PPS_ENABLE_QUEUE_ID,
-		       efx->ptp_data->channel ?
-		       efx->ptp_data->channel->channel : 0);
+
+	/* QUEUE_ID field should not be set for X4 */
+	if (efx_nic_rev(efx) < EFX_REV_X4)
+		MCDI_SET_DWORD(inbuf, PTP_IN_PPS_ENABLE_QUEUE_ID,
+			       efx->ptp_data->channel ?
+			       efx->ptp_data->channel->channel : 0);
 
 	rc = efx_mcdi_rpc_quiet(efx, MC_CMD_PTP, inbuf, sizeof(inbuf),
 				NULL, 0, NULL);
@@ -2529,6 +2511,12 @@ static int efx_ptp_probe_post_io(struct efx_nic *efx)
 		return -ENOMEM;
 	efx->ptp_data = ptp;
 
+	/* X4 needs to enable PTP before any PTP MCDI commands
+	 * will succeed.
+	 */
+	if (efx_nic_rev(efx) >= EFX_REV_X4)
+		efx_ptp_enable(efx);
+
 	rc = efx_mcdi_get_board_cfg(efx, 0, efx->adapter_base_addr, NULL,
 				    NULL);
 	if (rc < 0)
@@ -2736,7 +2724,8 @@ void efx_ptp_remove_post_io(struct efx_nic *efx)
 	if (!ptp_data)
 		return;
 
-	(void)efx_ptp_disable(efx);
+	if (efx_nic_rev(efx) < EFX_REV_X4)
+		(void)efx_ptp_disable(efx);
 
 	efx_ptp_remove_filters(efx, &ptp_data->rxfilters_mcast);
 	efx_ptp_remove_filters(efx, &ptp_data->rxfilters_ucast);
@@ -2761,6 +2750,16 @@ void efx_ptp_remove_post_io(struct efx_nic *efx)
 	efx_dissociate_phc(efx);
 	efx_nic_free_buffer(efx, &ptp_data->start);
 	efx_trim_debugfs_port(efx, efx_debugfs_ptp_parameters);
+
+	/*
+	 * For X4 need to wait until we're done with PTP MCDI before disabling.
+	 * It is important that we ensure that PTP is only disabled once and must
+	 * be disabled by the owner of the PTP hardware clock. The owner of the PTP
+	 * hardware clock must be able to disable HW PPS - this is not possible if
+	 * PTP has previously been disabled.
+	 */
+	if (efx_nic_rev(efx) >= EFX_REV_X4 && efx_phc_exposed(efx))
+		(void)efx_ptp_disable(efx);
 
 	efx->ptp_data = NULL;
 	ptp_data->efx = NULL;
@@ -2910,7 +2909,6 @@ static int efx_ptp_ts_init(struct efx_nic *efx,
 void efx_ptp_get_ts_info(struct efx_nic *efx,
 			 struct kernel_ethtool_ts_info *ts_info)
 {
-	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 	struct efx_ptp_data *phc_ptp = efx->phc_ptp_data;
 	struct efx_ptp_data *ptp = efx->ptp_data;
 
@@ -2926,8 +2924,7 @@ void efx_ptp_get_ts_info(struct efx_nic *efx,
 	ts_info->so_timestamping |= SOF_TIMESTAMPING_SYS_HARDWARE;
 #endif
 	/* Check licensed features. */
-	if (!(nic_data->licensed_features &
-	    (1 << LICENSED_V3_FEATURES_TX_TIMESTAMPS_LBN)))
+	if (!efx_ptp_tx_ts_support(efx))
 		ts_info->so_timestamping &= ~SOF_TIMESTAMPING_TX_HARDWARE;
 
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
@@ -3463,16 +3460,12 @@ static const struct efx_channel_type efx_ptp_channel_type = {
 
 int efx_ptp_defer_probe_with_channel(struct efx_nic *efx)
 {
-	int rc = 0;
+	if (!efx_ptp_adapter_has_support(efx))
+		return 0;
 
-	if (efx_ptp_adapter_has_support(efx)) {
-		efx->extra_channel_type[EFX_EXTRA_CHANNEL_PTP] =
-			&efx_ptp_channel_type;
+	efx->extra_channel_type[EFX_EXTRA_CHANNEL_PTP] = &efx_ptp_channel_type;
 
-		rc = efx_ptp_probe_post_io(efx);
-	}
-
-	return rc;
+	return efx_ptp_probe_post_io(efx);
 }
 
 void efx_ptp_start_datapath(struct efx_nic *efx)

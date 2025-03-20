@@ -459,6 +459,45 @@ static int efx_devlink_flash_update(struct devlink *devlink,
 }
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER)
+static int efx_devlink_reporter_log(struct devlink_health_reporter *reporter,
+				    struct devlink_fmsg *fmsg,
+				    u32 type, bool read, bool clear)
+{
+	struct efx_devlink *devlink_private =
+		devlink_health_reporter_priv(reporter);
+	struct efx_nvlog_data *nvlog_data =
+		kzalloc(sizeof(*nvlog_data), GFP_KERNEL);
+	struct efx_nic *efx = devlink_private->efx;
+	int rc;
+
+	if (!nvlog_data)
+		return -ENOMEM;
+
+	if (read) {
+		rc = efx_nvlog_do(efx, nvlog_data, type, true, false);
+		if (rc)
+			goto out_free;
+
+		rc = efx_nvlog_to_devlink(nvlog_data, fmsg);
+		if (rc)
+			goto out_free;
+	}
+
+	/* if log output was requested then this is ready, so now safe
+	 * to clear flash
+	 */
+	if (clear)
+		rc = efx_nvlog_do(efx, nvlog_data, type, false, true);
+
+ out_free:
+	kfree(nvlog_data->nvlog);
+	kfree(nvlog_data);
+
+	return rc;
+}
+#endif
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER)
 static int efx_devlink_reporter_nvlog_diagnose(struct devlink_health_reporter *reporter,
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER_OPS_EXTACK)
 					       struct devlink_fmsg *fmsg,
@@ -467,16 +506,9 @@ static int efx_devlink_reporter_nvlog_diagnose(struct devlink_health_reporter *r
 					       struct devlink_fmsg *fmsg)
 #endif
 {
-	struct efx_devlink *devlink_private =
-		devlink_health_reporter_priv(reporter);
-	struct efx_nic *efx = devlink_private->efx;
-	int rc;
-
-	rc = efx_nvlog_do(efx, NVRAM_PARTITION_TYPE_LOG, true, false);
-	if (rc)
-		return rc;
-
-	return efx_nvlog_to_devlink(efx, fmsg);
+	return efx_devlink_reporter_log(reporter, fmsg,
+					NVRAM_PARTITION_TYPE_LOG,
+					true, false);
 }
 
 static const struct devlink_health_reporter_ops sfc_devlink_nvlog_ops = {
@@ -492,27 +524,52 @@ static int efx_devlink_reporter_nvlog_clear_diagnose(struct devlink_health_repor
 						     struct devlink_fmsg *fmsg)
 #endif
 {
-	struct efx_devlink *devlink_private =
-		devlink_health_reporter_priv(reporter);
-	struct efx_nic *efx = devlink_private->efx;
-	int rc;
-
-	rc = efx_nvlog_do(efx, NVRAM_PARTITION_TYPE_LOG, true, false);
-	if (rc)
-		return rc;
-
-	rc = efx_nvlog_to_devlink(efx, fmsg);
-	if (rc)
-		return rc;
-
-	/* log output ready, so now safe to clear flash */
-	return efx_nvlog_do(efx, NVRAM_PARTITION_TYPE_LOG, false, true);
+	return efx_devlink_reporter_log(reporter, fmsg,
+					NVRAM_PARTITION_TYPE_LOG,
+					true, true);
 }
 
 static const struct devlink_health_reporter_ops sfc_devlink_nvlog_clear_ops = {
 	.name		= "nvlog-clear",
 	.diagnose	= efx_devlink_reporter_nvlog_clear_diagnose,
 };
+
+static int efx_devlink_reporter_ramlog_diagnose(struct devlink_health_reporter *reporter,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER_OPS_EXTACK)
+						struct devlink_fmsg *fmsg,
+						struct netlink_ext_ack *extack)
+#else
+						struct devlink_fmsg *fmsg)
+#endif
+{
+	return efx_devlink_reporter_log(reporter, fmsg,
+					NVRAM_PARTITION_TYPE_RAM_LOG,
+					true, false);
+}
+
+static const struct devlink_health_reporter_ops sfc_devlink_ramlog_ops = {
+	.name		= "ramlog",
+	.diagnose	= efx_devlink_reporter_ramlog_diagnose,
+};
+
+static int efx_devlink_reporter_ramlog_clear_diagnose(struct devlink_health_reporter *reporter,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER_OPS_EXTACK)
+						      struct devlink_fmsg *fmsg,
+						      struct netlink_ext_ack *extack)
+#else
+						      struct devlink_fmsg *fmsg)
+#endif
+{
+	return efx_devlink_reporter_log(reporter, fmsg,
+					NVRAM_PARTITION_TYPE_RAM_LOG,
+					true, true);
+}
+
+static const struct devlink_health_reporter_ops sfc_devlink_ramlog_clear_ops = {
+	.name		= "ramlog-clear",
+	.diagnose	= efx_devlink_reporter_ramlog_clear_diagnose,
+};
+
 #endif /* EFX_HAVE_DEVLINK_HEALTH */
 
 static const struct devlink_ops sfc_devlink_ops = {
@@ -531,7 +588,10 @@ void efx_fini_devlink(struct efx_nic *efx)
 			devlink_health_reporter_destroy(efx->devlink_reporter_nvlog);
 		if (efx->devlink_reporter_nvlog_clear)
 			devlink_health_reporter_destroy(efx->devlink_reporter_nvlog_clear);
-		efx_nvlog_fini(efx);
+		if (efx->devlink_reporter_ramlog)
+			devlink_health_reporter_destroy(efx->devlink_reporter_ramlog);
+		if (efx->devlink_reporter_ramlog_clear)
+			devlink_health_reporter_destroy(efx->devlink_reporter_ramlog_clear);
 #endif
 		devlink_unregister(efx->devlink);
 		devlink_free(efx->devlink);
@@ -559,8 +619,7 @@ void efx_fini_devlink_port(struct efx_nic *efx)
 int efx_probe_devlink(struct efx_nic *efx)
 {
 	struct efx_devlink *devlink_private;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER) || \
-defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VOID_DEVLINK_REGISTER)
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VOID_DEVLINK_REGISTER)
 	int rc;
 #endif
 
@@ -590,16 +649,25 @@ defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VOID_DEVLINK_REGISTER)
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER)
 	if (PCI_FUNC(efx->pci_dev->devfn) == 0) {
-		rc = efx_nvlog_init(efx);
-		if (!rc) {
-			efx->devlink_reporter_nvlog =
+		efx->devlink_reporter_nvlog =
+			devlink_health_reporter_create(efx->devlink,
+						       &sfc_devlink_nvlog_ops,
+						       0,
+						       devlink_private);
+		efx->devlink_reporter_nvlog_clear =
+			devlink_health_reporter_create(efx->devlink,
+						       &sfc_devlink_nvlog_clear_ops,
+						       0,
+						       devlink_private);
+		if (efx->type->revision == EFX_REV_X4) {
+			efx->devlink_reporter_ramlog =
 				devlink_health_reporter_create(efx->devlink,
-							       &sfc_devlink_nvlog_ops,
+							       &sfc_devlink_ramlog_ops,
 							       0,
 							       devlink_private);
-			efx->devlink_reporter_nvlog_clear =
+			efx->devlink_reporter_ramlog_clear =
 				devlink_health_reporter_create(efx->devlink,
-							       &sfc_devlink_nvlog_clear_ops,
+							       &sfc_devlink_ramlog_clear_ops,
 							       0,
 							       devlink_private);
 		}

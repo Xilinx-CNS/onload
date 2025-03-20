@@ -179,6 +179,13 @@ MODULE_PARM_DESC(performance_profile,
 		 "Tune settings for different performance profiles: 'throughput', 'latency' or (default) 'auto'");
 #endif
 
+#ifdef EFX_NOT_UPSTREAM
+static char *link_mgmt;
+module_param(link_mgmt, charp, 0444);
+MODULE_PARM_DESC(link_mgmt,
+		 "Choose link management API: 'netport' (default), 'legacy' or 'auto'");
+#endif
+
 /**************************************************************************
  *
  * Port handling
@@ -198,7 +205,7 @@ static int efx_init_port(struct efx_nic *efx)
 	efx->port_initialized = true;
 
 	/* Ensure the PHY advertises the correct flow control settings */
-	rc = efx_mcdi_port_reconfigure(efx);
+	rc = efx->type->reconfigure_port(efx);
 	if (rc && rc != -EPERM)
 		goto fail;
 
@@ -1073,6 +1080,18 @@ int efx_pci_probe_post_io(struct efx_nic *efx,
 	else
 		efx->performance_profile = EFX_PERFORMANCE_PROFILE_AUTO;
 #endif
+#ifdef EFX_NOT_UPSTREAM
+	if (!link_mgmt)
+		efx->link_mgmt = EFX_LINK_MGMT_NETPORT;
+	else if (strcmp(link_mgmt, "auto") == 0)
+		efx->link_mgmt = EFX_LINK_MGMT_AUTO;
+	else if (strcmp(link_mgmt, "legacy") == 0)
+		efx->link_mgmt = EFX_LINK_MGMT_LEGACY;
+	else if (strcmp(link_mgmt, "netport") == 0)
+		efx->link_mgmt = EFX_LINK_MGMT_NETPORT;
+	else
+		efx->link_mgmt = EFX_LINK_MGMT_AUTO;
+#endif
 
 	rc = efx_probe_common(efx);
 	if (rc)
@@ -1431,7 +1450,7 @@ static int efx_pm_freeze(struct device *dev)
 	if (efx_net_active(efx->state)) {
 		efx->state = efx_freeze(efx->state);
 
-		efx_mcdi_port_reconfigure(efx);
+		efx->type->reconfigure_port(efx);
 	}
 
 	rtnl_unlock();
@@ -1463,7 +1482,7 @@ static int efx_pm_thaw(struct device *dev)
 			goto fail;
 
 		mutex_lock(&efx->mac_lock);
-		efx_mcdi_port_reconfigure(efx);
+		efx->type->reconfigure_port(efx);
 		mutex_unlock(&efx->mac_lock);
 
 		efx_start_all(efx);
@@ -1474,7 +1493,7 @@ static int efx_pm_thaw(struct device *dev)
 	if (efx_frozen(efx->state)) {
 		efx->state = efx_thaw(efx->state);
 
-		efx_mcdi_port_reconfigure(efx);
+		efx->type->reconfigure_port(efx);
 
 		efx->type->resume_wol(efx);
 	}

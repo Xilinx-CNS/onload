@@ -224,7 +224,7 @@ static int ef100_net_open(struct net_device *net_dev)
 	 * to poll now because we could have missed a change
 	 */
 	mutex_lock(&efx->mac_lock);
-	if (efx_mcdi_phy_poll(efx))
+	if (efx->type->check_link_change(efx))
 		efx_link_status_changed(efx);
 	mutex_unlock(&efx->mac_lock);
 

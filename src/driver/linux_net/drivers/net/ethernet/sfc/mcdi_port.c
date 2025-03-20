@@ -18,6 +18,8 @@
 #include "efx_common.h"
 #include "selftest.h"
 #include "mcdi_port_common.h"
+#include "mcdi_port_handle.h"
+
 
 static void efx_mcdi_fwalert_event(struct efx_nic *efx, efx_qword_t *ev)
 {
@@ -95,6 +97,23 @@ bool efx_mcdi_mac_check_fault(struct efx_nic *efx)
 	return MCDI_DWORD(outbuf, GET_LINK_OUT_MAC_FAULT) != 0;
 }
 
+bool efx_x4_mcdi_mac_check_fault(struct efx_nic *efx)
+{
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_MAC_STATE_OUT_LEN);
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAC_STATE_IN_LEN);
+	size_t outlen;
+	int rc;
+
+	MCDI_SET_DWORD(inbuf, MAC_STATE_IN_PORT_HANDLE, efx->port_handle);
+
+	rc = efx_mcdi_rpc(efx, MC_CMD_MAC_STATE, inbuf, sizeof(inbuf),
+			  outbuf, sizeof(outbuf), &outlen);
+	if (rc)
+		return true;
+
+	return MCDI_DWORD(outbuf, MAC_STATE_OUT_MAC_FAULT_FLAGS) != 0;
+}
+
 int efx_mcdi_port_probe(struct efx_nic *efx)
 {
 	int rc;
@@ -110,7 +129,33 @@ int efx_mcdi_port_probe(struct efx_nic *efx)
 
 void efx_mcdi_port_remove(struct efx_nic *efx)
 {
-	efx_mcdi_port_reconfigure(efx);
+	efx->type->reconfigure_port(efx);
 	efx_mcdi_phy_remove(efx);
+	efx_mcdi_mac_fini_stats(efx);
+}
+
+int efx_x4_mcdi_port_probe(struct efx_nic *efx)
+{
+	int rc;
+
+	if (!efx_nic_port_handle_supported(efx))
+		return efx_mcdi_port_probe(efx);
+
+	/* Fill out loopback modes and initial link state */
+	rc = efx_x4_mcdi_phy_probe(efx);
+	if (rc)
+		return rc;
+
+	return efx_mcdi_mac_init_stats(efx);
+}
+
+void efx_x4_mcdi_port_remove(struct efx_nic *efx)
+{
+	if (!efx_nic_port_handle_supported(efx))
+		return efx_mcdi_port_remove(efx);
+
+	efx_x4_mcdi_port_reconfigure(efx);
+	efx_x4_mcdi_phy_remove(efx);
+
 	efx_mcdi_mac_fini_stats(efx);
 }

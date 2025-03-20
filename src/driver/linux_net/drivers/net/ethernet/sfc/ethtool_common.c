@@ -12,11 +12,13 @@
 #include "mcdi.h"
 #include "nic.h"
 #include "selftest.h"
+#include "efx_ethtool.h"
 #include "ethtool_common.h"
 #include "efx_common.h"
 #include "efx_channels.h"
 #include "rx_common.h"
 #include "mcdi_port_common.h"
+#include "mcdi_port_handle.h"
 #include "mcdi_filters.h"
 #include "tc.h"
 
@@ -301,9 +303,13 @@ fail:
 int efx_ethtool_nway_reset(struct net_device *net_dev)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
-	u32 flags = efx_get_mcdi_phy_flags(efx);
+	u32 flags;
 	int rc;
 
+	if (efx_nic_port_handle_supported(efx))
+		return efx_x4_mcdi_nway_reset(efx);
+
+	flags = efx_get_mcdi_phy_flags(efx);
 	flags |= (1 << MC_CMD_SET_LINK_IN_POWEROFF_LBN);
 
 	rc = efx_mcdi_set_link(efx, efx_get_mcdi_caps(efx), flags,
@@ -364,7 +370,7 @@ int efx_ethtool_set_pauseparam(struct net_device *net_dev,
 	efx_link_set_wanted_fc(efx, wanted_fc);
 	if (efx->link_advertising[0] != old_adv ||
 	    (efx->wanted_fc ^ old_fc) & EFX_FC_AUTO) {
-		rc = efx_mcdi_port_reconfigure(efx);
+		rc = efx->type->reconfigure_port(efx);
 		if (rc) {
 			netif_err(efx, drv, efx->net_dev,
 				  "Unable to advertise requested flow "
@@ -916,7 +922,10 @@ int efx_ethtool_get_link_ksettings(struct net_device *net_dev,
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	mutex_lock(&efx->mac_lock);
-	efx_mcdi_phy_get_ksettings(efx, out);
+	if (efx_nic_port_handle_supported(efx))
+		efx_x4_mcdi_phy_get_ksettings(efx, out);
+	else
+		efx_mcdi_phy_get_ksettings(efx, out);
 	mutex_unlock(&efx->mac_lock);
 
 	return 0;
@@ -930,7 +939,11 @@ int efx_ethtool_set_link_ksettings(struct net_device *net_dev,
 	int rc;
 
 	mutex_lock(&efx->mac_lock);
-	rc = efx_mcdi_phy_set_ksettings(efx, settings, advertising);
+	if (efx_nic_port_handle_supported(efx))
+		rc = efx_x4_mcdi_phy_set_ksettings(efx, settings, advertising);
+	else
+		rc = efx_mcdi_phy_set_ksettings(efx, settings, advertising);
+
 	if (rc > 0) {
 		efx_link_set_advertising(efx, advertising);
 		rc = 0;
@@ -950,7 +963,10 @@ int efx_ethtool_get_settings(struct net_device *net_dev,
 	struct efx_link_state *link_state = &efx->link_state;
 
 	mutex_lock(&efx->mac_lock);
-	efx_mcdi_phy_get_settings(efx, ecmd);
+	if (efx_nic_port_handle_supported(efx))
+		efx_x4_mcdi_phy_get_settings(efx, ecmd);
+	else
+		efx_mcdi_phy_get_settings(efx, ecmd);
 	mutex_unlock(&efx->mac_lock);
 
 	/* Both MACs support pause frames (bidirectional and respond-only) */
@@ -981,7 +997,11 @@ int efx_ethtool_set_settings(struct net_device *net_dev,
 	}
 
 	mutex_lock(&efx->mac_lock);
-	rc = efx_mcdi_phy_set_settings(efx, ecmd, new_adv);
+	if (efx_nic_port_handle_supported(efx))
+		rc = efx_x4_mcdi_phy_set_settings(efx, ecmd, new_adv);
+	else
+		rc = efx_mcdi_phy_set_settings(efx, ecmd, new_adv);
+
 	if (rc > 0) {
 		efx_link_set_advertising(efx, new_adv);
 		rc = 0;
@@ -1009,7 +1029,10 @@ int efx_ethtool_get_fecparam(struct net_device *net_dev,
 	int rc;
 
 	mutex_lock(&efx->mac_lock);
-	rc = efx_mcdi_phy_get_fecparam(efx, fecparam);
+	if (efx_nic_port_handle_supported(efx))
+		rc = efx_x4_mcdi_phy_get_fecparam(efx, fecparam);
+	else
+		rc = efx_mcdi_phy_get_fecparam(efx, fecparam);
 	mutex_unlock(&efx->mac_lock);
 
 	return rc;
@@ -1022,7 +1045,10 @@ int efx_ethtool_set_fecparam(struct net_device *net_dev,
 	int rc;
 
 	mutex_lock(&efx->mac_lock);
-	rc = efx_mcdi_phy_set_fecparam(efx, fecparam);
+	if (efx_nic_port_handle_supported(efx))
+		rc = efx_x4_mcdi_phy_set_fecparam(efx, fecparam);
+	else
+		rc = efx_mcdi_phy_set_fecparam(efx, fecparam);
 	mutex_unlock(&efx->mac_lock);
 	return rc;
 }
@@ -2103,11 +2129,35 @@ int efx_ethtool_get_module_eeprom(struct net_device *net_dev,
 				  struct ethtool_eeprom *ee,
 				  u8 *data)
 {
-	return efx_mcdi_phy_get_module_eeprom(efx_netdev_priv(net_dev), ee, data);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
+
+	if (efx_nic_port_handle_supported(efx))
+		return -EOPNOTSUPP;
+
+	return efx_mcdi_phy_get_module_eeprom(efx, ee, data);
 }
 
 int efx_ethtool_get_module_info(struct net_device *net_dev,
 				struct ethtool_modinfo *modinfo)
 {
-	return efx_mcdi_phy_get_module_info(efx_netdev_priv(net_dev), modinfo);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
+
+	if (efx_nic_port_handle_supported(efx))
+		return -EOPNOTSUPP;
+
+	return efx_mcdi_phy_get_module_info(efx, modinfo);
 }
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_EEPROM_BY_PAGE)
+int efx_ethtool_get_module_eeprom_by_page(struct net_device *net_dev,
+					  const struct ethtool_module_eeprom *page,
+					  struct netlink_ext_ack *extack)
+{
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
+
+	if (efx_nic_port_handle_supported(efx))
+		return efx_mcdi_x4_get_module_data(efx, page, extack);
+
+	return -EOPNOTSUPP; /* Fallback to get_module_{info,eeprom} */
+}
+#endif

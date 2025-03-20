@@ -328,4 +328,13 @@ bool efx_nic_client_supported(struct efx_nic *efx, enum efx_client_type type)
 bool efx_mcdi_port_process_event(struct efx_channel *channel, efx_qword_t *event,
 				 int *rc, int budget);
 
+static inline
+bool efx_nic_port_handle_supported(struct efx_nic *efx)
+{
+	if (efx->type->port_handle_supported)
+		return efx->type->port_handle_supported(efx);
+
+	return false;
+}
+
 #endif /* EFX_NIC_COMMON_H */
