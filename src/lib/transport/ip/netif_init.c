@@ -1261,11 +1261,11 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
 
   static const char* const multiarch_tx_opts[] = { "ff", "llct", 0 };
   opts->multiarch_tx_datapath =
-    parse_enum(opts, "EF_MULTIARCH_TX_DATAPATH", multiarch_tx_opts, "ff");
+    parse_enum(opts, "EF_MULTIARCH_TX_DATAPATH", multiarch_tx_opts, "llct");
 
   static const char* const multiarch_rx_opts[] = { "ff", "llct", "both", 0 };
   opts->multiarch_rx_datapath =
-    parse_enum(opts, "EF_MULTIARCH_RX_DATAPATH", multiarch_rx_opts, "ff");
+    parse_enum(opts, "EF_MULTIARCH_RX_DATAPATH", multiarch_rx_opts, "both");
 
   if( (s = getenv("EF_KERNEL_PACKETS_BATCH_SIZE")) )
     opts->kernel_packets_batch_size = atoi(s);
