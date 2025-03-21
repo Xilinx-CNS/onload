@@ -1039,6 +1039,10 @@ int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
       case EFCT_EVENT_TYPE_CONTROL:
         n_evs += efct_tx_handle_control_event(vi, *event, &evs[n_evs]);
         break;
+      case EFCT_EVENT_TYPE_RX:
+        /* processing the rxq should already be handled via efct_poll_rx, so
+         * there is no need to report events here. */
+        break;
       default:
         ef_log("%s:%d: ERROR: event="CI_QWORD_FMT,
                __FUNCTION__, __LINE__, CI_QWORD_VAL(*event));
