@@ -428,6 +428,7 @@ void ef_vi_reset_rxq(struct ef_vi* vi)
       eqs = &vi->ep_state->rxq.efct_state[i];
       eqs->free_head = eqs->fifo_head = -1;
       eqs->fifo_tail_hw = eqs->fifo_tail_sw = -1;
+      eqs->qid = -1;
     }
     /* shared rxqs have their buffer posting managed elsewhere, not by the app,
      * so let's make it look like the queue is constantly full. If we are using
