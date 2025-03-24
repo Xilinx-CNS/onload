@@ -12,14 +12,15 @@ struct ef_shrub_connection {
   struct ef_shrub_queue* queue;
 
   int socket;
-  int fifo_index;
+  size_t fifo_index;
+  size_t fifo_size;
   size_t fifo_mmap_offset;
 
   ef_shrub_buffer_id* fifo;
 };
 
 struct ef_shrub_connection*
-ef_shrub_connection_alloc(struct ef_shrub_queue* queue);
+ef_shrub_connection_alloc(int fifo_fd, size_t* fifo_offset, size_t fifo_size);
 
 void ef_shrub_connection_attach(struct ef_shrub_connection* connection,
                                 struct ef_shrub_queue* queue);

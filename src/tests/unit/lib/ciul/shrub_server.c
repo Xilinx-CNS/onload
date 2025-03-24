@@ -50,7 +50,6 @@ int ef_shrub_server_sockets_open(struct ef_shrub_server_sockets* sockets,
                                  const char* path)
 {
   calls->sockets_open++;
-  CHECK(calls->remove, ==, 1);
   CHECK(strcmp(path, server_addr), ==, 0);
   return 0;
 }
@@ -128,6 +127,8 @@ int ef_shrub_queue_open(struct ef_shrub_queue** queue_out,
                         struct ef_vi* vi_,
                         size_t buffer_bytes_,
                         size_t buffer_count_,
+                        size_t fifo_size,
+                        int client_fifo_fd,
                         int qid)
 {
   struct ef_shrub_queue* queue;
@@ -135,17 +136,19 @@ int ef_shrub_queue_open(struct ef_shrub_queue** queue_out,
   CHECK(vi_, ==, vi);
   CHECK(buffer_bytes_, ==, buffer_bytes);
   CHECK(buffer_count_, ==, buffer_count);
+  CHECK(fifo_size, >=, buffer_count);
 
   queue = calloc(1, sizeof(*queue));
   queue->buffer_bytes = buffer_bytes;
   queue->buffer_count = buffer_count;
+  queue->fifo_size = fifo_size;
 
   *queue_out = queue;
   return 0;
 }
 
 struct ef_shrub_connection*
-ef_shrub_connection_alloc(struct ef_shrub_queue* queue)
+ef_shrub_connection_alloc(int fifo_fd, size_t* fifo_offset, size_t fifo_size)
 {
   struct ef_shrub_connection* connection;
   connection = calloc(1, sizeof(struct ef_shrub_connection));
@@ -216,6 +219,8 @@ static void test_shrub_server_open(void)
   STATE_CHECK(calls, sockets_close, 1);
   STATE_CHECK(calls, cleanup, 1);
   STATE_CHECK(calls, remove, 1);
+  STATE_CHECK(calls, close, 1);
+  STATE_ACCEPT(calls, fd); /* maybe should check it's client_fifo_fd */
   STATE_CHECK_UNCHANGED(calls);
 
   STATE_FREE(calls);

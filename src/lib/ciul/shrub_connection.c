@@ -9,17 +9,11 @@
 #include <unistd.h>
 #include <sys/mman.h>
 
-static int client_total_bytes(struct ef_shrub_queue* queue)
-{
-  return ef_shrub_fifo_bytes(queue) +
-    EF_VI_ROUND_UP(sizeof(struct ef_shrub_client_state), PAGE_SIZE);
-}
-
 static struct ef_shrub_client_state*
 get_client_state(struct ef_shrub_connection* connection)
 {
   return (void*)((char*)connection->fifo +
-                 ef_shrub_fifo_bytes(connection->queue));
+                 connection->fifo_size * sizeof(ef_shrub_buffer_id));
 }
 
 static uint32_t get_buffer_id(ef_shrub_buffer_id id)
@@ -30,40 +24,34 @@ static uint32_t get_buffer_id(ef_shrub_buffer_id id)
 }
 
 struct ef_shrub_connection*
-ef_shrub_connection_alloc(struct ef_shrub_queue* queue)
+ef_shrub_connection_alloc(int fifo_fd, size_t* fifo_offset, size_t fifo_size)
 {
-  int i, fd, rc;
+  int i, rc;
   struct ef_shrub_connection* connection;
   void* map;
-  size_t offset;
-
-  if( queue->closed_connections ) {
-    connection = queue->closed_connections;
-    queue->closed_connections = connection->next;
-    return connection;
-  }
+  size_t fifo_bytes = fifo_size * sizeof(ef_shrub_buffer_id);
+  size_t total_bytes = fifo_bytes +
+    EF_VI_ROUND_UP(sizeof(struct ef_shrub_client_state), PAGE_SIZE);
 
   connection = calloc(1, sizeof(struct ef_shrub_connection));
   if( connection == NULL )
     return NULL;
 
-  fd = queue->shared_fds[EF_SHRUB_FD_CLIENT_FIFO];
-
-  offset = queue->connection_count * client_total_bytes(queue);
-  rc = ftruncate(fd, offset + client_total_bytes(queue));
+  rc = ftruncate(fifo_fd, *fifo_offset + total_bytes);
   if( rc < 0 )
     goto fail_fifo;
 
-  map = mmap(NULL, client_total_bytes(queue),
-             PROT_READ | PROT_WRITE,
-             MAP_SHARED | MAP_POPULATE, fd, offset);
+  map = mmap(NULL, total_bytes, PROT_READ | PROT_WRITE,
+             MAP_SHARED | MAP_POPULATE, fifo_fd, *fifo_offset);
   if( map == MAP_FAILED )
     goto fail_fifo;
 
-  connection->fifo_mmap_offset = offset;
   connection->fifo = map;
+  connection->fifo_size = fifo_size;
+  connection->fifo_mmap_offset = *fifo_offset;
+  *fifo_offset += total_bytes;
 
-  for( i = 0; i < queue->fifo_size; ++i )
+  for( i = 0; i < fifo_size; ++i )
     connection->fifo[i] = EF_SHRUB_INVALID_BUFFER;
 
   return connection;
@@ -76,9 +64,6 @@ fail_fifo:
 void ef_shrub_connection_attach(struct ef_shrub_connection* connection,
                                 struct ef_shrub_queue* queue)
 {
-  struct ef_shrub_client_state* state;
-  int i;
-
   assert(connection->queue == NULL);
   connection->queue = queue;
 
@@ -86,8 +71,7 @@ void ef_shrub_connection_attach(struct ef_shrub_connection* connection,
   queue->connections = connection;
 
   if ( queue->connection_count > 0 ) {
-    state = (void*)((char*)connection->fifo + ef_shrub_fifo_bytes(queue));
-    i = state->server_fifo_index;
+    int i = get_client_state(connection)->server_fifo_index;
     while ( i != queue->fifo_index ) {
       ef_shrub_buffer_id buffer = queue->fifo[i];
       assert(buffer != EF_SHRUB_INVALID_BUFFER);
@@ -121,8 +105,6 @@ void ef_shrub_connection_detach(struct ef_shrub_connection* connection,
   }
 
   connection->queue = NULL;
-  connection->next = queue->closed_connections;
-  queue->closed_connections = connection;
 
   i = state->server_fifo_index;
   while ( i != queue->fifo_index ) {

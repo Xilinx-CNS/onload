@@ -19,18 +19,14 @@ struct ef_shrub_queue {
   int* buffer_fifo_indices;
 
   struct ef_shrub_connection* connections;
-  struct ef_shrub_connection* closed_connections;
 };
-
-static inline int ef_shrub_fifo_bytes(struct ef_shrub_queue* queue)
-{
-  return queue->fifo_size * sizeof(ef_shrub_buffer_id);
-}
 
 int ef_shrub_queue_open(struct ef_shrub_queue** queue_out,
                         struct ef_vi* vi,
                         size_t buffer_bytes,
                         size_t buffer_count,
+                        size_t fifo_size,
+                        int client_fifo_fd,
                         int qid);
 
 void ef_shrub_queue_close(struct ef_shrub_queue* queue);

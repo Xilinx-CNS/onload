@@ -28,11 +28,9 @@ static bool fifo_has_space(struct ef_shrub_queue* queue)
          queue->fifo[queue->fifo_index] == EF_SHRUB_INVALID_BUFFER;
 }
 
-static void set_fifo_size(struct ef_shrub_queue* queue)
+static size_t fifo_bytes(struct ef_shrub_queue* queue)
 {
-  int bytes = (queue->buffer_count + 1) * sizeof(ef_shrub_buffer_id);
-  int pages = (bytes + PAGE_SIZE - 1) / PAGE_SIZE;
-  queue->fifo_size = pages * (PAGE_SIZE / sizeof(ef_shrub_buffer_id));
+  return queue->fifo_size * sizeof(ef_shrub_buffer_id);
 }
 
 static size_t buffer_total_bytes(struct ef_shrub_queue* queue)
@@ -44,7 +42,7 @@ static size_t buffer_total_bytes(struct ef_shrub_queue* queue)
 static int queue_map_fifo(struct ef_shrub_queue* queue)
 {
   int i;
-  queue->fifo = mmap(NULL, ef_shrub_fifo_bytes(queue), PROT_WRITE,
+  queue->fifo = mmap(NULL, fifo_bytes(queue), PROT_WRITE,
                      MAP_SHARED | MAP_POPULATE,
                      queue->shared_fds[EF_SHRUB_FD_SERVER_FIFO], 0);
   if( queue->fifo == MAP_FAILED )
@@ -79,10 +77,10 @@ static int queue_alloc_buffer_fifo_indices(struct ef_shrub_queue* queue)
 
 static int queue_alloc_shared(struct ef_shrub_queue* queue)
 {
-  int fd, rc, i;
+  int fd, rc;
 
-  for( i = 0; i < EF_SHRUB_FD_COUNT; ++i )
-    queue->shared_fds[i] = -1;
+  queue->shared_fds[EF_SHRUB_FD_BUFFERS] = -1;
+  queue->shared_fds[EF_SHRUB_FD_SERVER_FIFO] = -1;
 
   fd = memfd_create("ef_shrub_buffer", MFD_HUGETLB);
   if( fd < 0 )
@@ -98,18 +96,13 @@ static int queue_alloc_shared(struct ef_shrub_queue* queue)
     return -errno;
   queue->shared_fds[EF_SHRUB_FD_SERVER_FIFO] = fd;
 
-  rc = ftruncate(fd, ef_shrub_fifo_bytes(queue));
+  rc = ftruncate(fd, fifo_bytes(queue));
   if( rc < 0 )
     return -errno;
 
   rc = fcntl(fd, F_SETFL, O_RDONLY);
   if( rc < 0 )
     return -errno;
-
-  fd = memfd_create("ef_shrub_client_fifo", 0);
-  if( fd < 0 )
-    return -errno;
-  queue->shared_fds[EF_SHRUB_FD_CLIENT_FIFO] = fd;
 
   return 0;
 }
@@ -140,18 +133,21 @@ int ef_shrub_queue_open(struct ef_shrub_queue** queue_out,
                         struct ef_vi* vi,
                         size_t buffer_bytes,
                         size_t buffer_count,
+                        size_t fifo_size,
+                        int client_fifo_fd,
                         int qid)
 {
   struct ef_shrub_queue* queue;
-  int rc, i;
+  int rc;
 
   queue = calloc(1, sizeof(*queue));
   if( queue == NULL )
     return -ENOMEM;
 
+  queue->shared_fds[EF_SHRUB_FD_CLIENT_FIFO] = client_fifo_fd;
   queue->buffer_bytes = buffer_bytes;
   queue->buffer_count = buffer_count;
-  set_fifo_size(queue);
+  queue->fifo_size = fifo_size;
 
   rc = queue_alloc_refs(queue);
   if( rc < 0 )
@@ -182,10 +178,10 @@ int ef_shrub_queue_open(struct ef_shrub_queue** queue_out,
   return 0;
 
 fail_queue_attach:
-  munmap(queue->fifo, ef_shrub_fifo_bytes(queue));
+  munmap(queue->fifo, fifo_bytes(queue));
 fail_fifo:
-  for( i = 0; i < EF_SHRUB_FD_COUNT; ++i )
-    close(queue->shared_fds[i]);
+  close(queue->shared_fds[EF_SHRUB_FD_BUFFERS]);
+  close(queue->shared_fds[EF_SHRUB_FD_SERVER_FIFO]);
 fail_shared:
   free(queue->buffer_fifo_indices);
 fail_indices:
@@ -197,12 +193,10 @@ fail_refs:
 
 void ef_shrub_queue_close(struct ef_shrub_queue* queue)
 {
-  int i;
-
   /* TODO close connections */
-  munmap(queue->fifo, ef_shrub_fifo_bytes(queue));
-  for( i = 0; i < EF_SHRUB_FD_COUNT; ++i )
-    close(queue->shared_fds[i]);
+  munmap(queue->fifo, fifo_bytes(queue));
+  close(queue->shared_fds[EF_SHRUB_FD_BUFFERS]);
+  close(queue->shared_fds[EF_SHRUB_FD_SERVER_FIFO]);
   free(queue->buffer_fifo_indices);
   free(queue->buffer_refs);
   free(queue);

@@ -1,6 +1,9 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
 /* X-SPDX-Copyright-Text: (c) Copyright 2023 Advanced Micro Devices, Inc. */
 
+/* Enable memfd_create */
+#define _GNU_SOURCE
+
 #include "ef_vi_internal.h"
 
 #include <etherfabric/shrub_server.h>
@@ -18,12 +21,23 @@ struct ef_shrub_server {
   ef_vi* vi;
   size_t buffer_bytes;
   size_t buffer_count;
+  size_t client_fifo_offset;
+  int client_fifo_fd;
   /* Array of size res->vi.efct_rxqs.max_qs. */
   struct ef_shrub_queue** shrub_queues;
   unsigned pd_excl_rxq_tok;
   char socket_path[EF_SHRUB_SERVER_SOCKET_LEN];
+  struct ef_shrub_connection* closed_connections;
 };
 
+static size_t fifo_size(struct ef_shrub_server* server)
+{
+  size_t bytes = (server->buffer_count + 1) * sizeof(ef_shrub_buffer_id);
+  size_t pages = (bytes + PAGE_SIZE - 1) / PAGE_SIZE;
+  return pages * (PAGE_SIZE / sizeof(ef_shrub_buffer_id));
+}
+
+/* Unix server operations */
 static int server_connection_opened(struct ef_shrub_server* server);
 static int server_request_received(struct ef_shrub_server* server, int socket);
 static int server_connection_closed(struct ef_shrub_server* server, void *data);
@@ -69,16 +83,25 @@ static int server_request_queue(struct ef_shrub_server* server, int socket,
   if( queue == NULL ) {
     rc = ef_shrub_queue_open(&queue, server->vi,
                              server->buffer_bytes, server->buffer_count,
+                             fifo_size(server), server->client_fifo_fd,
                              qid);
     if( rc < 0 )
       return rc;
     server->shrub_queues[qid] = queue;
   }
 
-  connection = ef_shrub_connection_alloc(queue);
+  connection = server->closed_connections;
   if( connection == NULL ) {
-    rc = -1; /* TODO propogate connection_alloc's rc */
-    goto fail;
+    connection = ef_shrub_connection_alloc(server->client_fifo_fd,
+                                           &server->client_fifo_offset,
+                                           fifo_size(server));
+    if( connection == NULL ) {
+      rc = -1; /* TODO propogate connection_alloc's rc */
+      return 0;
+    }
+  }
+  else {
+    server->closed_connections = connection->next;
   }
 
   connection->socket = socket;
@@ -96,8 +119,8 @@ static int server_request_queue(struct ef_shrub_server* server, int socket,
   return 0;
 
 fail:
-  connection->next = queue->closed_connections;
-  queue->closed_connections = connection;
+  connection->next = server->closed_connections;
+  server->closed_connections = connection;
   return rc;
 }
 
@@ -193,6 +216,8 @@ static int server_connection_closed(struct ef_shrub_server* server, void *data)
   struct ef_shrub_connection* connection = data;
   ef_shrub_server_close_socket(connection->socket);
   ef_shrub_connection_detach(connection, server->vi);
+  connection->next = server->closed_connections;
+  server->closed_connections = connection;
   return 0;
 }
 
@@ -215,6 +240,13 @@ int ef_shrub_server_open(struct ef_vi* vi,
   if( rc < 0 )
     goto fail_sockets;
 
+  rc = memfd_create("ef_shrub_client_fifo", 0);
+  if( rc < 0 ) {
+    rc = -errno;
+    goto fail_memfd;
+  }
+  server->client_fifo_fd = rc;
+
   server->vi = vi;
   strncpy(server->socket_path, server_addr, sizeof(server->socket_path));
 
@@ -236,6 +268,8 @@ int ef_shrub_server_open(struct ef_vi* vi,
 fail_init_pd_token:
   free(server->shrub_queues);
 fail_queues_alloc:
+  close(server->client_fifo_fd);
+fail_memfd:
   ef_shrub_server_sockets_close(&server->sockets);
 fail_sockets:
   free(server);
@@ -267,6 +301,7 @@ void ef_shrub_server_close(struct ef_shrub_server* server)
   }
 
   free(server->shrub_queues);
+  ef_shrub_server_close_socket(server->client_fifo_fd);
   server->vi->efct_rxqs.ops->cleanup(server->vi);
   ef_shrub_server_sockets_close(&server->sockets);
   if ( server->socket_path[0] != '\0' )
