@@ -28,6 +28,7 @@ struct ef_shrub_server {
   unsigned pd_excl_rxq_tok;
   char socket_path[EF_SHRUB_SERVER_SOCKET_LEN];
   struct ef_shrub_connection* closed_connections;
+  struct ef_shrub_connection* pending_connections;
 };
 
 static size_t fifo_size(struct ef_shrub_server* server)
@@ -39,8 +40,10 @@ static size_t fifo_size(struct ef_shrub_server* server)
 
 /* Unix server operations */
 static int server_connection_opened(struct ef_shrub_server* server);
-static int server_request_received(struct ef_shrub_server* server, int socket);
-static int server_connection_closed(struct ef_shrub_server* server, void *data);
+static int server_request_received(struct ef_shrub_server* server,
+                                   struct ef_shrub_connection* connection);
+static int server_connection_closed(struct ef_shrub_server* server,
+                                    struct ef_shrub_connection* connection);
 
 static int unix_server_poll(struct ef_shrub_server* server)
 {
@@ -49,12 +52,11 @@ static int unix_server_poll(struct ef_shrub_server* server)
   rc = ef_shrub_server_epoll_wait(&server->sockets, &event);
   if( rc > 0 ) {
     if( event.events & EPOLLHUP )
-      // FIXME event.data.ptr is invalid if we haven't received a request
       rc = server_connection_closed(server, event.data.ptr);
     else if( event.data.ptr == NULL )
       rc = server_connection_opened(server);
     else if( event.events & EPOLLIN )
-      rc = server_request_received(server, event.data.fd);
+      rc = server_request_received(server, event.data.ptr);
   }
   return rc;
 }
@@ -71,13 +73,20 @@ static int server_alloc_queue_elems(struct ef_shrub_server *server,
   return 0;
 }
 
-static int server_request_queue(struct ef_shrub_server* server, int socket,
+static int server_request_queue(struct ef_shrub_server* server,
+                                struct ef_shrub_connection* connection,
                                 int qid)
 {
-  struct ef_shrub_connection* connection;
   struct ef_shrub_queue* queue;
-  epoll_data_t epoll_data;
   int rc;
+
+  if( connection->socket < 0 )
+    return -ENOTCONN;
+
+  if( connection->queue != NULL )
+    return -EALREADY;
+
+  ef_shrub_connection_remove(&server->pending_connections, connection);
 
   queue = server->shrub_queues[qid];
   if( queue == NULL ) {
@@ -89,6 +98,24 @@ static int server_request_queue(struct ef_shrub_server* server, int socket,
       return rc;
     server->shrub_queues[qid] = queue;
   }
+
+  rc = ef_shrub_connection_send_metrics(connection);
+  if( rc < 0 )
+    return rc;
+
+  ef_shrub_connection_attach(connection, queue);
+  return 0;
+}
+
+static int server_connection_opened(struct ef_shrub_server* server)
+{
+  int rc = 0;
+  struct ef_shrub_connection* connection;
+  int socket = ef_shrub_server_accept(&server->sockets);
+  epoll_data_t epoll_data;
+
+  if( socket < 0 )
+    return socket;
 
   connection = server->closed_connections;
   if( connection == NULL ) {
@@ -105,17 +132,14 @@ static int server_request_queue(struct ef_shrub_server* server, int socket,
   }
 
   connection->socket = socket;
-
-  rc = ef_shrub_connection_send_metrics(connection);
-  if( rc < 0 )
-    goto fail;
+  connection->next = server->pending_connections;
+  server->pending_connections = connection;
 
   epoll_data.ptr = connection;
-  rc = ef_shrub_server_epoll_mod(&server->sockets, socket, epoll_data);
+  rc = ef_shrub_server_epoll_add(&server->sockets, socket, epoll_data);
   if( rc < 0 )
     goto fail;
 
-  ef_shrub_connection_attach(connection, queue);
   return 0;
 
 fail:
@@ -146,18 +170,16 @@ static int server_request_token(struct ef_shrub_server *server, int socket)
     return -errno;
   if( rc < sizeof(response) )
     return -EIO;
-  /* Client will connect again once it has an rxq to attach to. Remove it from
-   * the epoll set */
-  ef_shrub_server_close_socket(socket);
   return 0;
 }
 
-static int server_request_received(struct ef_shrub_server* server, int socket)
+static int server_request_received(struct ef_shrub_server* server,
+                                   struct ef_shrub_connection* connection)
 {
   struct ef_shrub_request request;
   int rc;
 
-  rc = ef_shrub_server_recv(socket, &request, sizeof(request));
+  rc = ef_shrub_server_recv(connection->socket, &request, sizeof(request));
   if( rc < sizeof(request)) {
     if(rc < 0)
       rc = -errno;
@@ -174,10 +196,12 @@ static int server_request_received(struct ef_shrub_server* server, int socket)
 
   switch( request.type ) {
   case EF_SHRUB_REQUEST_TOKEN:
-    rc = server_request_token(server, socket);
+    rc = server_request_token(server, connection->socket);
+    /* Client will connect again once it has an rxq to attach to. Remove it from
+     * the epoll set */
     goto out_close;
   case EF_SHRUB_REQUEST_QUEUE:
-    rc = server_request_queue(server, socket, request.requests.queue.qid);
+    rc = server_request_queue(server, connection, request.requests.queue.qid);
     if( rc < 0 )
       goto out_close;
 
@@ -190,34 +214,26 @@ static int server_request_received(struct ef_shrub_server* server, int socket)
   return 0;
 
 out_close:
-  ef_shrub_server_close_socket(socket);
-  return rc;
-}
-
-static int server_connection_opened(struct ef_shrub_server* server)
-{
-  int rc = 0;
-  int socket = ef_shrub_server_accept(&server->sockets);
-  epoll_data_t epoll_data;
-
-  if( socket < 0 )
-    return socket;
-
-  epoll_data.fd = socket;
-  rc = ef_shrub_server_epoll_add(&server->sockets, socket, epoll_data);
-  if( rc < 0 )
-    ef_shrub_server_close_socket(socket);
-
-  return rc;
-}
-
-static int server_connection_closed(struct ef_shrub_server* server, void *data)
-{
-  struct ef_shrub_connection* connection = data;
   ef_shrub_server_close_socket(connection->socket);
-  ef_shrub_connection_detach(connection, server->vi);
   connection->next = server->closed_connections;
   server->closed_connections = connection;
+  return rc;
+}
+
+static int server_connection_closed(struct ef_shrub_server* server,
+                                    struct ef_shrub_connection* connection)
+{
+  if( connection->socket >= 0 ) {
+    ef_shrub_server_close_socket(connection->socket);
+    ef_shrub_connection_remove(&server->pending_connections, connection);
+
+    if( connection->queue != NULL )
+      ef_shrub_connection_detach(connection, server->vi);
+
+    connection->socket = -1;
+    connection->next = server->closed_connections;
+    server->closed_connections = connection;
+  }
   return 0;
 }
 

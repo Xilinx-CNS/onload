@@ -67,8 +67,8 @@ fail:
   return rc;
 }
 
-static int unix_server_epoll_ctl(struct ef_shrub_server_sockets* sockets,
-                                 int op, int fd, epoll_data_t data)
+int ef_shrub_server_epoll_add(struct ef_shrub_server_sockets* sockets,
+                              int fd, epoll_data_t data)
 {
   int rc;
   struct epoll_event event;
@@ -76,7 +76,7 @@ static int unix_server_epoll_ctl(struct ef_shrub_server_sockets* sockets,
   event.events = EPOLLIN;
   event.data = data;
 
-  rc = epoll_ctl(sockets->epoll, op, fd, &event);
+  rc = epoll_ctl(sockets->epoll, EPOLL_CTL_ADD, fd, &event);
   if( rc < 0 )
     return -errno;
 
@@ -114,18 +114,6 @@ void ef_shrub_server_sockets_close(struct ef_shrub_server_sockets* sockets)
 {
   close(sockets->listen);
   close(sockets->epoll);
-}
-
-int ef_shrub_server_epoll_add(struct ef_shrub_server_sockets* sockets,
-                              int fd, epoll_data_t data)
-{
-  return unix_server_epoll_ctl(sockets, EPOLL_CTL_ADD, fd, data);
-}
-
-int ef_shrub_server_epoll_mod(struct ef_shrub_server_sockets* sockets,
-                              int fd, epoll_data_t data)
-{
-  return unix_server_epoll_ctl(sockets, EPOLL_CTL_MOD, fd, data);
 }
 
 int ef_shrub_server_epoll_wait(struct ef_shrub_server_sockets* sockets,

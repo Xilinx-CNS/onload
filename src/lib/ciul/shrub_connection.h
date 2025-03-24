@@ -29,3 +29,21 @@ void ef_shrub_connection_detach(struct ef_shrub_connection* connection,
 
 int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection);
 
+static inline
+void ef_shrub_connection_remove(struct ef_shrub_connection** list,
+                                struct ef_shrub_connection* connection)
+{
+  if( *list == connection ) {
+    *list = connection->next;
+  }
+  else {
+    struct ef_shrub_connection* c;
+    for( c = *list; c != NULL; c = c->next ) {
+      if( c->next == connection ) {
+        c->next = connection->next;
+        break;
+      }
+    }
+  }
+}
+

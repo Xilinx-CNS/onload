@@ -90,20 +90,7 @@ void ef_shrub_connection_detach(struct ef_shrub_connection* connection,
   struct ef_shrub_queue* queue = connection->queue;
   int i;
 
-  /* TBD would a doubly linked list or something be better? */
-  if( connection == queue->connections ) {
-    queue->connections = connection->next;
-  }
-  else {
-    struct ef_shrub_connection* c;
-    for( c = queue->connections; c != NULL; c = c->next ) {
-      if( c->next == connection ) {
-        c->next = connection->next;
-        break;
-      }
-    }
-  }
-
+  ef_shrub_connection_remove(&queue->connections, connection);
   connection->queue = NULL;
 
   i = state->server_fifo_index;

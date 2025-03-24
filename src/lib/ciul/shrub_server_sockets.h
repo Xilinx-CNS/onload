@@ -16,8 +16,6 @@ int ef_shrub_server_sockets_open(struct ef_shrub_server_sockets* sockets,
 void ef_shrub_server_sockets_close(struct ef_shrub_server_sockets* sockets);
 int ef_shrub_server_epoll_add(struct ef_shrub_server_sockets* sockets,
                               int fd, epoll_data_t data);
-int ef_shrub_server_epoll_mod(struct ef_shrub_server_sockets* sockets,
-                              int fd, epoll_data_t data);
 int ef_shrub_server_epoll_wait(struct ef_shrub_server_sockets* sockets,
                                struct epoll_event* event);
 int ef_shrub_server_accept(struct ef_shrub_server_sockets* sockets);

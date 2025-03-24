@@ -33,7 +33,6 @@ static struct call_state
   int sockets_open;
   int sockets_close;
   int epoll_add;
-  int epoll_mod;
   int accept;
   int remove;
   int close;
@@ -63,15 +62,6 @@ int ef_shrub_server_epoll_add(struct ef_shrub_server_sockets* sockets,
                               int fd, epoll_data_t data)
 {
   calls->epoll_add++;
-  calls->fd = fd;
-  last_epoll_data = data;
-  return 0;
-}
-
-int ef_shrub_server_epoll_mod(struct ef_shrub_server_sockets* sockets,
-                              int fd, epoll_data_t data)
-{
-  calls->epoll_mod++;
   calls->fd = fd;
   last_epoll_data = data;
   return 0;
@@ -107,11 +97,12 @@ void ef_shrub_server_close_socket(int fd)
   calls->fd = fd;
 }
 
+static uint64_t client_shrub_version = EF_SHRUB_VERSION;
 int ef_shrub_server_recv(int fd, void* data, size_t bytes)
 {
   struct ef_shrub_request* req = data;
   CHECK(bytes, ==, sizeof(*req));
-  req->server_version = EF_SHRUB_VERSION;
+  req->server_version = client_shrub_version;
   req->type = EF_SHRUB_REQUEST_QUEUE;
   req->requests.queue.qid = 0; // TODO arbitrary value fails due to bogus use as array index
   return bytes;
@@ -159,6 +150,9 @@ void ef_shrub_connection_attach(struct ef_shrub_connection* connection,
                                 struct ef_shrub_queue* queue)
 {
   calls->attach++;
+  connection->queue = queue;
+  connection->next = queue->connections;
+  queue->connections = connection;
 }
 
 void ef_shrub_connection_detach(struct ef_shrub_connection* connection,
@@ -183,7 +177,7 @@ ef_vi_efct_rxq_ops mock_ops = {
   .cleanup = mock_cleanup,
 };
 
-/* Tests */
+/* Test setup */
 static void init_test(void)
 {
   STATE_ALLOC(struct ef_vi, vi_);
@@ -203,6 +197,37 @@ static void open_server(void)
   STATE_REVERT(calls);
 }
 
+#define POLL_CHECK_NOTHING \
+  ef_shrub_server_poll(server); \
+  STATE_CHECK_UNCHANGED(calls); \
+
+#define POLL_CHECK_ACCEPTED \
+  ef_shrub_server_poll(server); \
+  STATE_CHECK(calls, accept, 1); \
+  STATE_CHECK(calls, epoll_add, 1); \
+  STATE_CHECK(calls, fd, last_accept_fd); \
+  STATE_CHECK_UNCHANGED(calls); \
+
+#define POLL_CHECK_ATTACHED \
+  ef_shrub_server_poll(server); \
+  STATE_CHECK(calls, attach, 1); \
+  STATE_CHECK(calls, send, 1); \
+  STATE_CHECK_UNCHANGED(calls); \
+
+#define POLL_CHECK_DETACHED \
+  ef_shrub_server_poll(server); \
+  STATE_CHECK(calls, close, 1); \
+  STATE_CHECK(calls, detach, 1); \
+  STATE_CHECK(calls, fd, last_accept_fd); \
+  STATE_CHECK_UNCHANGED(calls); \
+
+#define POLL_CHECK_CLOSED \
+  ef_shrub_server_poll(server); \
+  STATE_CHECK(calls, close, 1); \
+  STATE_CHECK(calls, fd, last_accept_fd); \
+  STATE_CHECK_UNCHANGED(calls); \
+
+/* Tests */
 static void test_shrub_server_open(void)
 {
   int rc;
@@ -234,33 +259,58 @@ static void test_shrub_server_connect(void)
   init_test();
   open_server();
 
-  ef_shrub_server_poll(server);
-  STATE_CHECK_UNCHANGED(calls);
+  POLL_CHECK_NOTHING
 
   epoll_event = &event;
   event.events = EPOLLIN;
   event.data.ptr = NULL;
-  ef_shrub_server_poll(server);
-  STATE_CHECK(calls, accept, 1);
-  STATE_CHECK(calls, epoll_add, 1);
-  STATE_CHECK(calls, fd, last_accept_fd);
-  STATE_CHECK_UNCHANGED(calls);
+  POLL_CHECK_ACCEPTED
 
   event.data = last_epoll_data;
-  ef_shrub_server_poll(server);
-  STATE_CHECK(calls, epoll_mod, 1);
-  STATE_CHECK(calls, fd, last_accept_fd);
-  STATE_CHECK(calls, attach, 1);
-  STATE_CHECK(calls, send, 1);
-  STATE_CHECK_UNCHANGED(calls);
+  POLL_CHECK_ATTACHED
 
   event.data = last_epoll_data;
   event.events = EPOLLIN | EPOLLHUP;
-  ef_shrub_server_poll(server);
-  STATE_CHECK(calls, close, 1);
-  STATE_CHECK(calls, fd, last_accept_fd);
-  STATE_CHECK(calls, detach, 1);
-  STATE_CHECK_UNCHANGED(calls);
+  POLL_CHECK_DETACHED
+
+  STATE_FREE(calls);
+  STATE_FREE(vi);
+}
+
+static void test_shrub_server_bad_proto(void)
+{
+  struct epoll_event event;
+
+  init_test();
+  open_server();
+
+  epoll_event = &event;
+
+  /* Disconnect before sending request */
+  event.events = EPOLLIN;
+  event.data.ptr = NULL;
+  POLL_CHECK_ACCEPTED
+  event.data = last_epoll_data;
+  event.events = EPOLLIN | EPOLLHUP;
+  POLL_CHECK_CLOSED
+
+  /* New connection works */
+  event.events = EPOLLIN;
+  event.data.ptr = NULL;
+  POLL_CHECK_ACCEPTED
+  event.data = last_epoll_data;
+  POLL_CHECK_ATTACHED
+
+  /* Request for second queue is a protocol error */
+  POLL_CHECK_CLOSED
+
+  /* Request invalid protocol version */
+  event.data.ptr = NULL;
+  POLL_CHECK_ACCEPTED
+  event.data = last_epoll_data;
+  ++client_shrub_version;
+  POLL_CHECK_CLOSED
+  --client_shrub_version;
 
   STATE_FREE(calls);
   STATE_FREE(vi);
@@ -269,5 +319,6 @@ static void test_shrub_server_connect(void)
 int main(void) {
   TEST_RUN(test_shrub_server_open);
   TEST_RUN(test_shrub_server_connect);
+  TEST_RUN(test_shrub_server_bad_proto);
   TEST_END();
 }
