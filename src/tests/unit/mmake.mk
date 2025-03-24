@@ -29,6 +29,7 @@ ALL_UNIT_TESTS := \
   lib/ciul/efct_vi \
   lib/ciul/efct_ubufs \
   lib/ciul/shrub_pool \
+  lib/ciul/shrub_server \
 
 # The tests to be run, and their corresponding files
 TESTS := $(filter $(UNIT_TEST_FILTER)%, $(ALL_UNIT_TESTS))

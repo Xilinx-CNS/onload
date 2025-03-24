@@ -5,6 +5,7 @@
 #ifndef ONLOAD_UNIT_TEST_H
 #define ONLOAD_UNIT_TEST_H
 
+#include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -113,13 +114,20 @@
     (NAME + 1)->FIELD = NAME->FIELD; \
   } while (0)
 
+/* Restore the stashed copy of an object, ignoring any changes */
+#define STATE_REVERT(NAME) \
+  memcpy(NAME, NAME + 1, sizeof(*NAME))
+
+/* Check that there are no unchecked changes */
+#define STATE_CHECK_UNCHANGED(NAME) \
+  CHECK_MEM(NAME, NAME + 1, sizeof(*NAME))
+
 /* Check there are no unchecked changes before freeing the objects.
  * TIP: it can be useful to run the tests with a memory validator
  * (e.g. valgrind) to make sure these aren't omitted. */
 #define STATE_FREE(NAME) \
   do { \
-    const void* stash = NAME + 1; \
-    CHECK_MEM(NAME, stash, sizeof(*NAME)); \
+    STATE_CHECK_UNCHANGED(NAME); \
     free(NAME); \
   } while (0)
 

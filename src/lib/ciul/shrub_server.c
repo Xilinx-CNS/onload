@@ -34,13 +34,13 @@ static int unix_server_poll(struct ef_shrub_server* server)
   struct epoll_event event;
   rc = ef_shrub_server_epoll_wait(&server->sockets, &event);
   if( rc > 0 ) {
-    if( event.data.ptr == NULL )
+    if( event.events & EPOLLHUP )
+      // FIXME event.data.ptr is invalid if we haven't received a request
+      rc = server_connection_closed(server, event.data.ptr);
+    else if( event.data.ptr == NULL )
       rc = server_connection_opened(server);
     else if( event.events & EPOLLIN )
       rc = server_request_received(server, event.data.fd);
-
-    if( event.events & EPOLLHUP )
-      rc = server_connection_closed(server, event.data.ptr);
   }
   return rc;
 }

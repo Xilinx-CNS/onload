@@ -13,6 +13,7 @@
 #define __CI_CIUL_SHRUB_SERVER_H__
 
 #include <stddef.h>
+struct ef_vi;
 
 /* Opaque structure used to manage a server */
 struct ef_shrub_server;
