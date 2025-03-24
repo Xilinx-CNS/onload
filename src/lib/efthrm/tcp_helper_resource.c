@@ -1817,6 +1817,8 @@ static int allocate_vis(tcp_helper_resource_t* trs,
 #endif
     memset(trs->nic[intf_i].thn_efct_rxq, 0,
            sizeof(trs->nic[intf_i].thn_efct_rxq));
+    memset(trs->nic[intf_i].thn_efct_iobs, 0,
+           sizeof(trs->nic[intf_i].thn_efct_iobs));
   }
 
   /* This loop does the work of allocating a vi, using the information built
@@ -2090,7 +2092,8 @@ static void detach_efct_rxqs(tcp_helper_resource_t* trs)
       if( trs_nic->thn_efct_rxq[rxq_i] ) {
         efrm_rxq_release(trs_nic->thn_efct_rxq[rxq_i]);
         trs_nic->thn_efct_rxq[rxq_i] = NULL;
-        oo_iobufset_resource_release(trs_nic->thn_efct_iobs[rxq_i], 0);
+        if( trs_nic->thn_efct_iobs[rxq_i] )
+          oo_iobufset_resource_release(trs_nic->thn_efct_iobs[rxq_i], 0);
         trs_nic->thn_efct_iobs[rxq_i] = NULL;
       }
     }
