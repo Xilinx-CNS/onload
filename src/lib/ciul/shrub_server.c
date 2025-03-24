@@ -82,9 +82,8 @@ static int server_request_queue(struct ef_shrub_server* server, int socket,
   }
 
   connection->socket = socket;
-  connection->qid = qid;
 
-  rc = ef_shrub_connection_send_metrics(connection, queue);
+  rc = ef_shrub_connection_send_metrics(connection);
   if( rc < 0 )
     goto fail;
 
@@ -192,10 +191,8 @@ static int server_connection_opened(struct ef_shrub_server* server)
 static int server_connection_closed(struct ef_shrub_server* server, void *data)
 {
   struct ef_shrub_connection* connection = data;
-  struct ef_shrub_queue* queue = server->shrub_queues[connection->qid];
-
   ef_shrub_server_close_socket(connection->socket);
-  ef_shrub_connection_detach(connection, queue, server->vi);
+  ef_shrub_connection_detach(connection, server->vi);
   return 0;
 }
 

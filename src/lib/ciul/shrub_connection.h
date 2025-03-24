@@ -9,7 +9,7 @@ struct ef_shrub_queue;
 
 struct ef_shrub_connection {
   struct ef_shrub_connection* next;
-  int qid;
+  struct ef_shrub_queue* queue;
 
   int socket;
   int fifo_index;
@@ -24,10 +24,7 @@ ef_shrub_connection_alloc(struct ef_shrub_queue* queue);
 void ef_shrub_connection_attach(struct ef_shrub_connection* connection,
                                 struct ef_shrub_queue* queue);
 void ef_shrub_connection_detach(struct ef_shrub_connection* connection,
-                                struct ef_shrub_queue* queue,
                                 struct ef_vi* vi);
 
-int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection,
-                                     struct ef_shrub_queue* queue);
-                                
+int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection);
 

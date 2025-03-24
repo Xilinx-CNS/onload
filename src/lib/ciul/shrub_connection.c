@@ -16,10 +16,10 @@ static int client_total_bytes(struct ef_shrub_queue* queue)
 }
 
 static struct ef_shrub_client_state*
-get_client_state(struct ef_shrub_queue* queue,
-                 struct ef_shrub_connection* connection)
+get_client_state(struct ef_shrub_connection* connection)
 {
-  return (void*)((char*)connection->fifo + ef_shrub_fifo_bytes(queue));
+  return (void*)((char*)connection->fifo +
+                 ef_shrub_fifo_bytes(connection->queue));
 }
 
 static uint32_t get_buffer_id(ef_shrub_buffer_id id)
@@ -79,6 +79,9 @@ void ef_shrub_connection_attach(struct ef_shrub_connection* connection,
   struct ef_shrub_client_state* state;
   int i;
 
+  assert(connection->queue == NULL);
+  connection->queue = queue;
+
   connection->next = queue->connections;
   queue->connections = connection;
 
@@ -97,10 +100,10 @@ void ef_shrub_connection_attach(struct ef_shrub_connection* connection,
 }
 
 void ef_shrub_connection_detach(struct ef_shrub_connection* connection,
-                                struct ef_shrub_queue* queue,
                                 struct ef_vi* vi)
 {
-  struct ef_shrub_client_state* state;
+  struct ef_shrub_client_state* state = get_client_state(connection);
+  struct ef_shrub_queue* queue = connection->queue;
   int i;
 
   /* TBD would a doubly linked list or something be better? */
@@ -117,9 +120,9 @@ void ef_shrub_connection_detach(struct ef_shrub_connection* connection,
     }
   }
 
+  connection->queue = NULL;
   connection->next = queue->closed_connections;
   queue->closed_connections = connection;
-  state = get_client_state(queue, connection);
 
   i = state->server_fifo_index;
   while ( i != queue->fifo_index ) {
@@ -132,11 +135,11 @@ void ef_shrub_connection_detach(struct ef_shrub_connection* connection,
   queue->connection_count--;
 }
 
-int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection,
-                                     struct ef_shrub_queue* queue)
+int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection)
 {
   int rc;
-  struct ef_shrub_client_state* state = get_client_state(queue, connection);
+  struct ef_shrub_client_state* state = get_client_state(connection);
+  struct ef_shrub_queue* queue = connection->queue;
 
   //TODO: re-evaluate this if-check startup state case on completion of ON-16190
   if ( queue->connection_count > 0 ) {
