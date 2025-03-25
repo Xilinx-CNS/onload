@@ -736,6 +736,9 @@ ef10ct_dmaq_tx_q_init(struct efhw_nic *nic,
   EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_LABEL, txq_params->tag);
   EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_INSTANCE, ef10ct_evq->txq);
   EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_PORT_ID, EVB_PORT_ID_ASSIGNED);
+  /* FIXME ON-15570 - This value should match vi->vi_txq.ct_fifo_bytes +
+   * EFCT_TX_ALIGNMENT + EFCT_TX_HEADER_BYTES */
+  EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_SIZE, 32768);
 
   EFHW_MCDI_POPULATE_DWORD_4(in, INIT_TXQ_EXT_IN_FLAGS,
                              INIT_TXQ_EXT_IN_FLAG_IP_CSUM_DIS, 1,
