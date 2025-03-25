@@ -369,21 +369,21 @@ void ef_vi_init_rx_timestamping(struct ef_vi* vi, int rx_ts_correction)
      * Ensure that rx_ts_correction ends up <= 0.  It always will if the
      * correction is realistic!
      */
-    if( vi->rx_ts_correction == 0 ) {
-      /* Bug83458: Some old firmware versions return value of 0.  We
-       * know this is wrong, and we can write faster timestamp
-       * handling code if we limit it to -2
-       *
-       * We should only get here on Medford II or later, so use a
-       * value that we know is appropriate for that hardware.
-       */
-       LOG(ef_log("%s: ERROR: NIC returned zero timestamp correction. "
+    if( vi->rx_ts_correction > 0 ) {
+      /* There are no valid cases where we should have a positive correction
+       * here. There's not a lot we can do about it at this point, so just
+       * grumble alarmingly in release builds. */
+       LOG(ef_log("%s: ERROR: NIC returned positive timestamp correction. "
                   "Firmware update required to get accurate timestamps.",
                   __FUNCTION__));
-      vi->rx_ts_correction = -76;
     }
 
-    EF_VI_ASSERT(vi->rx_ts_correction <= -2);
+    /* There are two cases where firmware can report a correction of 0:
+     * a) the correction is already applied, so onload should do nothing
+     * b) the firmware is so old it doesn't properly report
+     * We assume that case b no longer exists, so don't try and distinguish
+     * these cases. */
+    EF_VI_ASSERT(vi->rx_ts_correction <= 0);
     if( vi->rx_ts_correction <= -2 )
       vi->rx_ts_correction += 2;
   }

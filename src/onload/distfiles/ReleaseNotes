@@ -7,6 +7,12 @@ the inclusion of SDCI here.
 Max TXQs placeholder - Express datapath maximum number of TX queues is limited
 to 128.
 
+X2 RX Timestamping with very old firmware versions
+--------------------------------------------------
+A workaround for handling v7.1 firmware on X2 has been removed, which would
+lead to inaccurate timestamps if that firmware was in use. Anyone use this
+outdated firmware should update to a supported version.
+
 Onload-9.0.1.86
 ===============
 
