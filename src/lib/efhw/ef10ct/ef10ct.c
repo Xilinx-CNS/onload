@@ -46,12 +46,14 @@ int ef10ct_fw_rpc(struct efhw_nic *nic, struct efx_auxdev_rpc *cmd)
   struct efx_auxdev* edev;
   struct efx_auxdev_client* cli;
 
-  EFHW_WARN("%s", __func__);
-
   /* FIXME need to handle reset stuff here */
   AUX_PRE(dev, edev, cli, nic, rc);
   rc = edev->llct_ops->base_ops->fw_rpc(cli, cmd);
   AUX_POST(dev, edev, cli, nic, rc);
+
+  EFHW_TRACE("%s: %s(%s) cmd %x rc %d", __func__,
+             nic->dev ? dev_name(dev) : "no dev",
+             nic->net_dev ? nic->net_dev->name : "no netdev", cmd->cmd, rc);
 
   return rc;
 }
@@ -176,7 +178,7 @@ static void ef10ct_free_rxq(struct efhw_nic *nic, int qid)
   struct efx_auxdev_client* cli;
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
 
-  EFHW_WARN("%s", __func__);
+  EFHW_TRACE("%s: qid %x", __func__, qid);
 
   rxq_num = ef10ct_get_queue_num(qid);
   mutex_lock(&ef10ct->rxq[rxq_num].bind_lock);
@@ -310,6 +312,7 @@ static int ef10ct_irq_alloc(struct efhw_nic *nic, uint32_t *channel,
 
 out:
   mutex_unlock(&ef10ct->irq_lock);
+  EFHW_TRACE("%s: irq %d channel %d rc %d", __FUNCTION__, *irq, *channel, rc);
   return rc;
 }
 
@@ -322,6 +325,8 @@ static void ef10ct_irq_free(struct efhw_nic *nic, uint32_t channel,
   struct efx_auxdev* edev;
   struct device *dev;
   int rc = 0;
+
+  EFHW_TRACE("%s: irq %d channel %d rc %d", __FUNCTION__, irq, channel, rc);
 
   ef10ct = nic->arch_extra;
   mutex_lock(&ef10ct->irq_lock);
@@ -364,7 +369,7 @@ ef10ct_nic_event_queue_enable(struct efhw_nic *nic,
   int evq_id = ef10ct_reconstruct_queue_handle(evq_num,
                                                EF10CT_QUEUE_HANDLE_TYPE_EVQ);
 
-  EFHW_WARN("%s: evq 0x%x", __func__, evq_id);
+  EFHW_TRACE("%s: evq 0x%x", __func__, evq_id);
 
   /* This is a dummy EVQ, so nothing to do. */
   if( evq_num >= ef10ct->evq_n )
@@ -451,7 +456,7 @@ ef10ct_nic_event_queue_disable(struct efhw_nic *nic,
   int evq_id = ef10ct_reconstruct_queue_handle(evq_num,
                                                EF10CT_QUEUE_HANDLE_TYPE_EVQ);
 
-  EFHW_WARN("%s: evq 0x%x", __func__, evq_id);
+  EFHW_TRACE("%s: evq 0x%x", __func__, evq_id);
 
   /* This is a dummy EVQ, so nothing to do. */
   if( evq_num >= ef10ct->evq_n )
@@ -610,7 +615,7 @@ static int ef10ct_vi_alloc_hw(struct efhw_nic *nic,
     evq_rc = evq_num;
   }
 
-  EFHW_WARN("%s: rc %d", __func__, evq_rc);
+  EFHW_TRACE("%s: rc %d", __func__, evq_rc);
 
   return evq_rc;
 }
@@ -638,7 +643,7 @@ static int ef10ct_vi_alloc_sw(struct efhw_nic *nic,
 
   efhw_nic_release_auxdev(nic, cli);
 
-  EFHW_WARN("%s: rc %d", __func__, rc);
+  EFHW_TRACE("%s: rc %d", __func__, rc);
 
   return rc;
 }
@@ -661,7 +666,7 @@ static void ef10ct_vi_free_hw(struct efhw_nic *nic, int evq_num)
   evq_id = ef10ct_reconstruct_queue_handle(evq_num,
                                            EF10CT_QUEUE_HANDLE_TYPE_EVQ);
 
-  EFHW_WARN("%s: q 0x%x", __func__, evq_id);
+  EFHW_TRACE("%s: q 0x%x", __func__, evq_id);
 
   ef10ct_free_evq(nic, evq_id);
 
@@ -720,7 +725,7 @@ ef10ct_dmaq_tx_q_init(struct efhw_nic *nic,
   evq_id = ef10ct_reconstruct_queue_handle(evq_num,
                                            EF10CT_QUEUE_HANDLE_TYPE_EVQ);
   ef10ct_evq = &ef10ct->evq[evq_num];
-  EFHW_WARN("%s: txq 0x%x evq 0x%x", __func__, ef10ct_evq->txq, evq_id);
+  EFHW_TRACE("%s: txq 0x%x evq 0x%x", __func__, ef10ct_evq->txq, evq_id);
 
   EFHW_ASSERT(evq_num < ef10ct->evq_n);
   EFHW_ASSERT(ef10ct_evq->txq != EFCT_EVQ_NO_TXQ);
@@ -766,7 +771,7 @@ ef10ct_rx_buffer_post_register(struct efhw_nic* nic, int instance,
                                                EF10CT_QUEUE_HANDLE_TYPE_RXQ);
   val.queue_io_wnd.qid_in = rxq_handle;
 
-  EFHW_WARN("%s: instance 0x%x", __func__, instance);
+  EFHW_TRACE("%s: instance 0x%x", __func__, instance);
 
   AUX_PRE(dev, edev, cli, nic, rc);
   rc = edev->llct_ops->base_ops->get_param(cli, EFX_AUXILIARY_RXQ_WINDOW, &val);
@@ -872,8 +877,8 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
   bool real_evq = params->interrupt_req &&
                   params->wakeup_instance < ef10ct->evq_n;
 
-  EFHW_WARN("%s: evq 0x%x, rxq 0x%x", __func__, params->wakeup_instance,
-            params->qid);
+  EFHW_TRACE("%s: evq 0x%x, rxq 0x%x", __func__, params->wakeup_instance,
+             params->qid);
 
   mutex_lock(&ef10ct->rxq[rxq_num].bind_lock);
 
@@ -905,13 +910,13 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
      * appropriate evq. */
     EFHW_ASSERT(ef10ct->shared_n >= 1 );
     evq = ef10ct->shared[0].evq_id;
-    EFHW_WARN("%s: Using shared evq 0x%x", __func__, evq);
+    EFHW_TRACE("%s: Using shared evq 0x%x", __func__, evq);
     suppress_events = true;
   }
   else {
     evq = ef10ct_reconstruct_queue_handle(params->wakeup_instance,
                                           EF10CT_QUEUE_HANDLE_TYPE_EVQ);
-    EFHW_WARN("%s: Using non-shared evq 0x%x", __func__, evq);
+    EFHW_TRACE("%s: Using non-shared evq 0x%x", __func__, evq);
   }
 
   EFHW_MCDI_INITIALISE_BUF(in);
@@ -1068,7 +1073,7 @@ ef10ct_nic_shared_rxq_refresh(struct efhw_nic *nic, int hwqid,
   size_t i, n_bufs = rxq->n_buffer_pages * CI_EFCT_SUPERBUFS_PER_PAGE;
 
   if( max_superbufs < n_bufs ) {
-    EFHW_TRACE("max_superbufs: %u passed in by user less than kernel's: %u.",
+    EFHW_TRACE("max_superbufs: %u passed in by user less than kernel's: %zx.",
                max_superbufs, n_bufs);
   }
 
@@ -1221,8 +1226,6 @@ static int get_rxq_num_from_mask(struct efhw_nic *nic,
 {
   int rc;
 
-  EFHW_WARN("%s", __func__);
-
   rc = ef10ct_alloc_rxq(nic);
 
   /* FIXME EF10CT full lifetime management of this RXQ. We do the queue init
@@ -1258,6 +1261,7 @@ static int get_rxq_num_from_mask(struct efhw_nic *nic,
     rc = rxq_num;
   }
 
+  EFHW_TRACE("%s rc %d", __func__, rc);
   return rc;
 }
 
