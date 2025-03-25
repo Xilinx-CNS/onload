@@ -1,7 +1,28 @@
+onload-9.0.2
+------------
+
+Update sfc net driver to v6.0.2.1007
+
+Add support for:
+ - Red Hat Enterprise Linux 10.0
+ - Red Hat Enterprise Linux 9.6
+ - kernel.org Linux kernels up to 6.14
+
+Changes:
+
+ON-7548: use 2MB huge pages when 1GB is set as default
+ON-10531: make sfcaffinity_config script pin the ptp interrupt
+ON-10782: add NUMA support to sfcaffinity_config script
+ON-16079: return correct CMSG len for TCP recvmsg
+ON-16168: add ef_receive_poll() API call for polling for rx only
+ON-16191: do not convert TCP zero checksums to all ones
+ON-16195: add SDCI support
+
+
 onload-9.0.1.86
 ---------------
 
-Updated sfc net driver to v6.0.2.1000
+Update sfc net driver to v6.0.2.1000
 
 Add support for:
  - Red Hat Enterprise Linux 9.5
