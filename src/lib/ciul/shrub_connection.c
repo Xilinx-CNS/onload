@@ -61,15 +61,9 @@ fail_fifo:
   return NULL;
 }
 
-void ef_shrub_connection_attach(struct ef_shrub_connection* connection,
-                                struct ef_shrub_queue* queue)
+void ef_shrub_connection_attached(struct ef_shrub_connection* connection,
+                                  struct ef_shrub_queue* queue)
 {
-  assert(connection->queue == NULL);
-  connection->queue = queue;
-
-  connection->next = queue->connections;
-  queue->connections = connection;
-
   if ( queue->connection_count > 0 ) {
     int i = get_client_state(connection)->server_fifo_index;
     while ( i != queue->fifo_index ) {
@@ -83,17 +77,11 @@ void ef_shrub_connection_attach(struct ef_shrub_connection* connection,
   queue->connection_count++;
 }
 
-void ef_shrub_connection_detach(struct ef_shrub_connection* connection,
-                                struct ef_vi* vi)
+void ef_shrub_connection_detached(struct ef_shrub_connection* connection,
+                                  struct ef_shrub_queue* queue,
+                                  struct ef_vi* vi)
 {
-  struct ef_shrub_client_state* state = get_client_state(connection);
-  struct ef_shrub_queue* queue = connection->queue;
-  int i;
-
-  ef_shrub_connection_remove(&queue->connections, connection);
-  connection->queue = NULL;
-
-  i = state->server_fifo_index;
+  int i = get_client_state(connection)->server_fifo_index;
   while ( i != queue->fifo_index ) {
     ef_shrub_buffer_id buffer = queue->fifo[i];
     assert(buffer != EF_SHRUB_INVALID_BUFFER);

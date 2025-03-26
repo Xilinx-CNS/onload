@@ -154,19 +154,29 @@ ef_shrub_connection_alloc(int fifo_fd, size_t* fifo_offset, size_t fifo_size)
   return connection;
 }
 
-void ef_shrub_connection_attach(struct ef_shrub_connection* connection,
-                                struct ef_shrub_queue* queue)
+static struct ef_shrub_connection*
+find_connection(struct ef_shrub_connection* target, struct ef_shrub_queue* queue)
 {
-  calls->attach++;
-  connection->queue = queue;
-  connection->next = queue->connections;
-  queue->connections = connection;
+  struct ef_shrub_connection* c;
+  for( c = queue->connections; c != NULL && c != target; c = c->next );
+  return c;
 }
 
-void ef_shrub_connection_detach(struct ef_shrub_connection* connection,
-                                struct ef_vi* vi_)
+void ef_shrub_connection_attached(struct ef_shrub_connection* connection,
+                                  struct ef_shrub_queue* queue)
+{
+  CHECK(connection->queue, ==, queue);
+  CHECK(find_connection(connection, queue), ==, connection);
+  calls->attach++;
+}
+
+void ef_shrub_connection_detached(struct ef_shrub_connection* connection,
+                                  struct ef_shrub_queue* queue,
+                                  struct ef_vi* vi_)
 {
   CHECK(vi_, ==, vi);
+  CHECK(connection->queue, ==, NULL);
+  CHECK(find_connection(connection, queue), ==, NULL);
   calls->detach++;
 }
 
@@ -321,8 +331,7 @@ static void test_shrub_server_bad_proto(void)
   --client_shrub_version;
 
   /* New connections work up to maximum queue count */
-  /* FIXME: starting at one because queues aren't released correctly */
-  for( i = 1; i < EF_VI_MAX_EFCT_RXQS; ++i ) {
+  for( i = 0; i < EF_VI_MAX_EFCT_RXQS; ++i ) {
     event.data.ptr = NULL;
     POLL_CHECK_ACCEPTED
     event.data = last_epoll_data;

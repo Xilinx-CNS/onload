@@ -60,6 +60,23 @@ static int unix_server_poll(struct ef_shrub_server* server)
   return rc;
 }
 
+static void remove_connection(struct ef_shrub_connection** list,
+                              struct ef_shrub_connection* connection)
+{
+  if( *list == connection ) {
+    *list = connection->next;
+  }
+  else {
+    struct ef_shrub_connection* c;
+    for( c = *list; c != NULL; c = c->next ) {
+      if( c->next == connection ) {
+        c->next = connection->next;
+        break;
+      }
+    }
+  }
+}
+
 static struct ef_shrub_queue*
 find_queue(struct ef_shrub_server* server, uint64_t qid)
 {
@@ -89,7 +106,7 @@ static int server_request_queue(struct ef_shrub_server* server,
   if( connection->queue != NULL )
     return -EALREADY;
 
-  ef_shrub_connection_remove(&server->pending_connections, connection);
+  remove_connection(&server->pending_connections, connection);
 
   queue = find_queue(server, qid);
   if( queue == NULL )
@@ -104,11 +121,15 @@ static int server_request_queue(struct ef_shrub_server* server,
       return rc;
   }
 
+  connection->queue = queue;
   rc = ef_shrub_connection_send_metrics(connection);
   if( rc < 0 )
     return rc;
 
-  ef_shrub_connection_attach(connection, queue);
+  connection->next = queue->connections;
+  queue->connections = connection;
+  ef_shrub_connection_attached(connection, queue);
+
   return 0;
 }
 
@@ -221,19 +242,23 @@ out_close:
 static int server_connection_closed(struct ef_shrub_server* server,
                                     struct ef_shrub_connection* connection)
 {
-  if( connection->socket >= 0 )
+  remove_connection(&server->pending_connections, connection);
+
+  if( connection->socket >= 0 ) {
     ef_shrub_server_close_socket(connection->socket);
+    connection->socket = -1;
+  }
 
-  if( connection->queue != NULL )
-    ef_shrub_connection_detach(connection, server->vi);
+  if( connection->queue != NULL ) {
+    struct ef_shrub_queue* queue = connection->queue;
+    connection->queue = NULL;
+    remove_connection(&queue->connections, connection);
+    ef_shrub_connection_detached(connection, queue, server->vi);
+  }
 
-  ef_shrub_connection_remove(&server->pending_connections, connection);
-
-  connection->queue = NULL;
-  connection->socket = -1;
   connection->next = server->closed_connections;
   server->closed_connections = connection;
-  
+
   return 0;
 }
 
