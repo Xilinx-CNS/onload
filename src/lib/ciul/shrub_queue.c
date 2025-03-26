@@ -129,7 +129,7 @@ static void poll_fifos(struct ef_vi* vi, struct ef_shrub_queue* queue)
     poll_fifo(vi, queue, c);
 }
 
-int ef_shrub_queue_open(struct ef_shrub_queue** queue_out,
+int ef_shrub_queue_open(struct ef_shrub_queue* queue,
                         struct ef_vi* vi,
                         size_t buffer_bytes,
                         size_t buffer_count,
@@ -137,21 +137,17 @@ int ef_shrub_queue_open(struct ef_shrub_queue** queue_out,
                         int client_fifo_fd,
                         int qid)
 {
-  struct ef_shrub_queue* queue;
   int rc;
-
-  queue = calloc(1, sizeof(*queue));
-  if( queue == NULL )
-    return -ENOMEM;
 
   queue->shared_fds[EF_SHRUB_FD_CLIENT_FIFO] = client_fifo_fd;
   queue->buffer_bytes = buffer_bytes;
   queue->buffer_count = buffer_count;
   queue->fifo_size = fifo_size;
+  queue->qid = qid;
 
   rc = queue_alloc_refs(queue);
   if( rc < 0 )
-    goto fail_refs;
+    return rc;
 
   rc = queue_alloc_buffer_fifo_indices(queue);
   if ( rc < 0 )
@@ -174,7 +170,6 @@ int ef_shrub_queue_open(struct ef_shrub_queue** queue_out,
     goto fail_queue_attach;
   
   queue->ix = rc;
-  *queue_out = queue;
   return 0;
 
 fail_queue_attach:
@@ -186,8 +181,6 @@ fail_shared:
   free(queue->buffer_fifo_indices);
 fail_indices:
   free(queue->buffer_refs);
-fail_refs:
-  free(queue);
   return rc;
 }
 
@@ -199,7 +192,6 @@ void ef_shrub_queue_close(struct ef_shrub_queue* queue)
   close(queue->shared_fds[EF_SHRUB_FD_SERVER_FIFO]);
   free(queue->buffer_fifo_indices);
   free(queue->buffer_refs);
-  free(queue);
 }
 
 void ef_shrub_queue_poll(struct ef_shrub_queue* queue, struct ef_vi* vi)

@@ -13,6 +13,7 @@ struct ef_shrub_queue {
   int fifo_size;
   int connection_count;
   int ix;
+  uint64_t qid;
 
   ef_shrub_buffer_id* fifo;
   unsigned* buffer_refs;
@@ -21,7 +22,7 @@ struct ef_shrub_queue {
   struct ef_shrub_connection* connections;
 };
 
-int ef_shrub_queue_open(struct ef_shrub_queue** queue_out,
+int ef_shrub_queue_open(struct ef_shrub_queue* queue,
                         struct ef_vi* vi,
                         size_t buffer_bytes,
                         size_t buffer_count,

@@ -20,9 +20,9 @@ static const char server_addr[] = "path/to/server/socket";
 static const size_t buffer_bytes = 64;
 static const size_t buffer_count = 32;
 
-static uint64_t active_qs;
 static struct epoll_event* epoll_event;
-static int last_accept_fd = 42;
+static int last_accept_fd = 42; /* arbitrary */
+static uint64_t last_qid = 413732132; /* arbitrary */
 static epoll_data_t last_epoll_data;
 
 static struct ef_vi* vi;
@@ -104,7 +104,7 @@ int ef_shrub_server_recv(int fd, void* data, size_t bytes)
   CHECK(bytes, ==, sizeof(*req));
   req->server_version = client_shrub_version;
   req->type = EF_SHRUB_REQUEST_QUEUE;
-  req->requests.queue.qid = 0; // TODO arbitrary value fails due to bogus use as array index
+  req->requests.queue.qid = ++last_qid;
   return bytes;
 }
 
@@ -114,7 +114,7 @@ int ef_shrub_server_resource_op(int fd, struct ci_resource_op_s* op)
   return 0;
 }
 
-int ef_shrub_queue_open(struct ef_shrub_queue** queue_out,
+int ef_shrub_queue_open(struct ef_shrub_queue* queue,
                         struct ef_vi* vi_,
                         size_t buffer_bytes_,
                         size_t buffer_count_,
@@ -122,20 +122,28 @@ int ef_shrub_queue_open(struct ef_shrub_queue** queue_out,
                         int client_fifo_fd,
                         int qid)
 {
-  struct ef_shrub_queue* queue;
-
   CHECK(vi_, ==, vi);
   CHECK(buffer_bytes_, ==, buffer_bytes);
   CHECK(buffer_count_, ==, buffer_count);
   CHECK(fifo_size, >=, buffer_count);
+  CHECK(qid, ==, last_qid);
 
-  queue = calloc(1, sizeof(*queue));
   queue->buffer_bytes = buffer_bytes;
   queue->buffer_count = buffer_count;
   queue->fifo_size = fifo_size;
+  queue->qid = qid;
 
-  *queue_out = queue;
   return 0;
+}
+
+void ef_shrub_queue_close(struct ef_shrub_queue* queue)
+{
+  // Probably should check when this is called
+}
+
+void ef_shrub_queue_poll(struct ef_shrub_queue* queue, struct ef_vi* vi)
+{
+  // Probably should check when this is called
 }
 
 struct ef_shrub_connection*
@@ -186,7 +194,6 @@ static void init_test(void)
   vi = vi_;
   calls = calls_;
 
-  vi->efct_rxqs.active_qs = &active_qs;
   vi->efct_rxqs.ops = &mock_ops;
   STATE_STASH(vi);
 }
@@ -279,6 +286,7 @@ static void test_shrub_server_connect(void)
 
 static void test_shrub_server_bad_proto(void)
 {
+  int i;
   struct epoll_event event;
 
   init_test();
@@ -302,7 +310,7 @@ static void test_shrub_server_bad_proto(void)
   POLL_CHECK_ATTACHED
 
   /* Request for second queue is a protocol error */
-  POLL_CHECK_CLOSED
+  POLL_CHECK_DETACHED
 
   /* Request invalid protocol version */
   event.data.ptr = NULL;
@@ -311,6 +319,21 @@ static void test_shrub_server_bad_proto(void)
   ++client_shrub_version;
   POLL_CHECK_CLOSED
   --client_shrub_version;
+
+  /* New connections work up to maximum queue count */
+  /* FIXME: starting at one because queues aren't released correctly */
+  for( i = 1; i < EF_VI_MAX_EFCT_RXQS; ++i ) {
+    event.data.ptr = NULL;
+    POLL_CHECK_ACCEPTED
+    event.data = last_epoll_data;
+    POLL_CHECK_ATTACHED
+  }
+
+  /* Request for too many queues fails */
+  event.data.ptr = NULL;
+  POLL_CHECK_ACCEPTED
+  event.data = last_epoll_data;
+  POLL_CHECK_CLOSED
 
   STATE_FREE(calls);
   STATE_FREE(vi);
