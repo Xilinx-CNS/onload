@@ -242,18 +242,20 @@ out_close:
 static int server_connection_closed(struct ef_shrub_server* server,
                                     struct ef_shrub_connection* connection)
 {
-  remove_connection(&server->pending_connections, connection);
+  struct ef_shrub_queue* queue = connection->queue;
+
+  if( queue == NULL ) {
+    remove_connection(&server->pending_connections, connection);
+  }
+  else {
+    connection->queue = NULL;
+    remove_connection(&queue->connections, connection);
+    ef_shrub_connection_detached(connection, queue, server->vi);
+  }
 
   if( connection->socket >= 0 ) {
     ef_shrub_server_close_socket(connection->socket);
     connection->socket = -1;
-  }
-
-  if( connection->queue != NULL ) {
-    struct ef_shrub_queue* queue = connection->queue;
-    connection->queue = NULL;
-    remove_connection(&queue->connections, connection);
-    ef_shrub_connection_detached(connection, queue, server->vi);
   }
 
   connection->next = server->closed_connections;

@@ -43,6 +43,8 @@ static struct call_state
 
   /* Function arguments */
   int fd;
+  struct ef_shrub_queue* queue;
+  struct ef_shrub_connection* connection;
 } *calls;
 
 int ef_shrub_server_sockets_open(struct ef_shrub_server_sockets* sockets,
@@ -168,6 +170,8 @@ void ef_shrub_connection_attached(struct ef_shrub_connection* connection,
   CHECK(connection->queue, ==, queue);
   CHECK(find_connection(connection, queue), ==, connection);
   calls->attach++;
+  calls->connection = connection;
+  calls->queue = queue;
 }
 
 void ef_shrub_connection_detached(struct ef_shrub_connection* connection,
@@ -178,6 +182,8 @@ void ef_shrub_connection_detached(struct ef_shrub_connection* connection,
   CHECK(connection->queue, ==, NULL);
   CHECK(find_connection(connection, queue), ==, NULL);
   calls->detach++;
+  calls->connection = connection;
+  calls->queue = queue;
 }
 
 int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection)
@@ -229,13 +235,17 @@ static void open_server(void)
   ef_shrub_server_poll(server); \
   STATE_CHECK(calls, attach, 1); \
   STATE_CHECK(calls, send, 1); \
+  STATE_ACCEPT(calls, connection); \
+  STATE_ACCEPT(calls, queue); \
   STATE_CHECK_UNCHANGED(calls); \
 
 #define POLL_CHECK_DETACHED \
   ef_shrub_server_poll(server); \
   STATE_CHECK(calls, close, 1); \
   STATE_CHECK(calls, detach, 1); \
-  STATE_CHECK(calls, fd, last_accept_fd); \
+  STATE_ACCEPT(calls, fd); \
+  STATE_ACCEPT(calls, connection); \
+  STATE_ACCEPT(calls, queue); \
   STATE_CHECK_UNCHANGED(calls); \
 
 #define POLL_CHECK_CLOSED \
@@ -243,6 +253,33 @@ static void open_server(void)
   STATE_CHECK(calls, close, 1); \
   STATE_CHECK(calls, fd, last_accept_fd); \
   STATE_CHECK_UNCHANGED(calls); \
+
+static void do_connect(void)
+{
+  struct epoll_event event;
+  epoll_event = &event;
+
+  event.events = EPOLLIN;
+  event.data.ptr = NULL;
+  POLL_CHECK_ACCEPTED
+
+  event.data = last_epoll_data;
+  POLL_CHECK_ATTACHED
+
+  epoll_event = NULL;
+}
+
+static void disconnect(struct ef_shrub_connection* connection)
+{
+  struct epoll_event event;
+  epoll_event = &event;
+
+  event.events = EPOLLIN | EPOLLHUP;
+  event.data.ptr = connection;
+  POLL_CHECK_DETACHED
+
+  epoll_event = NULL;
+}
 
 /* Tests */
 static void test_shrub_server_open(void)
@@ -289,6 +326,67 @@ static void test_shrub_server_connect(void)
   event.data = last_epoll_data;
   event.events = EPOLLIN | EPOLLHUP;
   POLL_CHECK_DETACHED
+
+  STATE_FREE(calls);
+  STATE_FREE(vi);
+}
+
+static void test_shrub_server_share(void)
+{
+  int i, j, repeat;
+  int n = 2 * EF_VI_MAX_EFCT_RXQS; /* no constraint on number of connections */
+  struct ef_shrub_queue* queue;
+  struct ef_shrub_connection* connection[2 * EF_VI_MAX_EFCT_RXQS];
+
+  init_test();
+  open_server();
+
+  for( repeat = 0; repeat < 3; ++repeat ) {
+    for( i = 0; i < n; ++i ) {
+      do_connect();
+
+      if( i == 0 )
+        queue = calls->queue;
+      else
+        CHECK(calls->queue, ==, queue);
+      CHECK(queue, !=, NULL);
+      CHECK(queue->qid, ==, last_qid);
+
+      connection[i] = calls->connection;
+      CHECK(connection[i]->socket, ==, last_accept_fd);
+      CHECK(connection[i], !=, NULL);
+      CHECK(connection[i]->queue, ==, queue);
+
+      /* Another connection to a different queue */
+      do_connect();
+      CHECK(calls->queue, !=, queue);
+      last_qid -= 2;
+
+      CHECK(queue->connections, ==, connection[i]);
+      for( j = 0; j < i; ++j ) {
+        CHECK(connection[j]->queue, ==, queue);
+        CHECK(connection[j+1]->next, ==, connection[j]);
+      }
+    }
+
+    for( i = 0; i < n; ++i ) {
+      int socket = connection[i]->socket;
+      disconnect(connection[i]);
+      CHECK(calls->fd, ==, socket);
+      CHECK(connection[i]->socket, <, 0);
+      CHECK(calls->queue, ==, queue);
+      CHECK(calls->connection, ==, connection[i]);
+      CHECK(connection[i]->queue, ==, NULL);
+
+      if( i != n - 1 )
+        CHECK(connection[i+1]->next, ==, NULL);
+      for( j = i + 1; j < n - 1; ++j )
+        CHECK(connection[j+1]->next, ==, connection[j]);
+      for( j = i + 1; j < n; ++j )
+        CHECK(connection[j]->queue, ==, queue);
+    }
+    CHECK(queue->connections, ==, NULL);
+  }
 
   STATE_FREE(calls);
   STATE_FREE(vi);
@@ -351,6 +449,7 @@ static void test_shrub_server_bad_proto(void)
 int main(void) {
   TEST_RUN(test_shrub_server_open);
   TEST_RUN(test_shrub_server_connect);
+  TEST_RUN(test_shrub_server_share);
   TEST_RUN(test_shrub_server_bad_proto);
   TEST_END();
 }
