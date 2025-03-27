@@ -18,18 +18,20 @@ struct ef_shrub_queue_buffer
   int fifo_index; /* Valid if ref_count is non-zero */
 };
 
-static ef_shrub_buffer_id set_buffer_id(ef_shrub_buffer_id id, bool sentinel)
+/* Make a munged id value suitable for writing into the outgoing fifo */
+static ef_shrub_buffer_id set_buffer_id(int index, bool sentinel)
 {
   ci_dword_t buffer_id;
   CI_POPULATE_DWORD_2(
     buffer_id,
-    EF_SHRUB_BUFFER_ID, id,
+    EF_SHRUB_BUFFER_ID, index,
     EF_SHRUB_SENTINEL, sentinel
   );
   return buffer_id.u32[0];
 }
 
-static uint32_t get_buffer_id(ef_shrub_buffer_id id)
+/* Extract the buffer index from a munged id value */
+static uint32_t get_buffer_index(ef_shrub_buffer_id id)
 {
   ci_dword_t id2;
   id2.u32[0] = id;
@@ -116,7 +118,6 @@ static int queue_alloc_shared(struct ef_shrub_queue* queue)
 
 static void release_buffer(struct ef_shrub_queue* queue, int buffer_index)
 {
-  assert(buffer_index != EF_SHRUB_INVALID_BUFFER);
   struct ef_shrub_queue_buffer* buffer = &queue->buffers[buffer_index];
   if( --buffer->ref_count == 0 ) {
     queue->fifo[buffer->fifo_index] = EF_SHRUB_INVALID_BUFFER;
@@ -124,26 +125,54 @@ static void release_buffer(struct ef_shrub_queue* queue, int buffer_index)
   }
 }
 
-static void poll_fifo(struct ef_shrub_queue* queue,
-                      struct ef_shrub_connection* connection)
+static void poll_connection(struct ef_shrub_queue* queue,
+                            struct ef_shrub_connection* connection)
 {
-  int i = connection->fifo_index;
+  int fifo_index = connection->fifo_index;
 
-  ef_shrub_buffer_id buffer = connection->fifo[i];
+  /* The client doesn't post the sentinel value, just the buffer index,
+   * so there's no need to call get_buffer_index */
+  ef_shrub_buffer_id buffer_index = connection->fifo[fifo_index];
 
-  if( buffer == EF_SHRUB_INVALID_BUFFER )
+  if( buffer_index == EF_SHRUB_INVALID_BUFFER )
     return;
 
-  connection->fifo[i] = EF_SHRUB_INVALID_BUFFER;
-  connection->fifo_index = next_fifo_index(queue, i);
-  release_buffer(queue, buffer);
+  connection->fifo[fifo_index] = EF_SHRUB_INVALID_BUFFER;
+  connection->fifo_index = next_fifo_index(queue, fifo_index);
+
+  if( buffer_index >= queue->buffer_count )
+    return; /* TBD: the client is misbehaving, should we disconnect? */
+
+  release_buffer(queue, buffer_index);
 }
 
-static void poll_fifos(struct ef_shrub_queue* queue)
+static void poll_connections(struct ef_shrub_queue* queue)
 {
   struct ef_shrub_connection* c;
   for( c = queue->connections; c != NULL; c = c->next )
-    poll_fifo(queue, c);
+    poll_connection(queue, c);
+}
+
+static void poll_fifo(struct ef_shrub_queue* queue)
+{
+  while( fifo_has_space(queue) ) {
+    bool sentinel;
+    unsigned sbseq;
+    int buffer_index =
+      queue->vi->efct_rxqs.ops->next(queue->vi, queue->ix, &sentinel, &sbseq);
+    if ( buffer_index < 0 )
+      break;
+
+    int fifo_index = queue->fifo_index;
+    queue->fifo[fifo_index] = set_buffer_id(buffer_index, sentinel);
+
+    struct ef_shrub_queue_buffer* buffer = &queue->buffers[buffer_index];
+    assert(buffer->ref_count == 0);
+    buffer->ref_count = queue->connection_count;
+    buffer->fifo_index = fifo_index;
+
+    queue->fifo_index = next_fifo_index(queue, fifo_index);
+  }
 }
 
 int ef_shrub_queue_open(struct ef_shrub_queue* queue,
@@ -206,36 +235,17 @@ void ef_shrub_queue_close(struct ef_shrub_queue* queue)
 
 void ef_shrub_queue_poll(struct ef_shrub_queue* queue)
 {
-  ef_vi_efct_rxq_ops* ops = queue->vi->efct_rxqs.ops;
-
-  poll_fifos(queue);
-
-  while( fifo_has_space(queue) ) {
-    bool sentinel;
-    unsigned sbseq;
-    int buffer_index = ops->next(queue->vi, queue->ix, &sentinel, &sbseq);
-    if ( buffer_index < 0 )
-      break;
-
-    int fifo_index = queue->fifo_index;
-    queue->fifo[fifo_index] = set_buffer_id(buffer_index, sentinel);
-
-    struct ef_shrub_queue_buffer* buffer = &queue->buffers[buffer_index];
-    assert(buffer->ref_count == 0);
-    buffer->ref_count = queue->connection_count;
-    buffer->fifo_index = fifo_index;
-
-    queue->fifo_index = next_fifo_index(queue, fifo_index);
-  }
+  poll_connections(queue);
+  poll_fifo(queue);
 }
 
 void ef_shrub_queue_attached(struct ef_shrub_queue* queue, int fifo_index)
 {
   if( queue->connection_count > 0 ) {
     while( fifo_index != queue->fifo_index ) {
-      ef_shrub_buffer_id buffer = queue->fifo[fifo_index];
-      assert(buffer != EF_SHRUB_INVALID_BUFFER);
-      queue->buffers[get_buffer_id(buffer)].ref_count++;
+      ef_shrub_buffer_id buffer_id = queue->fifo[fifo_index];
+      assert(buffer_id != EF_SHRUB_INVALID_BUFFER);
+      queue->buffers[get_buffer_index(buffer_id)].ref_count++;
       fifo_index = next_fifo_index(queue, fifo_index);
     }
   }
@@ -246,9 +256,9 @@ void ef_shrub_queue_attached(struct ef_shrub_queue* queue, int fifo_index)
 void ef_shrub_queue_detached(struct ef_shrub_queue* queue, int fifo_index)
 {
   while( fifo_index != queue->fifo_index ) {
-    ef_shrub_buffer_id buffer = queue->fifo[fifo_index];
-    assert(buffer != EF_SHRUB_INVALID_BUFFER);
-    release_buffer(queue, get_buffer_id(buffer));
+    ef_shrub_buffer_id buffer_id = queue->fifo[fifo_index];
+    assert(buffer_id != EF_SHRUB_INVALID_BUFFER);
+    release_buffer(queue, get_buffer_index(buffer_id));
     fifo_index = next_fifo_index(queue, fifo_index);
   }
 
