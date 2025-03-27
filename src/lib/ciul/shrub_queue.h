@@ -17,9 +17,7 @@ struct ef_shrub_queue {
 
   struct ef_vi* vi;
   ef_shrub_buffer_id* fifo;
-  unsigned* buffer_refs;
-  int* buffer_fifo_indices;
-
+  struct ef_shrub_queue_buffer* buffers;
   struct ef_shrub_connection* connections;
 };
 
