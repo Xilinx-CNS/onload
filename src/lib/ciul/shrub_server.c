@@ -250,7 +250,7 @@ static int server_connection_closed(struct ef_shrub_server* server,
   else {
     connection->queue = NULL;
     remove_connection(&queue->connections, connection);
-    ef_shrub_connection_detached(connection, queue, server->vi);
+    ef_shrub_connection_detached(connection, queue);
   }
 
   if( connection->socket >= 0 ) {
@@ -318,7 +318,7 @@ void ef_shrub_server_poll(struct ef_shrub_server* server)
 
   unix_server_poll(server);
   for( i = 0; i < EF_VI_MAX_EFCT_RXQS; ++i )
-    ef_shrub_queue_poll(&server->queues[i], server->vi);
+    ef_shrub_queue_poll(&server->queues[i]);
 }
 
 void ef_shrub_server_close(struct ef_shrub_server* server)

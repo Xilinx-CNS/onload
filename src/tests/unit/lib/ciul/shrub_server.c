@@ -143,7 +143,7 @@ void ef_shrub_queue_close(struct ef_shrub_queue* queue)
   // Probably should check when this is called
 }
 
-void ef_shrub_queue_poll(struct ef_shrub_queue* queue, struct ef_vi* vi)
+void ef_shrub_queue_poll(struct ef_shrub_queue* queue)
 {
   // Probably should check when this is called
 }
@@ -175,10 +175,8 @@ void ef_shrub_connection_attached(struct ef_shrub_connection* connection,
 }
 
 void ef_shrub_connection_detached(struct ef_shrub_connection* connection,
-                                  struct ef_shrub_queue* queue,
-                                  struct ef_vi* vi_)
+                                  struct ef_shrub_queue* queue)
 {
-  CHECK(vi_, ==, vi);
   CHECK(connection->queue, ==, NULL);
   CHECK(find_connection(connection, queue), ==, NULL);
   calls->detach++;

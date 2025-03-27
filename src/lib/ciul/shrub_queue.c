@@ -107,7 +107,7 @@ static int queue_alloc_shared(struct ef_shrub_queue* queue)
   return 0;
 }
 
-static void poll_fifo(struct ef_vi* vi, struct ef_shrub_queue* queue,
+static void poll_fifo(struct ef_shrub_queue* queue,
                       struct ef_shrub_connection* connection)
 {
   int i = connection->fifo_index;
@@ -119,14 +119,14 @@ static void poll_fifo(struct ef_vi* vi, struct ef_shrub_queue* queue,
 
   connection->fifo[i] = EF_SHRUB_INVALID_BUFFER;
   connection->fifo_index = i == queue->fifo_size - 1 ? 0 : i + 1;
-  ef_shrub_queue_release_buffer(queue, vi, buffer);
+  ef_shrub_queue_release_buffer(queue, buffer);
 }
 
-static void poll_fifos(struct ef_vi* vi, struct ef_shrub_queue* queue)
+static void poll_fifos(struct ef_shrub_queue* queue)
 {
   struct ef_shrub_connection* c;
   for( c = queue->connections; c != NULL; c = c->next )
-    poll_fifo(vi, queue, c);
+    poll_fifo(queue, c);
 }
 
 int ef_shrub_queue_open(struct ef_shrub_queue* queue,
@@ -194,16 +194,15 @@ void ef_shrub_queue_close(struct ef_shrub_queue* queue)
   free(queue->buffer_refs);
 }
 
-void ef_shrub_queue_poll(struct ef_shrub_queue* queue, struct ef_vi* vi)
+void ef_shrub_queue_poll(struct ef_shrub_queue* queue)
 {
   bool sentinel;
   unsigned sbseq;
-  ef_vi_efct_rxq_ops* ops;
-  ops = vi->efct_rxqs.ops;
+  ef_vi_efct_rxq_ops* ops = queue->vi->efct_rxqs.ops;
 
-  poll_fifos(vi, queue);
+  poll_fifos(queue);
   while( fifo_has_space(queue) ) {
-    int next_buffer = ops->next(vi, queue->ix, &sentinel, &sbseq);
+    int next_buffer = ops->next(queue->vi, queue->ix, &sentinel, &sbseq);
     if ( next_buffer < 0 ) {
       break;
     }
@@ -217,7 +216,6 @@ void ef_shrub_queue_poll(struct ef_shrub_queue* queue, struct ef_vi* vi)
 }
 
 void ef_shrub_queue_release_buffer(struct ef_shrub_queue* queue,
-                                   struct ef_vi* vi,
                                    ef_shrub_buffer_id buffer)
 {
   assert(buffer != EF_SHRUB_INVALID_BUFFER);
@@ -225,7 +223,7 @@ void ef_shrub_queue_release_buffer(struct ef_shrub_queue* queue,
     int buffer_fifo_index = queue->buffer_fifo_indices[buffer];
     queue->fifo[buffer_fifo_index] = EF_SHRUB_INVALID_BUFFER;
     queue->buffer_fifo_indices[buffer] = -1;
-    vi->efct_rxqs.ops->free(vi, queue->ix, buffer);
+    queue->vi->efct_rxqs.ops->free(queue->vi, queue->ix, buffer);
   }
 }
 

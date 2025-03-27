@@ -15,6 +15,7 @@ struct ef_shrub_queue {
   int ix;
   uint64_t qid;
 
+  struct ef_vi* vi;
   ef_shrub_buffer_id* fifo;
   unsigned* buffer_refs;
   int* buffer_fifo_indices;
@@ -33,8 +34,7 @@ int ef_shrub_queue_open(struct ef_shrub_queue* queue,
 void ef_shrub_queue_close(struct ef_shrub_queue* queue);
 
 void ef_shrub_queue_release_buffer(struct ef_shrub_queue* queue,
-                                   struct ef_vi* vi,
                                    ef_shrub_buffer_id buffer);
 
-void ef_shrub_queue_poll(struct ef_shrub_queue* queue, struct ef_vi* vi);
+void ef_shrub_queue_poll(struct ef_shrub_queue* queue);
 

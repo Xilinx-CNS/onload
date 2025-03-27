@@ -78,14 +78,13 @@ void ef_shrub_connection_attached(struct ef_shrub_connection* connection,
 }
 
 void ef_shrub_connection_detached(struct ef_shrub_connection* connection,
-                                  struct ef_shrub_queue* queue,
-                                  struct ef_vi* vi)
+                                  struct ef_shrub_queue* queue)
 {
   int i = get_client_state(connection)->server_fifo_index;
   while ( i != queue->fifo_index ) {
     ef_shrub_buffer_id buffer = queue->fifo[i];
     assert(buffer != EF_SHRUB_INVALID_BUFFER);
-    ef_shrub_queue_release_buffer(queue, vi, get_buffer_id(buffer));
+    ef_shrub_queue_release_buffer(queue, get_buffer_id(buffer));
     i = (i == queue->fifo_size - 1 ? 0: i + 1);
   }
 
