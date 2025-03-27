@@ -282,6 +282,8 @@ static void disconnect(struct ef_shrub_connection* connection)
 }
 
 /* Tests */
+
+/* Opening and closing the server */
 static void test_shrub_server_open(void)
 {
   int rc;
@@ -306,6 +308,7 @@ static void test_shrub_server_open(void)
   STATE_FREE(vi);
 }
 
+/* Stepping through the connection process */
 static void test_shrub_server_connect(void)
 {
   struct epoll_event event;
@@ -331,6 +334,41 @@ static void test_shrub_server_connect(void)
   STATE_FREE(vi);
 }
 
+/* Multiple connections to separate queues */
+static void test_shrub_server_multi(void)
+{
+  int i, j, n = EF_VI_MAX_EFCT_RXQS, repeat;
+  struct ef_shrub_queue* queue[EF_VI_MAX_EFCT_RXQS];
+
+  init_test();
+  open_server();
+
+  for( repeat = 0; repeat < 3; ++repeat ) {
+    for( i = 0; i < n; ++i ) {
+      do_connect();
+
+      queue[i] = calls->queue;
+      CHECK(queue[i], !=, NULL);
+      for( j = 0; j < i; ++j )
+        CHECK(queue[i], !=, queue[j]);
+
+      CHECK(queue[i]->connections, ==, calls->connection);
+      CHECK(calls->connection->next, ==, NULL);
+    }
+
+    for( i = 0; i < n; ++i ) {
+      disconnect(queue[i]->connections);
+
+      CHECK(queue[i], ==, calls->queue);
+      CHECK(queue[i]->connections, ==, NULL);
+    }
+  }
+
+  STATE_FREE(calls);
+  STATE_FREE(vi);
+}
+
+/* Multiple connections sharing a queue */
 static void test_shrub_server_share(void)
 {
   int i, j, repeat;
@@ -392,6 +430,7 @@ static void test_shrub_server_share(void)
   STATE_FREE(vi);
 }
 
+/* Various protocol violations */
 static void test_shrub_server_bad_proto(void)
 {
   int i;
@@ -449,6 +488,7 @@ static void test_shrub_server_bad_proto(void)
 int main(void) {
   TEST_RUN(test_shrub_server_open);
   TEST_RUN(test_shrub_server_connect);
+  TEST_RUN(test_shrub_server_multi);
   TEST_RUN(test_shrub_server_share);
   TEST_RUN(test_shrub_server_bad_proto);
   TEST_END();
