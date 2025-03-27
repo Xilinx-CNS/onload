@@ -32,9 +32,7 @@ int ef_shrub_queue_open(struct ef_shrub_queue* queue,
                         int qid);
 
 void ef_shrub_queue_close(struct ef_shrub_queue* queue);
-
-void ef_shrub_queue_release_buffer(struct ef_shrub_queue* queue,
-                                   ef_shrub_buffer_id buffer);
-
 void ef_shrub_queue_poll(struct ef_shrub_queue* queue);
 
+void ef_shrub_queue_attached(struct ef_shrub_queue* queue, int fifo_index);
+void ef_shrub_queue_detached(struct ef_shrub_queue* queue, int fifo_index);

@@ -16,13 +16,6 @@ get_client_state(struct ef_shrub_connection* connection)
                  connection->fifo_size * sizeof(ef_shrub_buffer_id));
 }
 
-static uint32_t get_buffer_id(ef_shrub_buffer_id id)
-{
-  ci_dword_t id2;
-  id2.u32[0] = id;
-  return CI_DWORD_FIELD(id2, EF_SHRUB_BUFFER_ID);
-}
-
 struct ef_shrub_connection*
 ef_shrub_connection_alloc(int fifo_fd, size_t* fifo_offset, size_t fifo_size)
 {
@@ -64,31 +57,13 @@ fail_fifo:
 void ef_shrub_connection_attached(struct ef_shrub_connection* connection,
                                   struct ef_shrub_queue* queue)
 {
-  if ( queue->connection_count > 0 ) {
-    int i = get_client_state(connection)->server_fifo_index;
-    while ( i != queue->fifo_index ) {
-      ef_shrub_buffer_id buffer = queue->fifo[i];
-      assert(buffer != EF_SHRUB_INVALID_BUFFER);
-      queue->buffer_refs[get_buffer_id(buffer)]++; 
-      i = (i == queue->fifo_size - 1 ? 0: i + 1);
-    } 
-  }
-
-  queue->connection_count++;
+  ef_shrub_queue_attached(queue, get_client_state(connection)->server_fifo_index);
 }
 
 void ef_shrub_connection_detached(struct ef_shrub_connection* connection,
                                   struct ef_shrub_queue* queue)
 {
-  int i = get_client_state(connection)->server_fifo_index;
-  while ( i != queue->fifo_index ) {
-    ef_shrub_buffer_id buffer = queue->fifo[i];
-    assert(buffer != EF_SHRUB_INVALID_BUFFER);
-    ef_shrub_queue_release_buffer(queue, get_buffer_id(buffer));
-    i = (i == queue->fifo_size - 1 ? 0: i + 1);
-  }
-
-  queue->connection_count--;
+  ef_shrub_queue_detached(queue, get_client_state(connection)->server_fifo_index);
 }
 
 int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection)
