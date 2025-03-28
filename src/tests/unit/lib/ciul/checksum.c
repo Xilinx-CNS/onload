@@ -10,7 +10,7 @@
 /* Test infrastructure */
 #include "unit_test.h"
 
-static void test_ef_tcp_checksum_0000(void)
+static void test_ef_checksum_run(void)
 {
   /* A real IPv4 packet grabbed from interface. */
   char ipdata[] = {
@@ -32,8 +32,15 @@ static void test_ef_tcp_checksum_0000(void)
     0x00, 0x00, 0x00, 0x00,
     0x01, 0x03, 0x03, 0x07
   };
+
+  char udpdata[] = {
+    0xD6, 0xBE, 0x00, 0x13,
+    0x00, 0x15, 0x00, 0x00  /* checksum - 0x0000 */
+  };
+
   struct iphdr *ip = (struct iphdr *)ipdata;
   struct tcphdr *tcp = (struct tcphdr *)tcpdata;
+  struct udphdr *udp = (struct udphdr *)udpdata;
 
   CHECK_TRUE(ef_tcp_checksum_is_correct(ip, tcp, NULL, 0));
 
@@ -41,12 +48,21 @@ static void test_ef_tcp_checksum_0000(void)
   tcp->check = 0;
   CHECK_TRUE(ef_tcp_checksum_is_correct(ip, tcp, NULL, 0));
 
-  /* Check that we compute the checksum of the above packet as 0x0000. */
+  /* Check that we compute the checksum of the above tcp packet as 0x0000. */
   CHECK(ef_tcp_checksum(ip, tcp, NULL, 0), ==, 0x0000);
+
+  /* Change protocol in IP data to UDP */
+  ip->protocol = IPPROTO_UDP;
+
+  /* Check that we still consider the checksum correct if it is 0. */
+  CHECK_TRUE(ef_udp_checksum_is_correct(ip, udp, NULL, 0));
+  /* Check that we compute checksum of the above udp packet as 0xffff */
+  CHECK(ef_udp_checksum(ip, (struct udphdr*) udp, NULL, 0), ==, 0xffff);
+
 }
 
 int main(void)
 {
-  TEST_RUN(test_ef_tcp_checksum_0000);
+  TEST_RUN(test_ef_checksum_run);
   TEST_END();
 }
