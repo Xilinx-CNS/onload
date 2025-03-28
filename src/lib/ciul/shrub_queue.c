@@ -52,6 +52,11 @@ static int next_fifo_index(struct ef_shrub_queue* queue, int index)
   return index == queue->fifo_size - 1 ? 0 : index + 1;
 }
 
+static int prev_fifo_index(struct ef_shrub_queue* queue, int index)
+{
+  return index == 0 ? queue->fifo_size - 1 : index - 1;
+}
+
 static size_t buffer_total_bytes(struct ef_shrub_queue* queue)
 {
   return EF_VI_ROUND_UP(queue->buffer_count * queue->buffer_bytes,
@@ -229,22 +234,34 @@ void ef_shrub_queue_poll(struct ef_shrub_queue* queue)
   poll_fifo(queue);
 }
 
-void ef_shrub_queue_attached(struct ef_shrub_queue* queue, int fifo_index)
+void ef_shrub_queue_attached(struct ef_shrub_queue* queue,
+                             struct ef_shrub_client_state* client)
 {
-  if( queue->connection_count > 0 ) {
-    while( fifo_index != queue->fifo_index ) {
-      ef_shrub_buffer_id buffer_id = queue->fifo[fifo_index];
-      assert(buffer_id != EF_SHRUB_INVALID_BUFFER);
-      queue->buffers[get_buffer_index(buffer_id)].ref_count++;
-      fifo_index = next_fifo_index(queue, fifo_index);
-    }
+  int fifo_index = queue->fifo_index;
+  int prev_index = prev_fifo_index(queue, fifo_index);
+
+  /* Scan backwards over valid buffers to find the most recent empty slot in
+   * the fifo. The synchronisation point must be after that point, so we
+   * provide the earliest valid buffer we find to the client. The client will
+   * scan forwards from there to find the synchronisation point. */
+  while( queue->fifo[prev_index] != EF_SHRUB_INVALID_BUFFER ) {
+    fifo_index = prev_index;
+    prev_index = prev_fifo_index(queue, fifo_index);
+
+    /* Take a reference to this buffer */
+    ef_shrub_buffer_id buffer_id = queue->fifo[fifo_index];
+    assert(buffer_id != EF_SHRUB_INVALID_BUFFER);
+    queue->buffers[get_buffer_index(buffer_id)].ref_count++;
   }
 
   queue->connection_count++;
+  client->server_fifo_index = fifo_index;
 }
 
-void ef_shrub_queue_detached(struct ef_shrub_queue* queue, int fifo_index)
+void ef_shrub_queue_detached(struct ef_shrub_queue* queue,
+                             struct ef_shrub_client_state* client)
 {
+  int fifo_index = client->server_fifo_index;
   while( fifo_index != queue->fifo_index ) {
     ef_shrub_buffer_id buffer_id = queue->fifo[fifo_index];
     assert(buffer_id != EF_SHRUB_INVALID_BUFFER);

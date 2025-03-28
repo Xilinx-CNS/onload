@@ -26,11 +26,10 @@ struct ef_shrub_connection {
 
 struct ef_shrub_connection*
 ef_shrub_connection_alloc(int fifo_fd, size_t* fifo_offset, size_t fifo_size);
+
 int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection);
 
-void ef_shrub_connection_attached(struct ef_shrub_connection* connection,
-                                  struct ef_shrub_queue* queue);
-void ef_shrub_connection_detached(struct ef_shrub_connection* connection,
-                                  struct ef_shrub_queue* queue);
+struct ef_shrub_client_state*
+ef_shrub_connection_client_state(struct ef_shrub_connection* connection);
 
 #endif

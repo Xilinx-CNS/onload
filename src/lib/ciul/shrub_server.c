@@ -124,7 +124,7 @@ static int server_request_queue(struct ef_shrub_server* server,
 
   connection->next = queue->connections;
   queue->connections = connection;
-  ef_shrub_connection_attached(connection, queue);
+  ef_shrub_queue_attached(queue, ef_shrub_connection_client_state(connection));
 
   return 0;
 }
@@ -246,7 +246,7 @@ static int server_connection_closed(struct ef_shrub_server* server,
   else {
     connection->queue = NULL;
     remove_connection(&queue->connections, connection);
-    ef_shrub_connection_detached(connection, queue);
+    ef_shrub_queue_detached(queue, ef_shrub_connection_client_state(connection));
   }
 
   if( connection->socket >= 0 ) {

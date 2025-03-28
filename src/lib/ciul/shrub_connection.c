@@ -6,8 +6,8 @@
 #include "shrub_connection.h"
 #include "shrub_server_sockets.h"
 
-static struct ef_shrub_client_state*
-get_client_state(struct ef_shrub_connection* connection)
+struct ef_shrub_client_state*
+ef_shrub_connection_client_state(struct ef_shrub_connection* connection)
 {
   return (void*)((char*)connection->fifo +
                  connection->fifo_size * sizeof(ef_shrub_buffer_id));
@@ -51,39 +51,12 @@ fail_fifo:
   return NULL;
 }
 
-void ef_shrub_connection_attached(struct ef_shrub_connection* connection,
-                                  struct ef_shrub_queue* queue)
-{
-  ef_shrub_queue_attached(queue, get_client_state(connection)->server_fifo_index);
-}
-
-void ef_shrub_connection_detached(struct ef_shrub_connection* connection,
-                                  struct ef_shrub_queue* queue)
-{
-  ef_shrub_queue_detached(queue, get_client_state(connection)->server_fifo_index);
-}
-
 int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection)
 {
   int rc;
-  struct ef_shrub_client_state* state = get_client_state(connection);
   struct ef_shrub_queue* queue = connection->queue;
-
-  //TODO: re-evaluate this if-check startup state case on completion of ON-16190
-  if ( queue->connection_count > 0 ) {
-    /* Function to scan backwards in the FIFO until it finds the first invalid buffer.
-     * The index afterwards is the first valid buffer that we wish to sync upon. */
-    int queue_index = queue->fifo_index == 0 ? queue->fifo_size - 1 : queue->fifo_index - 1;
-    assert(queue->fifo[queue_index] != EF_SHRUB_INVALID_BUFFER);
-    while ( queue->fifo[queue_index] != EF_SHRUB_INVALID_BUFFER ) {
-      queue_index--;
-      if ( queue_index < 0 )
-        queue_index = queue->fifo_size - 1;
-    }
-    state->server_fifo_index = ( queue_index == queue->fifo_size - 1 ? 0 : queue_index + 1 );
-  }
-
-  struct ef_shrub_shared_metrics* metrics = &state->metrics;
+  struct ef_shrub_shared_metrics* metrics =
+    &ef_shrub_connection_client_state(connection)->metrics;
   struct iovec iov = {
     .iov_base = metrics,
     .iov_len = sizeof(*metrics)
@@ -104,7 +77,7 @@ int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection)
   metrics->buffer_count = queue->buffer_count;
   metrics->server_fifo_size = queue->fifo_size;
   metrics->client_fifo_offset = connection->fifo_mmap_offset;
-  metrics->client_fifo_size = queue->fifo_size;
+  metrics->client_fifo_size = connection->fifo_size;
 
   cmsg->cmsg_level = SOL_SOCKET;
   cmsg->cmsg_type = SCM_RIGHTS;
