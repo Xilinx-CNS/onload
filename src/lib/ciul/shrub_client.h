@@ -8,6 +8,9 @@
  * release them for reuse once all data has been extracted.
  */
 
+#ifndef __CI_CIUL_SHRUB_CLIENT_H__
+#define __CI_CIUL_SHRUB_CLIENT_H__
+
 #include <etherfabric/shrub_shared.h>
 
 /* Structure for managing a client instance */
@@ -88,4 +91,6 @@ ef_shrub_client_get_state(const struct ef_shrub_client* client)
 {
   return (void*)(client->mappings[EF_SHRUB_FD_COUNT]);
 }
+
+#endif
 

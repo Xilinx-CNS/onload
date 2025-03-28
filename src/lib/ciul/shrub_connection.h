@@ -3,6 +3,11 @@
 
 /* Connection management for shrub server */
 
+#ifndef __CI_CIUL_SHRUB_CONNECTION_H__
+#define __CI_CIUL_SHRUB_CONNECTION_H__
+
+#include <stdint.h>
+#include <stddef.h>
 #include <etherfabric/shrub_shared.h>
 
 struct ef_shrub_queue;
@@ -28,3 +33,4 @@ void ef_shrub_connection_attached(struct ef_shrub_connection* connection,
 void ef_shrub_connection_detached(struct ef_shrub_connection* connection,
                                   struct ef_shrub_queue* queue);
 
+#endif

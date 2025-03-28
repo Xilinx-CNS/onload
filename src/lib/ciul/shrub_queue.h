@@ -3,6 +3,10 @@
 
 /* Queue management for shrub server */
 
+#ifndef __CI_CIUL_SHRUB_QUEUE_H__
+#define __CI_CIUL_SHRUB_QUEUE_H__
+
+#include <stddef.h>
 #include <etherfabric/shrub_shared.h>
 
 struct ef_shrub_queue {
@@ -34,3 +38,5 @@ void ef_shrub_queue_poll(struct ef_shrub_queue* queue);
 
 void ef_shrub_queue_attached(struct ef_shrub_queue* queue, int fifo_index);
 void ef_shrub_queue_detached(struct ef_shrub_queue* queue, int fifo_index);
+
+#endif

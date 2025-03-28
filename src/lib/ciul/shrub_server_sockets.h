@@ -2,6 +2,11 @@
 /* X-SPDX-Copyright-Text: (c) Copyright 2023 Advanced Micro Devices, Inc. */
 
 /* Socket management for shrub server */
+
+#ifndef __CI_CIUL_SHRUB_SERVER_SOCKETS_H__
+#define __CI_CIUL_SHRUB_SERVER_SOCKETS_H__
+
+#include <stdint.h>
 #include <sys/epoll.h>
 struct msghdr;
 struct ci_resource_op_s;
@@ -27,4 +32,6 @@ int ef_shrub_server_sendmsg(int fd, struct msghdr* msg);
 int ef_shrub_server_remove(const char* path);
 
 int ef_shrub_server_resource_op(int fd, struct ci_resource_op_s* op);
+
+#endif
 
