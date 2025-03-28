@@ -893,7 +893,7 @@ ktime_t efx_ptp_nic_to_kernel_time(struct efx_tx_queue *tx_queue)
 }
 
 /* Get PTP attributes and set up time conversions */
-int efx_ptp_get_attributes(struct efx_nic *efx)
+int efx_ef10_ptp_get_attributes(struct efx_nic *efx)
 {
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_PTP_IN_GET_ATTRIBUTES_LEN);
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_PTP_OUT_GET_ATTRIBUTES_LEN);
@@ -988,6 +988,75 @@ int efx_ptp_get_attributes(struct efx_nic *efx)
 		else
 			ptp->adjfreq_prec = 40;
 	}
+
+	return 0;
+}
+
+int efx_x4_ptp_get_attributes(struct efx_nic *efx)
+{
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_LEN);
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_PTP_IN_GET_ATTRIBUTES_LEN);
+	struct efx_ptp_data *ptp = efx->ptp_data;
+	size_t out_len;
+	u32 fmt;
+	int rc;
+
+	if (!ptp)
+		return -EINVAL;
+
+	MCDI_SET_DWORD(inbuf, PTP_IN_OP, MC_CMD_PTP_OP_GET_ATTRIBUTES);
+	MCDI_SET_DWORD(inbuf, PTP_IN_PERIPH_ID, 0);
+
+	rc = efx_mcdi_rpc_quiet(efx, MC_CMD_PTP, inbuf, sizeof(inbuf),
+				outbuf, sizeof(outbuf), &out_len);
+	if (rc)
+		return rc;
+
+	fmt = MCDI_DWORD(outbuf, PTP_OUT_GET_ATTRIBUTES_V2_TIME_FORMAT);
+	if (fmt != MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_SECONDS_QTR_NANOSECONDS)
+		return -ERANGE;
+
+	ptp->ns_to_nic_time = efx_ptp_ns_to_s_qns;
+	ptp->nic_to_kernel_time = efx_ptp_s_qns_to_ktime_correction;
+	ptp->nic_time.minor_max = 4000000000L;
+	ptp->nic_time.sync_event_minor_shift = 24;
+
+	/* Precalculate acceptable difference between the minor time in the
+	 * packet prefix and the last MCDI time sync event. We expect the
+	 * packet prefix timestamp to be after of sync event by up to one
+	 * sync event interval (0.25s) but we allow it to exceed this by a
+	 * fuzz factor of (0.1s)
+	 */
+	ptp->nic_time.sync_event_diff_min = ptp->nic_time.minor_max
+		- (ptp->nic_time.minor_max / 10);
+	ptp->nic_time.sync_event_diff_max = (ptp->nic_time.minor_max / 4)
+		+ (ptp->nic_time.minor_max / 10);
+	ptp->min_synchronisation_ns =
+		MCDI_DWORD(outbuf, PTP_OUT_GET_ATTRIBUTES_V2_SYNC_WINDOW_MIN);
+	efx->ptp_capability =
+		MCDI_DWORD(outbuf, PTP_OUT_GET_ATTRIBUTES_V2_CAPABILITIES);
+	ptp->capabilities = efx->ptp_capability;
+
+	if (ptp->capabilities &
+	    BIT(MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_FP44_FREQ_ADJ_LBN))
+		ptp->adjfreq_prec = 44;
+	else
+		ptp->adjfreq_prec = 40;
+
+	/* TODO SWNETLINUX-5612: Net driver use
+	 * MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_(MIN|MAX)
+	 *
+	 * The net driver currently does not use FREQ_ADJ_(MIN|MAX) fields of
+	 * MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2. If they are available it is better
+	 * to use FREQ_ADJ_(MIN|MAX) rather than assuming min/max frequency
+	 * adjustment values.
+	 *
+	 * e.g.
+	 * freq_adj_min =
+	 *	MCDI_QWORD(outbuf, PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_MIN);
+	 * freq_adj_max =
+	 *	MCDI_QWORD(outbuf, PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_MAX);
+	 */
 
 	return 0;
 }
@@ -1422,7 +1491,7 @@ static void efx_ptp_cmd_complete(struct efx_nic *efx, unsigned long cookie,
 }
 
 /* Synchronize times between the host and the MC */
-static int efx_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings)
+int efx_ef10_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings)
 {
 	struct efx_ptp_data *ptp = efx->ptp_data;
 	struct efx_ptp_mcdi_data *mcdi_data;
@@ -1529,6 +1598,166 @@ static int efx_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings)
 	if (rc != 0)
 		++ptp->sw_stats.bad_syncs;
 
+	return rc;
+}
+
+struct efx_x4_ptp_timeset {
+	struct timespec64 host_start;
+	struct timespec64 host_end;
+	struct timespec64 nic_time;
+	u64 window; /* Derived: host_end - host_start */
+	s64 mc_host_diff; /* Derived: mc_time - host_time */
+};
+
+static s64 efx_x4_ptp_read_time(struct efx_nic *efx)
+{
+	return le64_to_cpu(_efx_readq(efx, ER_IZ_THE_TIME));
+}
+
+static ktime_t efx_x4_ptp_s64_qns_to_ktime(s64 time)
+{
+	u64 nic_major;
+	u32 nic_minor;
+
+	nic_minor = (time & 0xFFFFFFFF);
+	/* Convert from qns to s */
+	nic_minor = DIV_ROUND_CLOSEST(nic_minor, 4);
+	nic_major = time >> ERF_IZ_THE_TIME_SECS_LBN;
+
+	return ktime_set(nic_major, nic_minor);
+}
+
+static struct timespec64 efx_x4_ptp_s64_qns_to_timespec64(s64 time)
+{
+	return ktime_to_timespec64(efx_x4_ptp_s64_qns_to_ktime(time));
+}
+
+/* Use the same number of samples as X3 */
+#define PTP_TIME_READ_SAMPLE_NUM 6
+static s64 efx_x4_ptp_get_the_time_delay(struct efx_nic *efx)
+{
+	u64 times[PTP_TIME_READ_SAMPLE_NUM];
+	s64 diff_min = LONG_MAX;
+	ktime_t t0, t1;
+	s64 diff;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(times); i++)
+		times[i] = efx_x4_ptp_read_time(efx);
+
+	for (i = 0; i < ARRAY_SIZE(times) - 1; i++) {
+		t1 = efx_x4_ptp_s64_qns_to_ktime(times[i + 1]);
+		t0 = efx_x4_ptp_s64_qns_to_ktime(times[i]);
+		diff = ktime_to_ns(ktime_sub(t1, t0));
+		if (diff < diff_min)
+			diff_min = diff;
+	}
+
+	/* Assume delay is half the time taken to read THE_TIME */
+	return diff_min >> 1;
+}
+
+int efx_x4_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings)
+{
+	struct timespec64 diff, mc_time, delta, window;
+	s64 diff_avg, diff_total, diff_min, d, time;
+	struct efx_ptp_data *ptp = efx->ptp_data;
+	struct efx_x4_ptp_timeset *timeset;
+	struct pps_event_time last_time;
+#ifdef EFX_NOT_UPSTREAM
+	struct timespec64 last_delta;
+#endif
+	u32 i, ngood, last_good;
+	ktime_t delay;
+	int rc;
+
+	ngood = last_good = diff_avg = 0;
+	diff_min = LONG_MAX;
+
+	timeset = kmalloc_array(num_readings,
+				sizeof(struct efx_x4_ptp_timeset),
+				GFP_KERNEL);
+	if (!timeset)
+		return -ENOMEM;
+
+	for (i = 0; i < num_readings; i++) {
+		ktime_get_real_ts64(&timeset[ngood].host_start);
+		time = efx_x4_ptp_read_time(efx);
+		ktime_get_real_ts64(&timeset[ngood].host_end);
+		mc_time = efx_x4_ptp_s64_qns_to_timespec64(time);
+		timeset[ngood].nic_time = mc_time;
+		window = timespec64_sub(timeset[ngood].host_end,
+					timeset[ngood].host_start);
+		timeset[ngood].window = timespec64_to_ktime(window);
+		if (timeset[ngood].window > SYNCHRONISATION_GRANULARITY_NS) {
+			++ptp->sw_stats.invalid_sync_windows;
+		} else {
+			diff = timespec64_sub(mc_time,
+					      timeset[ngood].host_start);
+			timeset[ngood].mc_host_diff = timespec64_to_ktime(diff);
+			diff_total += timeset[ngood].mc_host_diff;
+			ngood++;
+		}
+	}
+
+	pps_get_ts(&last_time);
+
+	if (ngood == 0) {
+		rc = -EAGAIN;
+		goto out;
+	}
+
+	if (ngood > 2) { /* No point doing this if only 1-2 valid samples */
+		diff_avg = div_s64(diff_total, ngood);
+		/* Find sample closest to the average */
+		for (i = 0; i < ngood; i++) {
+			d = abs(timeset[i].mc_host_diff - diff_avg);
+			if (d < diff_min) {
+				diff_min = d;
+				last_good = i;
+			}
+		}
+	}
+
+	mc_time = timeset[last_good].nic_time;
+
+	/* Delay in reading THE_TIME
+	 * Assume delay is half the time taken to read THE_TIME
+	 */
+	delay = efx_x4_ptp_get_the_time_delay(efx);
+	mc_time = timespec64_sub(mc_time, ktime_to_timespec64(delay));
+	ptp->last_mc_time = mc_time;
+
+	/* Calculate delta between time taken immediately after taking
+	 * samples and the last good sample.
+	 */
+	delta = timespec64_sub(last_time.ts_real,
+			       timeset[last_good].host_start);
+	if (delta.tv_sec > 1) {
+		netif_warn(efx, hw, efx->net_dev,
+			   "PTP bad synchronisation seconds\n");
+		rc = -EAGAIN;
+		goto out;
+	}
+
+	ptp->last_host_time_real = timespec64_sub(last_time.ts_real, delta);
+#ifdef CONFIG_NTP_PPS
+	ptp->last_host_time_raw = timespec64_sub(last_time.ts_raw, delta);
+#endif
+#ifdef EFX_NOT_UPSTREAM
+	last_delta = timespec64_sub(mc_time, ptp->last_host_time_real);
+	ptp->last_delta = last_delta;
+	ptp->last_delta_valid = true;
+#endif
+
+	/* Calculate delay from NIC top of second to last time */
+	delta.tv_nsec += ptp->last_mc_time.tv_nsec;
+	ptp->host_time_pps = last_time;
+	pps_sub_ts(&ptp->host_time_pps, delta);
+	rc = 0;
+
+out:
+	kfree(timeset);
 	return rc;
 }
 
@@ -1941,7 +2170,7 @@ fail:
 static int efx_ptp_stop(struct efx_nic *efx)
 {
 	struct efx_ptp_data *ptp = efx->ptp_data;
-	int rc;
+	int rc = 0;
 
 	if (ptp == NULL)
 		return 0;
@@ -2190,6 +2419,10 @@ static void efx_ptp_destroy_phc(struct efx_ptp_data *ptp)
 	struct ptp_clock_request req = {};
 	struct ptp_clock_info *info;
 
+	/* Only allow PHC owner to disable PHC */
+	if (!efx_phc_exposed(ptp->efx))
+		return;
+
 	info = efx_ptp_clock_info(ptp->efx);
 	if (!info)
 		return;
@@ -2356,6 +2589,37 @@ static int efx_phc_adjfine(struct ptp_clock_info *ptp, long ppm_fp16)
 	ptp_data->current_adjfreq = adjustment;
 	return 0;
 }
+
+static int efx_x4_phc_adjfine(struct ptp_clock_info *ptp, long ppm_fp16)
+{
+	struct efx_ptp_data *ptp_data = container_of(ptp,
+						     struct efx_ptp_data,
+						     phc_clock_info);
+	MCDI_DECLARE_BUF(inadj, MC_CMD_PTP_IN_ADJUST_V2_LEN);
+	struct efx_nic *efx = ptp_data->efx;
+	s64 adjustment;
+	int rc;
+
+	BUILD_BUG_ON(MC_CMD_PTP_OUT_LEN != 0);
+
+	ppm_fp16 = clamp_val(ppm_fp16, -ptp_data->max_adjfine, ptp_data->max_adjfine);
+	adjustment = ppm_fp16_to_factor(ppm_fp16, ptp_data->adjfreq_prec);
+
+	MCDI_SET_DWORD(inadj, PTP_IN_OP, MC_CMD_PTP_OP_ADJUST);
+	MCDI_SET_DWORD(inadj, PTP_IN_PERIPH_ID, 0);
+	MCDI_SET_QWORD(inadj, PTP_IN_ADJUST_V2_FREQ, adjustment);
+	MCDI_SET_DWORD(inadj, PTP_IN_ADJUST_V2_MAJOR_HI, 0);
+	MCDI_SET_DWORD(inadj, PTP_IN_ADJUST_V2_MAJOR, 0);
+	MCDI_SET_DWORD(inadj, PTP_IN_ADJUST_V2_MINOR, 0);
+	rc = efx_mcdi_rpc(efx, MC_CMD_PTP, inadj, sizeof(inadj),
+			  NULL, 0, NULL);
+	if (rc != 0)
+		return rc;
+
+	ptp_data->current_adjfreq = adjustment;
+
+	return 0;
+}
 #endif /* CONFIG_PTP_1588_CLOCK */
 
 /* Convert ppb value, clamped to +/- 10^9, to FP16 ppm. */
@@ -2401,6 +2665,7 @@ static const struct ptp_clock_info efx_x4_phc_clock_info = {
 	.name		= "sfc",
 	.max_adj	= MAX_PPB, /* unused, ptp_data->max_adjfreq used instead */
 	.n_alarm	= 0,
+	.adjfine	= efx_x4_phc_adjfine,
 	.adjtime	= efx_x4_phc_adjtime,
 	.gettime64	= efx_x4_phc_gettime,
 	.settime64	= efx_x4_phc_settime,
@@ -2433,10 +2698,6 @@ static int efx_create_pps_worker(struct efx_ptp_data *ptp)
 	return 0;
 }
 #endif
-bool efx_ptp_uses_separate_channel(struct efx_nic *efx)
-{
-	return efx->ptp_capability & (1 << MC_CMD_PTP_OUT_GET_ATTRIBUTES_RX_TSTAMP_OOB_LBN);
-}
 
 /* Find PTP data of this adapter's PHC or add its own to the list.
  */
@@ -3396,7 +3657,7 @@ static int efx_x4_phc_gettime(struct ptp_clock_info *ptp, struct timespec64 *ts)
 	u32 secs, ns, qns;
 	efx_qword_t time;
 
-	time.u64[0]  = le64_to_cpu(_efx_readq(efx, ER_IZ_THE_TIME));
+	time.u64[0]  = _efx_readq(efx, ER_IZ_THE_TIME);
 	secs = EFX_QWORD_FIELD(time, ERF_IZ_THE_TIME_SECS);
 	ns = EFX_QWORD_FIELD(time, ERF_IZ_THE_TIME_NANOS);
 	qns = EFX_QWORD_FIELD(time, ERF_IZ_THE_TIME_QNS);

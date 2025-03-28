@@ -92,7 +92,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.1.0.1000"
+#define EFX_DRIVER_VERSION	"6.1.0.1002"
 #endif
 
 #ifdef DEBUG
@@ -1420,6 +1420,7 @@ struct efx_mae;
  * @xdp_tx: Flag for whether XDP TX queues are supported
  * @irqs_hooked: Channel interrupts are hooked
  * @log_tc_errs: Error logging for TC filter insertion is enabled
+ * @use_legacy_link_mgmt: Use legacy MCDI link management commands
  * @irq_mod_step_us: Adaptive IRQ moderation time step for RX event queues
  * @irq_rx_moderation_us: IRQ moderation time for RX event queues
  * @rss_mode: RSS spreading mode
@@ -1627,9 +1628,8 @@ struct efx_nic {
 	bool xdp_tx;
 	bool irqs_hooked;
 	bool log_tc_errs;
-#ifdef EFX_NOT_UPSTREAM
-	/** @use_legacy_link_mgmt: Use legacy MCDI link management commands */
 	bool use_legacy_link_mgmt;
+#ifdef EFX_NOT_UPSTREAM
 	/** @link_mgmt: Select MCDI link management command set */
 	enum efx_link_mgmt link_mgmt;
 #endif
@@ -2209,6 +2209,9 @@ struct mae_mport_desc;
  * @ptp_tx_ts_support: Does NIC have the correct license for TX
  *	timestamping. If %NULL assume TX timestamping supported.
  * @ptp_set_clock_info: Set PTP hardware clock structure
+ * @ptp_rx_enable_ts: Subscribe to receive periodic time sync events on channel
+ * @ptp_get_attributes: Get PTP attributes
+ * @ptp_synchronize: Synchronize times between the host and the NIC
  * @ptp_write_host_time: Send host time to MC as part of sync protocol
  * @ptp_set_ts_sync_events: Enable or disable sync events for inline RX
  *	timestamping, possibly only temporarily for the purposes of a reset.
@@ -2454,6 +2457,9 @@ struct efx_nic_type {
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
 	void (*ptp_set_clock_info)(struct efx_nic *efx);
 #endif
+	int (*ptp_rx_enable_ts)(struct efx_channel *channel, bool temp);
+	int (*ptp_get_attributes)(struct efx_nic *efx);
+	int (*ptp_synchronize)(struct efx_nic *efx, unsigned int num_readings);
 	void (*ptp_write_host_time)(struct efx_nic *efx, u32 host_time);
 	int (*ptp_set_ts_sync_events)(struct efx_nic *efx, bool en, bool temp);
 	int (*ptp_set_ts_config)(struct efx_nic *efx,
@@ -2879,6 +2885,35 @@ static inline void efx_read_licensed_features(struct efx_nic *efx)
 {
 	if (efx->type->read_licensed_features)
 		efx->type->read_licensed_features(efx);
+}
+
+static inline int efx_ptp_get_attributes(struct efx_nic *efx)
+{
+#ifdef CONFIG_SFC_PTP
+	if (efx->type->ptp_get_attributes)
+		return efx->type->ptp_get_attributes(efx);
+#endif
+	return -EOPNOTSUPP;
+}
+
+static inline int efx_rx_enable_timestamping(struct efx_channel *channel,
+					     bool temp)
+{
+#ifdef CONFIG_SFC_PTP
+	if (channel->efx->type->ptp_rx_enable_ts)
+		return channel->efx->type->ptp_rx_enable_ts(channel, temp);
+#endif
+	return -EOPNOTSUPP;
+}
+
+static inline int efx_ptp_synchronize(struct efx_nic *efx,
+				      unsigned int num_readings)
+{
+#ifdef CONFIG_SFC_PTP
+	if (efx->type->ptp_synchronize)
+		return efx->type->ptp_synchronize(efx, num_readings);
+#endif
+	return -EOPNOTSUPP;
 }
 
 #endif /* EFX_NET_DRIVER_H */

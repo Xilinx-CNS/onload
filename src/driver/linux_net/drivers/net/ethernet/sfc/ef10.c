@@ -4709,6 +4709,37 @@ static int efx_ef10_rx_enable_timestamping(struct efx_channel *channel,
 	return rc;
 }
 
+static int efx_x4_rx_enable_timestamping(struct efx_channel *channel,
+					     bool temp)
+{
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_PTP_IN_TIME_EVENT_SUBSCRIBE_V2_LEN);
+	int rc;
+
+	BUILD_BUG_ON(MC_CMD_PTP_OUT_LEN != 0);
+
+	if (channel->sync_events_state == SYNC_EVENTS_REQUESTED ||
+	    channel->sync_events_state == SYNC_EVENTS_VALID)
+		return 0;
+
+	if (temp && channel->sync_events_state == SYNC_EVENTS_DISABLED)
+		return 0;
+
+	channel->sync_events_state = SYNC_EVENTS_REQUESTED;
+
+	MCDI_SET_DWORD(inbuf, PTP_IN_OP, MC_CMD_PTP_OP_TIME_EVENT_SUBSCRIBE_V2);
+	MCDI_SET_DWORD(inbuf, PTP_IN_PERIPH_ID, 0);
+	MCDI_SET_DWORD(inbuf, PTP_IN_TIME_EVENT_SUBSCRIBE_V2_QUEUE_ID,
+		       channel->channel);
+
+	rc = efx_mcdi_rpc(channel->efx, MC_CMD_PTP,
+			  inbuf, sizeof(inbuf), NULL, 0, NULL);
+	if (rc)
+		channel->sync_events_state = temp ? SYNC_EVENTS_QUIESCENT :
+						    SYNC_EVENTS_DISABLED;
+
+	return rc;
+}
+
 static int efx_ef10_rx_disable_timestamping(struct efx_channel *channel,
 					    bool temp)
 {
@@ -4746,27 +4777,18 @@ static int efx_ef10_ptp_set_ts_sync_events(struct efx_nic *efx, bool en,
 	int rc;
 
 	set = en ?
-	      efx_ef10_rx_enable_timestamping :
+	      efx_rx_enable_timestamping :
 	      efx_ef10_rx_disable_timestamping;
 
-	if (efx_ptp_uses_separate_channel(efx)) {
-		channel = efx_ptp_channel(efx);
-		if (channel) {
-			rc = set(channel, temp);
-			if (en && rc != 0) {
-				efx_ef10_ptp_set_ts_sync_events(efx, false, temp);
-				return rc;
-			}
+	channel = efx_ptp_channel(efx);
+	if (channel) {
+		rc = set(channel, temp);
+		if (en && rc != 0) {
+			efx_ef10_ptp_set_ts_sync_events(efx, false, temp);
+			return rc;
 		}
-	}
-	else {
-		efx_for_each_channel(channel, efx) {
-			rc = set(channel, temp);
-			if (en && rc != 0) {
-				efx_ef10_ptp_set_ts_sync_events(efx, false, temp);
-				return rc;
-			}
-		}
+	} else {
+		return -EOPNOTSUPP;
 	}
 
 	return 0;
@@ -6199,6 +6221,9 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
 	.ptp_set_clock_info = efx_ef10_phc_set_clock_info,
 #endif
+	.ptp_rx_enable_ts = efx_ef10_rx_enable_timestamping,
+	.ptp_get_attributes = efx_ef10_ptp_get_attributes,
+	.ptp_synchronize = efx_ef10_ptp_synchronize,
 	.ptp_write_host_time = efx_ef10_ptp_write_host_time,
 	.ptp_set_ts_config = efx_ef10_ptp_set_ts_config,
 #endif
@@ -6354,6 +6379,9 @@ const struct efx_nic_type efx_x4_vf_nic_type = {
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
 	.ptp_set_clock_info = efx_x4_phc_set_clock_info,
 #endif
+	.ptp_rx_enable_ts = efx_x4_rx_enable_timestamping,
+	.ptp_get_attributes = efx_x4_ptp_get_attributes,
+	.ptp_synchronize = efx_x4_ptp_synchronize,
 	.ptp_write_host_time = efx_ef10_ptp_write_host_time,
 	.ptp_set_ts_config = efx_ef10_ptp_set_ts_config,
 #endif
@@ -6529,6 +6557,9 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
 	.ptp_set_clock_info = efx_ef10_phc_set_clock_info,
 #endif
+	.ptp_rx_enable_ts = efx_ef10_rx_enable_timestamping,
+	.ptp_get_attributes = efx_ef10_ptp_get_attributes,
+	.ptp_synchronize = efx_ef10_ptp_synchronize,
 	.ptp_write_host_time = efx_ef10_ptp_write_host_time,
 	.ptp_set_ts_sync_events = efx_ef10_ptp_set_ts_sync_events,
 	.ptp_set_ts_config = efx_ef10_ptp_set_ts_config,
@@ -6727,6 +6758,9 @@ const struct efx_nic_type efx_x4_nic_type = {
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
 	.ptp_set_clock_info = efx_x4_phc_set_clock_info,
 #endif
+	.ptp_rx_enable_ts = efx_x4_rx_enable_timestamping,
+	.ptp_get_attributes = efx_x4_ptp_get_attributes,
+	.ptp_synchronize = efx_x4_ptp_synchronize,
 	.ptp_write_host_time = efx_ef10_ptp_write_host_time,
 	.ptp_set_ts_sync_events = efx_ef10_ptp_set_ts_sync_events,
 	.ptp_set_ts_config = efx_ef10_ptp_set_ts_config,
