@@ -849,7 +849,6 @@ void ef100_remove_netdev(struct efx_probe_data *probe_data)
 #endif
 
 	efx_mcdi_filter_table_remove(efx);
-	efx_fini_interrupts(efx);
 	efx_mcdi_mac_fini_stats(efx);
 	kfree(efx->phy_data);
 	efx->phy_data = NULL;
@@ -867,7 +866,7 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 	struct ef100_nic_data *nic_data;
 	struct efx_probe_data **probe_ptr;
 	struct net_device *net_dev;
-	int rc;
+	int rc, max_irqs;
 
 #if !defined(EFX_USE_KCOMPAT) || !defined(EFX_TC_OFFLOAD)
 	if (efx->mcdi->fn_flags &
@@ -929,9 +928,10 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 	rc = efx_init_interrupts(efx);
 	if (rc < 0)
 		goto fail;
+	max_irqs = rc;
 
 	/* Update maximum channel count for ethtool */
-	efx->max_channels = min_t(u16, efx->max_channels, efx->max_irqs);
+	efx->max_channels = min_t(u16, efx->max_channels, max_irqs);
 	efx->max_tx_channels = efx->max_channels;
 
 	rc = ef100_filter_table_probe(efx);

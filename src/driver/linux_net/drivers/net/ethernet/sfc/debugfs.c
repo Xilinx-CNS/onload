@@ -847,6 +847,38 @@ static void efx_fini_debugfs_rx_queue(struct efx_rx_queue *rx_queue)
 	rx_queue->debug_dir = NULL;
 }
 
+/* Per-channel_type parameters */
+#ifdef EFX_NOT_UPSTREAM
+static const char *const client_type_names[] = {
+	[EFX_CLIENT_ETH] =	"Full-featured ethernet",
+	[EFX_CLIENT_LLCT] =	"Low-latency Cut-through",
+	[EFX_CLIENT_ONLOAD] =	"Full-featured Onload",
+};
+
+static const unsigned int client_type_max = sizeof(client_type_names);
+
+static int efx_debugfs_read_client_type(struct seq_file *file, void *data)
+{
+	unsigned int value = *(enum  efx_client_type *)data;
+
+	BUILD_BUG_ON(ARRAY_SIZE(client_type_names) != _EFX_CLIENT_MAX);
+
+	seq_printf(file, "%d => %s\n", value,
+		   STRING_TABLE_LOOKUP(value, client_type));
+	return 0;
+}
+
+#define EFX_CLIENT_TYPE_PARAMETER(container_type, parameter)		\
+	EFX_PARAMETER(container_type, parameter,			\
+		      enum efx_client_type, efx_debugfs_read_client_type)
+#endif
+
+static const struct efx_debugfs_parameter efx_debugfs_channel_type_parameters[] = {
+#ifdef EFX_NOT_UPSTREAM
+	EFX_CLIENT_TYPE_PARAMETER(struct efx_channel_type, client_type),
+#endif
+};
+
 /* Per-channel parameters */
 static const struct efx_debugfs_parameter efx_debugfs_channel_parameters[] = {
 	EFX_BOOL_PARAMETER(struct efx_channel, enabled),
@@ -859,6 +891,13 @@ static const struct efx_debugfs_parameter efx_debugfs_channel_parameters[] = {
 static void *efx_debugfs_get_channel(void *ref, unsigned int index)
 {
 	return efx_get_channel(ref, index);
+}
+
+static void *efx_debugfs_get_channel_type(void *ref, unsigned int index)
+{
+	struct efx_channel *channel = efx_get_channel(ref, index);
+
+	return channel ? (void *)channel->type : NULL;
 }
 
 static void efx_fini_debugfs_channel(struct efx_channel *channel);
@@ -898,6 +937,12 @@ static int efx_init_debugfs_channel(struct efx_channel *channel)
 	if (rc)
 		goto err;
 
+	rc = efx_init_debugfs_files(channel->debug_dir,
+				    efx_debugfs_channel_type_parameters, 0,
+				    efx_debugfs_get_channel_type, channel->efx,
+				    channel->channel);
+	if (rc)
+		goto err;
 	return 0;
 
  err_len:
@@ -913,6 +958,27 @@ static int efx_init_debugfs_channel(struct efx_channel *channel)
 }
 
 /**
+ * efx_fini_debugfs_channel_type_files - remove channel type files
+ * @channel:		Efx channel
+ *
+ * Remove channel type files only. Leave directory otherwise intact.
+ */
+static void efx_fini_debugfs_channel_type_files(struct efx_channel *channel)
+{
+	const struct efx_debugfs_parameter *param =
+					efx_debugfs_channel_type_parameters;
+	struct dentry *dir = channel->debug_dir;
+
+	if (!dir)
+		return;
+
+	while (param->name) {
+		efx_fini_debugfs_child(dir, param->name);
+		param++;
+	}
+}
+
+/**
  * efx_fini_debugfs_channel - remove debugfs directory for channel
  * @channel:		Efx channel
  *
@@ -920,6 +986,12 @@ static int efx_init_debugfs_channel(struct efx_channel *channel)
  */
 static void efx_fini_debugfs_channel(struct efx_channel *channel)
 {
+	/* Channel parameters and channel type parameters share the same
+	 * debugfs directory but are separate parameter lists. First remove
+	 * channel type files. Then remove channel parameter files. Finally
+	 * remove channel debugfs directory.
+	 */
+	efx_fini_debugfs_channel_type_files(channel);
 	efx_fini_debugfs_dir(channel->debug_dir,
 			     efx_debugfs_channel_parameters, NULL);
 	channel->debug_dir = NULL;

@@ -14,7 +14,7 @@
 #include "llct_regs.h"
 
 /**
- * struct efx_bar_map_info - Represents a PCI function memory mapped BAR region.
+ * struct efx_ll - Represents a PCI function memory mapped BAR region.
  * @mem_bar: BAR number of the pci function
  * @membase_phys: Physical address of BAR memory region.
  * @uc_membase: Virtual address of BAR memory region mapped with
@@ -256,9 +256,9 @@ int efx_ll_remap_bar(struct efx_nic *efx)
 
 	uc_mem_map_size = ER_IZ_LLCT_CTPIO_REGION;
 #if defined(EFX_USE_KCOMPAT)
-	membase = efx_ioremap(efx->membase_phys, uc_mem_map_size);
+	membase = efx_ioremap(efx_ll->membase_phys, uc_mem_map_size);
 #else
-	membase = ioremap(efx->membase_phys, uc_mem_map_size);
+	membase = ioremap(efx_ll->membase_phys, uc_mem_map_size);
 #endif
 	if (!membase) {
 		pci_err(probe_data->pci_dev,

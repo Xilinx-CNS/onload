@@ -7,32 +7,6 @@
  * by the Free Software Foundation, incorporated herein by reference.
  */
 
-/* Theory of operation:
- *
- * PTP support is assisted by firmware running on the MC, which provides
- * the hardware timestamping capabilities.  Both transmitted and received
- * PTP event packets are queued onto internal queues for subsequent processing;
- * this is because the MC operations are relatively long and would block
- * block NAPI/interrupt operation.
- *
- * Receive event processing:
- *	The event contains the packet's UUID and sequence number, together
- *	with the hardware timestamp.  The PTP receive packet queue is searched
- *	for this UUID/sequence number and, if found, put on a pending queue.
- *	Packets not matching are delivered without timestamps (MCDI events will
- *	always arrive after the actual packet).
- *	It is important for the operation of the PTP protocol that the ordering
- *	of packets between the event and general port is maintained.
- *
- * Work queue processing:
- *	If work waiting, synchronise host/hardware time
- *
- *	Transmit: send packet through MC, which returns the transmission time
- *	that is converted to an appropriate timestamp.
- *
- *	Receive: the packet's reception time is converted to an appropriate
- *	timestamp.
- */
 #include <linux/ip.h>
 #include <linux/udp.h>
 #include <linux/time.h>
@@ -53,6 +27,7 @@
 #include "nic.h"
 #include "rx_common.h"
 #include "debugfs.h"
+#include "ef10_regs.h"
 #ifdef EFX_USE_KCOMPAT
 #include "efx_ioctl.h"
 #include "kernel_compat.h"
@@ -79,45 +54,11 @@
 /* Maximum permitted length of a (corrected) synchronisation time */
 #define	MAX_SYNCHRONISATION_NS		1000
 
-/* How many (MC) receive events that can be queued */
-#define	MAX_RECEIVE_EVENTS		8
-
 /* Length of (modified) moving average. */
 #define	AVERAGE_LENGTH			16
 
-/* How long an unmatched event or packet can be held */
-#define PKT_EVENT_LIFETIME_MS		10
-
 /* How long unused unicast filters can be held */
 #define UCAST_FILTER_EXPIRY_JIFFIES	msecs_to_jiffies(30000)
-
-/* Offsets into PTP packet for identification.  These offsets are from the
- * start of the IP header, not the MAC header.  Note that neither PTP V1 nor
- * PTP V2 permit the use of IPV4 options.
- */
-#define PTP_DPORT_OFFSET	22
-
-#define PTP_V1_VERSION_LENGTH	2
-#define PTP_V1_VERSION_OFFSET	28
-
-#define PTP_V1_SEQUENCE_LENGTH	2
-#define PTP_V1_SEQUENCE_OFFSET	58
-
-/* The minimum length of a PTP V1 packet for offsets, etc. to be valid:
- * includes IP header.
- */
-#define	PTP_V1_MIN_LENGTH	64
-
-#define PTP_V2_VERSION_LENGTH	1
-#define PTP_V2_VERSION_OFFSET	29
-
-#define PTP_V2_SEQUENCE_LENGTH	2
-#define PTP_V2_SEQUENCE_OFFSET	58
-
-/* The minimum length of a PTP V2 packet for offsets, etc. to be valid:
- * includes IP header.
- */
-#define	PTP_V2_MIN_LENGTH	63
 
 #define	PTP_MIN_LENGTH		63
 
@@ -145,34 +86,6 @@ static const u8 ptp_peer_delay_addr_ether[ETH_ALEN] __aligned(2) = {
 #define PTP_EVENT_PORT		319
 #define PTP_GENERAL_PORT	320
 
-/* Annoyingly the format of the version numbers are different between
- * versions 1 and 2 so it isn't possible to simply look for 1 or 2.
- */
-#define	PTP_VERSION_V1		1
-
-#define	PTP_VERSION_V2		2
-#define	PTP_VERSION_V2_MASK	0x0f
-
-#ifdef EFX_NOT_UPSTREAM
-
-/* Mask of VLAN tag in bytes 2 and 3 of 802.1Q header
- */
-#define VLAN_TAG_MASK		0x0fff
-
-/* Offest into the packet where PTP header starts
- */
-#define PTP_LAYER2_LEN		14
-#define PTP_LAYER2_VLAN_LEN	(PTP_LAYER2_LEN + VLAN_HLEN)
-
-#endif /* EFX_NOT_UPSTREAM */
-
-enum ptp_packet_state {
-	PTP_PACKET_STATE_UNMATCHED = 0,
-	PTP_PACKET_STATE_MATCHED,
-	PTP_PACKET_STATE_TIMED_OUT,
-	PTP_PACKET_STATE_MATCH_UNWANTED
-};
-
 /* NIC synchronised with single word of time only comprising
  * partial seconds and full nanoseconds: 10^9 ~ 2^30 so 2 bits for seconds.
  */
@@ -187,39 +100,6 @@ enum ptp_packet_state {
 #define ONE_BILLION		1000000000
 
 #define PTP_SYNC_ATTEMPTS	4
-
-/**
- * struct efx_ptp_match - Matching structure, stored in sk_buff's cb area.
- * @expiry: Time after which the packet should be delivered irrespective of
- *            event arrival.
- * @state: The state of the packet - whether it is ready for processing or
- *         whether that is of no interest.
- * @vlan_tci: VLAN tag in host byte order.
- * @vlan_tagged: Whether the match is VLAN tagged. The vlan_tci attributes is
- *	only valid if this is true.
- */
-struct efx_ptp_match {
-	unsigned long expiry;
-	enum ptp_packet_state state;
-	u16 vlan_tci;
-	bool vlan_tagged;
-};
-
-/**
- * struct efx_ptp_event_rx - A PTP receive event (from MC)
- * @link: list of events
- * @seq0: First part of (PTP) UUID
- * @seq1: Second part of (PTP) UUID and sequence number
- * @hwtimestamp: Event timestamp
- * @expiry: Time which the packet arrived
- */
-struct efx_ptp_event_rx {
-	struct list_head link;
-	u32 seq0;
-	u32 seq1;
-	ktime_t hwtimestamp;
-	unsigned long expiry;
-};
 
 /**
  * struct efx_ptp_timeset - Synchronisation between host and MC
@@ -313,7 +193,6 @@ struct efx_pps_dev_attr {
  * @adapter_base_addr: MAC address of port0 (used as unique identifier) of PHC
  * @node_ptp_all_phcs: Node in list of all PHC PTP datas
  * @channel: The PTP channel (for Medford and Medford2)
- * @rxq: Receive SKB queue (awaiting timestamps)
  * @txq: Transmit SKB queue
  * @workwq: Work queue for processing pending PTP operations
  * @work: Work task
@@ -371,9 +250,8 @@ struct efx_pps_dev_attr {
  * @phc_clock_info: Registration structure for phc device
  * @pps_work: pps work task for handling pps events
  * @pps_workwq: pps work queue
+ * @pin_config: Function of the EXTTS pin.
  * @usr_evt_enabled: Flag indicating how NIC generated TS events are handled
- * @txbuf: Buffer for use when transmitting (PTP) packets to MC (avoids
- *         allocations in main data path).
  * @sw_stats: Driver level statistics.
  * @sw_stats.good_syncs: Number of successful synchronisations.
  * @sw_stats.fast_syncs: Number of synchronisations requiring short delay
@@ -386,6 +264,8 @@ struct efx_pps_dev_attr {
  * @sw_stats.oversize_sync_windows: Number of corrected sync windows that
  *                                  are too large
  * @sw_stats.rx_no_timestamp: Number of packets received without a timestamp.
+ * @sw_stats.pps_fw: Number of internal PPS events (generated from clock source on the NIC)
+ * @sw_stats.pps_in: Number of external PPS events (generated from PPS_IN external connector)
  * @initialised_stats: Indicates if @initial_mc_stats has been populated.
  * @initial_mc_stats: Firmware statistics.
  * @timeset: Last set of synchronisation statistics.
@@ -397,7 +277,6 @@ struct efx_ptp_data {
 	u8 adapter_base_addr[ETH_ALEN];
 	struct list_head node_ptp_all_phcs;
 	struct efx_channel *channel;
-	struct sk_buff_head rxq;
 	struct sk_buff_head txq;
 	struct workqueue_struct *workwq;
 	struct work_struct work;
@@ -459,14 +338,9 @@ struct efx_ptp_data {
 	struct efx_pps_data *pps_data;
 #endif
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PTP_PF_NONE)
-	/** @pin_config: Function of the EXTTS pin. */
 	struct ptp_pin_desc pin_config[1];
-#endif
 	u8 usr_evt_enabled;
 #endif
-	efx_dword_t txbuf[MCDI_TX_BUF_LEN(MC_CMD_PTP_IN_TRANSMIT_LENMAX)];
-
 	struct {
 		unsigned int good_syncs;
 		unsigned int fast_syncs;
@@ -477,6 +351,8 @@ struct efx_ptp_data {
 		unsigned int undersize_sync_windows;
 		unsigned int oversize_sync_windows;
 		unsigned int rx_no_timestamp;
+		unsigned int pps_fw;
+		unsigned int pps_in;
 	} sw_stats;
 	bool initialised_stats;
 	__le16 initial_mc_stats[MC_CMD_PTP_OUT_STATUS_LEN / sizeof(__le16)];
@@ -529,26 +405,19 @@ struct efx_ptp_data {
 	void (*xmit_skb)(struct efx_nic *efx, struct sk_buff *skb);
 };
 
-static int efx_phc_adjtime(struct ptp_clock_info *ptp, s64 delta);
-static int efx_phc_gettime(struct ptp_clock_info *ptp, struct timespec64 *ts);
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+static int efx_phc_adjtime(struct ptp_clock_info *ptp, s64 delta);
+static int efx_x4_phc_adjtime(struct ptp_clock_info *ptp, s64 delta);
+static int efx_phc_gettime(struct ptp_clock_info *ptp, struct timespec64 *ts);
+static int efx_x4_phc_gettime(struct ptp_clock_info *ptp, struct timespec64 *ts);
 static int efx_phc_settime(struct ptp_clock_info *ptp,
 			   const struct timespec64 *e_ts);
-
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_64BIT_PHC)
-static int efx_phc_gettime32(struct ptp_clock_info *ptp, struct timespec *ts);
-static int efx_phc_settime32(struct ptp_clock_info *ptp,
-			     const struct timespec *ts);
-#endif
-#endif
+static int efx_x4_phc_settime(struct ptp_clock_info *ptp,
+			      const struct timespec64 *e_ts);
+#endif /* CONFIG_PTP_1588_CLOCK */
 
 static LIST_HEAD(efx_all_phcs_list);
 static DEFINE_SPINLOCK(ptp_all_phcs_list_lock);
-
-bool efx_ptp_use_mac_tx_timestamps(struct efx_nic *efx)
-{
-	return efx_has_cap(efx, TX_MAC_TIMESTAMPING);
-}
 
 static int efx_ptp_insert_unicast_filter(struct efx_nic *efx,
 					 struct sk_buff *skb);
@@ -572,6 +441,8 @@ static const struct efx_hw_stat_desc efx_ptp_stat_desc[] = {
 	PTP_MC_STAT(ptp_timestamp_packets, TS),
 	PTP_MC_STAT(ptp_filter_matches, FM),
 	PTP_MC_STAT(ptp_non_filter_matches, NFM),
+	PTP_SW_STAT(pps_fw, sw_stats.pps_fw),
+	PTP_SW_STAT(pps_hw, sw_stats.pps_in),
 };
 #define PTP_STAT_COUNT ARRAY_SIZE(efx_ptp_stat_desc)
 static const unsigned long efx_ptp_stat_mask[] = {
@@ -1014,19 +885,11 @@ ktime_t efx_ptp_nic_to_kernel_time(struct efx_tx_queue *tx_queue)
 {
 	struct efx_nic *efx = tx_queue->efx;
 	struct efx_ptp_data *ptp = efx->ptp_data;
-	ktime_t kt;
 
-	if (efx_ptp_use_mac_tx_timestamps(efx))
-		kt = efx_ptp_mac_nic_to_ktime_correction(efx, ptp,
-				tx_queue->completed_timestamp_major,
-				tx_queue->completed_timestamp_minor,
-				ptp->ts_corrections.general_tx);
-	else
-		kt = ptp->nic_to_kernel_time(
-				tx_queue->completed_timestamp_major,
-				tx_queue->completed_timestamp_minor,
-				ptp->ts_corrections.general_tx);
-	return kt;
+	return efx_ptp_mac_nic_to_ktime_correction(efx, ptp,
+					tx_queue->completed_timestamp_major,
+					tx_queue->completed_timestamp_minor,
+					ptp->ts_corrections.general_tx);
 }
 
 /* Get PTP attributes and set up time conversions */
@@ -1249,30 +1112,6 @@ static int efx_ptp_disable(struct efx_nic *efx)
 				       MC_CMD_PTP_IN_DISABLE_LEN,
 				       outbuf, sizeof(outbuf), rc);
 	return rc;
-}
-
-static void efx_ptp_deliver_rx_queue(struct efx_nic *efx)
-{
-	struct sk_buff *skb;
-
-	while ((skb = skb_dequeue(&efx->ptp_data->rxq))) {
-#if IS_ENABLED(CONFIG_VLAN_8021Q) || defined(CONFIG_SFC_TRACING)
-		struct efx_ptp_match *match = (struct efx_ptp_match *)skb->cb;
-#endif
-
-		local_bh_disable();
-#ifdef CONFIG_SFC_TRACING
-		trace_sfc_receive(skb, false, match->vlan_tagged,
-				  match->vlan_tci);
-#endif
-#if IS_ENABLED(CONFIG_VLAN_8021Q)
-		if (match->vlan_tagged)
-			__vlan_hwaccel_put_tag(skb, htons(ETH_P_8021Q),
-					       match->vlan_tci);
-#endif
-		netif_receive_skb(skb);
-		local_bh_enable();
-	}
 }
 
 static void efx_ptp_handle_no_channel(struct efx_nic *efx)
@@ -1578,20 +1417,11 @@ efx_ptp_process_times(struct efx_nic *efx, MCDI_DECLARE_STRUCT_PTR(synch_buf),
 	delta.tv_nsec += ptp->last_mc_time.tv_nsec;
 
 	/* Set PPS timestamp to match NIC top of second */
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_PPS_EVENT_TIME_TIMESPEC)
-	/* struct pps_event_time is old-style struct timespec, so convert */
-	ptp->host_time_pps.ts_real = timespec64_to_timespec(*last_time_real);
-#ifdef CONFIG_NTP_PPS
-	ptp->host_time_pps.ts_raw = timespec64_to_timespec(*last_time_raw);
-#endif /* CONFIG_NTP_PPS */
-	pps_sub_ts(&ptp->host_time_pps, timespec64_to_timespec(delta));
-#else /* pps_event_time uses timespec64 */
 	ptp->host_time_pps.ts_real = *last_time_real;
 #ifdef CONFIG_NTP_PPS
 	ptp->host_time_pps.ts_raw = *last_time_raw;
 #endif /* CONFIG_NTP_PPS */
 	pps_sub_ts(&ptp->host_time_pps, delta);
-#endif
 
 	return 0;
 }
@@ -1724,27 +1554,6 @@ static int efx_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings)
 	return rc;
 }
 
-#ifdef EFX_NOT_UPSTREAM
-/* Get the host time from a given hardware time */
-static bool efx_ptp_get_host_time(struct efx_nic *efx,
-				  struct skb_shared_hwtstamps *timestamps)
-{
-#ifdef EFX_HAVE_SKB_SYSTSTAMP
-	if (efx->ptp_data->last_delta_valid) {
-		ktime_t diff = timespec64_to_ktime(efx->ptp_data->last_delta);
-		timestamps->syststamp = ktime_sub(timestamps->hwtstamp, diff);
-	} else {
-		timestamps->syststamp = ktime_set(0, 0);
-	}
-
-	return efx->ptp_data->last_delta_valid;
-#else
-	return false;
-#endif
-}
-#endif
-
-
 /* Transmit a PTP packet via the dedicated hardware timestamped queue. */
 static void efx_ptp_xmit_skb_queue(struct efx_nic *efx, struct sk_buff *skb)
 {
@@ -1799,121 +1608,6 @@ static void efx_ptp_xmit_skb_queue(struct efx_nic *efx, struct sk_buff *skb)
 	}
 }
 
-/* Transmit a PTP packet, via the MCDI interface, to the wire. */
-static void efx_ptp_xmit_skb_mc(struct efx_nic *efx, struct sk_buff *skb)
-{
-	MCDI_DECLARE_BUF(txtime, MC_CMD_PTP_OUT_TRANSMIT_LEN);
-	struct efx_ptp_data *ptp_data = efx->ptp_data;
-	struct skb_shared_hwtstamps timestamps;
-	size_t len;
-	int rc;
-
-	MCDI_SET_DWORD(ptp_data->txbuf, PTP_IN_OP, MC_CMD_PTP_OP_TRANSMIT);
-	MCDI_SET_DWORD(ptp_data->txbuf, PTP_IN_PERIPH_ID, 0);
-
-	/* Get the UDP source IP address and use it to set up a unicast receive
-	 * filter for received PTP packets. This enables PTP hybrid mode to
-	 * work. */
-	efx_ptp_insert_unicast_filter(efx, skb);
-
-	if (skb_shinfo(skb)->nr_frags != 0) {
-		rc = skb_linearize(skb);
-		if (rc != 0)
-			goto fail;
-	}
-
-	if (skb->ip_summed == CHECKSUM_PARTIAL) {
-		rc = skb_checksum_help(skb);
-		if (rc != 0)
-			goto fail;
-	}
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_FAKE_VLAN_TX_ACCEL)
-	if (skb_vlan_tag_present(skb)) {
-		skb = vlan_insert_tag_set_proto(skb, htons(ETH_P_8021Q),
-				     skb_vlan_tag_get(skb));
-		if (unlikely(!skb))
-			return;
-	}
-#endif
-	skb_copy_from_linear_data(skb,
-				  MCDI_PTR(ptp_data->txbuf,
-					   PTP_IN_TRANSMIT_PACKET),
-				  skb->len);
-	MCDI_SET_DWORD(ptp_data->txbuf, PTP_IN_TRANSMIT_LENGTH, skb->len);
-
-	rc = efx_mcdi_rpc(efx, MC_CMD_PTP,
-			  ptp_data->txbuf, MC_CMD_PTP_IN_TRANSMIT_LEN(skb->len),
-			  txtime, sizeof(txtime), &len);
-	if (rc != 0)
-		goto fail;
-
-	memset(&timestamps, 0, sizeof(timestamps));
-	timestamps.hwtstamp = ptp_data->nic_to_kernel_time(
-		MCDI_DWORD(txtime, PTP_OUT_TRANSMIT_MAJOR),
-		MCDI_DWORD(txtime, PTP_OUT_TRANSMIT_MINOR),
-		ptp_data->ts_corrections.ptp_tx);
-
-#if defined(EFX_NOT_UPSTREAM)
-#if !IS_ENABLED(CONFIG_PTP_1588_CLOCK)
-	/* Failure to get the system timestamp is non-fatal */
-	(void)efx_ptp_get_host_time(efx, &timestamps);
-#endif
-#endif
-	skb_tstamp_tx(skb, &timestamps);
-
-	rc = 0;
-
-fail:
-	dev_kfree_skb_any(skb);
-
-	return;
-}
-
-static enum ptp_packet_state efx_ptp_match_rx(struct efx_nic *efx,
-					      struct sk_buff *skb)
-{
-#ifndef EFX_USE_KCOMPAT
-
-	WARN_ON_ONCE(true);
-	return PTP_PACKET_STATE_UNMATCHED;
-#else
-	struct efx_ptp_match *match = (struct efx_ptp_match *)skb->cb;
-
-	match->state = PTP_PACKET_STATE_MATCHED;
-	return PTP_PACKET_STATE_MATCHED;
-#endif
-}
-
-/* Process any queued receive events and corresponding packets
- *
- * q is returned with all the packets that are ready for delivery.
- */
-static void efx_ptp_process_events(struct efx_nic *efx, struct sk_buff_head *q)
-{
-	struct efx_ptp_data *ptp = efx->ptp_data;
-	struct sk_buff *skb;
-
-	while ((skb = skb_dequeue(&ptp->rxq))) {
-		struct efx_ptp_match *match;
-
-		match = (struct efx_ptp_match *)skb->cb;
-		if (match->state == PTP_PACKET_STATE_MATCH_UNWANTED) {
-			__skb_queue_tail(q, skb);
-		} else if (efx_ptp_match_rx(efx, skb) ==
-			   PTP_PACKET_STATE_MATCHED) {
-			__skb_queue_tail(q, skb);
-		} else if (time_after(jiffies, match->expiry)) {
-			match->state = PTP_PACKET_STATE_TIMED_OUT;
-			++ptp->sw_stats.rx_no_timestamp;
-			__skb_queue_tail(q, skb);
-		} else {
-			/* Replace unprocessed entry and stop */
-			skb_queue_head(&ptp->rxq, skb);
-			break;
-		}
-	}
-}
-
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_DEBUG_FS
 /* Calculate synchronisation delta statistics */
@@ -1947,41 +1641,6 @@ static void efx_ptp_update_delta_stats(struct efx_nic *efx,
 }
 #endif
 #endif /* EFX_NOT_UPSTREAM */
-
-/* Complete processing of a received packet */
-static inline void efx_ptp_process_rx(struct efx_nic *efx, struct sk_buff *skb)
-{
-#if defined(CONFIG_SFC_TRACING) || IS_ENABLED(CONFIG_VLAN_8021Q) || \
-	defined(EFX_NOT_UPSTREAM)
-	struct efx_ptp_match *match = (struct efx_ptp_match *)skb->cb;
-#endif
-#ifdef EFX_NOT_UPSTREAM
-	struct skb_shared_hwtstamps *timestamps = skb_hwtstamps(skb);
-
-	/* Translate timestamps, as required */
-	if (match->state == PTP_PACKET_STATE_MATCHED &&
-#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_HAVE_KTIME_UNION)
-	    timestamps->hwtstamp) {
-#else
-	    timestamps->hwtstamp.tv64) {
-#endif
-		efx_ptp_get_host_time(efx, timestamps);
-		efx_ptp_update_delta_stats(efx, timestamps);
-	}
-
-#endif
-	local_bh_disable();
-#ifdef CONFIG_SFC_TRACING
-	trace_sfc_receive(skb, false, match->vlan_tagged, match->vlan_tci);
-#endif
-#if IS_ENABLED(CONFIG_VLAN_8021Q)
-	if (match->vlan_tagged)
-		__vlan_hwaccel_put_tag(skb, htons(ETH_P_8021Q),
-				       match->vlan_tci);
-#endif
-	netif_receive_skb(skb);
-	local_bh_enable();
-}
 
 static struct efx_ptp_rxfilter *
 efx_ptp_filter_exists(struct efx_nic *efx,
@@ -2150,41 +1809,34 @@ static int efx_ptp_insert_multicast_filters(struct efx_nic *efx)
 	if (rc < 0)
 		goto fail;
 
-	/* if the NIC supports hw timestamps by the MAC, we can support
-	 * PTP over IPv6 and Ethernet.
-	 */
-	if (efx_ptp_use_mac_tx_timestamps(efx)) {
-		rc = efx_ptp_insert_ipv6_filter(efx, &ptp->rxfilters_mcast,
-						&ptp_addr_ipv6, PTP_EVENT_PORT, 0);
+	rc = efx_ptp_insert_ipv6_filter(efx, &ptp->rxfilters_mcast,
+					&ptp_addr_ipv6, PTP_EVENT_PORT, 0);
+	if (rc < 0)
+		goto fail;
 
-		if (rc < 0)
-			goto fail;
+	rc = efx_ptp_insert_ipv6_filter(efx, &ptp->rxfilters_mcast,
+					&ptp_addr_ipv6, PTP_GENERAL_PORT, 0);
+	if (rc < 0)
+		goto fail;
 
-		rc = efx_ptp_insert_ipv6_filter(efx, &ptp->rxfilters_mcast,
-						&ptp_addr_ipv6, PTP_GENERAL_PORT, 0);
+	rc = efx_ptp_insert_ipv6_filter(efx, &ptp->rxfilters_mcast,
+					&ptp_peer_delay_addr_ipv6, PTP_EVENT_PORT, 0);
+	if (rc < 0)
+		goto fail;
 
-		if (rc < 0)
-			goto fail;
+	rc = efx_ptp_insert_ipv6_filter(efx, &ptp->rxfilters_mcast,
+					&ptp_peer_delay_addr_ipv6, PTP_GENERAL_PORT, 0);
+	if (rc < 0)
+		goto fail;
 
-		rc = efx_ptp_insert_ipv6_filter(efx, &ptp->rxfilters_mcast,
-						&ptp_peer_delay_addr_ipv6, PTP_EVENT_PORT, 0);
-		if (rc < 0)
-			goto fail;
+	/* Not all firmware variants support RSS filters */
+	rc = efx_ptp_insert_eth_multicast_filter(efx, ptp_addr_ether);
+	if (rc < 0 && rc != -EPROTONOSUPPORT)
+		goto fail;
 
-		rc = efx_ptp_insert_ipv6_filter(efx, &ptp->rxfilters_mcast,
-						&ptp_peer_delay_addr_ipv6, PTP_GENERAL_PORT, 0);
-		if (rc < 0)
-			goto fail;
-
-		/* Not all firmware variants support RSS filters */
-		rc = efx_ptp_insert_eth_multicast_filter(efx, ptp_addr_ether);
-		if (rc < 0 && rc != -EPROTONOSUPPORT)
-			goto fail;
-
-		rc = efx_ptp_insert_eth_multicast_filter(efx, ptp_peer_delay_addr_ether);
-		if (rc < 0 && rc != -EPROTONOSUPPORT)
-			goto fail;
-	}
+	rc = efx_ptp_insert_eth_multicast_filter(efx, ptp_peer_delay_addr_ether);
+	if (rc < 0 && rc != -EPROTONOSUPPORT)
+		goto fail;
 
 	return 0;
 
@@ -2246,9 +1898,7 @@ static int efx_ptp_insert_unicast_filter(struct efx_nic *efx,
 
 		rc = efx_ptp_insert_ipv4_filter(efx, &ptp->rxfilters_ucast,
 						addr, PTP_GENERAL_PORT, expiry);
-	} else if (skb->protocol == htons(ETH_P_IPV6) &&
-		   efx_ptp_use_mac_tx_timestamps(efx)) {
-		/* IPv6 PTP only supported by devices with MAC hw timestamp */
+	} else if (skb->protocol == htons(ETH_P_IPV6)) {
 		struct in6_addr *addr = &ipv6_hdr(skb)->saddr;
 
 		rc = efx_ptp_insert_ipv6_filter(efx, &ptp->rxfilters_ucast,
@@ -2323,8 +1973,6 @@ static int efx_ptp_stop(struct efx_nic *efx)
 	efx_ptp_remove_filters(efx, &ptp->rxfilters_mcast);
 	efx_ptp_remove_filters(efx, &ptp->rxfilters_ucast);
 
-	/* Make sure RX packets are really delivered */
-	efx_ptp_deliver_rx_queue(efx);
 	skb_queue_purge(&efx->ptp_data->txq);
 #if defined(EFX_NOT_UPSTREAM)
 	ptp->last_delta_valid = false;
@@ -2382,54 +2030,6 @@ out:
 	kref_put(&ptp->kref, efx_ptp_delete_data);
 }
 
-int efx_ptp_pps_get_event(struct efx_nic *efx, struct efx_ts_get_pps *event)
-{
-	struct timespec64 nic_time;
-	struct efx_pps_data *pps_data;
-	unsigned int ev;
-	unsigned int err;
-	unsigned int timeout;
-
-	if (!efx->ptp_data)
-		return -ENOTTY;
-
-	if (!efx->ptp_data->pps_data)
-		return -ENOTTY;
-
-	pps_data = efx->ptp_data->pps_data;
-	timeout = msecs_to_jiffies(event->timeout);
-
-	ev = pps_data->last_ev_taken;
-
-	if (ev == pps_data->last_ev) {
-		err = wait_event_interruptible_timeout(pps_data->read_data,
-						       ev != pps_data->last_ev,
-						       timeout);
-		if (err == 0)
-			return -ETIMEDOUT;
-
-		/* Check for pending signals */
-		if (err == -ERESTARTSYS)
-			return -EINTR;
-	}
-
-	/* Return the fetched timestamp */
-	nic_time = ktime_to_timespec64(pps_data->n_assert);
-	event->nic_assert.tv_sec = nic_time.tv_sec;
-	event->nic_assert.tv_nsec = nic_time.tv_nsec;
-
-	event->sys_assert.tv_sec = pps_data->s_assert.tv_sec;
-	event->sys_assert.tv_nsec = pps_data->s_assert.tv_nsec;
-
-	event->delta.tv_sec = pps_data->s_delta.tv_sec;
-	event->delta.tv_nsec = pps_data->s_delta.tv_nsec;
-	event->sequence = pps_data->last_ev;
-
-	pps_data->last_ev_taken = pps_data->last_ev;
-
-	return 0;
-}
-
 static bool efx_is_pps_possible(struct efx_nic *efx)
 {
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_PTP_IN_RESET_STATS_LEN);
@@ -2444,7 +2044,7 @@ static bool efx_is_pps_possible(struct efx_nic *efx)
 	return rc != -EPERM;
 }
 
-int efx_ptp_hw_pps_enable(struct efx_nic *efx, bool enable)
+static int efx_ptp_hw_pps_enable(struct efx_nic *efx, bool enable)
 {
 	struct efx_pps_data *pps_data;
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_PTP_IN_PPS_ENABLE_LEN);
@@ -2516,7 +2116,6 @@ static void efx_ptp_worker(struct work_struct *work)
 		container_of(work, struct efx_ptp_data, work);
 	struct efx_nic *efx = ptp_data->efx;
 	struct sk_buff *skb;
-	struct sk_buff_head tempq;
 
 	if (ptp_data->reset_required) {
 		efx_ptp_stop(efx);
@@ -2524,14 +2123,8 @@ static void efx_ptp_worker(struct work_struct *work)
 		return;
 	}
 
-	__skb_queue_head_init(&tempq);
-	efx_ptp_process_events(efx, &tempq);
-
 	while ((skb = skb_dequeue(&ptp_data->txq)))
 		ptp_data->xmit_skb(efx, skb);
-
-	while ((skb = __skb_dequeue(&tempq)))
-		efx_ptp_process_rx(efx, skb);
 }
 
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
@@ -2544,7 +2137,6 @@ static int efx_phc_enable(struct ptp_clock_info *ptp,
 						     phc_clock_info);
 
 	switch (request->type) {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PTP_PF_NONE)
 	case PTP_CLK_REQ_EXTTS:
 		if (ptp_data->pin_config[0].func != PTP_PF_EXTTS)
 			enable = false;
@@ -2555,7 +2147,6 @@ static int efx_phc_enable(struct ptp_clock_info *ptp,
 			efx_ptp_hw_pps_enable(ptp_data->efx, enable);
 #endif
 		fallthrough;
-#endif
 	case PTP_CLK_REQ_PPS:
 		if (enable)
 			ptp_data->usr_evt_enabled |= BIT(request->type);
@@ -2570,19 +2161,15 @@ static int efx_phc_enable(struct ptp_clock_info *ptp,
 #endif
 
 #if defined(EFX_NOT_UPSTREAM)
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
 static struct ptp_clock_info *efx_ptp_clock_info(struct efx_nic *efx)
 {
-	struct ptp_clock_info *phc_clock_info;
-
-	if (!efx->ptp_data)
+	if (!efx->phc_ptp_data)
 		return NULL;
 
-	phc_clock_info = &efx->ptp_data->phc_clock_info;
-	if (!phc_clock_info && efx->phc_ptp_data)
-		phc_clock_info = &efx->phc_ptp_data->phc_clock_info;
-
-	return phc_clock_info;
+	return &efx->phc_ptp_data->phc_clock_info;
 }
+#endif /* CONFIG_PTP_1588_CLOCK */
 
 static int efx_ptp_create_pps(struct efx_ptp_data *ptp)
 {
@@ -2688,7 +2275,6 @@ static int efx_phc_gettimex64(struct ptp_clock_info *ptp, struct timespec64 *ts,
 }
 #endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PTP_PF_NONE)
 static int efx_phc_verify(struct ptp_clock_info *ptp, unsigned int pin,
 			  enum ptp_pin_function func, unsigned int chan)
 {
@@ -2701,9 +2287,7 @@ static int efx_phc_verify(struct ptp_clock_info *ptp, unsigned int pin,
 	}
 	return 0;
 }
-#endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PTP_GETCROSSTSTAMP)
 static int efx_phc_getcrosststamp(struct ptp_clock_info *ptp,
 				  struct system_device_crosststamp *cts)
 {
@@ -2727,7 +2311,6 @@ static int efx_phc_getcrosststamp(struct ptp_clock_info *ptp,
 	cts->sys_monoraw = timespec64_to_ktime(ptp_data->last_host_time_raw);
 	return 0;
 }
-#endif
 #endif /* CONFIG_PTP_1588_CLOCK */
 
 /* Convert FP16 ppm value to frequency adjustment in specified fixed point form.
@@ -2764,6 +2347,7 @@ static s64 ppm_fp16_to_factor(s64 ppm_fp16, unsigned int prec)
 		(1 << (66 - prec - 1))) >> (66 - prec);
 }
 
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
 static int efx_phc_adjfine(struct ptp_clock_info *ptp, long ppm_fp16)
 {
 	struct efx_ptp_data *ptp_data = container_of(ptp,
@@ -2790,6 +2374,7 @@ static int efx_phc_adjfine(struct ptp_clock_info *ptp, long ppm_fp16)
 	ptp_data->current_adjfreq = adjustment;
 	return 0;
 }
+#endif /* CONFIG_PTP_1588_CLOCK */
 
 /* Convert ppb value, clamped to +/- 10^9, to FP16 ppm. */
 static s64 ppb_to_ppm_fp16(s64 ppb)
@@ -2800,54 +2385,51 @@ static s64 ppb_to_ppm_fp16(s64 ppb)
 	return (ppb * 2199023255LL) >> (41 - 16);
 }
 
-#if defined(EFX_NOT_UPSTREAM) || (defined(EFX_USE_KCOMPAT) &&	\
-	IS_ENABLED(CONFIG_PTP_1588_CLOCK) &&			\
-	defined(EFX_HAVE_PTP_CLOCK_INFO_ADJFREQ) &&		\
-	!defined(EFX_HAVE_PTP_CLOCK_INFO_ADJFINE))
-static int efx_phc_adjfreq(struct ptp_clock_info *ptp, s32 ppb)
-{
-	return efx_phc_adjfine(ptp, ppb_to_ppm_fp16(ppb));
-}
-#endif
-
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
-static const struct ptp_clock_info efx_phc_clock_info = {
+static const struct ptp_clock_info efx_ef10_phc_clock_info = {
 	.owner		= THIS_MODULE,
 	.name		= "sfc",
 	.max_adj	= MAX_PPB, /* unused, ptp_data->max_adjfreq used instead */
 	.n_alarm	= 0,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PTP_PF_NONE)
 	.n_ext_ts	= 1,
 	.n_pins		= 1,
-#else
-	.n_ext_ts	= 0,
-#endif
 	.n_per_out	= 0,
 	.pps		= 1,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PTP_CLOCK_INFO_ADJFINE)
 	.adjfine	= efx_phc_adjfine,
-#elif defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_PTP_CLOCK_INFO_ADJFREQ)
-	.adjfreq	= efx_phc_adjfreq,
-#endif
 	.adjtime	= efx_phc_adjtime,
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_64BIT_PHC)
-	.gettime	= efx_phc_gettime32,
-	.settime	= efx_phc_settime32,
-#else
 	.gettime64	= efx_phc_gettime,
 	.settime64	= efx_phc_settime,
-#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PTP_CLOCK_GETTIMEX64)
 	.gettimex64	= efx_phc_gettimex64,
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PTP_GETCROSSTSTAMP)
 	.getcrosststamp = efx_phc_getcrosststamp,
-#endif
 	.enable		= efx_phc_enable,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PTP_PF_NONE)
 	.verify		= efx_phc_verify,
-#endif
 };
+
+void efx_ef10_phc_set_clock_info(struct efx_nic *efx)
+{
+	struct efx_ptp_data *ptp = efx->ptp_data;
+
+	ptp->phc_clock_info = efx_ef10_phc_clock_info;
+}
+
+static const struct ptp_clock_info efx_x4_phc_clock_info = {
+	.owner		= THIS_MODULE,
+	.name		= "sfc",
+	.max_adj	= MAX_PPB, /* unused, ptp_data->max_adjfreq used instead */
+	.n_alarm	= 0,
+	.adjtime	= efx_x4_phc_adjtime,
+	.gettime64	= efx_x4_phc_gettime,
+	.settime64	= efx_x4_phc_settime,
+};
+
+void efx_x4_phc_set_clock_info(struct efx_nic *efx)
+{
+	struct efx_ptp_data *ptp = efx->ptp_data;
+
+	ptp->phc_clock_info = efx_x4_phc_clock_info;
+}
 #endif
 
 #ifdef EFX_NOT_UPSTREAM
@@ -2935,9 +2517,7 @@ static int efx_ptp_probe_post_io(struct efx_nic *efx)
 	unsigned int __maybe_unused pos;
 	struct efx_ptp_data *ptp;
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PTP_PF_NONE)
 	struct ptp_pin_desc *ppd;
-#endif
 #endif
 #ifdef EFX_NOT_UPSTREAM
 	bool pps_ok;
@@ -3004,15 +2584,16 @@ static int efx_ptp_probe_post_io(struct efx_nic *efx)
 #endif
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
 	if (efx_phc_exposed(efx)) {
-		ptp->phc_clock_info = efx_phc_clock_info;
+		rc = efx_phc_set_clock_info(efx);
+		if (rc)
+			goto fail4;
+
 		ptp->phc_clock_info.max_adj = ptp->max_adjfreq;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PTP_PF_NONE)
 		ppd = &ptp->pin_config[0];
 		snprintf(ppd->name, sizeof(ppd->name), "pps0");
 		ppd->index = 0;
 		ppd->func = PTP_PF_EXTTS;
 		ptp->phc_clock_info.pin_config = ptp->pin_config;
-#endif
 		ptp->phc_clock = ptp_clock_register(&ptp->phc_clock_info,
 						    &efx->pci_dev->dev);
 		if (IS_ERR(ptp->phc_clock)) {
@@ -3102,19 +2683,14 @@ int efx_ptp_probe(struct efx_nic *efx, struct efx_channel *channel)
 
 	ptp->channel = channel;
 
-	skb_queue_head_init(&ptp->rxq);
 	skb_queue_head_init(&ptp->txq);
 	ptp->workwq = create_singlethread_workqueue("sfc_ptp");
 	if (!ptp->workwq)
 		return -ENOMEM;
 
-	if (efx_ptp_use_mac_tx_timestamps(efx)) {
-		ptp->xmit_skb = efx_ptp_xmit_skb_queue;
-		/* Request sync events on this channel. */
-		channel->sync_events_state = SYNC_EVENTS_QUIESCENT;
-	} else {
-		ptp->xmit_skb = efx_ptp_xmit_skb_mc;
-	}
+	ptp->xmit_skb = efx_ptp_xmit_skb_queue;
+	/* Request sync events on this channel. */
+	channel->sync_events_state = SYNC_EVENTS_QUIESCENT;
 
 	return 0;
 }
@@ -3203,7 +2779,6 @@ void efx_ptp_remove(struct efx_nic *efx)
 	cancel_work_sync(&ptp_data->work);
 	cancel_delayed_work_sync(&ptp_data->cleanup_work);
 
-	skb_queue_purge(&ptp_data->rxq);
 	skb_queue_purge(&ptp_data->txq);
 
 	destroy_workqueue(ptp_data->workwq);
@@ -3237,74 +2812,6 @@ bool efx_ptp_is_ptp_tx(struct efx_nic *efx, struct sk_buff *skb)
 		skb_headlen(skb) >=
 		skb_transport_offset(skb) + sizeof(struct udphdr) &&
 		udp_hdr(skb)->dest == htons(PTP_EVENT_PORT);
-}
-
-/* Receive a PTP packet.  Packets are queued until the arrival of
- * the receive timestamp from the MC - this will probably occur after the
- * packet arrival because of the processing in the MC.
- */
-static bool efx_ptp_rx(struct efx_rx_queue *rx_queue, struct sk_buff *skb)
-{
-	struct efx_nic *efx = rx_queue->efx;
-	struct efx_ptp_data *ptp = efx->ptp_data;
-	struct efx_ptp_match *match = (struct efx_ptp_match *)skb->cb;
-	unsigned int version;
-	u8 *data = skb->data;
-
-	match->expiry = jiffies + msecs_to_jiffies(PKT_EVENT_LIFETIME_MS);
-
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_FAKE_VLAN_RX_ACCEL)
-	/* All vlan info is provided by the "hardware" in this case. */
-	match->vlan_tagged = !vlan_get_tag(skb, &match->vlan_tci);
-#else
-	/* In this case, software accounts for lack of receive vlan acceleration */
-	if (skb->dev->features & NETIF_F_HW_VLAN_CTAG_RX)
-		match->vlan_tagged = !vlan_get_tag(skb, &match->vlan_tci);
-	else if ((skb->protocol == htons(ETH_P_8021Q) ||
-		  skb->protocol == htons(ETH_P_8021AD)) && pskb_may_pull(skb, VLAN_HLEN)) {
-		/* required because of the fixed offsets used below */
-		data += VLAN_HLEN;
-	}
-#endif
-
-	/* catch up with skb->data if there's a VLAN tag present */
-	if (match->vlan_tagged)
-		data += VLAN_HLEN;
-
-	/* Correct version? */
-	if (ptp->mode == MC_CMD_PTP_MODE_V1) {
-		if (!pskb_may_pull(skb, PTP_V1_MIN_LENGTH))
-			return false;
-		version = ntohs(*(__be16 *)&data[PTP_V1_VERSION_OFFSET]);
-		if (version != PTP_VERSION_V1) {
-			return false;
-		}
-	} else {
-		if (!pskb_may_pull(skb, PTP_V2_MIN_LENGTH))
-			return false;
-		version = data[PTP_V2_VERSION_OFFSET];
-		if ((version & PTP_VERSION_V2_MASK) != PTP_VERSION_V2) {
-			return false;
-		}
-	}
-
-	/* Does this packet require timestamping? */
-	if (ntohs(*(__be16 *)&data[PTP_DPORT_OFFSET]) == PTP_EVENT_PORT) {
-		match->state = PTP_PACKET_STATE_UNMATCHED;
-
-		/* We expect the sequence number to be in the same position in
-		 * the packet for PTP V1 and V2
-		 */
-		BUILD_BUG_ON(PTP_V1_SEQUENCE_OFFSET != PTP_V2_SEQUENCE_OFFSET);
-		BUILD_BUG_ON(PTP_V1_SEQUENCE_LENGTH != PTP_V2_SEQUENCE_LENGTH);
-	} else {
-		match->state = PTP_PACKET_STATE_MATCH_UNWANTED;
-	}
-
-	skb_queue_tail(&ptp->rxq, skb);
-	queue_work(ptp->workwq, &ptp->work);
-
-	return true;
 }
 
 /* Transmit a PTP packet.  This has to be transmitted by the MC
@@ -3403,6 +2910,7 @@ static int efx_ptp_ts_init(struct efx_nic *efx,
 void efx_ptp_get_ts_info(struct efx_nic *efx,
 			 struct kernel_ethtool_ts_info *ts_info)
 {
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 	struct efx_ptp_data *phc_ptp = efx->phc_ptp_data;
 	struct efx_ptp_data *ptp = efx->ptp_data;
 
@@ -3418,14 +2926,10 @@ void efx_ptp_get_ts_info(struct efx_nic *efx,
 	ts_info->so_timestamping |= SOF_TIMESTAMPING_SYS_HARDWARE;
 #endif
 	/* Check licensed features. */
-	if (efx_ptp_use_mac_tx_timestamps(efx)) {
-		struct efx_ef10_nic_data *nic_data = efx->nic_data;
+	if (!(nic_data->licensed_features &
+	    (1 << LICENSED_V3_FEATURES_TX_TIMESTAMPS_LBN)))
+		ts_info->so_timestamping &= ~SOF_TIMESTAMPING_TX_HARDWARE;
 
-		if (!(nic_data->licensed_features &
-		      (1 << LICENSED_V3_FEATURES_TX_TIMESTAMPS_LBN)))
-			ts_info->so_timestamping &=
-				~SOF_TIMESTAMPING_TX_HARDWARE;
-	}
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
 	if (ptp->phc_clock)
 		ts_info->phc_index = ptp_clock_index(ptp->phc_clock);
@@ -3506,43 +3010,6 @@ int efx_ptp_get_ts_config(struct efx_nic *efx, struct ifreq *ifr)
 #endif
 
 #if defined(EFX_NOT_UPSTREAM)
-int efx_ptp_ts_settime(struct efx_nic *efx, struct efx_ts_settime *settime)
-{
-	struct ptp_clock_info *phc_clock_info = efx_ptp_clock_info(efx);
-	int ret;
-	struct timespec64 ts;
-	s64 delta;
-
-	if (!phc_clock_info)
-		return -ENOTTY;
-
-	ts.tv_sec = settime->ts.tv_sec;
-	ts.tv_nsec = settime->ts.tv_nsec;
-
-	if (settime->iswrite) {
-		delta = timespec64_to_ns(&ts);
-
-		return efx_phc_adjtime(phc_clock_info, delta);
-	} else {
-		ret = efx_phc_gettime(phc_clock_info, &ts);
-		if (!ret) {
-			settime->ts.tv_sec = ts.tv_sec;
-			settime->ts.tv_nsec = ts.tv_nsec;
-		}
-		return ret;
-	}
-}
-
-int efx_ptp_ts_adjtime(struct efx_nic *efx, struct efx_ts_adjtime *adjtime)
-{
-	struct ptp_clock_info *phc_clock_info = efx_ptp_clock_info(efx);
-
-	if (!phc_clock_info)
-		return -ENOTTY;
-
-	return efx_phc_adjfreq(phc_clock_info, adjtime->adjustment);
-}
-
 int efx_ptp_ts_sync(struct efx_nic *efx, struct efx_ts_sync *sync)
 {
 	int rc;
@@ -3615,6 +3082,8 @@ static void ptp_event_pps(struct efx_nic *efx, struct efx_ptp_data *ptp)
 {
 	if (efx && ptp->pps_workwq)
 		queue_work(ptp->pps_workwq, &ptp->pps_work);
+
+	ptp->sw_stats.pps_fw++;
 }
 
 #if defined(EFX_NOT_UPSTREAM)
@@ -3651,6 +3120,7 @@ static void hw_pps_event_pps(struct efx_nic *efx, struct efx_ptp_data *ptp)
 		ptp_clock_event(ptp->phc_clock, &ptp_evt);
 	}
 #endif
+	ptp->sw_stats.pps_in++;
 }
 #endif
 
@@ -3810,14 +3280,16 @@ void __efx_rx_skb_attach_timestamp(struct efx_channel *channel,
 		ptp->nic_to_kernel_time(pkt_timestamp_major,
 					pkt_timestamp_minor,
 					ptp->ts_corrections.general_rx);
-#if defined(EFX_NOT_UPSTREAM)
-	/* Note the unusual preprocessor condition:
-	 * - setting syststamp is deprecated, so this is EFX_NOT_UPSTREAM
-	 */
-	efx_ptp_get_host_time(efx, timestamps);
+
+#ifdef EFX_NOT_UPSTREAM
+#ifdef CONFIG_DEBUG_FS
+	if (ptp->channel == channel)
+		efx_ptp_update_delta_stats(efx, timestamps);
+#endif
 #endif
 }
 
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
 static int efx_phc_adjtime(struct ptp_clock_info *ptp, s64 delta)
 {
 	u32 nic_major, nic_minor;
@@ -3842,6 +3314,39 @@ static int efx_phc_adjtime(struct ptp_clock_info *ptp, s64 delta)
 #if defined(EFX_NOT_UPSTREAM)
 	rc = efx_mcdi_rpc(efx, MC_CMD_PTP, inbuf, sizeof(inbuf), NULL, 0, NULL);
 
+	if (!rc)
+		return rc;
+	return efx_ptp_synchronize(efx, PTP_SYNC_ATTEMPTS);
+#else
+	return efx_mcdi_rpc(efx, MC_CMD_PTP, inbuf, sizeof(inbuf),
+			    NULL, 0, NULL);
+#endif
+}
+
+static int efx_x4_phc_adjtime(struct ptp_clock_info *ptp, s64 delta)
+{
+	struct efx_ptp_data *ptp_data = container_of(ptp,
+						     struct efx_ptp_data,
+						     phc_clock_info);
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_PTP_IN_ADJUST_V2_LEN);
+	struct efx_nic *efx = ptp_data->efx;
+	u32 nic_major, nic_minor;
+#if defined(EFX_NOT_UPSTREAM)
+	int rc;
+
+	ptp_data->last_delta_valid = false;
+#endif
+
+	efx->ptp_data->ns_to_nic_time(delta, &nic_major, &nic_minor);
+
+	MCDI_SET_DWORD(inbuf, PTP_IN_OP, MC_CMD_PTP_OP_ADJUST);
+	MCDI_SET_DWORD(inbuf, PTP_IN_PERIPH_ID, 0);
+	MCDI_SET_QWORD(inbuf, PTP_IN_ADJUST_V2_FREQ, ptp_data->current_adjfreq);
+	MCDI_SET_DWORD(inbuf, PTP_IN_ADJUST_V2_MAJOR, nic_major);
+	MCDI_SET_DWORD(inbuf, PTP_IN_ADJUST_V2_MINOR, nic_minor);
+
+#if defined(EFX_NOT_UPSTREAM)
+	rc = efx_mcdi_rpc(efx, MC_CMD_PTP, inbuf, sizeof(inbuf), NULL, 0, NULL);
 	if (!rc)
 		return rc;
 	return efx_ptp_synchronize(efx, PTP_SYNC_ATTEMPTS);
@@ -3877,7 +3382,32 @@ static int efx_phc_gettime(struct ptp_clock_info *ptp, struct timespec64 *ts)
 	return 0;
 }
 
-#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+static void efx_x4_ptp_nic_to_ts64(struct timespec64 *ts, u32 secs,
+				   u32 ns, u32 qns)
+{
+	ts->tv_sec = secs;
+	/* Round quarter nanosecond count to the closest nanosecond */
+	ts->tv_nsec = ns + DIV_ROUND_CLOSEST(qns, 4);
+}
+
+static int efx_x4_phc_gettime(struct ptp_clock_info *ptp, struct timespec64 *ts)
+{
+	struct efx_ptp_data *ptp_data = container_of(ptp,
+						     struct efx_ptp_data,
+						     phc_clock_info);
+	struct efx_nic *efx = ptp_data->efx;
+	u32 secs, ns, qns;
+	efx_qword_t time;
+
+	time.u64[0]  = le64_to_cpu(_efx_readq(efx, ER_IZ_THE_TIME));
+	secs = EFX_QWORD_FIELD(time, ERF_IZ_THE_TIME_SECS);
+	ns = EFX_QWORD_FIELD(time, ERF_IZ_THE_TIME_NANOS);
+	qns = EFX_QWORD_FIELD(time, ERF_IZ_THE_TIME_QNS);
+
+	efx_x4_ptp_nic_to_ts64(ts, secs, ns, qns);
+	return 0;
+}
+
 static int efx_phc_settime(struct ptp_clock_info *ptp,
 			   const struct timespec64 *e_ts)
 {
@@ -3902,36 +3432,31 @@ static int efx_phc_settime(struct ptp_clock_info *ptp,
 	return 0;
 }
 
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_64BIT_PHC)
-static int efx_phc_settime32(struct ptp_clock_info *ptp,
-			     const struct timespec *ts)
+/* Get the current NIC time, subtract current time from the desired time to get
+ * the offset. Adjust clock by the offset.
+ */
+static int efx_x4_phc_settime(struct ptp_clock_info *ptp,
+			      const struct timespec64 *e_ts)
 {
-	struct timespec64 ts64 = timespec_to_timespec64(*ts);
-
-	return efx_phc_settime(ptp, &ts64);
-}
-
-static int efx_phc_gettime32(struct ptp_clock_info *ptp,
-			     struct timespec *ts)
-{
-	struct timespec64 ts64 = timespec_to_timespec64(*ts);
+	struct timespec64 time_now;
+	struct timespec64 delta;
 	int rc;
 
-	rc = efx_phc_gettime(ptp, &ts64);
-	if (rc == 0)
-		*ts = timespec64_to_timespec(ts64);
+	rc = efx_x4_phc_gettime(ptp, &time_now);
+	if (rc)
+		return rc;
 
-	return rc;
+	delta = timespec64_sub(*e_ts, time_now);
+
+	return efx_x4_phc_adjtime(ptp, timespec64_to_ns(&delta));
 }
-#endif
-#endif
+#endif /* CONFIG_PTP_1588_CLOCK */
 
 static const struct efx_channel_type efx_ptp_channel_type = {
 	.handle_no_channel	= efx_ptp_handle_no_channel,
 	.pre_probe		= efx_ptp_probe_channel,
 	.post_remove		= efx_ptp_remove_channel,
 	.get_name		= efx_ptp_get_channel_name,
-	.receive_skb		= efx_ptp_rx,
 	.keep_eventq		= false,
 	.hide_tx		= true,
 };

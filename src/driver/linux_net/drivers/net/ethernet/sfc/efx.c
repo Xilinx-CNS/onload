@@ -1030,7 +1030,6 @@ void efx_pci_remove_post_io(struct efx_nic *efx,
 		efx->type->sriov_fini(efx);
 	if (efx->type->vswitching_remove)
 		efx->type->vswitching_remove(efx);
-	efx_fini_interrupts(efx);
 #ifdef CONFIG_SFC_PTP
 	efx_ptp_remove_post_io(efx);
 #endif
@@ -1047,7 +1046,7 @@ void efx_pci_remove_post_io(struct efx_nic *efx,
 int efx_pci_probe_post_io(struct efx_nic *efx,
 			  int (*nic_probe)(struct efx_nic *efx))
 {
-	int rc;
+	int rc, max_irqs;
 
 #ifdef EFX_NOT_UPSTREAM
 	if (!performance_profile)
@@ -1132,12 +1131,12 @@ int efx_pci_probe_post_io(struct efx_nic *efx,
 	if (rc)
 		return rc;
 
-	rc = efx_init_interrupts(efx);
-	if (rc < 0)
-		return rc;
+	max_irqs = efx_init_interrupts(efx);
+	if (max_irqs < 0)
+		return max_irqs;
 
 	/* Update maximum channel count for ethtool */
-	efx->max_channels = min_t(u16, efx->max_channels, efx->max_irqs);
+	efx->max_channels = min_t(u16, efx->max_channels, max_irqs);
 	efx->max_tx_channels = efx->max_channels;
 
 	rc = efx->type->vswitching_probe(efx);

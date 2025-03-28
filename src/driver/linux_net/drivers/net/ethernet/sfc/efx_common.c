@@ -36,6 +36,7 @@
 #include "ef100_dump.h"
 #include "efx_client.h"
 #include "efx_auxbus_internal.h"
+#include "efx_ll.h"
 #endif
 #ifdef CONFIG_SFC_VDPA
 #include "ef100_vdpa.h"
@@ -1617,6 +1618,7 @@ fail1:
 /**
  * efx_pci_unmap_bar() - Unmap PCI bar previously mapped by efx_pci_map_bar()
  * @efx: NIC to map BAR of.
+ * @bar: BAR number to unmap.
  * @membase_phys: Physical address of mapping.
  * @membase: Virtual address of mapping.
  */
@@ -1691,6 +1693,7 @@ int efx_init_probe_data(struct pci_dev *pci_dev,
 	efx->pci_dev = pci_dev;
 	pci_set_drvdata(pci_dev, efx);
 	efx->type = nic_type;
+	xa_init_flags(&probe_data->irq_pool, XA_FLAGS_ALLOC);
 
 	*pd = probe_data;
 	return efx_init_struct(efx, pci_dev);
@@ -1698,13 +1701,45 @@ int efx_init_probe_data(struct pci_dev *pci_dev,
 
 void efx_fini_probe_data(struct efx_probe_data *probe_data)
 {
+	efx_nic_fini_irq_pool(probe_data);
+	xa_destroy(&probe_data->irq_pool);
 	pci_set_drvdata(probe_data->pci_dev, NULL);
 	efx_fini_struct(&probe_data->efx);
 	kfree(probe_data);
 }
 
+static void efx_set_max_channels(struct efx_nic *efx)
+{
+	int num_channels;
+#ifdef EFX_NOT_UPSTREAM
+	struct efx_design_params *design_params;
+#endif
+
+	/* For the normal netdev we need at most 2 interrupts per CPU (each CPU
+	 * may need a separate RX and TX channel).
+	 * For XDP we could need the CPU count minus 1 again.
+	 * And we need another one for PTP.
+	 */
+	num_channels = num_present_cpus();
+	if (separate_tx_channels)
+		num_channels *= 2;
+	if (efx->xdp_tx)
+		num_channels += num_possible_cpus() - 1;
+#ifdef CONFIG_SFC_PTP
+	num_channels++;
+#endif
+
+#ifdef EFX_NOT_UPSTREAM
+	design_params = efx_llct_get_design_parameters(efx);
+	if (!IS_ERR(design_params))
+		num_channels += design_params->ev_queues;
+#endif
+	efx->max_channels = min_t(u16, efx->max_channels, num_channels);
+}
+
 int efx_probe_common(struct efx_nic *efx)
 {
+	struct efx_probe_data *probe_data;
 	int rc = efx_mcdi_init(efx);
 
 	if (rc)
@@ -1726,6 +1761,17 @@ int efx_probe_common(struct efx_nic *efx)
 	if (rc)
 		return rc;
 
+	/* Adjust the maximum number of netdev channels from the architecture
+	 * maximum before initialising the interrupt pool.
+	 */
+	efx_set_max_channels(efx);
+
+	probe_data = efx_nic_to_probe_data(efx);
+
+	rc = efx_nic_init_irq_pool(probe_data);
+	if (rc)
+		return rc;
+
 	/* Create debugfs symlinks */
 #ifdef CONFIG_DEBUG_FS
 	mutex_lock(&efx->debugfs_symlink_mutex);
@@ -1740,12 +1786,13 @@ int efx_probe_common(struct efx_nic *efx)
 
 void efx_remove_common(struct efx_nic *efx)
 {
-#ifdef EFX_NOT_UPSTREAM
 	struct efx_probe_data *probe_data;
 
 	probe_data = efx_nic_to_probe_data(efx);
+#ifdef EFX_NOT_UPSTREAM
 	efx_client_fini(probe_data);
 #endif
+	efx_nic_fini_irq_pool(probe_data);
 #ifdef CONFIG_DEBUG_FS
 	mutex_lock(&efx->debugfs_symlink_mutex);
 	efx_fini_debugfs_nic(efx);

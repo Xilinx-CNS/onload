@@ -35,6 +35,8 @@
 #include "workarounds.h"
 #include "mcdi_pcol.h"
 
+extern unsigned int efx_interrupt_mode;
+
 /**************************************************************************
  *
  * Generic buffer handling
@@ -96,7 +98,9 @@ int efx_nic_irq_test_start(struct efx_nic *efx)
  */
 int efx_nic_init_interrupt(struct efx_nic *efx)
 {
+	struct efx_probe_data *pd = efx_nic_to_probe_data(efx);
 	struct cpu_rmap *cpu_rmap __maybe_unused = NULL;
+	struct efx_msi_context *msi_context;
 	struct efx_channel *channel;
 	unsigned int n_irqs;
 	int rc;
@@ -123,12 +127,17 @@ int efx_nic_init_interrupt(struct efx_nic *efx)
 	/* Hook MSI or MSI-X interrupt */
 	n_irqs = 0;
 	efx_for_each_channel(channel, efx) {
-		if (!channel->irq)
+		if (!channel->irq || channel->irq_index < 0)
 			continue;
 
+		msi_context = xa_load(&pd->irq_pool, channel->irq_index);
+		if (!msi_context)
+			continue;
+
+		msi_context->efx = efx;
+		msi_context->channel = channel->channel;
 		rc = request_irq(channel->irq, efx->type->irq_handle_msi, 0,
-				 efx->msi_context[channel->channel].name,
-				 &efx->msi_context[channel->channel]);
+				 msi_context->name, msi_context);
 		if (rc) {
 			netif_err(efx, drv, efx->net_dev,
 				  "failed to hook IRQ %d\n", channel->irq);
@@ -157,11 +166,15 @@ int efx_nic_init_interrupt(struct efx_nic *efx)
 	free_irq_cpu_rmap(cpu_rmap);
 #endif
 	efx_for_each_channel(channel, efx) {
-		if (!channel->irq)
+		if (!channel->irq || channel->irq_index < 0)
 			continue;
 		if (n_irqs-- == 0)
 			break;
-		free_irq(channel->irq, &efx->msi_context[channel->channel]);
+		msi_context = xa_load(&pd->irq_pool, channel->irq_index);
+		if (!msi_context)
+			continue;
+		msi_context->efx = NULL;
+		free_irq(channel->irq, msi_context);
 	}
 #ifdef CONFIG_RFS_ACCEL
  fail1:
@@ -171,6 +184,8 @@ int efx_nic_init_interrupt(struct efx_nic *efx)
 
 void efx_nic_fini_interrupt(struct efx_nic *efx)
 {
+	struct efx_probe_data *pd = efx_nic_to_probe_data(efx);
+	struct efx_msi_context *msi_context;
 	struct efx_channel *channel;
 
 #ifdef CONFIG_RFS_ACCEL
@@ -182,9 +197,16 @@ void efx_nic_fini_interrupt(struct efx_nic *efx)
 	if (efx->irqs_hooked)
 		/* Disable MSI/MSI-X interrupts */
 		efx_for_each_channel(channel, efx) {
-			if (channel->irq)
-				free_irq(channel->irq,
-					 &efx->msi_context[channel->channel]);
+			if (!channel->irq || channel->irq_index < 0)
+				continue;
+
+			msi_context = xa_load(&pd->irq_pool,
+					      channel->irq_index);
+			if (!msi_context)
+				continue;
+			msi_context->efx = NULL;
+			msi_context->channel = 0;
+			free_irq(channel->irq, msi_context);
 		}
 	efx->irqs_hooked = false;
 
@@ -193,6 +215,176 @@ void efx_nic_fini_interrupt(struct efx_nic *efx)
 	pcie_disable_tph(efx->pci_dev);
 #endif
 #endif
+}
+
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_PCI_ALLOC_DYN)
+static int efx_alloc_irq_vectors(struct efx_probe_data *pd, unsigned int n_irqs)
+{
+	struct msix_entry *xentries;
+	unsigned int i;
+	int rc;
+
+	xentries = kmalloc_array(n_irqs, sizeof(*xentries), GFP_KERNEL);
+	if (!xentries)
+		return -ENOMEM;
+	for (i = 0; i < n_irqs; i++)
+		xentries[i].entry = i;
+	rc = pci_enable_msix_range(pd->pci_dev, xentries, 1, n_irqs);
+	if (rc <= 0)
+		kfree(xentries);
+	else
+		pd->xentries = xentries;
+	return rc;
+}
+#endif
+
+void efx_nic_fini_irq_pool(struct efx_probe_data *pd)
+{
+	unsigned long index;
+	bool warned = false;
+	void *entry;
+
+	xa_lock(&pd->irq_pool);
+
+	pd->max_irqs = 0;
+	pd->irqs_left = 0;
+	xa_for_each(&pd->irq_pool, index, entry) {
+		if (!entry)
+			continue;
+		if (!warned)
+			pci_err(pd->pci_dev,
+				"Interrupt at index %u freed late\n",
+				(unsigned int)index);
+		warned = true;
+		kfree(entry);
+		__xa_erase(&pd->irq_pool, index);
+	}
+	xa_unlock(&pd->irq_pool);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_ALLOC_DYN)
+	pci_free_irq_vectors(pd->pci_dev);
+#else
+	kfree(pd->xentries);
+	pd->xentries = NULL;
+	pci_disable_msix(pd->pci_dev);
+#endif
+}
+
+int efx_nic_init_irq_pool(struct efx_probe_data *pd)
+{
+	struct efx_nic *efx = &pd->efx;
+	unsigned int n_irqs;
+	int rc;
+
+	if (WARN_ON(efx->type->supported_interrupt_modes == 0)) {
+		pci_err(pd->pci_dev, "no interrupt modes supported\n");
+		return -EOPNOTSUPP;
+	}
+	pd->max_irqs = 1;	/* For MSI mode */
+	if (BIT(efx_interrupt_mode) & efx->type->supported_interrupt_modes)
+		efx->interrupt_mode = efx_interrupt_mode;
+	else
+		efx->interrupt_mode = ffs(efx->type->supported_interrupt_modes) - 1;
+
+	if (efx_interrupt_mode == EFX_INT_MODE_MSI ||
+	    !(efx->type->supported_interrupt_modes & BIT(EFX_INT_MODE_MSIX))) {
+		rc = pci_alloc_irq_vectors(pd->pci_dev, 1, 1, PCI_IRQ_MSI);
+		if (rc)
+			pci_err(pd->pci_dev, "Error %d allocating an MSI vector\n",
+				rc);
+		return rc;
+	}
+	/* MSI-X mode */
+	rc = pci_msix_vec_count(pd->pci_dev);
+	if (rc <= 0)
+		rc = efx_wanted_parallelism(efx);
+
+	/* Determine how many interrupts we need */
+	n_irqs = min_t(u16, rc, efx->max_channels);
+	pci_dbg(pd->pci_dev, "Allocating %u interrupts\n", n_irqs);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_ALLOC_DYN)
+	rc = pci_alloc_irq_vectors(pd->pci_dev, 1, n_irqs, PCI_IRQ_MSIX);
+#else
+	rc = efx_alloc_irq_vectors(pd, n_irqs);
+#endif
+	if (rc <= 0) {
+		pci_err(pd->pci_dev, "could not enable interrupts (%d)\n", rc);
+		pd->max_irqs = 0;
+	} else {
+		pd->max_irqs = rc;
+		rc = 0;
+	}
+	pd->irqs_left = pd->max_irqs;
+	return rc;
+}
+
+struct efx_msi_context *efx_nic_alloc_irq(struct efx_probe_data *pd,
+					  int *os_vector)
+{
+	struct efx_msi_context *msi_context;
+	struct xa_limit irq_limit;
+	int rc, irq;
+
+	msi_context = kzalloc(sizeof(*msi_context), GFP_KERNEL);
+	if (!msi_context)
+		return ERR_PTR(-ENOMEM);
+
+	xa_lock(&pd->irq_pool);
+
+	if (!pd->irqs_left) {
+		rc = -ENOSPC;
+		goto out_free;
+	}
+
+	irq_limit.min = 0;
+	irq_limit.max = pd->max_irqs;
+
+	/* Find a free slot for the interrupt */
+	rc = __xa_alloc(&pd->irq_pool, &msi_context->index, msi_context,
+			irq_limit, GFP_KERNEL);
+	if (rc == -EBUSY)
+		rc = -ENOSPC;
+	if (rc)
+		goto out_free;
+
+	pd->irqs_left--;
+	xa_unlock(&pd->irq_pool);
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_ALLOC_DYN)
+	irq = pci_irq_vector(pd->pci_dev, msi_context->index);
+	if (irq < 0) {
+		rc = irq;
+		xa_lock(&pd->irq_pool);
+		pd->irqs_left++;
+		goto out_free;
+	}
+#else
+	irq = pd->xentries[msi_context->index].vector;
+#endif
+	*os_vector = irq;
+	return msi_context;
+
+out_free:
+	kfree(msi_context);
+	xa_unlock(&pd->irq_pool);
+	return ERR_PTR(rc);
+}
+
+void efx_nic_free_irq(struct efx_probe_data *pd, int irq_index)
+{
+	struct efx_msi_context *msi_context;
+
+	xa_lock(&pd->irq_pool);
+
+	if (irq_index < 0 || irq_index >= pd->max_irqs)
+		goto out_unlock;
+
+	msi_context = __xa_erase(&pd->irq_pool, irq_index);
+	EFX_WARN_ON_ONCE_PARANOID(!msi_context);
+	kfree(msi_context);
+	pd->irqs_left++;
+
+out_unlock:
+	xa_unlock(&pd->irq_pool);
 }
 
 #ifdef EFX_NOT_UPSTREAM

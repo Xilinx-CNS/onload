@@ -15,15 +15,12 @@
 struct kernel_ethtool_ts_info;
 #ifdef CONFIG_SFC_PTP
 #if defined(EFX_NOT_UPSTREAM)
-struct efx_ts_settime;
 struct efx_ts_adjtime;
 struct efx_ts_sync;
 struct efx_ts_set_sync_status;
 struct efx_ts_set_vlan_filter;
 struct efx_ts_set_uuid_filter;
 struct efx_ts_set_domain_filter;
-int efx_ptp_ts_settime(struct efx_nic *efx, struct efx_ts_settime *settime);
-int efx_ptp_ts_adjtime(struct efx_nic *efx, struct efx_ts_adjtime *adjtime);
 int efx_ptp_ts_sync(struct efx_nic *efx, struct efx_ts_sync *sync);
 int efx_ptp_ts_set_sync_status(struct efx_nic *efx, struct efx_ts_set_sync_status *status);
 #endif
@@ -67,7 +64,6 @@ static inline void efx_rx_skb_attach_timestamp(struct efx_channel *channel,
 }
 void efx_ptp_start_datapath(struct efx_nic *efx);
 void efx_ptp_stop_datapath(struct efx_nic *efx);
-bool efx_ptp_use_mac_tx_timestamps(struct efx_nic *efx);
 ktime_t efx_ptp_nic_to_kernel_time(struct efx_tx_queue *tx_queue);
 #else
 static inline int efx_ptp_probe(struct efx_nic *efx, struct efx_channel *channel)
@@ -140,38 +136,24 @@ static inline void efx_time_sync_event(struct efx_channel *channel,
 				       efx_qword_t *ev) {}
 static inline void efx_ptp_start_datapath(struct efx_nic *efx) {}
 static inline void efx_ptp_stop_datapath(struct efx_nic *efx) {}
-static inline bool efx_ptp_use_mac_tx_timestamps(struct efx_nic *efx)
-{
-	return false;
-}
 static inline ktime_t efx_ptp_nic_to_kernel_time(struct efx_tx_queue *tx_queue)
 {
 	return (ktime_t) { 0 };
 }
 #endif
 
-#if defined(EFX_NOT_UPSTREAM)
-struct efx_ts_get_pps;
-struct efx_ts_hw_pps;
-#ifdef CONFIG_SFC_PTP
-int efx_ptp_pps_get_event(struct efx_nic *efx, struct efx_ts_get_pps *data);
-int efx_ptp_hw_pps_enable(struct efx_nic *efx, bool enable);
+#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_PTP)
 int efx_ptp_pps_reset(struct efx_nic *efx);
 #else
-static inline int efx_ptp_pps_get_event(struct efx_nic *efx,
-					struct efx_ts_get_pps *data)
-{
-	return -EOPNOTSUPP;
-}
-static inline int efx_ptp_hw_pps_enable(struct efx_nic *efx, bool enable)
-{
-	return -EOPNOTSUPP;
-}
 static inline int efx_ptp_pps_reset(struct efx_nic *efx)
 {
 	return -EOPNOTSUPP;
 }
 #endif
+
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+void efx_ef10_phc_set_clock_info(struct efx_nic *efx);
+void efx_x4_phc_set_clock_info(struct efx_nic *efx);
 #endif
 
 #endif /* EFX_PTP_H */

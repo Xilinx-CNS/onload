@@ -26,6 +26,9 @@
 #include "mcdi_functions.h"
 #include "mcdi_filters.h"
 #include "debugfs.h"
+#ifdef EFX_NOT_UPSTREAM
+#include "efx_client.h"
+#endif
 
 /* Interrupt mode names (see INT_MODE())) */
 const unsigned int efx_interrupt_mode_max = EFX_INT_MODE_MAX;
@@ -194,7 +197,7 @@ static unsigned int efx_num_packages(const cpumask_t *in)
 }
 #endif
 
-static unsigned int efx_wanted_parallelism(struct efx_nic *efx)
+unsigned int efx_wanted_parallelism(struct efx_nic *efx)
 {
 #if defined(EFX_NOT_UPSTREAM)
 	static unsigned int n_rxq;
@@ -548,78 +551,43 @@ static bool efx_fallback_interrupt_mode(struct efx_nic *efx)
 }
 #endif	/* EFX_NOT_UPSTREAM */
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_ALLOC_DYN)
-static void efx_assign_msix_vectors(struct efx_nic *efx, unsigned int n_irqs)
+static void efx_assign_msix_vectors(struct efx_nic *efx)
 {
+	struct efx_probe_data *probe_data = efx_nic_to_probe_data(efx);
+	struct efx_msi_context *msi_context;
 	struct efx_channel *channel;
 
-	efx_for_each_channel(channel, efx)
-		if (channel->channel < n_irqs)
-			channel->irq = pci_irq_vector(efx->pci_dev,
-						      channel->channel);
-		else
-			channel->irq = 0;
+	efx_for_each_channel(channel, efx) {
+		msi_context = efx_nic_alloc_irq(probe_data, &channel->irq);
+		if (IS_ERR(msi_context)) {
+			channel->irq_index = EFX_IRQ_INDEX_INVALID;
+		} else {
+			channel->type->get_name(channel, msi_context->name,
+						sizeof(msi_context->name));
+			channel->irq_index = msi_context->index;
+		}
+	}
 }
-#else
-static void efx_assign_msix_vectors(struct efx_nic *efx,
-				    struct msix_entry *xentries,
-				    unsigned int n_irqs)
-{
-	struct efx_channel *channel;
-
-	efx_for_each_channel(channel, efx)
-		if (channel->channel < n_irqs)
-			channel->irq = xentries[channel->channel].vector;
-		else
-			channel->irq = 0;
-}
-#endif
 
 /* Probe the number and type of interrupts we are able to obtain, and
  * the resulting numbers of channels and RX queues.
  */
 int efx_probe_interrupts(struct efx_nic *efx)
 {
-	unsigned int i;
+	struct efx_probe_data *pd = efx_nic_to_probe_data(efx);
 	int rc;
 
 	if (efx->interrupt_mode == EFX_INT_MODE_MSIX) {
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_PCI_ALLOC_DYN)
-		struct msix_entry *xentries;
-#endif
-		unsigned int n_irqs = efx->max_irqs;
+		rc = pd->max_irqs;
+		if (!pd->max_irqs)
+			rc = -EOPNOTSUPP;
 
-		n_irqs = min(n_irqs, efx_channels(efx));
-		netif_dbg(efx, drv, efx->net_dev,
-			  "Allocating %u interrupts\n", n_irqs);
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_ALLOC_DYN)
-		i = PCI_IRQ_MSIX;
-		if (efx->type->supported_interrupt_modes &
-		    BIT(EFX_INT_MODE_MSI))
-			i |= PCI_IRQ_MSI;
-		rc = pci_alloc_irq_vectors(efx->pci_dev, 1, n_irqs, i);
-#else
-		xentries = kmalloc_array(n_irqs, sizeof(*xentries), GFP_KERNEL);
-		if (!xentries) {
-			rc = -ENOMEM;
-		} else {
-			for (i = 0; i < n_irqs; i++)
-				xentries[i].entry = i;
-			rc = pci_enable_msix_range(efx->pci_dev, xentries,
-						   1, n_irqs);
-		}
-#endif
 		if (rc < 0) {
 #if defined(EFX_NOT_UPSTREAM)
 			netif_err(efx, drv, efx->net_dev,
 				  "could not enable MSI-X (%d)\n", rc);
-			if (!efx_fallback_interrupt_mode(efx)) {
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_PCI_ALLOC_DYN)
-				kfree(xentries);
-#endif
+			if (!efx_fallback_interrupt_mode(efx))
 				return rc;
-			}
 #else	/* EFX_NOT_UPSTREAM */
 			netif_err(efx, drv, efx->net_dev,
 				  "could not enable interrupts (%d)\n", rc);
@@ -628,13 +596,7 @@ int efx_probe_interrupts(struct efx_nic *efx)
 		}
 
 		if (rc > 0)
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_ALLOC_DYN)
-			efx_assign_msix_vectors(efx, n_irqs);
-#else
-			efx_assign_msix_vectors(efx, xentries, n_irqs);
-
-		kfree(xentries);
-#endif
+			efx_assign_msix_vectors(efx);
 	}
 
 	/* Try single interrupt MSI */
@@ -679,12 +641,16 @@ int efx_probe_interrupts(struct efx_nic *efx)
 
 void efx_remove_interrupts(struct efx_nic *efx)
 {
+	struct efx_probe_data *probe_data = efx_nic_to_probe_data(efx);
 	struct efx_channel *channel;
 
 	/* Remove MSI/MSI-X interrupts */
-	efx_for_each_channel(channel, efx)
+	efx_for_each_channel(channel, efx) {
+		efx_nic_free_irq(probe_data, channel->irq_index);
 		channel->irq = 0;
-	pci_free_irq_vectors(efx->pci_dev);
+		channel->irq_index = EFX_IRQ_INDEX_INVALID;
+	}
+
 #ifdef EFX_NOT_UPSTREAM
 #if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	kfree(efx->irq_resources);
@@ -721,28 +687,36 @@ static void efx_set_tph_hint(struct efx_channel *channel, unsigned int cpu)
 #ifdef CONFIG_SFC_TPH
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCIE_TPH_GET_CPU_ST)
 	struct efx_nic *efx = channel->efx;
+	struct efx_probe_data *pd = efx_nic_to_probe_data(efx);
+	struct efx_msi_context *msi_context;
 	u16 tag;
 	int rc;
 
 	if (!efx->pci_dev->tph_enabled)
 		return;
 
+	if (WARN_ON_ONCE(channel->irq_index < 0))
+		return;
+	msi_context = xa_load(&pd->irq_pool, channel->irq_index);
+	if (WARN_ON_ONCE(!msi_context))
+		return;
+
 	rc = pcie_tph_get_cpu_st(efx->pci_dev, TPH_MEM_TYPE_VM, cpu, &tag);
 	if (rc) {
 		netif_err(efx, probe, efx->net_dev,
 			  "pcie_tph_get_cpu_st error(%d) channel %s, cpu %u\n",
-			  rc, efx->msi_context[channel->channel].name, cpu);
+			  rc, msi_context->name, cpu);
 		return;
 	}
 	netif_dbg(efx, probe, efx->net_dev,
 		  "ST hint %04x for channel %s and cpu %u\n",
-		  tag, efx->msi_context[channel->channel].name, cpu);
+		  tag, msi_context->name, cpu);
 
 	rc = efx_set_tlp_tph(efx, channel->channel, tag);
 	if (rc)
 		netif_info(efx, probe, efx->net_dev,
 			   "efx_set_tlp_tph error(%d) for channel %s, cpu %u\n",
-			   rc, efx->msi_context[channel->channel].name, cpu);
+			   rc, msi_context->name, cpu);
 #endif
 #endif
 }
@@ -1310,6 +1284,7 @@ static struct efx_channel *efx_alloc_channel(struct efx_nic *efx, int i)
 #ifdef CONFIG_RFS_ACCEL
 	INIT_DELAYED_WORK(&channel->filter_work, efx_filter_rfs_expire);
 #endif
+	channel->irq_index = EFX_IRQ_INDEX_INVALID;
 
 	channel->rx_queue.efx = efx;
 
@@ -1331,12 +1306,6 @@ struct efx_channel *efx_get_channel(struct efx_nic *efx, unsigned int index)
 	return NULL;
 }
 
-void efx_fini_interrupts(struct efx_nic *efx)
-{
-	kfree(efx->msi_context);
-	efx->msi_context = NULL;
-}
-
 void efx_fini_channels(struct efx_nic *efx)
 {
 	struct efx_channel *channel;
@@ -1349,48 +1318,31 @@ void efx_fini_channels(struct efx_nic *efx)
 	}
 }
 
-/* Returns the maximum number of interrupts we can use, or a negative number
- * on error.
+/* Returns the maximum number of interrupts the netdev can use, or a negative
+ * number on error.
  */
 int efx_init_interrupts(struct efx_nic *efx)
 {
+	struct efx_probe_data *pd = efx_nic_to_probe_data(efx);
+	unsigned int max_irqs;
 	int rc = 0;
 
-	if (WARN_ON(efx->type->supported_interrupt_modes == 0)) {
-		netif_err(efx, drv, efx->net_dev, "no interrupt modes supported\n");
-		return -ENOTSUPP;
-	}
+	max_irqs = pd->max_irqs;
 
-	efx->max_irqs = 1;	/* For MSI mode */
-	if (BIT(efx_interrupt_mode) & efx->type->supported_interrupt_modes)
-		efx->interrupt_mode = efx_interrupt_mode;
-	else
-		efx->interrupt_mode = ffs(efx->type->supported_interrupt_modes) - 1;
+#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_BUSYPOLL)
+	if (max_irqs <= 0 && efx->interrupt_mode != EFX_INT_MODE_POLLED)
+#else
+	if (max_irqs <= 0)
+#endif
+		return -ENOSPC;
+	if (efx->interrupt_mode != EFX_INT_MODE_MSIX)
+		return max_irqs;
 
-	if (efx->interrupt_mode == EFX_INT_MODE_MSIX) {
-		rc = pci_msix_vec_count(efx->pci_dev);
-		if (rc <= 0)
-			rc = efx_wanted_parallelism(efx);
-		efx->max_irqs = rc;
-	}
+	rc = efx_allocate_msix_channels(efx, efx->max_channels);
+	if (rc < 0)
+		return rc;
 
-	if (efx->max_irqs > 0) {
-		rc = efx->max_irqs;
-		/* TODO: At some point limit this to the number of cores
-		 * times the number of clients.
-		 */
-		rc = min_t(u16, rc, efx->max_channels);
-		efx->msi_context = kcalloc(rc, sizeof(struct efx_msi_context),
-					   GFP_KERNEL);
-		if (!efx->msi_context)
-			rc = -ENOMEM;
-		efx->max_irqs = rc;
-	}
-
-	if (efx->interrupt_mode == EFX_INT_MODE_MSIX)
-		rc = efx_allocate_msix_channels(efx, efx->max_channels);
-
-	return rc;
+	return max_irqs;
 }
 
 int efx_init_channels(struct efx_nic *efx)
@@ -1410,10 +1362,6 @@ int efx_init_channels(struct efx_nic *efx)
 			break;
 		}
 		list_add_tail(&channel->list, &efx->channel_list);
-		if (i < efx->max_irqs) {
-			efx->msi_context[i].efx = efx;
-			efx->msi_context[i].index = i;
-		}
 	}
 
 	return rc;
@@ -1511,15 +1459,19 @@ efx_get_channel_name(struct efx_channel *channel, char *buf, size_t len)
 
 void efx_set_channel_names(struct efx_nic *efx)
 {
+	struct efx_probe_data *pd = efx_nic_to_probe_data(efx);
+	struct efx_msi_context *msi_context;
 	struct efx_channel *channel;
 
 	efx_for_each_channel(channel, efx) {
-		if (channel->channel >= efx->max_irqs)
+		if (WARN_ON_ONCE(channel->irq_index < 0))
+			continue;
+		msi_context = xa_load(&pd->irq_pool, channel->irq_index);
+		if (WARN_ON_ONCE(!msi_context))
 			continue;
 
-		channel->type->get_name(channel,
-					efx->msi_context[channel->channel].name,
-					sizeof(efx->msi_context[0].name));
+		channel->type->get_name(channel, msi_context->name,
+					sizeof(msi_context->name));
 	}
 }
 
@@ -2394,6 +2346,9 @@ static const struct efx_channel_type efx_default_channel_type = {
 	.post_remove            = efx_channel_dummy_op_void,
 	.get_name               = efx_get_channel_name,
 	.keep_eventq            = false,
+#ifdef EFX_NOT_UPSTREAM
+	.client_type		= EFX_CLIENT_ETH,
+#endif
 };
 
 int efx_channels_init_module(void)

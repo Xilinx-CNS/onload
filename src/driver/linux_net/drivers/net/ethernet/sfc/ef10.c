@@ -146,6 +146,13 @@ efx_ef10_select_tx_queue_overlay(struct efx_channel *channel,
 				 struct sk_buff *skb);
 #endif /* EFX_USE_OVERLAY_TX_CSUM */
 
+static bool ef10_has_dynamic_sensors(struct efx_nic *efx)
+{
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+
+	return efx_ef10_has_cap(nic_data->datapath_caps2, DYNAMIC_SENSORS);
+}
+
 static u8 *efx_ef10_mcdi_buf(struct efx_nic *efx, u8 bufid,
 			     dma_addr_t *dma_addr)
 {
@@ -1378,10 +1385,6 @@ static void efx_ef10_fini_nic(struct efx_nic *efx)
 
 	kfree(nic_data->mc_stats);
 	nic_data->mc_stats = NULL;
-
-	if (!efx_ptp_uses_separate_channel(efx) &&
-	    !efx_ptp_use_mac_tx_timestamps(efx))
-		efx_ptp_remove(efx);
 }
 
 static int efx_ef10_init_nic(struct efx_nic *efx)
@@ -1477,10 +1480,6 @@ static int efx_ef10_init_nic(struct efx_nic *efx)
 	efx->net_dev->hw_enc_features = hw_enc_features;
 #endif
 #endif
-
-	if (!efx_ptp_uses_separate_channel(efx) &&
-	    !efx_ptp_use_mac_tx_timestamps(efx))
-		efx_ptp_probe(efx, NULL);
 
 	return 0;
 }
@@ -2479,7 +2478,7 @@ static irqreturn_t efx_ef10_msi_interrupt(int irq, void *dev_id)
 			efx->last_irq_cpu = raw_smp_processor_id();
 
 		/* Schedule processing of the channel */
-		channel = efx_get_channel(efx, context->index);
+		channel = efx_get_channel(efx, context->channel);
 		efx_schedule_channel_irq(channel);
 	}
 
@@ -5674,21 +5673,16 @@ static int efx_ef10_probe_pf(struct efx_nic *efx)
 
 static int efx_x4_probe_pf(struct efx_nic *efx)
 {
-	int rc = efx_ef10_probe_pf(efx);
-
 #ifdef EFX_NOT_UPSTREAM
-	if (rc)
-		return rc;
-
+	int rc;
 	rc = efx_ll_init(efx);
 	if (rc)
 		pci_info(efx->pci_dev,
 			 "Low latency datapath initialisation failed with error %d. Continuing without it.\n",
 			 rc);
 
-	rc = 0;
 #endif
-	return rc;
+	return efx_ef10_probe_pf(efx);
 }
 
 static void efx_ef10_remove(struct efx_nic *efx)
@@ -5807,21 +5801,16 @@ fail:
 
 static int efx_x4_probe_vf(struct efx_nic *efx)
 {
-	int rc = efx_ef10_probe_vf(efx);
-
 #ifdef EFX_NOT_UPSTREAM
-	if (rc)
-		return rc;
-
+	int rc;
 	rc = efx_ll_init(efx);
 	if (rc)
 		pci_info(efx->pci_dev,
 			 "Low latency datapath initialisation failed with error %d. Continuing without it.\n",
 			 rc);
 
-	rc = 0;
 #endif
-	return rc;
+	return efx_ef10_probe_vf(efx);
 }
 #endif /* CONFIG_SFC_SRIOV */
 
@@ -5986,6 +5975,9 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 	.mtd_probe = efx_port_dummy_op_int,
 #endif
 #ifdef CONFIG_SFC_PTP
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+	.ptp_set_clock_info = efx_ef10_phc_set_clock_info,
+#endif
 	.ptp_write_host_time = efx_ef10_ptp_write_host_time,
 	.ptp_set_ts_config = efx_ef10_ptp_set_ts_config,
 #endif
@@ -6136,6 +6128,9 @@ const struct efx_nic_type efx_x4_vf_nic_type = {
 	.mtd_probe = efx_port_dummy_op_int,
 #endif
 #ifdef CONFIG_SFC_PTP
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+	.ptp_set_clock_info = efx_x4_phc_set_clock_info,
+#endif
 	.ptp_write_host_time = efx_ef10_ptp_write_host_time,
 	.ptp_set_ts_config = efx_ef10_ptp_set_ts_config,
 #endif
@@ -6190,6 +6185,7 @@ const struct efx_nic_type efx_x4_vf_nic_type = {
 			    1 << HWTSTAMP_FILTER_ALL,
 	.check_caps = ef10_check_caps,
 	.rx_recycle_ring_size = efx_ef10_recycle_ring_size,
+	.has_dynamic_sensors = ef10_has_dynamic_sensors,
 };
 #endif
 
@@ -6302,6 +6298,9 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.mtd_sync = efx_mcdi_mtd_sync,
 #endif
 #ifdef CONFIG_SFC_PTP
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+	.ptp_set_clock_info = efx_ef10_phc_set_clock_info,
+#endif
 	.ptp_write_host_time = efx_ef10_ptp_write_host_time,
 	.ptp_set_ts_sync_events = efx_ef10_ptp_set_ts_sync_events,
 	.ptp_set_ts_config = efx_ef10_ptp_set_ts_config,
@@ -6494,6 +6493,9 @@ const struct efx_nic_type efx_x4_nic_type = {
 	.mtd_sync = efx_mcdi_mtd_sync,
 #endif
 #ifdef CONFIG_SFC_PTP
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+	.ptp_set_clock_info = efx_x4_phc_set_clock_info,
+#endif
 	.ptp_write_host_time = efx_ef10_ptp_write_host_time,
 	.ptp_set_ts_sync_events = efx_ef10_ptp_set_ts_sync_events,
 	.ptp_set_ts_config = efx_ef10_ptp_set_ts_config,
@@ -6577,5 +6579,6 @@ const struct efx_nic_type efx_x4_nic_type = {
 			    1 << HWTSTAMP_FILTER_ALL,
 	.check_caps = ef10_check_caps,
 	.rx_recycle_ring_size = efx_ef10_recycle_ring_size,
+	.has_dynamic_sensors = ef10_has_dynamic_sensors,
 };
 

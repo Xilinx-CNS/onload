@@ -92,7 +92,7 @@ int efx_mcdi_ev_init(struct efx_channel *channel, bool v1_cut_thru, bool v2)
 	MCDI_SET_DWORD(inbuf, INIT_EVQ_IN_SIZE, channel->eventq_mask + 1);
 	MCDI_SET_DWORD(inbuf, INIT_EVQ_IN_INSTANCE, channel->channel);
 	/* INIT_EVQ expects index in vector table, not absolute */
-	MCDI_SET_DWORD(inbuf, INIT_EVQ_IN_IRQ_NUM, channel->channel);
+	MCDI_SET_DWORD(inbuf, INIT_EVQ_IN_IRQ_NUM, channel->irq_index);
 	MCDI_SET_DWORD(inbuf, INIT_EVQ_IN_TMR_MODE,
 			MC_CMD_INIT_EVQ_IN_TMR_MODE_DIS);
 	MCDI_SET_DWORD(inbuf, INIT_EVQ_IN_TMR_LOAD, 0);

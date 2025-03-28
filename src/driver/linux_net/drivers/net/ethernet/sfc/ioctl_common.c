@@ -234,16 +234,6 @@ out_free:
 
 #ifdef CONFIG_SFC_PTP
 #ifdef EFX_NOT_UPSTREAM
-static int efx_ioctl_ts_settime(struct efx_nic *efx, union efx_ioctl_data *data)
-{
-	return efx_ptp_ts_settime(efx, &data->ts_settime);
-}
-
-static int efx_ioctl_ts_adjtime(struct efx_nic *efx, union efx_ioctl_data *data)
-{
-	return efx_ptp_ts_adjtime(efx, &data->ts_adjtime);
-}
-
 static int efx_ioctl_ts_sync(struct efx_nic *efx, union efx_ioctl_data *data)
 {
 	return efx_ptp_ts_sync(efx, &data->ts_sync);
@@ -257,18 +247,6 @@ static int efx_ioctl_ts_set_sync_status(struct efx_nic *efx,
 
 #endif
 #endif
-
-static int efx_ioctl_get_pps_event(struct efx_nic *efx,
-				   union efx_ioctl_data *data)
-{
-	return efx_ptp_pps_get_event(efx, &data->pps_event);
-}
-
-static int
-efx_ioctl_hw_pps_enable(struct efx_nic *efx, union efx_ioctl_data *data)
-{
-	return efx_ptp_hw_pps_enable(efx, data->pps_enable.enable != 0);
-}
 
 static int efx_ioctl_get_device_ids(struct efx_nic *efx,
 				    union efx_ioctl_data *data)
@@ -467,18 +445,7 @@ int efx_private_ioctl_common(struct efx_nic *efx, u16 cmd,
 	case EFX_MCDI_REQUEST2:
 		/* This command has variable length */
 		return efx_ioctl_do_mcdi(efx, &user_data->mcdi_request2);
-#ifdef CONFIG_SFC_PTP
-	case EFX_TS_INIT:
-		return -EOPNOTSUPP;
-#if defined(EFX_NOT_UPSTREAM)
-	case EFX_TS_SETTIME:
-		size = sizeof(data->ts_settime);
-		op = efx_ioctl_ts_settime;
-		break;
-	case EFX_TS_ADJTIME:
-		size = sizeof(data->ts_adjtime);
-		op = efx_ioctl_ts_adjtime;
-		break;
+#if defined(CONFIG_SFC_PTP) && defined(EFX_NOT_UPSTREAM)
 	case EFX_TS_SYNC:
 		size = sizeof(data->ts_sync);
 		op = efx_ioctl_ts_sync;
@@ -488,17 +455,8 @@ int efx_private_ioctl_common(struct efx_nic *efx, u16 cmd,
 		op = efx_ioctl_ts_set_sync_status;
 		break;
 #endif
-#endif
 	case EFX_SFCTOOL:
 		return efx_ioctl_sfctool(efx, user_data);
-	case EFX_TS_GET_PPS:
-		size = sizeof(data->pps_event);
-		op = efx_ioctl_get_pps_event;
-		break;
-	case EFX_TS_ENABLE_HW_PPS:
-		size = sizeof(data->pps_enable);
-		op = efx_ioctl_hw_pps_enable;
-		break;
 	case EFX_GET_DEVICE_IDS:
 		size = sizeof(data->device_ids);
 		op = efx_ioctl_get_device_ids;

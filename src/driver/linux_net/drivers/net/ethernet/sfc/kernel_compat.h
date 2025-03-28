@@ -70,9 +70,12 @@
  * layer above. The following definitions are all deprecated
  */
 
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,18,0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,1,0)
+#if LINUX_VERSION_CODE == KERNEL_VERSION(4,18,0) && defined(EFX_HAVE_XARRAY)
+/* Support RHEL 8.x (kernel v4.18) which has backported xarray from v5.1 */
+#else
 	#error "This kernel version is now unsupported"
+#endif
 #endif
 
 
@@ -880,40 +883,6 @@ unsigned int cpumask_local_spread(unsigned int i, int node);
 
 #include <linux/pps_kernel.h>
 
-#ifdef EFX_NEED_PPS_EVENT_TIME
-	struct pps_event_time {
-	#ifdef CONFIG_NTP_PPS
-		struct timespec ts_raw;
-	#endif /* CONFIG_NTP_PPS */
-		struct timespec ts_real;
-	};
-#endif
-
-#ifdef EFX_NEED_PPS_GET_TS
-#ifdef CONFIG_NTP_PPS
-	static inline void pps_get_ts(struct pps_event_time *ts)
-	{
-		getnstime_raw_and_real(&ts->ts_raw, &ts->ts_real);
-	}
-#else /* CONFIG_NTP_PPS */
-	static inline void pps_get_ts(struct pps_event_time *ts)
-	{
-		getnstimeofday(&ts->ts_real);
-	}
-#endif /* CONFIG_NTP_PPS */
-#endif
-
-#ifdef EFX_NEED_PPS_SUB_TS
-	static inline void pps_sub_ts(struct pps_event_time *ts, struct timespec delta)
-	{
-		ts->ts_real = timespec_sub(ts->ts_real, delta);
-	#ifdef CONFIG_NTP_PPS
-		ts->ts_raw = timespec_sub(ts->ts_raw, delta);
-	#endif
-	}
-#endif
-
-
 #ifdef EFX_NEED_KTIME_GET_SNAPSHOT
 /* simplified structure for systems which don't have a kernel definition
  * we only need a couple of fields and layout doesn't matter for this usage */
@@ -1270,6 +1239,11 @@ xdp_prepare_buff(struct xdp_buff *xdp, unsigned char *hard_start,
 	xdp->data_meta = meta_valid ? data : data + 1;
 #endif
 }
+#endif
+
+#ifdef EFX_HAVE_BPF_WARN_INVALID_XDP_ACTION_CONST
+/* addition of 'const' changed the symtype but doesn't affect our use */
+#define EFX_HAVE_BPF_WARN_INVALID_XDP_ACTION_3PARAM
 #endif
 
 #ifdef EFX_NEED_VOID_SKB_PUT
