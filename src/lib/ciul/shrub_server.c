@@ -1,14 +1,10 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
 /* X-SPDX-Copyright-Text: (c) Copyright 2023 Advanced Micro Devices, Inc. */
 
-/* Enable memfd_create */
-#define _GNU_SOURCE
-
 #include "ef_vi_internal.h"
 
 #include <etherfabric/shrub_server.h>
 #include <etherfabric/shrub_shared.h>
-#include <ci/tools/sysdep.h>
 
 #include "shrub_server_sockets.h"
 #include "shrub_connection.h"
@@ -254,7 +250,7 @@ static int server_connection_closed(struct ef_shrub_server* server,
   }
 
   if( connection->socket >= 0 ) {
-    ef_shrub_server_close_socket(connection->socket);
+    ef_shrub_server_close_fd(connection->socket);
     connection->socket = -1;
   }
 
@@ -283,13 +279,11 @@ int ef_shrub_server_open(struct ef_vi* vi,
   if( rc < 0 )
     goto fail_sockets;
 
-  rc = memfd_create("ef_shrub_client_fifo", 0);
-  if( rc < 0 ) {
-    rc = -errno;
+  rc = ef_shrub_server_memfd_create("ef_shrub_client_fifo", 0, false);
+  if( rc < 0 )
     goto fail_memfd;
-  }
-  server->client_fifo_fd = rc;
 
+  server->client_fifo_fd = rc;
   server->vi = vi;
   strncpy(server->socket_path, server_addr, sizeof(server->socket_path));
 
@@ -304,7 +298,7 @@ int ef_shrub_server_open(struct ef_vi* vi,
   return 0;
 
 fail_init_pd_token:
-  close(server->client_fifo_fd);
+  ef_shrub_server_close_fd(server->client_fifo_fd);
 fail_memfd:
   ef_shrub_server_sockets_close(&server->sockets);
 fail_sockets:
@@ -328,7 +322,7 @@ void ef_shrub_server_close(struct ef_shrub_server* server)
   for( i = 0; i < EF_VI_MAX_EFCT_RXQS; ++i )
     ef_shrub_queue_close(&server->queues[i]);
 
-  ef_shrub_server_close_socket(server->client_fifo_fd);
+  ef_shrub_server_close_fd(server->client_fifo_fd);
   server->vi->efct_rxqs.ops->cleanup(server->vi);
   ef_shrub_server_sockets_close(&server->sockets);
   if ( server->socket_path[0] != '\0' )

@@ -6,9 +6,6 @@
 #include "shrub_connection.h"
 #include "shrub_server_sockets.h"
 
-#include <unistd.h>
-#include <sys/mman.h>
-
 static struct ef_shrub_client_state*
 get_client_state(struct ef_shrub_connection* connection)
 {
@@ -30,13 +27,13 @@ ef_shrub_connection_alloc(int fifo_fd, size_t* fifo_offset, size_t fifo_size)
   if( connection == NULL )
     return NULL;
 
-  rc = ftruncate(fifo_fd, *fifo_offset + total_bytes);
+  rc = ef_shrub_server_memfd_resize(fifo_fd, *fifo_offset + total_bytes);
   if( rc < 0 )
     goto fail_fifo;
 
-  map = mmap(NULL, total_bytes, PROT_READ | PROT_WRITE,
-             MAP_SHARED | MAP_POPULATE, fifo_fd, *fifo_offset);
-  if( map == MAP_FAILED )
+  rc = ef_shrub_server_mmap(&map, total_bytes, PROT_READ | PROT_WRITE,
+                            MAP_SHARED | MAP_POPULATE, fifo_fd, *fifo_offset);
+  if( rc < 0 )
     goto fail_fifo;
 
   connection->fifo = map;

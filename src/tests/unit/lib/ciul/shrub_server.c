@@ -93,7 +93,7 @@ int ef_shrub_server_accept(struct ef_shrub_server_sockets* sockets)
   return ++last_accept_fd;
 }
 
-void ef_shrub_server_close_socket(int fd)
+void ef_shrub_server_close_fd(int fd)
 {
   calls->close++;
   calls->fd = fd;
@@ -146,6 +146,12 @@ void ef_shrub_queue_close(struct ef_shrub_queue* queue)
 void ef_shrub_queue_poll(struct ef_shrub_queue* queue)
 {
   // Probably should check when this is called
+}
+
+int ef_shrub_server_memfd_create(const char* name, size_t size, bool huge)
+{
+  // Probably should check when this is called
+  return 0;
 }
 
 struct ef_shrub_connection*

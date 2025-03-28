@@ -1,12 +1,10 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
 /* X-SPDX-Copyright-Text: (c) Copyright 2023 Advanced Micro Devices, Inc. */
 
-/* Enable memfd_create */
-#define _GNU_SOURCE
-
 #include "ef_vi_internal.h"
 #include "shrub_queue.h"
 #include "shrub_connection.h"
+#include "shrub_server_sockets.h"
 #include "bitfield.h"
 
 #include <etherfabric/internal/efct_uk_api.h> // for CI_HUGEPAGE_SIZE
@@ -62,12 +60,14 @@ static size_t buffer_total_bytes(struct ef_shrub_queue* queue)
 
 static int queue_map_fifo(struct ef_shrub_queue* queue)
 {
-  int i;
-  queue->fifo = mmap(NULL, fifo_bytes(queue), PROT_WRITE,
-                     MAP_SHARED | MAP_POPULATE,
-                     queue->shared_fds[EF_SHRUB_FD_SERVER_FIFO], 0);
-  if( queue->fifo == MAP_FAILED )
-    return -errno;
+  int i, rc;
+  void* map;
+  rc = ef_shrub_server_mmap(&map, fifo_bytes(queue), PROT_WRITE,
+                            MAP_SHARED | MAP_POPULATE,
+                            queue->shared_fds[EF_SHRUB_FD_SERVER_FIFO], 0);
+  if( rc < 0 )
+    return rc;
+  queue->fifo = map;
 
   for( i = 0; i < queue->fifo_size; ++i )
     queue->fifo[i] = EF_SHRUB_INVALID_BUFFER;
@@ -86,32 +86,22 @@ static int queue_alloc_buffers(struct ef_shrub_queue* queue)
 
 static int queue_alloc_shared(struct ef_shrub_queue* queue)
 {
-  int fd, rc;
+  int fd;
 
   queue->shared_fds[EF_SHRUB_FD_BUFFERS] = -1;
   queue->shared_fds[EF_SHRUB_FD_SERVER_FIFO] = -1;
 
-  fd = memfd_create("ef_shrub_buffer", MFD_HUGETLB);
+  fd = ef_shrub_server_memfd_create("ef_shrub_buffer",
+                                    buffer_total_bytes(queue), true);
   if( fd < 0 )
-    return -errno;
+    return fd;
   queue->shared_fds[EF_SHRUB_FD_BUFFERS] = fd;
 
-  rc = ftruncate(fd, buffer_total_bytes(queue));
-  if( rc < 0 )
-    return -errno;
-
-  fd = memfd_create("ef_shrub_server_fifo", 0);
+  fd = ef_shrub_server_memfd_create("ef_shrub_server_fifo",
+                                    fifo_bytes(queue), false);
   if( fd < 0 )
-    return -errno;
+    return fd;
   queue->shared_fds[EF_SHRUB_FD_SERVER_FIFO] = fd;
-
-  rc = ftruncate(fd, fifo_bytes(queue));
-  if( rc < 0 )
-    return -errno;
-
-  rc = fcntl(fd, F_SETFL, O_RDONLY);
-  if( rc < 0 )
-    return -errno;
 
   return 0;
 }
