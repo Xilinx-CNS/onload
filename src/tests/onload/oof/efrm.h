@@ -80,5 +80,8 @@ struct ooft_hwport;
 extern void ooft_client_hw_filter_matches_hwport(ci_dllist* in,
                                                  ci_dllist* out_matches,
                                                  struct ooft_hwport* hwport);
+extern int ooft_client_hw_filter_match(struct efx_filter_spec* spec1,
+                                       struct efx_filter_spec* spec2,
+                                       unsigned match_flags);
 
 #endif /* __OOF_TEST_EFRM_H__ */

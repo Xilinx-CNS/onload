@@ -13,6 +13,29 @@
 #include "oof_test.h"
 
 
+bool efrm_filter_insert_allowed(struct efrm_client *client, int *rxq,
+                                struct efx_filter_spec *spec)
+{
+  ci_dllink *link;
+  struct ooft_hw_filter *filter;
+
+  /* Always allow insert for non-ll nics */
+  if( (oo_nics[client->hwport].oo_nic_flags & OO_NIC_LL) == 0 )
+    return true;
+
+  /* Else check that if this filter matches an existing one, the rxq requested
+   * matches too. */
+  CI_DLLIST_FOR_EACH(link, &client->hw_filters_all) {
+    filter = CI_CONTAINER(struct ooft_hw_filter, all_link, link);
+    if( ooft_client_hw_filter_match(&filter->spec, spec, 0xffffffff) &&
+        filter->spec.dmaq_id != *rxq )
+      return false;
+  }
+
+  return true;
+}
+
+
 int efrm_filter_insert_common(struct efrm_client* client,
                               struct efx_filter_spec *spec, int *rxq,
                               unsigned pd_excl_owner,
@@ -23,6 +46,9 @@ int efrm_filter_insert_common(struct efrm_client* client,
   struct ooft_hw_filter* filter;
   ci_dllink* link;
   int rc = 0;
+
+  if( !efrm_filter_insert_allowed(client, rxq, spec) )
+    return -EPERM;
 
   LOG_FILTER_OP(ooft_log_hw_filter_op(client, spec, 0, op));
 

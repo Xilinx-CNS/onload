@@ -60,6 +60,11 @@ void tcp_helper_get_filter_params(tcp_helper_resource_t* trs,
                                   unsigned *exclusive_rxq_token)
 {
   *vi_id = tcp_helper_hwport_to_stack_id(trs, hwport);
+  /* At the moment we don't support replicating the shared queue behaviour
+   * so just pretend we always use a single exclusive queue matching our
+   * stack_id. */
+  if( oo_nics[hwport].oo_nic_flags & OO_NIC_LL )
+    *rxq = *vi_id;
 }
 
 int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
