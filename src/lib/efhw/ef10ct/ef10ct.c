@@ -1402,7 +1402,7 @@ static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in_data,
     /* Claim that we are now in the FREEING state, rather than making the
      * check in ef10ct_free_rxq too broad to be useful. */
     ef10ct_rxq->state = EF10CT_RXQ_STATE_FREEING;
-    EFHW_ERR("%s filter insert failed. Freeing rxq = %d", __func__, rxq);
+    EFHW_TRACE("%s filter insert failed. Freeing rxq = %x", __func__, rxq);
     ef10ct_free_rxq(params->nic, rxq);
     mutex_unlock(&ef10ct_rxq->bind_lock);
   }
