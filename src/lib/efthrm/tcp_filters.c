@@ -425,17 +425,21 @@ static unsigned oo_hw_filter_primary_ports(unsigned hwport_mask)
   return primary_mask;
 }
 
-static unsigned oo_hw_filter_fallback_ports(unsigned hwport_mask)
+static unsigned oo_hw_filter_fallback_ports(unsigned hwport_mask,
+                                            unsigned *no_fallback_mask)
 {
   int hwport;
   int fallback;
   unsigned fallback_mask = 0;
+  *no_fallback_mask = 0;
 
   while(hwport_mask) {
     hwport = ffs(hwport_mask) - 1;
     fallback = oo_nics[hwport].fallback_hwport;
     if( fallback >= 0 )
       fallback_mask |= 1u << fallback;
+    else
+      *no_fallback_mask |= 1u << hwport;
     hwport_mask &= ~(1u << hwport);
   }
 
@@ -453,6 +457,7 @@ int oo_hw_filter_add_hwports(struct oo_hw_filter* oofilter,
   bool ok_seen = false;
   unsigned install_ports = oo_hw_filter_primary_ports(hwport_mask);
   unsigned failed_ports = 0;
+  unsigned failed_without_fallback = 0;
 
   if( (src_flags & OO_HW_SRC_FLAG_KERNEL_REDIRECT) == 0 )
     ci_assert_nequal(oofilter->trs != NULL, oofilter->thc != NULL);
@@ -465,13 +470,19 @@ int oo_hw_filter_add_hwports(struct oo_hw_filter* oofilter,
   /* For any port that failed see if we have a fallback available. Try again
    * with any fallback ports. */
   if( failed_ports ) {
-    install_ports = oo_hw_filter_fallback_ports(failed_ports);
+    install_ports = oo_hw_filter_fallback_ports(failed_ports,
+                                                &failed_without_fallback);
     failed_ports = 0;
     if( hwport_mask ) {
       rc1 = __oo_hw_filter_add_hwports(oofilter, oo_filter_spec,
                                        set_vlan_mask, install_ports,
                                        redirect_mask, drop_hwport_mask,
                                        src_flags, &ok_seen, &failed_ports);
+      /* If the first attempt resulted in failure for exactly the set of
+       * ports that had a fallback available and that we've now successfully
+       * installed a filter for, record that as success. */
+      if( (failed_without_fallback == 0) && (failed_ports == 0) )
+        rc = 0;
       /* Preserve the most severe error seen over the two attempts */
       rc = oo_hw_filter_update_error(rc, rc1);
     }
