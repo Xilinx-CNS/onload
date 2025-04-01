@@ -31,8 +31,10 @@
 
 /* Forward declarations. */
 struct eflatency_vi;
-static inline void rx_wait_poll_evq(struct eflatency_vi*);
-static inline void rx_wait_poll_rx(struct eflatency_vi*);
+static inline void rx_wait_poll_evq(struct eflatency_vi*,
+                                    struct eflatency_vi* tx_vi);
+static inline void rx_wait_poll_rx(struct eflatency_vi*,
+                                   struct eflatency_vi* tx_vi);
 
 
 #define DEFAULT_PAYLOAD_SIZE  0
@@ -226,11 +228,13 @@ typedef struct {
 } test_t;
 
 static int
-generic_desc_check(struct eflatency_vi* vi, int wait);
+generic_desc_check(struct eflatency_vi* vi, struct eflatency_vi* tx_vi,
+                   int wait);
 
 static inline
 void poll_tx_and_wait_for_pkt(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi,
-                              void (*rx_wait)(struct eflatency_vi*))
+                              void (*rx_wait)(struct eflatency_vi*,
+                                              struct eflatency_vi*))
 {
   if( rx_vi->needs_rx_post )
     rx_post(&rx_vi->vi);
@@ -238,14 +242,14 @@ void poll_tx_and_wait_for_pkt(struct eflatency_vi* rx_vi, struct eflatency_vi* t
   /* Check once for a TX completion and then wait for packet.
    * If rx_vi == tx_vi we may observe received packet in poll on tx_vi
    * so only wait if initial poll doesn't see an RX event. */
-  if ( !generic_desc_check(tx_vi, 0) )
-    rx_wait(rx_vi);
+  if ( !generic_desc_check(tx_vi, tx_vi, 0) )
+    rx_wait(rx_vi, tx_vi);
 }
 
 
 static void
 generic_ping(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi,
-             void (*rx_wait)(struct eflatency_vi*),
+             void (*rx_wait)(struct eflatency_vi*, struct eflatency_vi*),
              void (*tx_send)(struct eflatency_vi*))
 {
   struct timeval start, end;
@@ -274,7 +278,7 @@ generic_ping(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi,
 
 static void
 generic_pong(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi,
-             void (*rx_wait)(struct eflatency_vi*),
+             void (*rx_wait)(struct eflatency_vi*, struct eflatency_vi*),
              void (*tx_send)(struct eflatency_vi*))
 {
   int i;
@@ -419,7 +423,7 @@ static inline void ctpio_send(struct eflatency_vi* vi)
       TRY(rc);
       break;
     }
-    generic_desc_check(vi, 0);
+    generic_desc_check(vi, vi, 0);
   }
 }
 
@@ -439,7 +443,8 @@ static const test_t ctpio_test = {
  * Returns 1 if RX event found, else 0
  */
 static int
-generic_desc_check(struct eflatency_vi* vi, int wait)
+generic_desc_check(struct eflatency_vi* vi, struct eflatency_vi *tx_vi,
+                   int wait)
 {
   /* We might exit with events read but unprocessed. */
   int i = vi->i;
@@ -490,7 +495,8 @@ generic_desc_check(struct eflatency_vi* vi, int wait)
         break;
       case EF_EVENT_TYPE_RX_DISCARD:
         if( EF_EVENT_RX_DISCARD_TYPE(evs[i]) == EF_EVENT_RX_DISCARD_CRC_BAD &&
-            (ef_vi_flags(&vi->vi) & EF_VI_TX_CTPIO) && ! cfg_ctpio_no_poison ) {
+            (ef_vi_flags(&tx_vi->vi) & EF_VI_TX_CTPIO) &&
+            ! cfg_ctpio_no_poison ) {
           /* Likely a poisoned frame caused by underrun.  A good copy will
            * follow.
            */
@@ -514,7 +520,8 @@ generic_desc_check(struct eflatency_vi* vi, int wait)
 }
 
 
-static void rx_wait_poll_rx(struct eflatency_vi* vi)
+static void rx_wait_poll_rx(struct eflatency_vi* vi,
+                            struct eflatency_vi* tx_vi)
 {
   ef_event ev;
 
@@ -546,9 +553,10 @@ static void rx_wait_poll_rx(struct eflatency_vi* vi)
 }
 
 
-static inline void rx_wait_poll_evq(struct eflatency_vi* vi)
+static inline void rx_wait_poll_evq(struct eflatency_vi* vi,
+                                    struct eflatency_vi* tx_vi)
 {
-  generic_desc_check(vi, 1);
+  generic_desc_check(vi, tx_vi, 1);
 }
 
 /**********************************************************************/
@@ -745,7 +753,7 @@ int main(int argc, char* argv[])
   const test_t* t;
   int iters_run = 0;
   struct eflatency_vi* tx_vi_ptr;
-  void (*rx_wait)(struct eflatency_vi*);
+  void (*rx_wait)(struct eflatency_vi*, struct eflatency_vi*);
   unsigned long rx_min_page_size;
   unsigned long min_page_size;
   unsigned long can_rx_poll;
