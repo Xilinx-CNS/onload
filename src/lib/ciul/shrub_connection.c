@@ -13,8 +13,9 @@ ef_shrub_connection_client_state(struct ef_shrub_connection* connection)
                  connection->fifo_size * sizeof(ef_shrub_buffer_id));
 }
 
-struct ef_shrub_connection*
-ef_shrub_connection_alloc(int fifo_fd, size_t* fifo_offset, size_t fifo_size)
+int
+ef_shrub_connection_alloc(struct ef_shrub_connection** connection_out,
+                          int fifo_fd, size_t* fifo_offset, size_t fifo_size)
 {
   int i, rc;
   struct ef_shrub_connection* connection;
@@ -25,7 +26,7 @@ ef_shrub_connection_alloc(int fifo_fd, size_t* fifo_offset, size_t fifo_size)
 
   connection = calloc(1, sizeof(struct ef_shrub_connection));
   if( connection == NULL )
-    return NULL;
+    return -ENOMEM;
 
   rc = ef_shrub_server_memfd_resize(fifo_fd, *fifo_offset + total_bytes);
   if( rc < 0 )
@@ -44,11 +45,12 @@ ef_shrub_connection_alloc(int fifo_fd, size_t* fifo_offset, size_t fifo_size)
   for( i = 0; i < fifo_size; ++i )
     connection->fifo[i] = EF_SHRUB_INVALID_BUFFER;
 
-  return connection;
+  *connection_out = connection;
+  return 0;
 
 fail_fifo:
   free(connection);
-  return NULL;
+  return rc;
 }
 
 int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection)

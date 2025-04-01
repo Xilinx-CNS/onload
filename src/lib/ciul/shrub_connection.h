@@ -24,8 +24,9 @@ struct ef_shrub_connection {
   ef_shrub_buffer_id* fifo;
 };
 
-struct ef_shrub_connection*
-ef_shrub_connection_alloc(int fifo_fd, size_t* fifo_offset, size_t fifo_size);
+int
+ef_shrub_connection_alloc(struct ef_shrub_connection** connection_out,
+                          int fifo_fd, size_t* fifo_offset, size_t fifo_size);
 
 int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection);
 

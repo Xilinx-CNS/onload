@@ -141,13 +141,12 @@ static int server_connection_opened(struct ef_shrub_server* server)
 
   connection = server->closed_connections;
   if( connection == NULL ) {
-    connection = ef_shrub_connection_alloc(server->client_fifo_fd,
-                                           &server->client_fifo_offset,
-                                           fifo_size(server));
-    if( connection == NULL ) {
-      rc = -1; /* TODO propogate connection_alloc's rc */
-      return 0;
-    }
+    rc = ef_shrub_connection_alloc(&connection,
+                                   server->client_fifo_fd,
+                                   &server->client_fifo_offset,
+                                   fifo_size(server));
+    if( rc < 0 )
+      return rc;
   }
   else {
     server->closed_connections = connection->next;

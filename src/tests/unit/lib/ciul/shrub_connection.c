@@ -88,9 +88,11 @@ int ef_shrub_server_sendmsg(int fd, struct msghdr* msg)
 /* Tests */
 void test_shrub_connection(void)
 {
+  int rc;
   size_t offset = fifo_offset;
-  struct ef_shrub_connection* connection =
-    ef_shrub_connection_alloc(client_fifo_fd, &offset, fifo_size);
+  struct ef_shrub_connection* connection;
+  rc = ef_shrub_connection_alloc(&connection, client_fifo_fd, &offset, fifo_size);
+  CHECK(rc, ==, 0);
   CHECK(offset, ==, new_offset);
   CHECK(connection, !=, NULL);
   CHECK(connection->next, ==, NULL);

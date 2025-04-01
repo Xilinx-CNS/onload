@@ -154,12 +154,13 @@ int ef_shrub_server_memfd_create(const char* name, size_t size, bool huge)
   return 0;
 }
 
-struct ef_shrub_connection*
-ef_shrub_connection_alloc(int fifo_fd, size_t* fifo_offset, size_t fifo_size)
+int
+ef_shrub_connection_alloc(struct ef_shrub_connection** connection_out,
+                          int fifo_fd, size_t* fifo_offset, size_t fifo_size)
 {
-  struct ef_shrub_connection* connection;
-  connection = calloc(1, sizeof(struct ef_shrub_connection));
-  return connection;
+  *connection_out = calloc(1, sizeof(struct ef_shrub_connection));
+  CHECK(*connection_out, !=, NULL);
+  return 0;
 }
 
 static struct ef_shrub_connection*
