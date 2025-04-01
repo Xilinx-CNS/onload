@@ -2082,6 +2082,9 @@ static size_t efx_x4_describe_stats(struct efx_nic *efx, u8 *names)
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 	DECLARE_BITMAP(mask, EF10_STAT_COUNT) = {};
 
+	if (!efx_nic_port_handle_supported(efx))
+		return efx_ef10_describe_stats(efx, names);
+
 	efx_x4_get_stat_mask(efx, mask);
 	return efx_nic_describe_stats(nic_data->x4_stat_desc, EF10_STAT_COUNT,
 				      mask, names);

@@ -1689,7 +1689,7 @@ int efx_x4_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings)
 		window = timespec64_sub(timeset[ngood].host_end,
 					timeset[ngood].host_start);
 		timeset[ngood].window = timespec64_to_ktime(window);
-		if (timeset[ngood].window > SYNCHRONISATION_GRANULARITY_NS) {
+		if (timeset[ngood].window > MAX_SYNCHRONISATION_NS) {
 			++ptp->sw_stats.invalid_sync_windows;
 		} else {
 			diff = timespec64_sub(mc_time,
