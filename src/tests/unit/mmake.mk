@@ -30,6 +30,7 @@ ALL_UNIT_TESTS := \
   lib/ciul/efct_ubufs \
   lib/ciul/shrub_connection \
   lib/ciul/shrub_pool \
+  lib/ciul/shrub_queue \
   lib/ciul/shrub_server \
 
 # The tests to be run, and their corresponding files

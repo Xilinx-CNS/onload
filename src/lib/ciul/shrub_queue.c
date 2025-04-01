@@ -115,7 +115,23 @@ static void release_buffer(struct ef_shrub_queue* queue, int buffer_index)
 {
   struct ef_shrub_queue_buffer* buffer = &queue->buffers[buffer_index];
   if( --buffer->ref_count == 0 ) {
-    queue->fifo[buffer->fifo_index] = EF_SHRUB_INVALID_BUFFER;
+    /* Remove all FIFO entries older than the buffer being freed. All
+     * clients must have taken these (or they wouldn't be releasing a later
+     * buffer), and we don't want a client holding on to a buffer to prevent
+     * the FIFO from refilling. */
+    if( buffer->fifo_index >= 0 ) {
+      int remove_fifo_index = buffer->fifo_index;
+      while( remove_fifo_index != queue->fifo_index ) {
+        ef_shrub_buffer_id id = queue->fifo[remove_fifo_index];
+        if( id != EF_SHRUB_INVALID_BUFFER ) {
+          int remove_buffer_index = get_buffer_index(id);
+          queue->buffers[remove_buffer_index].fifo_index = -1;
+          queue->fifo[remove_fifo_index] = EF_SHRUB_INVALID_BUFFER;
+        }
+        remove_fifo_index = prev_fifo_index(queue, remove_fifo_index);
+      }
+    }
+
     queue->vi->efct_rxqs.ops->free(queue->vi, queue->ix, buffer_index);
   }
 }
@@ -159,6 +175,7 @@ static void poll_fifo(struct ef_shrub_queue* queue)
       break;
 
     int fifo_index = queue->fifo_index;
+    assert(queue->fifo[fifo_index] == EF_SHRUB_INVALID_BUFFER);
     queue->fifo[fifo_index] = set_buffer_id(buffer_index, sentinel);
 
     struct ef_shrub_queue_buffer* buffer = &queue->buffers[buffer_index];
@@ -180,11 +197,13 @@ int ef_shrub_queue_open(struct ef_shrub_queue* queue,
 {
   int rc;
 
+  memset(queue, 0, sizeof(*queue));
   queue->shared_fds[EF_SHRUB_FD_CLIENT_FIFO] = client_fifo_fd;
   queue->buffer_bytes = buffer_bytes;
   queue->buffer_count = buffer_count;
   queue->fifo_size = fifo_size;
   queue->qid = qid;
+  queue->vi = vi;
 
   rc = queue_alloc_buffers(queue);
   if( rc < 0 )
@@ -246,12 +265,19 @@ void ef_shrub_queue_attached(struct ef_shrub_queue* queue,
    * scan forwards from there to find the synchronisation point. */
   while( queue->fifo[prev_index] != EF_SHRUB_INVALID_BUFFER ) {
     fifo_index = prev_index;
-    prev_index = prev_fifo_index(queue, fifo_index);
 
     /* Take a reference to this buffer */
     ef_shrub_buffer_id buffer_id = queue->fifo[fifo_index];
     assert(buffer_id != EF_SHRUB_INVALID_BUFFER);
     queue->buffers[get_buffer_index(buffer_id)].ref_count++;
+
+    /* This should never happen since the FIFO should never be completely full,
+     * but we shouldn't loop forever if it does happen somehow. */
+    assert(fifo_index != queue->fifo_index);
+    if( fifo_index == queue->fifo_index )
+      break; /* The queue is full and we've reached the oldest buffer */
+
+    prev_index = prev_fifo_index(queue, fifo_index);
   }
 
   queue->connection_count++;

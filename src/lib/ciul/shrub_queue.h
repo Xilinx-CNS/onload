@@ -7,6 +7,7 @@
 #define __CI_CIUL_SHRUB_QUEUE_H__
 
 #include <stddef.h>
+#include <stdint.h>
 #include <etherfabric/shrub_shared.h>
 
 struct ef_shrub_queue {
