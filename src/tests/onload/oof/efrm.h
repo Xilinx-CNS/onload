@@ -16,7 +16,13 @@ struct ooft_hw_filter {
   int filter_id;
   int hwport;
   struct efx_filter_spec spec;
+
+  /* Used for test management to specify what filters are expected to be
+   * acted upon. */
   ci_dllink client_link;
+
+  /* Used to track all active filters */
+  ci_dllink all_link;
 };
 
 struct efrm_client {
@@ -30,6 +36,8 @@ struct efrm_client {
   ci_dllist hw_filters_removed;
 
   ci_dllist hw_filters_bad_add;
+
+  ci_dllist hw_filters_all;
 };
 
 #define HW_FILTER_FROM_LINK(link) \

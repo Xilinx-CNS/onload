@@ -24,6 +24,8 @@ void ooft_init_efrm_client(struct efrm_client* client, int hwport)
 
   ci_dllist_init(&client->hw_filters_bad_add);
 
+  ci_dllist_init(&client->hw_filters_all);
+
   client->filter_id = 0;
   client->hwport = hwport;
   oo_nics[hwport].efrm_client = client;
