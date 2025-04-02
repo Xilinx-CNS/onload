@@ -1,17 +1,54 @@
 This is not a supported release version of Onload
 =================================================
 
-SDCI placeholder - add more details here when we decide whether we advertise
-the inclusion of SDCI here.
+
+Onload-9.1.x
+============
+
+ This is an update release of Onload to fix various bugs in
+ OpenOnload-9.0.1.86, add a new version of the sfc net driver
+ and update the supported operating system list.
+
+ Please see the ChangeLog for a full list of changes.
+
+
+Linux distribution support
+--------------------------
+
+ This package can be installed on:
+ - Red Hat Enterprise Linux 8.6 - 8.10
+ - Red Hat Enterprise Linux 9.2 - 9.6
+ - Red Hat Enterprise Linux 10.0
+ - Canonical Ubuntu Server LTS 22.04 and 24.04
+ - Debian 12 "Bookworm"
+ - Linux kernels 5.11 - 6.14
+
+
+New ef_receive_poll() API call
+------------------------------
+
+In this update release, the ef_vi API gains a facility to poll for
+receives separately from transmissions, for potential latency improvements
+in some situations.
+
+
+SDCI
+----
+
+Support for SDCI is available when compiled in.
+
 
 Max TXQs placeholder - Express datapath maximum number of TX queues is limited
 to 128.
 
+
 X2 RX Timestamping with very old firmware versions
 --------------------------------------------------
+
 A workaround for handling v7.1 firmware on X2 has been removed, which would
 lead to inaccurate timestamps if that firmware was in use. Anyone use this
 outdated firmware should update to a supported version.
+
 
 Onload-9.0.1.86
 ===============
