@@ -37,8 +37,17 @@ SDCI
 Support for SDCI is available when compiled in.
 
 
-Max TXQs placeholder - Express datapath maximum number of TX queues is limited
-to 128.
+X4 Functionality
+----------------
+- Currently only 128 TXQs are available on the Express datapath
+- NIC reset is not handled
+- Shared queues are not available
+- Filter handling when interfaces change state does not operate correctly
+
+ef_vi Compatibility
+-------------------
+The ef_vi interface is still under development. As such there are no binary
+compatibility guarantees either backwards or forwards.
 
 
 X2 RX Timestamping with very old firmware versions
