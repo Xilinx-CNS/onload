@@ -15,6 +15,11 @@
   typedef void efhw_efct_rxq_free_func_t(struct efhw_efct_rxq*);
 #endif
 
+/* Avoid dragging the full efhw_types.h header into the ZF unit test build. */
+#ifdef __KERNEL__
+  #include <ci/efhw/efhw_types.h>
+#endif
+
 extern struct efhw_func_ops efct_char_functional_units;
 
 struct efhw_efct_rxq;
