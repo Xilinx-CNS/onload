@@ -1,7 +1,20 @@
-onload-9.0.2
+onload-9.1~s1a [Unreleased]
+--------------
+
+Update sfc net driver to v6.1.0.1003
+
+Changes:
+
+ON-15741: some legacy sample applications removed
+ON-16277: allow physical addressing mode selection in eflatency
+ON-16329: allow eflatency to parse payload length list as input
+ON-16330: Handle sending ICMP over CTPIO
+
+
+onload-9.0.2 [Unreleased]
 ------------
 
-Update sfc net driver to v6.0.2.1007
+Update sfc net driver to v6.0.2.1008
 
 Add support for:
  - Red Hat Enterprise Linux 10.0
