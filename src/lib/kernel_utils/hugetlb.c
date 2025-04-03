@@ -307,11 +307,28 @@ EXPORT_SYMBOL(oo_hugetlb_pages_prealloc);
 loff_t
 oo_hugetlb_page_offset(struct page *page)
 {
-	/* In Linux 6.7+, the huge page ->index is in the PAGE_SIZE and not in
-	 * the 2 MiB units. The patch series that makes that change also removes
-	 * the hugetlb_basepage_index() function so that we can use it for the
-	 * conditional compilation. */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,0,0) && ! defined(EFRM_HUGETLB_HAS_BASEPAGE_INDEX)
+	/* Historically, page->index was expressed in the huge page size units.
+	 * Then, it changed to the PAGE_SIZE units. We use the presence of the
+	 * hugetlb_basepage_index() function as a marker of this transition,
+	 * also taking into consideration the Linux version to disambiguate
+	 * between the first and the third rows in the table below:
+	 *
+	 * +------------------+-------------------+--------------------------+
+	 * |    Linux version | page->index units | hugetlb_basepage_index() |
+	 * +------------------+-------------------+--------------------------+
+	 * |            < 5.4 |        Huge pages |          Not implemented |
+	 * +------------------+-------------------+--------------------------+
+	 * | 5.4 <= and < 6.7 |        Huge pages |              Implemented |
+	 * +------------------+-------------------+--------------------------+
+	 * |           >= 6.7 |         PAGE_SIZE |          Not implemented |
+	 * +------------------+-------------------+--------------------------+
+	 *
+	 * One complexity comes from the RHEL kernel 5.14 with the backported
+	 * transition to PAGE_SIZE and removal of hugetlb_basepage_index(),
+	 * which happened in the vanilla Linux 6.7. Thus, in the expression
+	 * below, we compare the current Linux version with 5.14 and not 6.7.
+	 */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0) && ! defined(EFRM_HUGETLB_HAS_BASEPAGE_INDEX)
 	return page->index * PAGE_SIZE;
 #else
 	return page->index * OO_HUGEPAGE_SIZE;
