@@ -813,6 +813,21 @@ static void efx_init_features(struct efx_nic *efx)
 	 */
 	net_dev->features &= ~NETIF_F_HW_VLAN_CTAG_FILTER;
 	net_dev->features |= efx->fixed_features;
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NETDEV_XDP_FEATURES)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP)
+	net_dev->xdp_features |= NETDEV_XDP_ACT_BASIC;
+#endif
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_REDIR)
+	net_dev->xdp_features |= NETDEV_XDP_ACT_REDIRECT;
+	net_dev->xdp_features |= NETDEV_XDP_ACT_NDO_XMIT;
+#endif
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+#if defined(CONFIG_XDP_SOCKETS)
+	net_dev->xdp_features |= NETDEV_XDP_ACT_XSK_ZEROCOPY;
+#endif
+#endif
+#endif
 }
 
 static int efx_register_netdev(struct efx_nic *efx)

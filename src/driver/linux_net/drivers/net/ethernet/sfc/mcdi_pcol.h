@@ -2923,6 +2923,13 @@
  * indicating the current NIC time
  */
 #define          MC_CMD_PTP_OP_TIME_EVENT_SUBSCRIBE_V2 0x1c
+/* enum: For X4 and later NICs. Packet timestamps and time sync events have
+ * IS_SET and IN_SYNC flags, that indicates whether time is updated and if it
+ * is in sync with host. Once set, IN_SYNC flag is cleared by hardware after a
+ * software configurable time out. Host driver need to query what is set and
+ * what is maximum supported interval, this MCDI can be used to query these.
+ */
+#define          MC_CMD_PTP_OP_GET_SYNC_TIMEOUT 0x1d
 
 /* MC_CMD_PTP_IN_ENABLE msgrequest */
 #define    MC_CMD_PTP_IN_ENABLE_LEN 16
@@ -3412,6 +3419,13 @@
 #define       MC_CMD_PTP_IN_SET_SYNC_STATUS_RESERVED1_OFST 20
 #define       MC_CMD_PTP_IN_SET_SYNC_STATUS_RESERVED1_LEN 4
 
+/* MC_CMD_PTP_IN_GET_SYNC_TIMEOUT msgrequest */
+#define    MC_CMD_PTP_IN_GET_SYNC_TIMEOUT_LEN 8
+/*            MC_CMD_PTP_IN_CMD_OFST 0 */
+/*            MC_CMD_PTP_IN_CMD_LEN 4 */
+/*            MC_CMD_PTP_IN_PERIPH_ID_OFST 4 */
+/*            MC_CMD_PTP_IN_PERIPH_ID_LEN 4 */
+
 /* MC_CMD_PTP_OUT msgresponse */
 #define    MC_CMD_PTP_OUT_LEN 0
 
@@ -3810,6 +3824,15 @@
 
 /* MC_CMD_PTP_OUT_SET_SYNC_STATUS msgresponse */
 #define    MC_CMD_PTP_OUT_SET_SYNC_STATUS_LEN 0
+
+/* MC_CMD_PTP_OUT_GET_SYNC_TIMEOUT msgresponse */
+#define    MC_CMD_PTP_OUT_GET_SYNC_TIMEOUT_LEN 8
+/* Current value set in NIC, in seconds */
+#define       MC_CMD_PTP_OUT_GET_SYNC_TIMEOUT_CURRENT_OFST 0
+#define       MC_CMD_PTP_OUT_GET_SYNC_TIMEOUT_CURRENT_LEN 4
+/* Maximum supported by NIC, in seconds */
+#define       MC_CMD_PTP_OUT_GET_SYNC_TIMEOUT_MAXIMUM_OFST 4
+#define       MC_CMD_PTP_OUT_GET_SYNC_TIMEOUT_MAXIMUM_LEN 4
 
 
 /***********************************/
@@ -7647,6 +7670,12 @@
 #define        MC_CMD_NVRAM_INFO_V2_OUT_A_B_OFST 12
 #define        MC_CMD_NVRAM_INFO_V2_OUT_A_B_LBN 7
 #define        MC_CMD_NVRAM_INFO_V2_OUT_A_B_WIDTH 1
+#define        MC_CMD_NVRAM_INFO_V2_OUT_WRITE_ONLY_OFST 12
+#define        MC_CMD_NVRAM_INFO_V2_OUT_WRITE_ONLY_LBN 8
+#define        MC_CMD_NVRAM_INFO_V2_OUT_WRITE_ONLY_WIDTH 1
+#define        MC_CMD_NVRAM_INFO_V2_OUT_SEQUENTIAL_WRITE_OFST 12
+#define        MC_CMD_NVRAM_INFO_V2_OUT_SEQUENTIAL_WRITE_LBN 9
+#define        MC_CMD_NVRAM_INFO_V2_OUT_SEQUENTIAL_WRITE_WIDTH 1
 #define       MC_CMD_NVRAM_INFO_V2_OUT_PHYSDEV_OFST 16
 #define       MC_CMD_NVRAM_INFO_V2_OUT_PHYSDEV_LEN 4
 #define       MC_CMD_NVRAM_INFO_V2_OUT_PHYSADDR_OFST 20
@@ -7994,6 +8023,128 @@
 #define          MC_CMD_NVRAM_VERIFY_RC_BUNDLE_COMPONENT_COPY_FAILED 0x19
 /* enum: The update operation is in-progress. */
 #define          MC_CMD_NVRAM_VERIFY_RC_PENDING 0x1a
+/* enum: The update was an invalid user configuration file. */
+#define          MC_CMD_NVRAM_VERIFY_RC_BAD_CONFIG 0x1b
+/* enum: The write was to the AUTO partition but the data was not recognised as
+ * a valid partition.
+ */
+#define          MC_CMD_NVRAM_VERIFY_RC_UNKNOWN_TYPE 0x1c
+
+/* MC_CMD_NVRAM_UPDATE_FINISH_V3_OUT msgresponse */
+#define    MC_CMD_NVRAM_UPDATE_FINISH_V3_OUT_LEN 88
+/* Result of nvram update completion processing. Result codes that indicate an
+ * internal build failure and therefore not expected to be seen by customers in
+ * the field are marked with a prefix 'Internal-error'.
+ */
+#define       MC_CMD_NVRAM_UPDATE_FINISH_V3_OUT_RESULT_CODE_OFST 0
+#define       MC_CMD_NVRAM_UPDATE_FINISH_V3_OUT_RESULT_CODE_LEN 4
+/* enum: Invalid return code; only non-zero values are defined. Defined as
+ * unknown for backwards compatibility with NVRAM_UPDATE_FINISH_OUT.
+ */
+/*               MC_CMD_NVRAM_VERIFY_RC_UNKNOWN 0x0 */
+/* enum: Verify succeeded without any errors. */
+/*               MC_CMD_NVRAM_VERIFY_RC_SUCCESS 0x1 */
+/* enum: CMS format verification failed due to an internal error. */
+/*               MC_CMD_NVRAM_VERIFY_RC_CMS_CHECK_FAILED 0x2 */
+/* enum: Invalid CMS format in image metadata. */
+/*               MC_CMD_NVRAM_VERIFY_RC_INVALID_CMS_FORMAT 0x3 */
+/* enum: Message digest verification failed due to an internal error. */
+/*               MC_CMD_NVRAM_VERIFY_RC_MESSAGE_DIGEST_CHECK_FAILED 0x4 */
+/* enum: Error in message digest calculated over the reflash-header, payload
+ * and reflash-trailer.
+ */
+/*               MC_CMD_NVRAM_VERIFY_RC_BAD_MESSAGE_DIGEST 0x5 */
+/* enum: Signature verification failed due to an internal error. */
+/*               MC_CMD_NVRAM_VERIFY_RC_SIGNATURE_CHECK_FAILED 0x6 */
+/* enum: There are no valid signatures in the image. */
+/*               MC_CMD_NVRAM_VERIFY_RC_NO_VALID_SIGNATURES 0x7 */
+/* enum: Trusted approvers verification failed due to an internal error. */
+/*               MC_CMD_NVRAM_VERIFY_RC_TRUSTED_APPROVERS_CHECK_FAILED 0x8 */
+/* enum: The Trusted approver's list is empty. */
+/*               MC_CMD_NVRAM_VERIFY_RC_NO_TRUSTED_APPROVERS 0x9 */
+/* enum: Signature chain verification failed due to an internal error. */
+/*               MC_CMD_NVRAM_VERIFY_RC_SIGNATURE_CHAIN_CHECK_FAILED 0xa */
+/* enum: The signers of the signatures in the image are not listed in the
+ * Trusted approver's list.
+ */
+/*               MC_CMD_NVRAM_VERIFY_RC_NO_SIGNATURE_MATCH 0xb */
+/* enum: The image contains a test-signed certificate, but the adapter accepts
+ * only production signed images.
+ */
+/*               MC_CMD_NVRAM_VERIFY_RC_REJECT_TEST_SIGNED 0xc */
+/* enum: The image has a lower security level than the current firmware. */
+/*               MC_CMD_NVRAM_VERIFY_RC_SECURITY_LEVEL_DOWNGRADE 0xd */
+/* enum: Internal-error. The signed image is missing the 'contents' section,
+ * where the 'contents' section holds the actual image payload to be applied.
+ */
+/*               MC_CMD_NVRAM_VERIFY_RC_CONTENT_NOT_FOUND 0xe */
+/* enum: Internal-error. The bundle header is invalid. */
+/*               MC_CMD_NVRAM_VERIFY_RC_BUNDLE_CONTENT_HEADER_INVALID 0xf */
+/* enum: Internal-error. The bundle does not have a valid reflash image layout.
+ */
+/*               MC_CMD_NVRAM_VERIFY_RC_BUNDLE_REFLASH_IMAGE_INVALID 0x10 */
+/* enum: Internal-error. The bundle has an inconsistent layout of components or
+ * incorrect checksum.
+ */
+/*               MC_CMD_NVRAM_VERIFY_RC_BUNDLE_IMAGE_LAYOUT_INVALID 0x11 */
+/* enum: Internal-error. The bundle manifest is inconsistent with components in
+ * the bundle.
+ */
+/*               MC_CMD_NVRAM_VERIFY_RC_BUNDLE_MANIFEST_INVALID 0x12 */
+/* enum: Internal-error. The number of components in a bundle do not match the
+ * number of components advertised by the bundle manifest.
+ */
+/*               MC_CMD_NVRAM_VERIFY_RC_BUNDLE_MANIFEST_NUM_COMPONENTS_MISMATCH 0x13 */
+/* enum: Internal-error. The bundle contains too many components for the MC
+ * firmware to process
+ */
+/*               MC_CMD_NVRAM_VERIFY_RC_BUNDLE_MANIFEST_TOO_MANY_COMPONENTS 0x14 */
+/* enum: Internal-error. The bundle manifest has an invalid/inconsistent
+ * component.
+ */
+/*               MC_CMD_NVRAM_VERIFY_RC_BUNDLE_MANIFEST_COMPONENT_INVALID 0x15 */
+/* enum: Internal-error. The hash of a component does not match the hash stored
+ * in the bundle manifest.
+ */
+/*               MC_CMD_NVRAM_VERIFY_RC_BUNDLE_MANIFEST_COMPONENT_HASH_MISMATCH 0x16 */
+/* enum: Internal-error. Component hash calculation failed. */
+/*               MC_CMD_NVRAM_VERIFY_RC_BUNDLE_MANIFEST_COMPONENT_HASH_FAILED 0x17 */
+/* enum: Internal-error. The component does not have a valid reflash image
+ * layout.
+ */
+/*               MC_CMD_NVRAM_VERIFY_RC_BUNDLE_COMPONENT_REFLASH_IMAGE_INVALID 0x18 */
+/* enum: The bundle processing code failed to copy a component to its target
+ * partition.
+ */
+/*               MC_CMD_NVRAM_VERIFY_RC_BUNDLE_COMPONENT_COPY_FAILED 0x19 */
+/* enum: The update operation is in-progress. */
+/*               MC_CMD_NVRAM_VERIFY_RC_PENDING 0x1a */
+/* enum: The update was an invalid user configuration file. */
+/*               MC_CMD_NVRAM_VERIFY_RC_BAD_CONFIG 0x1b */
+/* enum: The write was to the AUTO partition but the data was not recognised as
+ * a valid partition.
+ */
+/*               MC_CMD_NVRAM_VERIFY_RC_UNKNOWN_TYPE 0x1c */
+/* If the update was a user configuration, what action(s) the user must take to
+ * apply the new configuration.
+ */
+#define       MC_CMD_NVRAM_UPDATE_FINISH_V3_OUT_ACTIONS_REQUIRED_OFST 4
+#define       MC_CMD_NVRAM_UPDATE_FINISH_V3_OUT_ACTIONS_REQUIRED_LEN 4
+/* enum: No action required. */
+#define          MC_CMD_NVRAM_UPDATE_FINISH_V3_OUT_NONE 0x0
+/* enum: The MC firmware must be rebooted (eg with MC_CMD_REBOOT). */
+#define          MC_CMD_NVRAM_UPDATE_FINISH_V3_OUT_FIRMWARE_REBOOT 0x1
+/* enum: The host must be rebooted. */
+#define          MC_CMD_NVRAM_UPDATE_FINISH_V3_OUT_HOST_REBOOT 0x2
+/* enum: The firmware and host must be rebooted (in either order). */
+#define          MC_CMD_NVRAM_UPDATE_FINISH_V3_OUT_FIRMWARE_AND_HOST_REBOOT 0x3
+/* enum: The host must be fully powered off. */
+#define          MC_CMD_NVRAM_UPDATE_FINISH_V3_OUT_HOST_POWERCYCLE 0x4
+/* If the update failed with MC_CMD_NVRAM_VERIFY_RC_BAD_CONFIG, a null-
+ * terminated US-ASCII string suitable for showing to the user.
+ */
+#define       MC_CMD_NVRAM_UPDATE_FINISH_V3_OUT_ERROR_STRING_OFST 8
+#define       MC_CMD_NVRAM_UPDATE_FINISH_V3_OUT_ERROR_STRING_LEN 80
 
 
 /***********************************/
@@ -10227,6 +10378,102 @@
 #define       MC_CMD_GET_MODULE_DATA_OUT_DATA_MAXNUM 248
 #define       MC_CMD_GET_MODULE_DATA_OUT_DATA_MAXNUM_MCDI2 1016
 
+/* EVENT_MASK structuredef */
+#define    EVENT_MASK_LEN 4
+#define       EVENT_MASK_TYPE_OFST 0
+#define       EVENT_MASK_TYPE_LEN 4
+/* enum: PORT_LINKCHANGE event is enabled */
+#define          EVENT_MASK_PORT_LINKCHANGE 0x0
+/* enum: PORT_MODULECHANGE event is enabled */
+#define          EVENT_MASK_PORT_MODULECHANGE 0x1
+#define       EVENT_MASK_TYPE_LBN 0
+#define       EVENT_MASK_TYPE_WIDTH 32
+
+
+/***********************************/
+/* MC_CMD_SET_NETPORT_EVENTS_MASK
+ */
+#define MC_CMD_SET_NETPORT_EVENTS_MASK 0x1e9
+#undef MC_CMD_0x1e9_PRIVILEGE_CTG
+
+#define MC_CMD_0x1e9_PRIVILEGE_CTG SRIOV_CTG_LINK
+
+/* MC_CMD_SET_NETPORT_EVENTS_MASK_IN msgrequest: Enable or disable delivery of
+ * specified network port events for a given port identified by PORT_HANDLE. At
+ * start of day, or after any control interface reset (FLR, ENTITY_RESET,
+ * etc.), all event delivery is disabled for all ports associated with the
+ * control interface.
+ */
+#define    MC_CMD_SET_NETPORT_EVENTS_MASK_IN_LEN 8
+/* Handle to port to set event delivery mask. */
+#define       MC_CMD_SET_NETPORT_EVENTS_MASK_IN_PORT_HANDLE_OFST 0
+#define       MC_CMD_SET_NETPORT_EVENTS_MASK_IN_PORT_HANDLE_LEN 4
+/* Bitmask of events to enable. Event delivery is enabled when corresponding
+ * bit is 1, disabled when 0.
+ */
+#define       MC_CMD_SET_NETPORT_EVENTS_MASK_IN_EVENT_MASK_OFST 4
+#define       MC_CMD_SET_NETPORT_EVENTS_MASK_IN_EVENT_MASK_LEN 4
+/* enum property: bitshift */
+/*            Enum values, see field(s): */
+/*               EVENT_MASK/TYPE */
+
+/* MC_CMD_SET_NETPORT_EVENTS_MASK_OUT msgresponse */
+#define    MC_CMD_SET_NETPORT_EVENTS_MASK_OUT_LEN 0
+
+
+/***********************************/
+/* MC_CMD_GET_NETPORT_EVENTS_MASK
+ */
+#define MC_CMD_GET_NETPORT_EVENTS_MASK 0x1ea
+#undef MC_CMD_0x1ea_PRIVILEGE_CTG
+
+#define MC_CMD_0x1ea_PRIVILEGE_CTG SRIOV_CTG_LINK
+
+/* MC_CMD_GET_NETPORT_EVENTS_MASK_IN msgrequest: Get event delivery mask a
+ * given port identified by PORT_HANDLE.
+ */
+#define    MC_CMD_GET_NETPORT_EVENTS_MASK_IN_LEN 4
+/* Handle to port to get event deliver mask for. */
+#define       MC_CMD_GET_NETPORT_EVENTS_MASK_IN_PORT_HANDLE_OFST 0
+#define       MC_CMD_GET_NETPORT_EVENTS_MASK_IN_PORT_HANDLE_LEN 4
+
+/* MC_CMD_GET_NETPORT_EVENTS_MASK_OUT msgresponse */
+#define    MC_CMD_GET_NETPORT_EVENTS_MASK_OUT_LEN 4
+/* Bitmask of events enabled. Event delivery is enabled when corresponding bit
+ * is 1, disabled when 0.
+ */
+#define       MC_CMD_GET_NETPORT_EVENTS_MASK_OUT_EVENT_MASK_OFST 0
+#define       MC_CMD_GET_NETPORT_EVENTS_MASK_OUT_EVENT_MASK_LEN 4
+/* enum property: bitshift */
+/*            Enum values, see field(s): */
+/*               EVENT_MASK/TYPE */
+
+
+/***********************************/
+/* MC_CMD_GET_SUPPORTED_NETPORT_EVENTS
+ */
+#define MC_CMD_GET_SUPPORTED_NETPORT_EVENTS 0x1eb
+#undef MC_CMD_0x1eb_PRIVILEGE_CTG
+
+#define MC_CMD_0x1eb_PRIVILEGE_CTG SRIOV_CTG_LINK
+
+/* MC_CMD_GET_SUPPORTED_NETPORT_EVENTS_IN msgrequest: Get network port events
+ * supported by the platform. Information returned is fixed for a given NIC
+ * platform.
+ */
+#define    MC_CMD_GET_SUPPORTED_NETPORT_EVENTS_IN_LEN 0
+
+/* MC_CMD_GET_SUPPORTED_NETPORT_EVENTS_OUT msgresponse */
+#define    MC_CMD_GET_SUPPORTED_NETPORT_EVENTS_OUT_LEN 4
+/* Bitmask of events enabled. Event delivery is enabled when corresponding bit
+ * is 1, disabled when 0.
+ */
+#define       MC_CMD_GET_SUPPORTED_NETPORT_EVENTS_OUT_EVENT_MASK_OFST 0
+#define       MC_CMD_GET_SUPPORTED_NETPORT_EVENTS_OUT_EVENT_MASK_LEN 4
+/* enum property: bitshift */
+/*            Enum values, see field(s): */
+/*               EVENT_MASK/TYPE */
+
 
 /***********************************/
 /* MC_CMD_GET_NETPORT_STATISTICS
@@ -10383,6 +10630,8 @@
 #define          NVRAM_PARTITION_TYPE_NMC_LOG 0x700
 /* enum: Non-volatile log output of second core on dual-core device */
 #define          NVRAM_PARTITION_TYPE_LOG_SLAVE 0x701
+/* enum: RAM (volatile) log output partition */
+#define          NVRAM_PARTITION_TYPE_RAM_LOG 0x702
 /* enum: Device state dump output partition */
 #define          NVRAM_PARTITION_TYPE_DUMP 0x800
 /* enum: Crash log partition for NMC firmware */
@@ -10519,6 +10768,16 @@
 #define          NVRAM_PARTITION_TYPE_SUC_SOC_CONFIG 0x1f07
 /* enum: System-on-Chip update information. */
 #define          NVRAM_PARTITION_TYPE_SOC_UPDATE 0x2003
+/* enum: Virtual partition. Write-only. Writes will actually be sent to BUNDLE
+ * partition (if the data starts with the magic number for a bundle update) or
+ * to the user configuration (if the data is ascii text), or discarded with an
+ * error if neither.
+ */
+#define          NVRAM_PARTITION_TYPE_AUTO 0x2100
+/* enum: MC/NMC (first stage) bootloader firmware. (For X4, see XN-202072-PS
+ * and XN-202084-SW section 3.1).
+ */
+#define          NVRAM_PARTITION_TYPE_BOOTLOADER 0x2200
 /* enum: Start of reserved value range (firmware may use for any purpose) */
 #define          NVRAM_PARTITION_TYPE_RESERVED_VALUES_MIN 0xff00
 /* enum: End of reserved value range (firmware may use for any purpose) */

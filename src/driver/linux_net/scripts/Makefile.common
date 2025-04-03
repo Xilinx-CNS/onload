@@ -81,7 +81,7 @@ $(obj)/.kpath: FORCE
 
 ifdef srctree
 define filechk_autocompat.h
-	$(src)/kernel_compat.sh -k $(srctree) -o "$(srctree)" $(if $(filter 1,$(V)),-v,-q)
+	$(src)/kernel_compat.sh -k $(srctree) -o "$(realpath $(objtree))" $(if $(filter 1,$(V)),-v,-q)
 endef
 else
 ifdef KBUILD_SRC

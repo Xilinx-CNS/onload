@@ -92,7 +92,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.0.2.1007"
+#define EFX_DRIVER_VERSION	"6.0.2.1008"
 #endif
 
 #ifdef DEBUG
@@ -2227,6 +2227,8 @@ struct mae_mport_desc;
  * @always_rx_scatter: NIC will always scatter packets to multiple buffers
  * @option_descriptors: NIC supports TX option descriptors
  * @copy_break: driver datapath may perform TX copy break
+ * @flash_auto_partition: firmware flash uses AUTO partition, driver does
+ *	not need to perform image parsing
  * @supported_interrupt_modes: A set of flags denoting which interrupt
  *	modes are supported, denoted by a bitshift by values in &enum
  *	efx_init_mode.
@@ -2486,6 +2488,7 @@ struct efx_nic_type {
 	bool always_rx_scatter;
 	bool option_descriptors;
 	bool copy_break;
+	bool flash_auto_partition;
 	unsigned int supported_interrupt_modes;
 	unsigned int timer_period_max;
 #ifdef EFX_NOT_UPSTREAM

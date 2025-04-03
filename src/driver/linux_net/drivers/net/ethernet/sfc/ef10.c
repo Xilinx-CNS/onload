@@ -6153,6 +6153,7 @@ const struct efx_nic_type efx_x4_vf_nic_type = {
 	.always_rx_scatter = true,
 	.option_descriptors = true,
 	.copy_break = true,
+	.flash_auto_partition = true,
 	.supported_interrupt_modes = BIT(EFX_INT_MODE_MSIX),
 	.timer_period_max = 1 << ERF_DD_EVQ_IND_TIMER_VAL_WIDTH,
 #ifdef EFX_NOT_UPSTREAM
@@ -6547,6 +6548,7 @@ const struct efx_nic_type efx_x4_nic_type = {
 	.always_rx_scatter = true,
 	.option_descriptors = true,
 	.copy_break = true,
+	.flash_auto_partition = true,
 	.supported_interrupt_modes = BIT(EFX_INT_MODE_MSIX),
 	.timer_period_max = 1 << ERF_DD_EVQ_IND_TIMER_VAL_WIDTH,
 #ifdef EFX_NOT_UPSTREAM
