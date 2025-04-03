@@ -179,6 +179,9 @@ EFRM_HAVE_FOLLOW_PTE_VMA symtype follow_pte include/linux/mm.h int(struct vm_are
 EFRM_HAVE_LINUX_TPH_H 			file	include/linux/pci-tph.h
 EFRM_HAVE_GET_FILE_RCU_FUNC symtype get_file_rcu include/linux/fs.h struct file*(struct file __rcu **)
 
+EFX_NEED_NETDEV_HOLD		nsymbol	netdev_hold		include/linux/netdevice.h
+EFX_HAVE_DEV_HOLD_TRACK		symbol	dev_hold_track		include/linux/netdevice.h
+
 # TODO move onload-related stuff from net kernel_compat
 " | grep -E -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
