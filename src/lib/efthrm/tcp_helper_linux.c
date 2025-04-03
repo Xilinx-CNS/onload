@@ -495,6 +495,7 @@ static int linux_tcp_helper_fop_close(struct inode* inode, struct file* filp)
   ci_private_t* priv = filp->private_data;
   int rc;
   OO_DEBUG_TCPH(ci_log("%s:", __FUNCTION__));
+  ci_assert_equal(priv->_filp, filp);
   generic_tcp_helper_close(priv);
   rc = oo_fop_release(inode, filp);
   OO_DEBUG_TCPH(ci_log("%s: done", __FUNCTION__));
@@ -513,6 +514,7 @@ static int linux_tcp_helper_fop_close_pipe(struct inode* inode,
   OO_DEBUG_TCPH(ci_log("%s:", __FUNCTION__));
   ci_assert_equal(SP_TO_WAITABLE(&trs->netif, ep->id)->state,
                   CI_TCP_STATE_PIPE);
+  ci_assert_equal(priv->_filp, filp);
 
   /* Set flag to indicate that we've closed one end of the pipe. */
   ep_aflags = tcp_helper_endpoint_set_aflags(ep, OO_THR_EP_AFLAG_PEER_CLOSED);

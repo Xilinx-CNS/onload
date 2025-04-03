@@ -7122,9 +7122,6 @@ void generic_tcp_helper_close(ci_private_t* priv)
     linux_tcp_helper_fop_fasync(-1, priv->_filp, 0);
   }
 
- if( priv->fd_flags & OO_FDFLAG_EP_ALIEN )
-    fput(priv->_filp);
-
 #if CI_CFG_FD_CACHING
   /* We don't close the endpoint for something in the cache.  The socket will
    * either be accepted, then freed as normal, or freed on removal from the
