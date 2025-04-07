@@ -17,8 +17,8 @@
 
 pthread_mutex_t citp_pkt_map_lock = PTHREAD_MUTEX_INITIALIZER;
 
-/* Returns MAP_FAILED (that is, (void*) -1) on failure. */
-static void* __ci_pkt_buf_map(ci_netif* ni, off_t offset)
+/* Returns 0 and sets *p on success, or returns negative error on failure. */
+static int __ci_pkt_buf_map(ci_netif* ni, off_t offset, void** p)
 {
   oo_pkt_buf_map_t arg;
   int rc;
@@ -28,9 +28,10 @@ static void* __ci_pkt_buf_map(ci_netif* ni, off_t offset)
                       OO_IOC_PKT_BUF_MMAP, &arg);
 
   if( rc != 0 )
-    return MAP_FAILED;
+    return rc;
 
-  return CI_USER_PTR_GET(arg.addr);
+  *p = CI_USER_PTR_GET(arg.addr);
+  return 0;
 }
 
 ci_ip_pkt_fmt* __ci_netif_pkt(ci_netif* ni, unsigned id)
@@ -38,7 +39,7 @@ ci_ip_pkt_fmt* __ci_netif_pkt(ci_netif* ni, unsigned id)
   int rc;
   ci_ip_pkt_fmt* pkt = 0;
   unsigned setid = id >> CI_CFG_PKTS_PER_SET_S;
-  void *p;
+  void *p = NULL;
 
   ci_assert(id != (unsigned)(-1));
 
@@ -50,10 +51,10 @@ ci_ip_pkt_fmt* __ci_netif_pkt(ci_netif* ni, unsigned id)
 
 #if CI_CFG_PKTS_AS_HUGE_PAGES
   if( ni->packets->set[setid].page_offset >= 0 ) {
-    p = __ci_pkt_buf_map(ni, ni->packets->set[setid].page_offset);
-    if( p == (void *)-1) {
-      if( errno == EACCES ) {
-        ci_log("Failed to mmap packet buffer for [%s] with errno=EACCES.\n"
+    rc = __ci_pkt_buf_map(ni, ni->packets->set[setid].page_offset, &p);
+    if( rc < 0 ) {
+      if( rc == -EACCES ) {
+        ci_log("Failed to mmap packet buffer for [%s] with rc=-EACCES.\n"
                "Probably, you are using this stack from processes with "
                "different UIDs.\n"
                "Try either allowing user stack sharing: EF_SHARE_WITH=-1\n"
@@ -61,8 +62,9 @@ ci_ip_pkt_fmt* __ci_netif_pkt(ci_netif* ni, unsigned id)
                ni->state->pretty_name);
       }
       else {
-        ci_log("%s: mmap(0x%016lx) failed for pkt set %d (%d)", __FUNCTION__,
-               ni->packets->set[setid].page_offset, setid, -errno);
+        ci_log("%s: mmap(0x%016lx) failed for pkt set %d rc=%d (%s)",
+               __FUNCTION__, ni->packets->set[setid].page_offset, setid, rc,
+               strerror(-rc));
       }
       goto out;
     }
