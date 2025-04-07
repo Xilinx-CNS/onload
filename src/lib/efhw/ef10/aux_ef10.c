@@ -20,6 +20,7 @@
 #include <ci/internal/transport_config_opt.h>
 #include <ci/driver/resource/linux_efhw_nic.h>
 #include <ci/driver/resource/driverlink.h>
+#include <lib/efhw/aux.h>
 
 
 /* Determines whether a known NIC is equivalent to one that would be
@@ -313,6 +314,10 @@ static int ef10_probe(struct auxiliary_device *auxdev,
                 __func__, id->name);
     return -EPERM;
   }
+
+  rc = efhw_check_aux_abi_version(edev, id);
+  if( rc )
+    return rc;
 
   client = edev->onload_ops->base_ops->open(auxdev, &ef10_handler,
                                             EFX_AUXDEV_ALL_EVENTS);

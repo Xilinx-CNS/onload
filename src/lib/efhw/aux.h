@@ -55,5 +55,20 @@ efhw_nic_release_auxdev(struct efhw_nic* nic, struct efx_auxdev_client* cli)
   put_device((dev)); \
 }
 
+static inline int
+efhw_check_aux_abi_version(const struct efx_auxdev *edev,
+                           const struct auxiliary_device_id *id) {
+  if ( !efx_aux_abi_version_is_compat(edev->abi_version) ) {
+    EFHW_ERR("Auxbus ABI version mismatch. %s requires %u.%u. %s has %u.%u.",
+             KBUILD_MODNAME, EFX_AUX_ABI_VERSION_MAJOR_GET(edev->abi_version),
+             EFX_AUX_ABI_VERSION_MINOR_GET(edev->abi_version),
+             id->name, EFX_AUX_ABI_VERSION_MAJOR,
+             EFX_AUX_ABI_VERSION_MINOR);
+    return -EPROTO;
+  }
+
+  return 0;
+}
+
 #endif
 

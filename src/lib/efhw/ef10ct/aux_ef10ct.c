@@ -7,6 +7,7 @@
 #include <ci/efhw/ef10ct.h>
 #include <ci/efhw/efct_filters.h>
 #include <ci/efhw/iopage.h>
+#include <lib/efhw/aux.h>
 
 #include "linux_resource_internal.h"
 #include "efrm_internal.h"
@@ -293,14 +294,9 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
   union efx_auxiliary_param_value val;
   int rc, i, shared_n = 0;
 
-  if ( !efx_aux_abi_version_is_compat(edev->abi_version) ) {
-    EFHW_ERR("Auxbus ABI version mismatch. %s requires %u.%u. Auxdev has %u.%u.",
-             KBUILD_MODNAME, EFX_AUX_ABI_VERSION_MAJOR_GET(edev->abi_version),
-             EFX_AUX_ABI_VERSION_MINOR_GET(edev->abi_version),
-             EFX_AUX_ABI_VERSION_MAJOR,
-             EFX_AUX_ABI_VERSION_MINOR);
-    return -EPROTO;
-  }
+  rc = efhw_check_aux_abi_version(edev, id);
+  if( rc )
+    return rc;
 
   ef10ct = vzalloc(sizeof(*ef10ct));
   if( ! ef10ct )
