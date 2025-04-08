@@ -151,7 +151,8 @@ EFRM_HAVE_GET_RANDOM_U32	symbol get_random_u32	include/linux/random.h
 EFRM_HUGETLB_FILE_SETUP		symtype	hugetlb_file_setup	include/linux/hugetlb.h	struct file *(const char *, size_t, vm_flags_t, int, int)
 EFRM_HUGETLB_FILE_SETUP_UCOUNTS	symtype	hugetlb_file_setup	include/linux/hugetlb.h	struct file *(const char *, size_t, vm_flags_t, struct ucounts **, int, int)
 EFRM_HUGETLB_FILE_SETUP_USER	symtype	hugetlb_file_setup	include/linux/hugetlb.h	struct file *(const char *, size_t, vm_flags_t, struct user_struct**, int, int)
-EFRM_HUGETLB_HAS_BASEPAGE_INDEX	symbol	hugetlb_basepage_index	include/linux/pagemap.h
+EFRM_HAS_HUGETLB_BASEPAGE_INDEX	symbol	hugetlb_basepage_index	include/linux/pagemap.h
+EFRM_HAS_FILEMAP_LOCK_HUGETLB_FOLIO symbol	filemap_lock_hugetlb_folio	include/linux/hugetlb.h
 
 EFRM_CLASS_CREATE_NO_MODULE symtype class_create include/linux/device/class.h struct class *(const char *)
 
