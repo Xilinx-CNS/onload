@@ -309,26 +309,13 @@ oo_hugetlb_page_offset(struct page *page)
 {
 	/* Historically, page->index was expressed in the huge page size units.
 	 * Then, it changed to the PAGE_SIZE units. We use the presence of the
-	 * hugetlb_basepage_index() function as a marker of this transition,
-	 * also taking into consideration the Linux version to disambiguate
-	 * between the first and the third rows in the table below:
-	 *
-	 * +------------------+-------------------+--------------------------+
-	 * |    Linux version | page->index units | hugetlb_basepage_index() |
-	 * +------------------+-------------------+--------------------------+
-	 * |            < 5.4 |        Huge pages |          Not implemented |
-	 * +------------------+-------------------+--------------------------+
-	 * | 5.4 <= and < 6.7 |        Huge pages |              Implemented |
-	 * +------------------+-------------------+--------------------------+
-	 * |           >= 6.7 |         PAGE_SIZE |          Not implemented |
-	 * +------------------+-------------------+--------------------------+
-	 *
-	 * One complexity comes from the RHEL kernel 5.14 with the backported
-	 * transition to PAGE_SIZE and removal of hugetlb_basepage_index(),
-	 * which happened in the vanilla Linux 6.7. Thus, in the expression
-	 * below, we compare the current Linux version with 5.14 and not 6.7.
+	 * hugetlb_basepage_index() function as a marker of this transition.
+	 * We also use the presence of filemap_lock_hugetlb_folio() to
+	 * distinguish between older Linux kernels (< 5.4) and newer (>= 6.7
+	 * for vanilla, and >= 5.14 for RHEL 9.6) where hugetlb_basepage_index()
+	 * was not present.
 	 */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0) && ! defined(EFRM_HUGETLB_HAS_BASEPAGE_INDEX)
+#if defined(EFRM_HAS_FILEMAP_LOCK_HUGETLB_FOLIO) && ! defined(EFRM_HAS_HUGETLB_BASEPAGE_INDEX)
 	return page->index * PAGE_SIZE;
 #else
 	return page->index * OO_HUGEPAGE_SIZE;
