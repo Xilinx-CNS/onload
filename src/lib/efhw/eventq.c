@@ -89,6 +89,17 @@ efhw_handle_timeout_event(struct efhw_nic *nic, unsigned instance, int budget)
 	return nic->ev_handlers->timeout_fn(nic, instance, budget);
 }
 
+int
+efhw_handle_efct_rxq_flushed(struct efhw_nic *nic, unsigned instance)
+{
+	if (!nic->ev_handlers->efct_rxq_flushed_fn) {
+		EFHW_WARN("%s: no handler registered", __func__);
+		return 0;
+	}
+
+	return nic->ev_handlers->efct_rxq_flushed_fn(nic, instance);
+}
+
 /**********************************************************************
  * Kernel event queue event handling.
  */

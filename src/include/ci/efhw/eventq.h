@@ -49,11 +49,14 @@ struct efhw_ev_handler {
 	int (*wakeup_fn)(struct efhw_nic *nic, unsigned, int);
 	int (*timeout_fn)(struct efhw_nic *nic, unsigned, int);
 	int (*dmaq_flushed_fn) (struct efhw_nic *, unsigned, int, int);
+	int (*efct_rxq_flushed_fn) (struct efhw_nic *, unsigned);
 };
 
 extern int efhw_handle_txdmaq_flushed(struct efhw_nic *, unsigned);
 extern int efhw_handle_rxdmaq_flushed(struct efhw_nic *, unsigned, int);
 extern int efhw_handle_wakeup_event(struct efhw_nic *, unsigned, int);
 extern int efhw_handle_timeout_event(struct efhw_nic *, unsigned, int);
+
+extern int efhw_handle_efct_rxq_flushed(struct efhw_nic *, unsigned);
 
 #endif /* __CI_EFHW_EVENTQ_H__ */
