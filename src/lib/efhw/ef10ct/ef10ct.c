@@ -268,20 +268,24 @@ static int ef10ct_check_for_flushes_common(struct efhw_nic_ef10ct_evq *evq)
   return 0;
 }
 
-static void ef10ct_check_for_flushes_polled(struct work_struct *work)
+static int ef10ct_check_for_flushes(struct efhw_nic *nic, unsigned evq_num)
 {
   struct efhw_nic_ef10ct_evq *evq;
+  struct efhw_nic_ef10ct *ef10ct;
   int rc;
 
-  evq = container_of(work, struct efhw_nic_ef10ct_evq,
-                     check_flushes_polled.work);
+  ef10ct = nic->arch_extra;
+  evq = &ef10ct->evq[evq_num];
 
   rc = ef10ct_check_for_flushes_common(evq);
-  if (rc == -EAGAIN) {
-    EFHW_ERR("%s: WARNING: No flush found, scheduling delayed work",
-             __FUNCTION__);
-    schedule_delayed_work(&evq->check_flushes_polled, 100);
-  }
+
+  /* re-prime the evq for any future interrupts */
+  efhw_nic_wakeup_request(evq->nic, NULL, evq->queue_num, evq->next);
+
+  if (rc == -EAGAIN)
+    rc = 0;
+
+  return rc;
 }
 
 static void ef10ct_check_for_flushes_irq(struct work_struct *work)
@@ -677,8 +681,6 @@ ef10ct_nic_event_queue_enable(struct efhw_nic *nic,
     ef10ct_evq->capacity = efhw_params->evq_size;
     ef10ct_evq->queue_num = evq_num;
     atomic_set(&ef10ct_evq->queues_flushing, 0);
-    INIT_DELAYED_WORK(&ef10ct_evq->check_flushes_polled,
-                      ef10ct_check_for_flushes_polled);
     INIT_DELAYED_WORK(&ef10ct_evq->check_flushes_irq,
                       ef10ct_check_for_flushes_irq);
   }
@@ -713,7 +715,6 @@ ef10ct_nic_event_queue_disable(struct efhw_nic *nic,
    * still be a work item scheduled. We want to avoid it rescheduling if so.
    */
   atomic_set(&ef10ct_evq->queues_flushing, -1);
-  cancel_delayed_work_sync(&ef10ct_evq->check_flushes_polled);
   cancel_delayed_work_sync(&ef10ct_evq->check_flushes_irq);
 
   EFHW_MCDI_INITIALISE_BUF(in);
@@ -1104,8 +1105,6 @@ static int ef10ct_fini_rxq(struct efhw_nic *nic, int rxq_num)
   ef10ct_evq = &ef10ct->evq[ef10ct_get_queue_num(evq_id)];
 
   atomic_inc(&ef10ct_evq->queues_flushing);
-  if (!ef10ct_is_shared_evq(nic, ef10ct_get_queue_num(evq_id)))
-    schedule_delayed_work(&ef10ct_evq->check_flushes_polled, 0);
 
   return rc;
 }
@@ -1414,7 +1413,6 @@ ef10ct_flush_tx_dma_channel(struct efhw_nic *nic,
   rc = ef10ct_fw_rpc(nic, &rpc);
 
   atomic_inc(&ef10ct_evq->queues_flushing);
-  schedule_delayed_work(&ef10ct_evq->check_flushes_polled, 0);
 
   return rc;
 }
@@ -1998,6 +1996,7 @@ struct efhw_func_ops ef10ct_char_functional_units = {
   .irq_alloc = ef10ct_irq_alloc,
   .irq_free = ef10ct_irq_free,
   .set_vi_tlp_processing = ef10ct_mcdi_cmd_set_vi_tlp_processing,
+  .check_for_flushes = ef10ct_check_for_flushes,
 };
 
 #endif
