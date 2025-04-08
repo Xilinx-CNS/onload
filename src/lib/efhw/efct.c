@@ -842,6 +842,23 @@ static void efct_check_for_flushes(struct work_struct *work)
   }
 }
 
+static int efct_nic_check_for_flushes(struct efhw_nic *nic, unsigned evq_num)
+{
+  struct efhw_nic_efct_evq *efct_evq;
+  struct efhw_nic_efct *efct;
+
+  efct = nic->arch_extra;
+  efct_evq = &efct->evq[evq_num];
+
+  efct_check_for_flushes(&efct_evq->check_flushes.work);
+
+  /* Technically this should re-prime the evq, but for X3 nics there is at most
+   * one queue attached to this evq so we can get away with not doing anything
+   */
+
+  return 0;
+}
+
 
 static int efct_flush_tx_dma_channel(struct efhw_nic *nic, uint dmaq, uint evq)
 {
@@ -852,12 +869,11 @@ static int efct_flush_tx_dma_channel(struct efhw_nic *nic, uint dmaq, uint evq)
   struct efhw_nic_efct_evq *efct_evq = &efct->evq[evq];
   int rc = 0;
 
+  atomic_inc(&efct_evq->queues_flushing);
+
   EFCT_PRE(dev, edev, cli, nic, rc);
   edev->ops->free_txq(cli, dmaq);
   EFCT_POST(dev, edev, cli, nic, rc);
-
-  atomic_inc(&efct_evq->queues_flushing);
-  schedule_delayed_work(&efct_evq->check_flushes, 0);
 
   return 0;
 }
@@ -1224,6 +1240,7 @@ struct efhw_func_ops efct_char_functional_units = {
   .shared_rxq_request_wakeup = efct_nic_shared_rxq_request_wakeup,
   .irq_alloc = efct_nic_irq_alloc,
   .irq_free = efct_nic_irq_free,
+  .check_for_flushes = efct_nic_check_for_flushes,
 };
 
 #endif
