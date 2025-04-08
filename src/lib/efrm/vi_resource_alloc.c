@@ -1720,6 +1720,8 @@ int  efrm_vi_alloc(struct efrm_client *client,
 		}
 	}
 
+	INIT_LIST_HEAD(&virs->efct_rxq_list);
+
 	rc = efrm_vi_io_map(virs, client->nic,
 			    virs->allocation.instance);
 	if (rc < 0) {

@@ -19,6 +19,8 @@ struct efrm_efct_rxq {
 	struct efrm_vi *vi;
 	struct efhw_efct_rxq hw;
 	struct work_struct free_work;
+
+	struct list_head vi_link;
 };
 
 #if CI_HAVE_EFCT_COMMON
@@ -259,6 +261,7 @@ int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix, bool timestamp_req,
 	efrm_resource_init(&rxq->rs, EFRM_RESOURCE_EFCT_RXQ, 0);
 	efrm_client_add_resource(vi_rs->rs_client, &rxq->rs);
 	efrm_resource_ref(vi_rs);
+	list_add_tail(&rxq->vi_link, &vi->efct_rxq_list);
 	if( shm_ix >= 0 )
 	  efrm_init_debugfs_efct_rxq(rxq);
 	*rxq_out = rxq;
@@ -291,6 +294,7 @@ void efrm_rxq_release(struct efrm_efct_rxq *rxq)
 			efrm_fini_debugfs_efct_rxq(rxq);
 			rxq->vi->efct_shm->active_qs &= ~(1ull << shm_ix);
 		}
+		list_del(&rxq->vi_link);
 		efhw_nic_shared_rxq_unbind(rxq->rs.rs_client->nic, &rxq->hw,
 					   free_rxq);
 		/* caution! rxq may have been freed now */
