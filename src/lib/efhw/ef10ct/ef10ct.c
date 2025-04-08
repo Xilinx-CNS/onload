@@ -1246,6 +1246,7 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
 out_good:
   ef10ct->rxq[rxq_num].ref_count++;
   params->rxq->qid = rxq_num;
+  params->rxq->shared_evq = !real_evq;
 out_locked:
   mutex_unlock(&ef10ct->rxq[rxq_num].bind_lock);
   return rc;

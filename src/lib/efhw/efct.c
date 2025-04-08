@@ -76,6 +76,9 @@ efct_nic_rxq_bind(struct efhw_nic *nic, struct efhw_shared_bind_params *params)
   EFCT_POST(dev, edev, cli, nic, rc);
 
   efct_unprovide_hugetlb_alloc();
+
+  params->rxq->shared_evq = true;
+
   return rc;
 }
 
