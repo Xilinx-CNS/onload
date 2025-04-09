@@ -375,8 +375,6 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
 
 
 static const struct auxiliary_device_id ef10ct_id_table[] = {
-  { .name = "sfc." EFX_LLCT_DEVNAME, },
-  { .name = "efct_test." EFX_LLCT_DEVNAME ".test", },
   {},
 };
 MODULE_DEVICE_TABLE(auxiliary, ef10ct_id_table);
