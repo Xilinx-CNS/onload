@@ -9560,6 +9560,10 @@
 #define          MC_CMD_STAT_ID_MAC 0x2
 /* enum: Network port PHY statistics. */
 #define          MC_CMD_STAT_ID_PHY 0x3
+/* enum: Network port packet memory (PM) statistics. */
+#define          MC_CMD_STAT_ID_PM 0x4
+/* enum: Network port RXDP statistics. */
+#define          MC_CMD_STAT_ID_RXDP 0x5
 #define       MC_CMD_STAT_ID_SOURCE_ID_LBN 0
 #define       MC_CMD_STAT_ID_SOURCE_ID_WIDTH 16
 #define       MC_CMD_STAT_ID_MARKER_STAT_ID_OFST 2
@@ -9720,6 +9724,51 @@
 #define          MC_CMD_STAT_ID_FEC_CORRECTED_SYMBOLS_LANE3 0x6
 #define       MC_CMD_STAT_ID_PHY_STAT_ID_LBN 16
 #define       MC_CMD_STAT_ID_PHY_STAT_ID_WIDTH 16
+/* Include packet memory (PM) stats. */
+#define       MC_CMD_STAT_ID_PM_STAT_ID_OFST 2
+#define       MC_CMD_STAT_ID_PM_STAT_ID_LEN 2
+/* enum property: index */
+/* enum: PM discard_vfifo_full counter. */
+#define          MC_CMD_STAT_ID_PM_DISCARD_VFIFO_FULL 0x1
+/* enum: PM discard_qbb counter. */
+#define          MC_CMD_STAT_ID_PM_DISCARD_QBB 0x2
+/* enum: PM discard_mapping counter. */
+#define          MC_CMD_STAT_ID_PM_DISCARD_MAPPING 0x3
+#define       MC_CMD_STAT_ID_PM_STAT_ID_LBN 16
+#define       MC_CMD_STAT_ID_PM_STAT_ID_WIDTH 16
+/* Include RXDP stats. */
+#define       MC_CMD_STAT_ID_RXDP_STAT_ID_OFST 2
+#define       MC_CMD_STAT_ID_RXDP_STAT_ID_LEN 2
+/* enum property: index */
+/* enum: RXDP counter: Number of packets dropped due to the queue being
+ * disabled.
+ */
+#define          MC_CMD_STAT_ID_RXDP_Q_DISABLED_PKTS 0x1
+/* enum: RXDP counter: Number of packets dropped by the DICPU. */
+#define          MC_CMD_STAT_ID_RXDP_DI_DROPPED_PKTS 0x2
+/* enum: RXDP counter: Number of non-host packets. */
+#define          MC_CMD_STAT_ID_RXDP_STREAMING_PKTS 0x3
+/* enum: RXDP counter: Number of times an hlb descriptor fetch was performed.
+ */
+#define          MC_CMD_STAT_ID_RXDP_HLB_FETCH_CONDITIONS 0x4
+/* enum: RXDP counter: Number of times the DPCPU waited for an existing
+ * descriptor fetch.
+ */
+#define          MC_CMD_STAT_ID_RXDP_HLB_WAIT_CONDITIONS 0x5
+/* enum: RXDP counter: Number of packets truncated because scattering was
+ * disabled.
+ */
+#define          MC_CMD_STAT_ID_RXDP_SCATTER_DISABLED_TRUNC 0x6
+/* enum: RXDP counter: Number of times the RXDP head of line blocked waiting
+ * for descriptors. Will be zero unless RXDP_HLB_IDLE capability is set.
+ */
+#define          MC_CMD_STAT_ID_RXDP_HLB_IDLE 0x7
+/* enum: RXDP counter: Number of times the RXDP timed out while head of line
+ * blocking. Will be zero unless RXDP_HLB_IDLE capability is set.
+ */
+#define          MC_CMD_STAT_ID_RXDP_HLB_TIMEOUT 0x8
+#define       MC_CMD_STAT_ID_RXDP_STAT_ID_LBN 16
+#define       MC_CMD_STAT_ID_RXDP_STAT_ID_WIDTH 16
 
 /* MC_CMD_STAT_DESC structuredef: Structure describing the layout and size of
  * the stats DMA buffer descriptor.
@@ -9747,6 +9796,14 @@
 #define       MC_CMD_STAT_DESC_STAT_ID_PHY_STAT_ID_LEN 2
 #define       MC_CMD_STAT_DESC_STAT_ID_PHY_STAT_ID_LBN 16
 #define       MC_CMD_STAT_DESC_STAT_ID_PHY_STAT_ID_WIDTH 16
+#define       MC_CMD_STAT_DESC_STAT_ID_PM_STAT_ID_OFST 2
+#define       MC_CMD_STAT_DESC_STAT_ID_PM_STAT_ID_LEN 2
+#define       MC_CMD_STAT_DESC_STAT_ID_PM_STAT_ID_LBN 16
+#define       MC_CMD_STAT_DESC_STAT_ID_PM_STAT_ID_WIDTH 16
+#define       MC_CMD_STAT_DESC_STAT_ID_RXDP_STAT_ID_OFST 2
+#define       MC_CMD_STAT_DESC_STAT_ID_RXDP_STAT_ID_LEN 2
+#define       MC_CMD_STAT_DESC_STAT_ID_RXDP_STAT_ID_LBN 16
+#define       MC_CMD_STAT_DESC_STAT_ID_RXDP_STAT_ID_WIDTH 16
 /* Index of the statistic in the DMA buffer. */
 #define       MC_CMD_STAT_DESC_STAT_INDEX_OFST 4
 #define       MC_CMD_STAT_DESC_STAT_INDEX_LEN 2
@@ -13171,6 +13228,37 @@
 #define       MC_CMD_FILTER_OP_EXT_OUT_HANDLE_HI_WIDTH 32
 /*            Enum values, see field(s): */
 /*               MC_CMD_FILTER_OP_OUT/HANDLE */
+
+/* MC_CMD_FILTER_OP_EXT_V2_OUT msgresponse */
+#define    MC_CMD_FILTER_OP_EXT_V2_OUT_LEN 16
+/* identifies the type of operation requested */
+#define       MC_CMD_FILTER_OP_EXT_V2_OUT_OP_OFST 0
+#define       MC_CMD_FILTER_OP_EXT_V2_OUT_OP_LEN 4
+/*            Enum values, see field(s): */
+/*               MC_CMD_FILTER_OP_EXT_IN/OP */
+/* Returned filter handle (for insert / subscribe operations). Note that these
+ * handles should be considered opaque to the host, although a value of
+ * 0xFFFFFFFF_FFFFFFFF is guaranteed never to be a valid handle.
+ */
+#define       MC_CMD_FILTER_OP_EXT_V2_OUT_HANDLE_OFST 4
+#define       MC_CMD_FILTER_OP_EXT_V2_OUT_HANDLE_LEN 8
+#define       MC_CMD_FILTER_OP_EXT_V2_OUT_HANDLE_LO_OFST 4
+#define       MC_CMD_FILTER_OP_EXT_V2_OUT_HANDLE_LO_LEN 4
+#define       MC_CMD_FILTER_OP_EXT_V2_OUT_HANDLE_LO_LBN 32
+#define       MC_CMD_FILTER_OP_EXT_V2_OUT_HANDLE_LO_WIDTH 32
+#define       MC_CMD_FILTER_OP_EXT_V2_OUT_HANDLE_HI_OFST 8
+#define       MC_CMD_FILTER_OP_EXT_V2_OUT_HANDLE_HI_LEN 4
+#define       MC_CMD_FILTER_OP_EXT_V2_OUT_HANDLE_HI_LBN 64
+#define       MC_CMD_FILTER_OP_EXT_V2_OUT_HANDLE_HI_WIDTH 32
+/*            Enum values, see field(s): */
+/*               MC_CMD_FILTER_OP_OUT/HANDLE */
+/* identifies the format of the handle returned. */
+#define       MC_CMD_FILTER_OP_EXT_V2_OUT_HANDLE_FORMAT_OFST 12
+#define       MC_CMD_FILTER_OP_EXT_V2_OUT_HANDLE_FORMAT_LEN 4
+/* enum: the filter handle should be considered opaque to the host. */
+#define          MC_CMD_FILTER_OP_EXT_V2_OUT_OPAQUE_HANDLE_FORMAT 0x0
+/* enum: the filter handle format is defined in X4_FILTER_HANDLE. */
+#define          MC_CMD_FILTER_OP_EXT_V2_OUT_X4_HANDLE_FORMAT 0x1
 
 
 /***********************************/
@@ -25929,6 +26017,69 @@
 
 /* MC_CMD_FREE_LL_QUEUES_OUT msgresponse */
 #define    MC_CMD_FREE_LL_QUEUES_OUT_LEN 0
+
+
+/***********************************/
+/* MC_CMD_READ_CONFIGURATION
+ * Read the user configuration. This is in an ini-style text format with key
+ * value pairs, described in XN-202419-SW.
+ */
+#define MC_CMD_READ_CONFIGURATION 0x1fb
+#undef MC_CMD_0x1fb_PRIVILEGE_CTG
+
+#define MC_CMD_0x1fb_PRIVILEGE_CTG SRIOV_CTG_GENERAL
+
+/* MC_CMD_READ_CONFIGURATION_IN msgrequest */
+#define    MC_CMD_READ_CONFIGURATION_IN_LEN 8
+/* Which configuration to return */
+#define       MC_CMD_READ_CONFIGURATION_IN_TYPE_OFST 0
+#define       MC_CMD_READ_CONFIGURATION_IN_TYPE_LEN 4
+/* enum: Return the derived configuration which is currently in use. Includes
+ * settings which have been left at the default, and derived settings.
+ */
+#define          MC_CMD_READ_CONFIGURATION_IN_ACTIVE 0x0
+/* enum: Return the derived configuration which will be in use after any
+ * required resets have been done.
+ */
+#define          MC_CMD_READ_CONFIGURATION_IN_NEXT 0x1
+/* enum: Return the user configuration as it is stored in flash. This is what
+ * the user actually wrote.
+ */
+#define          MC_CMD_READ_CONFIGURATION_IN_STORED 0x2
+/* Offset of the first byte of the configuration to return. The configuration
+ * may be too large to return in a single MCDI response. As many bytes as will
+ * fit into the MCDI response will be returned. Parts after the first can be
+ * retrieved by using a nonzero START_BYTE_OFFSET.
+ */
+#define       MC_CMD_READ_CONFIGURATION_IN_START_BYTE_OFFSET_OFST 4
+#define       MC_CMD_READ_CONFIGURATION_IN_START_BYTE_OFFSET_LEN 4
+
+/* MC_CMD_READ_CONFIGURATION_OUT msgresponse */
+#define    MC_CMD_READ_CONFIGURATION_OUT_LENMIN 8
+#define    MC_CMD_READ_CONFIGURATION_OUT_LENMAX 252
+#define    MC_CMD_READ_CONFIGURATION_OUT_LENMAX_MCDI2 1020
+#define    MC_CMD_READ_CONFIGURATION_OUT_LEN(num) (8+1*(num))
+#define    MC_CMD_READ_CONFIGURATION_OUT_DATA_NUM(len) (((len)-8)/1)
+/* Length of the entire configuration, in bytes. */
+#define       MC_CMD_READ_CONFIGURATION_OUT_LENGTH_OFST 0
+#define       MC_CMD_READ_CONFIGURATION_OUT_LENGTH_LEN 4
+/* Generation count for the configuration. Not actually a linearly increasing
+ * counter, but when requesting a configuration via multiple calls, the
+ * generation will be different if the requested configuration has changed. In
+ * this case the caller should start again.
+ */
+#define       MC_CMD_READ_CONFIGURATION_OUT_GENERATION_OFST 4
+#define       MC_CMD_READ_CONFIGURATION_OUT_GENERATION_LEN 4
+/* As many bytes of the configuration as will fit in the MCDI response,
+ * starting from START_BYTE_OFFSET. The caller can calculate how many bytes
+ * were returned from the response length. If there are fewer bytes to return
+ * than the maximum, the length will be smaller.
+ */
+#define       MC_CMD_READ_CONFIGURATION_OUT_DATA_OFST 8
+#define       MC_CMD_READ_CONFIGURATION_OUT_DATA_LEN 1
+#define       MC_CMD_READ_CONFIGURATION_OUT_DATA_MINNUM 0
+#define       MC_CMD_READ_CONFIGURATION_OUT_DATA_MAXNUM 244
+#define       MC_CMD_READ_CONFIGURATION_OUT_DATA_MAXNUM_MCDI2 1012
 
 
 #endif /* MCDI_PCOL_H */

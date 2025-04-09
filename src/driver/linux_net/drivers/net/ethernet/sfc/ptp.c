@@ -1018,7 +1018,7 @@ int efx_x4_ptp_get_attributes(struct efx_nic *efx)
 
 	ptp->ns_to_nic_time = efx_ptp_ns_to_s_qns;
 	ptp->nic_to_kernel_time = efx_ptp_s_qns_to_ktime_correction;
-	ptp->nic_time.minor_max = 4000000000L;
+	ptp->nic_time.minor_max = 4000000000UL;
 	ptp->nic_time.sync_event_minor_shift = 24;
 
 	/* Precalculate acceptable difference between the minor time in the
@@ -1671,7 +1671,7 @@ int efx_x4_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings)
 	ktime_t delay;
 	int rc;
 
-	ngood = last_good = diff_avg = 0;
+	ngood = last_good = diff_avg = diff_total = 0;
 	diff_min = LONG_MAX;
 
 	timeset = kmalloc_array(num_readings,

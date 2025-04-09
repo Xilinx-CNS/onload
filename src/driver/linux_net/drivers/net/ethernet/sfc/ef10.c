@@ -300,7 +300,7 @@ static bool efx_ef10_port_handle_supported(struct efx_nic *efx)
 
 static int efx_ef10_init_datapath_caps(struct efx_nic *efx)
 {
-	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_CAPABILITIES_V4_OUT_LEN);
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_CAPABILITIES_V10_OUT_LEN);
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 	size_t outlen;
 	int rc;
@@ -392,6 +392,15 @@ static int efx_ef10_init_datapath_caps(struct efx_nic *efx)
 		pci_dbg(efx->pci_dev,
 			"firmware did not report num_mac_stats, assuming %u\n",
 			efx->num_mac_stats);
+	}
+
+	if (outlen >= MC_CMD_GET_CAPABILITIES_V10_OUT_LEN) {
+		efx->supported_bitmap =
+			MCDI_DWORD(outbuf,
+				   GET_CAPABILITIES_V10_OUT_SUPPORTED_QUEUE_SIZES);
+		efx->guaranteed_bitmap =
+			MCDI_DWORD(outbuf,
+				   GET_CAPABILITIES_V10_OUT_GUARANTEED_QUEUE_SIZES);
 	}
 
 	return 0;
@@ -6791,9 +6800,7 @@ const struct efx_nic_type efx_x4_nic_type = {
 	.sriov_set_vf_mac = efx_ef10_sriov_set_vf_mac,
 	.sriov_set_vf_vlan = efx_ef10_sriov_set_vf_vlan,
 	.sriov_set_vf_spoofchk = efx_ef10_sriov_set_vf_spoofchk,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_VF_MAC)
 	.sriov_get_vf_config = efx_ef10_sriov_get_vf_config,
-#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VF_LINK_STATE)
 	.sriov_set_vf_link_state = efx_ef10_sriov_set_vf_link_state,
 #endif

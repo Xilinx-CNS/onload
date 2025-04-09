@@ -92,7 +92,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.1.0.1003"
+#define EFX_DRIVER_VERSION	"6.1.0.1004"
 #endif
 
 #ifdef DEBUG
@@ -1449,8 +1449,8 @@ struct efx_mae;
  * @max_channels: Max available channels
  * @max_vis: Max available VI resources
  * @max_tx_channels: Max available TX channels
- * @supported_bitmap: Bitmap of supported ring sizes (EF100)
- * @guaranteed_bitmap: Bitmap of guaranteed ring sizes (EF100)
+ * @supported_bitmap: Bitmap of supported ring sizes
+ * @guaranteed_bitmap: Bitmap of guaranteed ring sizes
  * @n_combined_channels: Number of combined RX/TX channels
  * @n_extra_channels: Number of extra channels (for driver-internal uses)
  * @n_rx_only_channels: Number of channels used only for RX (after combined)
@@ -1892,6 +1892,12 @@ struct efx_nic {
 	struct devlink_health_reporter *devlink_reporter_ramlog;
 	/** @devlink_reporter_ramlog_clear: Devlink reporter for ramlog-clear */
 	struct devlink_health_reporter *devlink_reporter_ramlog_clear;
+	/** @devlink_reporter_nvcfg_next: Devlink reporter for nvcfg-next */
+	struct devlink_health_reporter *devlink_reporter_nvcfg_next;
+	/** @devlink_reporter_nvcfg: Devlink reporter for nvcfg-active */
+	struct devlink_health_reporter *devlink_reporter_nvcfg_active;
+	/** @devlink_reporter_nvcfg: Devlink reporter for nvcfg-stored */
+	struct devlink_health_reporter *devlink_reporter_nvcfg_stored;
 #endif
 #endif
 	unsigned int mem_bar;

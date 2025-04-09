@@ -116,6 +116,10 @@ static const struct {
 	[EF10_STAT_ ## ef10_name] = { STAT_ID(MAC, mcdi_index) }
 #define PHY_STAT(ef10_name, mcdi_index)		\
 	[EF10_STAT_ ## ef10_name] = { STAT_ID(PHY, mcdi_index) }
+#define PM_STAT(ef10_name, mcdi_index)		\
+	[EF10_STAT_ ## ef10_name] = { STAT_ID(PM, mcdi_index) }
+#define RXDP_STAT(ef10_name, mcdi_index)	\
+	[EF10_STAT_ ## ef10_name] = { STAT_ID(RXDP, mcdi_index) }
 
 	MAC_STAT(port_tx_bytes, TX_BYTES),
 	MAC_STAT(port_tx_packets, TX_PKTS),
@@ -156,8 +160,14 @@ static const struct {
 	MAC_STAT(port_rx_align_error, RX_ALIGN_ERROR_PKTS),
 	MAC_STAT(port_rx_length_error, RX_LENGTH_ERROR_PKTS),
 	MAC_STAT(port_rx_nodesc_drops, RX_NODESC_DROPS),
-	// TODO: port_rx_pm_* (no STAT_IDs, was MC_CMD_MAC_PM_*)
-	// TODO: port_rx_dp_* (no STAT_IDs, was MC_CMD_MAC_RXDP_*)
+	PM_STAT(port_rx_pm_discard_vfifo_full, PM_DISCARD_VFIFO_FULL),
+	PM_STAT(port_rx_pm_discard_qbb, PM_DISCARD_QBB),
+	PM_STAT(port_rx_pm_discard_mapping, PM_DISCARD_MAPPING),
+	RXDP_STAT(port_rx_dp_q_disabled_packets, RXDP_Q_DISABLED_PKTS),
+	RXDP_STAT(port_rx_dp_di_dropped_packets, RXDP_DI_DROPPED_PKTS),
+	RXDP_STAT(port_rx_dp_streaming_packets, RXDP_STREAMING_PKTS),
+	RXDP_STAT(port_rx_dp_hlb_fetch, RXDP_HLB_FETCH_CONDITIONS),
+	RXDP_STAT(port_rx_dp_hlb_wait, RXDP_HLB_WAIT_CONDITIONS),
 	// TODO: rx_*	      (no STAT_IDs, was MC_CMD_MAC_VADAPTER_RX_*)
 	// TODO: tx_*	      (no STAT_IDs, was MC_CMD_MAC_VADAPTER_RX_*)
 	PHY_STAT(fec_uncorrected_errors, FEC_UNCORRECTED_ERRORS),
@@ -168,6 +178,8 @@ static const struct {
 	PHY_STAT(fec_corrected_symbols_lane3, FEC_CORRECTED_SYMBOLS_LANE3),
 #undef MAC_STAT
 #undef PHY_STAT
+#undef PM_STAT
+#undef RXDP_STAT
 };
 
 static bool efx_x4_lookup_ef10_stat(u32 mcdi_stat_id, u32 *ef10_stat)
@@ -454,6 +466,15 @@ static void x4_mcdi_to_speed_duplex(struct efx_nic *efx, u32 tech,
 		*speed = SPEED_UNKNOWN;
 		*duplex = DUPLEX_UNKNOWN;
 	}
+}
+
+static void x4_mcdi_tech_to_lanes(struct efx_nic *efx, u32 tech, u32 *lanes)
+{
+	if (tech < ARRAY_SIZE(tech_map) &&
+	    tech_map[tech].flags & TECH_MAP_VALID)
+		*lanes = tech_map[tech].lanes;
+	else
+		*lanes = 0; /* unknown */
 }
 
 static u32 x4_mcdi_to_ethtool_cap(struct efx_nic *efx, bool autoneg,
@@ -1289,6 +1310,9 @@ void efx_x4_mcdi_phy_get_ksettings(struct efx_nic *efx,
 	x4_mcdi_fec_to_ethtool_linkset(port_data->partner.fec,
 				       port_data->partner.requested_fec,
 				       out->link_modes.lp_advertising);
+#endif
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_LINK_LANES)
+	x4_mcdi_tech_to_lanes(efx, port_data->link.tech, &out->lanes);
 #endif
 }
 

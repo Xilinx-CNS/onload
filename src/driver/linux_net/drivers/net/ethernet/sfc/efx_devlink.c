@@ -15,6 +15,7 @@
 #include "mcdi_pcol.h"
 #include "efx_reflash.h"
 #include "nvlog.h"
+#include "nvcfg.h"
 
 /* Custom devlink-info version object names for details that do not map to the
  * generic standardized names.
@@ -570,6 +571,72 @@ static const struct devlink_health_reporter_ops sfc_devlink_ramlog_clear_ops = {
 	.diagnose	= efx_devlink_reporter_ramlog_clear_diagnose,
 };
 
+static int efx_devlink_reporter_cfg(struct devlink_health_reporter *reporter,
+				    struct devlink_fmsg *fmsg, u32 type)
+{
+	struct efx_devlink *devlink_private = devlink_health_reporter_priv(reporter);
+	struct efx_nic *efx = devlink_private->efx;
+	struct efx_nvlog_data data = {};
+	int rc;
+
+	rc = efx_nvcfg_read(efx, &data, type);
+	if (!rc)
+		rc = efx_nvlog_to_devlink(&data, fmsg);
+	kfree(data.nvlog);
+	return rc;
+}
+
+static int efx_devlink_reporter_nvcfg_next_diagnose(struct devlink_health_reporter *reporter,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER_OPS_EXTACK)
+						    struct devlink_fmsg *fmsg,
+						    struct netlink_ext_ack *extack)
+#else
+						    struct devlink_fmsg *fmsg)
+#endif
+{
+	return efx_devlink_reporter_cfg(reporter, fmsg,
+					MC_CMD_READ_CONFIGURATION_IN_NEXT);
+}
+
+static const struct devlink_health_reporter_ops sfc_devlink_nvcfg_next_ops = {
+	.name		= "nvcfg-next",
+	.diagnose	= efx_devlink_reporter_nvcfg_next_diagnose,
+};
+
+static int efx_devlink_reporter_nvcfg_active_diagnose(struct devlink_health_reporter *reporter,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER_OPS_EXTACK)
+						      struct devlink_fmsg *fmsg,
+						      struct netlink_ext_ack *extack)
+#else
+						      struct devlink_fmsg *fmsg)
+#endif
+{
+	return efx_devlink_reporter_cfg(reporter, fmsg,
+					MC_CMD_READ_CONFIGURATION_IN_ACTIVE);
+}
+
+static const struct devlink_health_reporter_ops sfc_devlink_nvcfg_active_ops = {
+	.name		= "nvcfg-active",
+	.diagnose	= efx_devlink_reporter_nvcfg_active_diagnose,
+};
+
+static int efx_devlink_reporter_nvcfg_stored_diagnose(struct devlink_health_reporter *reporter,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER_OPS_EXTACK)
+						      struct devlink_fmsg *fmsg,
+						      struct netlink_ext_ack *extack)
+#else
+						      struct devlink_fmsg *fmsg)
+#endif
+{
+	return efx_devlink_reporter_cfg(reporter, fmsg,
+					MC_CMD_READ_CONFIGURATION_IN_STORED);
+}
+
+static const struct devlink_health_reporter_ops sfc_devlink_nvcfg_stored_ops = {
+	.name		= "nvcfg-stored",
+	.diagnose	= efx_devlink_reporter_nvcfg_stored_diagnose,
+};
+
 #endif /* EFX_HAVE_DEVLINK_HEALTH */
 
 static const struct devlink_ops sfc_devlink_ops = {
@@ -592,6 +659,12 @@ void efx_fini_devlink(struct efx_nic *efx)
 			devlink_health_reporter_destroy(efx->devlink_reporter_ramlog);
 		if (efx->devlink_reporter_ramlog_clear)
 			devlink_health_reporter_destroy(efx->devlink_reporter_ramlog_clear);
+		if (efx->devlink_reporter_nvcfg_next)
+			devlink_health_reporter_destroy(efx->devlink_reporter_nvcfg_next);
+		if (efx->devlink_reporter_nvcfg_active)
+			devlink_health_reporter_destroy(efx->devlink_reporter_nvcfg_active);
+		if (efx->devlink_reporter_nvcfg_stored)
+			devlink_health_reporter_destroy(efx->devlink_reporter_nvcfg_stored);
 #endif
 		devlink_unregister(efx->devlink);
 		devlink_free(efx->devlink);
@@ -668,6 +741,21 @@ int efx_probe_devlink(struct efx_nic *efx)
 			efx->devlink_reporter_ramlog_clear =
 				devlink_health_reporter_create(efx->devlink,
 							       &sfc_devlink_ramlog_clear_ops,
+							       0,
+							       devlink_private);
+			efx->devlink_reporter_nvcfg_next =
+				devlink_health_reporter_create(efx->devlink,
+							       &sfc_devlink_nvcfg_next_ops,
+							       0,
+							       devlink_private);
+			efx->devlink_reporter_nvcfg_active =
+				devlink_health_reporter_create(efx->devlink,
+							       &sfc_devlink_nvcfg_active_ops,
+							       0,
+							       devlink_private);
+			efx->devlink_reporter_nvcfg_stored =
+				devlink_health_reporter_create(efx->devlink,
+							       &sfc_devlink_nvcfg_stored_ops,
 							       0,
 							       devlink_private);
 		}
