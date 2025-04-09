@@ -284,6 +284,34 @@ resource_size_t efrm_rxq_superbuf_window(struct efrm_efct_rxq *rxq)
 }
 EXPORT_SYMBOL(efrm_rxq_superbuf_window);
 
+static void dummy_freer(struct efhw_efct_rxq *rxq)
+{
+}
+
+void efrm_rxq_flush(struct efrm_efct_rxq *rxq)
+{
+	efhw_nic_shared_rxq_unbind(rxq->rs.rs_client->nic, &rxq->hw,
+	                           dummy_freer);
+}
+EXPORT_SYMBOL(efrm_rxq_flush);
+
+void efrm_rxq_free(struct efrm_efct_rxq *rxq)
+{
+	if (__efrm_resource_release(&rxq->rs)) {
+		struct efrm_client *rs_client = rxq->rs.rs_client;
+		int shm_ix = rxq->hw.qix;
+		if (shm_ix >= 0) {
+			efrm_fini_debugfs_efct_rxq(rxq);
+			rxq->vi->efct_shm->active_qs &= ~(1ull << shm_ix);
+		}
+		list_del(&rxq->vi_link);
+		efrm_vi_resource_release(rxq->vi);
+		kfree(rxq);
+		efrm_client_put(rs_client);
+	}
+}
+EXPORT_SYMBOL(efrm_rxq_free);
+
 void efrm_rxq_release(struct efrm_efct_rxq *rxq)
 {
 #if CI_HAVE_EFCT_COMMON

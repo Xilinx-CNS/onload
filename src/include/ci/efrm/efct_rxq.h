@@ -21,7 +21,12 @@ extern int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix,
                           struct oo_hugetlb_allocator *hugetlb_alloc,
                           struct efrm_efct_rxq **rxq_out);
 
+/** Flush and release rxq resource. To be used with shared queues */
 extern void efrm_rxq_release(struct efrm_efct_rxq *rxq);
+/** Flush queue associated with resource - to be used with non-shared queues */
+void efrm_rxq_flush(struct efrm_efct_rxq *rxq);
+/** Release resource - to be used with non-shared queues after flush complete */
+void efrm_rxq_free(struct efrm_efct_rxq *rxq);
 int efrm_rxq_refresh(struct efrm_efct_rxq *rxq,
                      unsigned long superbufs, uint64_t __user *user_current,
                      unsigned max_superbufs);
