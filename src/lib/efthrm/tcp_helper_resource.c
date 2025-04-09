@@ -28,6 +28,7 @@
 #include <etherfabric/internal/internal.h>
 #include <etherfabric/internal/efct_uk_api.h>
 #include <ci/efhw/nic.h>
+#include <ci/efhw/efct.h>
 #include <ci/efrm/efrm_client.h>
 #include <ci/efrm/vi_resource_manager.h>
 #include <ci/efrm/pd.h>
@@ -2133,8 +2134,10 @@ static void detach_efct_rxqs(tcp_helper_resource_t* trs)
     size_t rxq_i;
     for( rxq_i = 0; rxq_i < ARRAY_SIZE(trs_nic->thn_efct_rxq); ++rxq_i ) {
       if( trs_nic->thn_efct_rxq[rxq_i] ) {
-        efrm_rxq_release(trs_nic->thn_efct_rxq[rxq_i]);
-        trs_nic->thn_efct_rxq[rxq_i] = NULL;
+        /* Non-shared event queues are handled separately */
+        if (efrm_rxq_get_hw(trs_nic->thn_efct_rxq[rxq_i])->shared_evq)
+          efrm_rxq_release(trs_nic->thn_efct_rxq[rxq_i]);
+        trs_nic->thn_efct_rxq[rxq_i] = NULL; /* pointer is no longer needed */
         if( trs_nic->thn_efct_iobs[rxq_i] )
           oo_iobufset_resource_release(trs_nic->thn_efct_iobs[rxq_i], 0);
         trs_nic->thn_efct_iobs[rxq_i] = NULL;

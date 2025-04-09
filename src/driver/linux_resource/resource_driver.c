@@ -78,6 +78,7 @@ static struct efhw_ev_handler ev_handler = {
 	.wakeup_fn = efrm_handle_wakeup_event,
 	.timeout_fn = efrm_handle_timeout_event,
 	.dmaq_flushed_fn = efrm_handle_dmaq_flushed_schedule,
+	.efct_rxq_flushed_fn = efrm_handle_efct_rxq_flushed_schedule,
 };
 
 const int max_hardware_init_repeats = 1;

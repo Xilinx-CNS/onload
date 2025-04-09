@@ -35,6 +35,11 @@ int efrm_rxq_refresh_kernel(struct efhw_nic *nic, int hwqid,
 int efrm_rxq_request_wakeup(struct efrm_efct_rxq *rxq, unsigned sbseq,
                             unsigned pktix, bool allow_recursion);
 resource_size_t efrm_rxq_superbuf_window(struct efrm_efct_rxq *rxq);
+struct efhw_efct_rxq *efrm_rxq_get_hw(struct efrm_efct_rxq *rxq);
+struct efrm_vi *efrm_rxq_get_vi(struct efrm_efct_rxq *rxq);
+struct list_head *efrm_rxq_get_flush_list(struct efrm_efct_rxq *rxq);
+struct efrm_efct_rxq *efrm_rxq_from_flush_list(struct list_head *);
+struct efrm_efct_rxq *efrm_rxq_from_vi_list(struct list_head *);
 
 
 #endif

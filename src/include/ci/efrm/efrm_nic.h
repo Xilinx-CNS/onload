@@ -28,6 +28,9 @@ struct efrm_nic_vi {
 	struct list_head rx_flush_outstanding_list;
 	struct list_head tx_flush_outstanding_list;
 	int              rx_flush_outstanding_count;
+	/* Efct rxq attachment is handled separately from dma rxq attachment.
+	 * we keep a separate list of efct rxqs with outstanding flushes. */
+	struct list_head efct_rx_flush_outstanding_list;
 
 	/* once the flush has happened we push the close into the work queue
 	 * so its OK on Windows to free the resources (Bug 3469).  Resources

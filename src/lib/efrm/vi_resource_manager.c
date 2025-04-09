@@ -49,6 +49,7 @@ void efrm_nic_vi_ctor(struct efrm_nic_vi *nvi)
 	INIT_LIST_HEAD(&nvi->rx_flush_waiting_list);
 	INIT_LIST_HEAD(&nvi->rx_flush_outstanding_list);
 	INIT_LIST_HEAD(&nvi->tx_flush_outstanding_list);
+	INIT_LIST_HEAD(&nvi->efct_rx_flush_outstanding_list);
 	nvi->rx_flush_outstanding_count = 0;
 	INIT_LIST_HEAD(&nvi->close_pending);
 	INIT_WORK(&nvi->work_item, efrm_vi_rm_delayed_free);
@@ -67,6 +68,7 @@ void efrm_nic_vi_dtor(struct efrm_nic_vi *nvi)
 	spin_lock_bh(&efrm_vi_manager->rm.rm_lock);
 	EFRM_ASSERT(nvi->rx_flush_outstanding_count == 0);
 	EFRM_ASSERT(list_empty(&nvi->tx_flush_outstanding_list));
+	EFRM_ASSERT(list_empty(&nvi->efct_rx_flush_outstanding_list));
 	spin_unlock_bh(&efrm_vi_manager->rm.rm_lock);
 
 #ifdef EFX_USE_CANCEL_DELAYED_WORK_SYNC

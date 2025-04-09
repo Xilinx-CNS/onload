@@ -20,6 +20,7 @@ struct efrm_efct_rxq {
 	struct efhw_efct_rxq hw;
 	struct work_struct free_work;
 
+	struct list_head flush_link;
 	struct list_head vi_link;
 };
 
@@ -284,6 +285,12 @@ resource_size_t efrm_rxq_superbuf_window(struct efrm_efct_rxq *rxq)
 }
 EXPORT_SYMBOL(efrm_rxq_superbuf_window);
 
+struct efhw_efct_rxq *efrm_rxq_get_hw(struct efrm_efct_rxq *rxq)
+{
+	return &rxq->hw;
+}
+EXPORT_SYMBOL(efrm_rxq_get_hw);
+
 static void dummy_freer(struct efhw_efct_rxq *rxq)
 {
 }
@@ -311,6 +318,30 @@ void efrm_rxq_free(struct efrm_efct_rxq *rxq)
 	}
 }
 EXPORT_SYMBOL(efrm_rxq_free);
+
+struct list_head *efrm_rxq_get_flush_list(struct efrm_efct_rxq *rxq)
+{
+	return &rxq->flush_link;
+}
+EXPORT_SYMBOL(efrm_rxq_get_flush_list);
+
+struct efrm_efct_rxq *efrm_rxq_from_flush_list(struct list_head *list)
+{
+	return container_of(list, struct efrm_efct_rxq, flush_link);
+}
+EXPORT_SYMBOL(efrm_rxq_from_flush_list);
+
+struct efrm_efct_rxq *efrm_rxq_from_vi_list(struct list_head *list)
+{
+	return container_of(list, struct efrm_efct_rxq, vi_link);
+}
+EXPORT_SYMBOL(efrm_rxq_from_vi_list);
+
+struct efrm_vi *efrm_rxq_get_vi(struct efrm_efct_rxq *rxq)
+{
+	return rxq->vi;
+}
+EXPORT_SYMBOL(efrm_rxq_get_vi);
 
 void efrm_rxq_release(struct efrm_efct_rxq *rxq)
 {

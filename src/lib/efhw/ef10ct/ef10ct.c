@@ -201,6 +201,18 @@ static void ef10ct_free_rxq(struct efhw_nic *nic, int qid)
   ef10ct->rxq[rxq_num].state = EF10CT_RXQ_STATE_FREE;
 }
 
+static int ef10ct_is_shared_evq(struct efhw_nic *nic, int evq_num)
+{
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  int i;
+
+  for (i = 0; i < ef10ct->shared_n; i++)
+    if (ef10ct_get_queue_num(ef10ct->shared[i].evq_id) == evq_num)
+      return true;
+
+  return false;
+}
+
 static int ef10ct_check_for_flushes_common(struct efhw_nic_ef10ct_evq *evq)
 {
   unsigned offset = evq->next;
@@ -233,6 +245,8 @@ static int ef10ct_check_for_flushes_common(struct efhw_nic_ef10ct_evq *evq)
       } else /* EFCT_FLUSH_TYPE_RX */ {
         queue_handle = ef10ct_reconstruct_queue_handle(q_id,
                                                   EF10CT_QUEUE_HANDLE_TYPE_RXQ);
+        if (!ef10ct_is_shared_evq(evq->nic, evq->queue_num))
+          efhw_handle_efct_rxq_flushed(evq->nic, q_id);
         ef10ct = evq->nic->arch_extra;
         mutex_lock(&ef10ct->rxq[q_id].bind_lock);
         ef10ct_free_rxq(evq->nic, queue_handle);
@@ -1090,6 +1104,8 @@ static int ef10ct_fini_rxq(struct efhw_nic *nic, int rxq_num)
   ef10ct_evq = &ef10ct->evq[ef10ct_get_queue_num(evq_id)];
 
   atomic_inc(&ef10ct_evq->queues_flushing);
+  if (!ef10ct_is_shared_evq(nic, ef10ct_get_queue_num(evq_id)))
+    schedule_delayed_work(&ef10ct_evq->check_flushes_polled, 0);
 
   return rc;
 }

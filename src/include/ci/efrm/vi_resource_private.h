@@ -64,6 +64,9 @@ extern int efrm_handle_dmaq_flushed_schedule(struct efhw_nic *nic,
 					      unsigned id,
 					      int rx_flush, int failed);
 
+extern int efrm_handle_efct_rxq_flushed_schedule(struct efhw_nic *flush_nic,
+                                                 unsigned instance);
+
 extern unsigned
 efrm_vi_shut_down_flag(enum efhw_q_type queue);
 

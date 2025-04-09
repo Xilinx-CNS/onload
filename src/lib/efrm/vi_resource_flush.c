@@ -42,6 +42,8 @@
 #include <ci/efrm/private.h>
 #include <ci/efrm/sysdep.h>
 #include <ci/efrm/vi_resource_private.h>
+#include <ci/efrm/efct_rxq.h>
+#include <ci/efhw/efct.h>
 #include "efrm_internal.h"
 #include "efrm_vi.h"
 #include "efrm_vi_set.h"
@@ -67,6 +69,14 @@ static inline struct efrm_nic_vi *nvi_from_virs(struct efrm_vi *virs)
 	return &efrm_nic_from_rs(&virs->rs)->nvi;
 }
 
+static int
+efrm_vi_flushing(struct efrm_vi *virs)
+{
+	return virs->q[EFHW_RXQ].flushing != 0 ||
+	       virs->q[EFHW_TXQ].flushing != 0 ||
+	       virs->efct_flush_outstanding != 0;
+}
+
 
 static void
 efrm_vi_resource_rx_flush_done(struct efrm_vi *virs, bool *completed)
@@ -83,7 +93,7 @@ efrm_vi_resource_rx_flush_done(struct efrm_vi *virs, bool *completed)
 		list_del(&virs->q[EFHW_RXQ].flush_link);
 		--nvi->rx_flush_outstanding_count;
 		
-		if (virs->q[EFHW_TXQ].flushing == 0) {
+		if (efrm_vi_flushing(virs) == 0) {
 			list_add_tail(&virs->q[EFHW_RXQ].flush_link,
 				      &nvi->close_pending);
 			*completed = 1;
@@ -104,7 +114,7 @@ efrm_vi_resource_tx_flush_done(struct efrm_vi *virs, bool *completed)
 
 		list_del(&virs->q[EFHW_TXQ].flush_link);
 
-		if (virs->q[EFHW_RXQ].flushing == 0) {
+		if (efrm_vi_flushing(virs) == 0) {
 			list_add_tail(&virs->q[EFHW_RXQ].flush_link,
 				      &nvi_from_virs(virs)->close_pending);
 			*completed = 1;
@@ -112,6 +122,29 @@ efrm_vi_resource_tx_flush_done(struct efrm_vi *virs, bool *completed)
 	} else 
 		EFRM_WARN("%s: unexpected flush completion on tx queue %d",
 			  __FUNCTION__, virs->rs.rs_instance);	
+}
+
+static void
+efrm_vi_resource_efct_rxq_flush_done(struct efrm_vi *virs,
+                                     struct efrm_efct_rxq *rxq,
+                                     bool *completed)
+{
+	if (virs->efct_flush_outstanding) {
+		virs->efct_flush_outstanding--;
+
+		list_del(efrm_rxq_get_flush_list(rxq));
+
+		efrm_rxq_free(rxq);
+
+		if (efrm_vi_flushing(virs) == 0) {
+			list_add_tail(&virs->q[EFHW_RXQ].flush_link,
+				      &nvi_from_virs(virs)->close_pending);
+			*completed = 1;
+		}
+	} else {
+		EFRM_WARN("%s: unexpected flush completion on efct rx queue %d",
+			__FUNCTION__, virs->rs.rs_instance);
+	}
 }
 
 static void efrm_vi_resource_process_flushes(struct efrm_nic *efrm_nic,
@@ -204,6 +237,23 @@ efrm_vi_resource_issue_tx_flush(struct efrm_vi *virs, bool *completed)
 	__efrm_vi_resource_issue_flush( virs, EFHW_TXQ, completed);
 }
 
+static void efrm_vi_resource_issue_efct_rx_flush(struct efrm_vi *virs,
+	struct efrm_efct_rxq *rxq)
+{
+	list_add_tail(efrm_rxq_get_flush_list(rxq),
+	&nvi_from_virs(virs)->efct_rx_flush_outstanding_list);
+
+	efrm_rxq_flush(rxq);
+
+	/* flush_jiffies needs to be different than JIFFIES_NO_TIMEOUT,
+	* we ensure this by always setting the least significant bit */
+	virs->efct_flush_jiffies = jiffies | 1;
+
+	queue_delayed_work(efrm_vi_manager->workqueue,
+	                   &nvi_from_virs(virs)->flush_work_item,
+	                   FLUSH_TIMEOUT);
+}
+
 
 static void efrm_vi_resource_process_flushes(struct efrm_nic *efrm_nic,
 					     bool *completed)
@@ -227,7 +277,8 @@ static bool efrm_vi_rm_flushes_pending(struct efrm_nic *efrm_nic)
 {
 	struct efrm_nic_vi *nvi = &efrm_nic->nvi;
 	return (nvi->rx_flush_outstanding_count != 0 ||
-		!list_empty(&nvi->tx_flush_outstanding_list));
+		!list_empty(&nvi->tx_flush_outstanding_list) ||
+		!list_empty(&nvi->efct_rx_flush_outstanding_list));
 }
 
 static bool efrm_vi_rm_flushes_pending_nic(struct efhw_nic *nic)
@@ -311,6 +362,7 @@ void efrm_vi_check_flushes(struct work_struct *data)
 	struct efrm_nic_vi *nvi;
 	struct efrm_nic *efrm_nic;
 	struct list_head *pos, *temp;
+	struct efrm_efct_rxq *rxq;
 	struct efrm_vi *virs;
 	bool completed;
 	bool found = false;
@@ -380,6 +432,32 @@ void efrm_vi_check_flushes(struct work_struct *data)
 			break;
 	}
 
+	list_for_each_safe(pos, temp, &nvi->efct_rx_flush_outstanding_list) {
+		rxq = efrm_rxq_from_flush_list(pos);
+		virs = efrm_rxq_get_vi(rxq);
+
+		if (virs->efct_flush_jiffies == JIFFIES_NO_TIMEOUT)
+			continue;
+		if (time_after(j, virs->efct_flush_jiffies)) {
+			/* Please don't whitelist this log output. If
+			 * it's appearing, that means this workaround
+			 * for bug18474/bug20608 is needed, and we'd
+			 * like to know about it.
+			 */
+			if (!efrm_nic->efhw_nic.resetting)
+				EFRM_WARN_LIMITED("%s: efct rx flush outstanding"
+				  "after %d second(s) on ifindex %u:%d",
+				  __FUNCTION__, FLUSH_TIMEOUT / HZ,
+				  efhw_nic_get_netns_id(&efrm_nic->efhw_nic),
+				  efhw_nic_get_ifindex(&efrm_nic->efhw_nic));
+			efrm_vi_resource_efct_rxq_flush_done(virs, rxq,
+			                                     &completed);
+			found = true;
+		}
+		else
+			break;
+	}
+
 	efrm_vi_resource_process_flushes(efrm_nic, &completed);
 	efrm_vi_rm_may_complete_flushes(efrm_nic);
 	if (found)
@@ -423,9 +501,22 @@ efrm_vi_register_flush_callback(struct efrm_vi *virs,
 }
 EXPORT_SYMBOL(efrm_vi_register_flush_callback);
 
+static int efrm_vi_has_efct_rxqs(struct efrm_vi *virs)
+{
+	struct list_head *pos, *temp;
+	int found = 0;
+
+	list_for_each_safe(pos, temp, &virs->efct_rxq_list)
+		found++;
+
+	return found;
+}
+
 void efrm_pt_flush(struct efrm_vi *virs)
 {
 	struct efrm_nic_vi *nvi = nvi_from_virs(virs);
+	struct list_head *pos, *temp;
+	struct efrm_efct_rxq *rxq;
 	bool completed = false;
 
 	EFRM_ASSERT(virs->q[EFHW_RXQ].flushing == 0);
@@ -446,12 +537,22 @@ void efrm_pt_flush(struct efrm_vi *virs)
 	if (virs->q[EFHW_TXQ].capacity != 0)
 		virs->q[EFHW_TXQ].flushing = 1;
 
+	virs->efct_flush_outstanding = efrm_vi_has_efct_rxqs(virs);
+
 	/* Clean up immediately if there are no flushes. */
-	if (virs->q[EFHW_RXQ].flushing == 0 &&
-	    virs->q[EFHW_TXQ].flushing == 0) {
+	if (efrm_vi_flushing(virs) == 0) {
 		list_add_tail(&virs->q[EFHW_RXQ].flush_link,
 			      &nvi->close_pending);
 		completed = true;
+	}
+
+	list_for_each_safe(pos, temp, &virs->efct_rxq_list) {
+		rxq = efrm_rxq_from_vi_list(pos);
+
+		/* Drop spin lock as efhw_nic_* calls can block */
+		spin_unlock_bh(&efrm_vi_manager->rm.rm_lock);
+		efrm_vi_resource_issue_efct_rx_flush(virs, rxq);
+		spin_lock_bh(&efrm_vi_manager->rm.rm_lock);
 	}
 
 	/* Issue the RX flush if possible or queue it for later. */
@@ -584,6 +685,71 @@ efrm_handle_dmaq_flushed_schedule(struct efhw_nic *flush_nic,
 	req->failed = failed;
 
 	INIT_WORK(&req->work, efrm_handle_dmaq_flushed_work);
+	queue_work(efrm_vi_manager->workqueue, &req->work);
+	return 1;
+}
+
+static void
+efrm_handle_efct_rxq_flushed(struct efhw_nic *flush_nic, unsigned instance)
+{
+	struct efrm_nic *efrm_nic = efrm_nic_from_efhw_nic(flush_nic);
+	struct efrm_nic_vi *nvi = &efrm_nic->nvi;
+	struct list_head *pos, *temp;
+	struct efrm_efct_rxq *rxq;
+	bool found_flush = false;
+	bool completed = false;
+	struct efrm_vi *virs;
+
+	spin_lock_bh(&efrm_vi_manager->rm.rm_lock);
+
+	list_for_each_safe(pos, temp, &nvi->efct_rx_flush_outstanding_list) {
+		rxq = efrm_rxq_from_flush_list(pos);
+		virs = efrm_rxq_get_vi(rxq);
+
+		if (instance == efrm_rxq_get_hw(rxq)->qid) {
+			efrm_vi_resource_efct_rxq_flush_done(virs, rxq,
+			                                     &completed);
+			efrm_vi_resource_process_flushes(efrm_nic, &completed);
+			efrm_vi_rm_may_complete_flushes(efrm_nic);
+
+			found_flush = true;
+			break;
+		}
+	}
+	if (!found_flush)
+		EFRM_TRACE("%s: Unhandled rx flush event, nic %d, instance %d",
+		           __FUNCTION__, flush_nic->index, instance);
+
+	spin_unlock_bh(&efrm_vi_manager->rm.rm_lock);
+
+	if (completed)
+		queue_work(efrm_vi_manager->workqueue, &nvi->work_item);
+}
+
+static void efrm_handle_efct_rxq_flushed_work(struct work_struct *data)
+{
+	struct efrm_flushed_req *req = container_of(data,
+	                                         struct efrm_flushed_req, work);
+
+	efrm_handle_efct_rxq_flushed(req->flush_nic, req->instance);
+	kfree(req);
+}
+
+int
+efrm_handle_efct_rxq_flushed_schedule(struct efhw_nic *flush_nic,
+                                      unsigned instance)
+{
+	struct efrm_flushed_req *req = kmalloc(sizeof(*req), GFP_ATOMIC);
+
+	/* Failed kmalloc complains to syslog, so we shouldn't. */
+	if (req == NULL)
+		return 0;
+
+	/* Reuse struct efrm_flushed_req for convenience */
+	req->flush_nic = flush_nic;
+	req->instance = instance;
+
+	INIT_WORK(&req->work, efrm_handle_efct_rxq_flushed_work);
 	queue_work(efrm_vi_manager->workqueue, &req->work);
 	return 1;
 }
