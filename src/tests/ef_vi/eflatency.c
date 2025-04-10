@@ -49,6 +49,8 @@ static int              cfg_ctpio_no_poison;
 static unsigned         cfg_ctpio_thresh = 64;
 static const char*      cfg_save_file = NULL;
 static const char*      cfg_yaml_file = NULL;
+static bool             cfg_data_read = false;
+static bool             cfg_data_peek = false;
 enum mode {
   MODE_DMA = 1,
   MODE_PIO = 2,
@@ -62,8 +64,9 @@ static enum ef_pd_flags cfg_rx_pd_flags = EF_PD_LLCT;
 static enum ef_pd_flags cfg_tx_pd_flags = EF_PD_LLCT;
 
 
-#define N_RX_BUFS	256u
-#define N_TX_BUFS	1u
+#define N_RX_BUFS       (1 << 8)
+#define RX_BUFS_MASK    (N_RX_BUFS - 1)
+#define N_TX_BUFS       1u
 #define N_BUFS          (N_RX_BUFS + N_TX_BUFS)
 #define FIRST_TX_BUF    N_RX_BUFS
 #define BUF_SIZE        2048
@@ -73,7 +76,6 @@ static enum ef_pd_flags cfg_tx_pd_flags = EF_PD_LLCT;
 
 
 struct pkt_buf {
-  struct pkt_buf* next;
   ef_addr         dma_buf_addr;
   int             id;
   unsigned        dma_buf[1] EF_VI_ALIGN(EF_VI_DMA_ALIGN);
@@ -87,6 +89,7 @@ struct eflatency_vi {
   ef_pd     pd;
   ef_memreg memreg;
   bool      needs_rx_post;
+  int       rx_prefix_len;
 };
 
 static ef_driver_handle  driver_handle;
@@ -104,6 +107,8 @@ const uint32_t laddr_he = 0xac108564;  /* 172.16.133.100 */
 const uint32_t raddr_he = 0xac010203;  /* 172.1.2.3 */
 const uint16_t port_he = 8080;
 
+/* Used for simulating copy to app buffer */
+static char app_buf[BUF_SIZE];
 
 static void init_udp_pkt(void* pkt_buf, int paylen)
 {
@@ -139,7 +144,7 @@ static void init_udp_pkt(void* pkt_buf, int paylen)
 static inline void rx_post(ef_vi* vi)
 {
   static int rx_posted = 0;
-  struct pkt_buf* pb = pkt_bufs[rx_posted++ & (N_RX_BUFS - 1)];
+  struct pkt_buf* pb = pkt_bufs[rx_posted++ & RX_BUFS_MASK];
   TRY(ef_vi_receive_post(vi, pb->dma_buf_addr, pb->id));
 }
 
@@ -289,10 +294,44 @@ generic_pong(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi,
   }
 }
 
-static void handle_rx_ref(ef_vi* vi, unsigned pkt_id, int len)
+
+static void read_pkt_data(const char *p)
 {
-  efct_vi_rxpkt_release(vi, pkt_id);
+  /* Read data, assume we have a UDP pkt with no vlan */
+  struct ethhdr *eth = (struct ethhdr *)p;
+  struct iphdr *ip = (struct iphdr *)(eth + 1);
+  struct udphdr *udp = (struct udphdr *)((uint8_t*)ip + ip->ihl*4);
+  char *pay = (char*)(udp + 1);
+  int paylen = ntohs(udp->len) - sizeof(struct udphdr);
+  TEST(paylen == cfg_payload_len);
+  memcpy(app_buf, pay, paylen);
 }
+
+
+static void handle_rx_ref(struct eflatency_vi * vi, unsigned pkt_id)
+{
+  if( cfg_data_read ) {
+    const void *p = efct_vi_rxpkt_get(&vi->vi, pkt_id);
+    read_pkt_data(p);
+  }
+  efct_vi_rxpkt_release(&vi->vi, pkt_id);
+}
+
+
+static void handle_rx_ref_discard(struct eflatency_vi * vi, unsigned pkt_id)
+{
+  efct_vi_rxpkt_release(&vi->vi, pkt_id);
+}
+
+
+static void handle_rx(struct eflatency_vi* vi, unsigned pkt_id)
+{
+  if( cfg_data_read ) {
+    const void *p = (char*)(pkt_bufs[pkt_id]->dma_buf) + vi->rx_prefix_len;
+    read_pkt_data(p);
+  }
+}
+
 
 /*
  * DMA
@@ -446,6 +485,9 @@ static int
 generic_desc_check(struct eflatency_vi* vi, struct eflatency_vi *tx_vi,
                    int wait)
 {
+  /* Track which buffer will be written next to be able to
+   * peek at data. */
+  static int rx_bufs_idx = 0;
   /* We might exit with events read but unprocessed. */
   int i = vi->i;
   int n_ev = vi->n_ev;
@@ -458,10 +500,12 @@ generic_desc_check(struct eflatency_vi* vi, struct eflatency_vi *tx_vi,
     for( ; i < n_ev; vi->i = ++i )
       switch( EF_EVENT_TYPE(evs[i]) ) {
       case EF_EVENT_TYPE_RX:
+        handle_rx(vi, EF_EVENT_RX_RQ_ID(evs[i]));
+        rx_bufs_idx++;
         vi->i = ++i;
         return 1;
       case EF_EVENT_TYPE_RX_REF:
-        handle_rx_ref(&vi->vi, evs[i].rx_ref.pkt_id, evs[i].rx_ref.len);
+        handle_rx_ref(vi, evs[i].rx_ref.pkt_id);
         vi->i = ++i;
         return 1;
       case EF_EVENT_TYPE_TX:
@@ -471,14 +515,19 @@ generic_desc_check(struct eflatency_vi* vi, struct eflatency_vi *tx_vi,
         ++(tx_alt.complete_id);
         break;
       case EF_EVENT_TYPE_RX_MULTI:
+        n_rx = ef_vi_receive_unbundle(&vi->vi, &(evs[i]), rx_ids);
+        TEST(n_rx == 1);
+        handle_rx(vi, rx_ids[0]);
+        rx_bufs_idx++;
+        vi->i = ++i;
+        return 1;
       case EF_EVENT_TYPE_RX_MULTI_DISCARD:
         n_rx = ef_vi_receive_unbundle(&vi->vi, &(evs[i]), rx_ids);
         TEST(n_rx == 1);
-        vi->i = ++i;
-        return 1;
+        rx_bufs_idx++;
+        break;
       case EF_EVENT_TYPE_RX_REF_DISCARD:
-        handle_rx_ref(&vi->vi, evs[i].rx_ref_discard.pkt_id,
-                      evs[i].rx_ref_discard.len);
+        handle_rx_ref_discard(vi, evs[i].rx_ref_discard.pkt_id);
         if( evs[i].rx_ref_discard.flags & EF_VI_DISCARD_RX_ETH_FCS_ERR &&
             cfg_ctpio_thresh < tx_frame_len ) {
           break;
@@ -488,6 +537,7 @@ generic_desc_check(struct eflatency_vi* vi, struct eflatency_vi *tx_vi,
         TEST(0);
         break;
       case EF_EVENT_TYPE_RX_DISCARD:
+        rx_bufs_idx++;
         if( EF_EVENT_RX_DISCARD_TYPE(evs[i]) == EF_EVENT_RX_DISCARD_CRC_BAD &&
             (ef_vi_flags(&tx_vi->vi) & EF_VI_TX_CTPIO) &&
             ! cfg_ctpio_no_poison ) {
@@ -509,6 +559,8 @@ generic_desc_check(struct eflatency_vi* vi, struct eflatency_vi *tx_vi,
     vi->i = i = 0;
     if( ! n_ev && ! wait )
       break;
+    else if( cfg_data_peek )
+      *(volatile unsigned*)pkt_bufs[rx_bufs_idx & RX_BUFS_MASK]->dma_buf;
   }
   return 0;
 }
@@ -520,16 +572,23 @@ static void rx_wait_poll_rx(struct eflatency_vi* vi,
   ef_event ev;
 
   while( 1 ) {
-    while( !ef_receive_poll(&vi->vi, &ev, 1) )
-      ;
+    if( cfg_data_peek ) {
+      /* Peek at location where NIC will write
+       * ahead of arrival. Can reduce latency of
+       * of reading data (with cfg_data_read) */
+      while( !ef_receive_poll(&vi->vi, &ev, 1) )
+        efct_vi_rx_future_peek(&vi->vi);
+    } else {
+      while( !ef_receive_poll(&vi->vi, &ev, 1) )
+        ;
+    }
 
     switch( EF_EVENT_TYPE(ev) ) {
     case EF_EVENT_TYPE_RX_REF:
-      handle_rx_ref(&vi->vi, ev.rx_ref.pkt_id, ev.rx_ref.len);
+      handle_rx_ref(vi, ev.rx_ref.pkt_id);
       return;
     case EF_EVENT_TYPE_RX_REF_DISCARD:
-      handle_rx_ref(&vi->vi, ev.rx_ref_discard.pkt_id,
-                    ev.rx_ref_discard.len);
+      handle_rx_ref_discard(vi, ev.rx_ref_discard.pkt_id);
       if( ev.rx_ref_discard.flags & EF_VI_DISCARD_RX_ETH_FCS_ERR &&
           cfg_ctpio_thresh < tx_frame_len )
         break;
@@ -677,6 +736,7 @@ static void prepare(struct eflatency_vi* rx_vi)
     for( i = 0; i < N_RX_BUFS && ef_vi_receive_space(&rx_vi->vi) > 1; ++i )
       rx_post(&rx_vi->vi);
   }
+  rx_vi->rx_prefix_len = ef_vi_receive_prefix_len(&rx_vi->vi);
 }
 
 
@@ -732,6 +792,9 @@ static CI_NORETURN usage(const char* fmt, ...)
   fprintf(stderr, "  -m <modes>          - allow mode of the set: [c]tpio, \n");
   fprintf(stderr, "                        [p]io, [a]lternatives, [d]ma\n");
   fprintf(stderr, "  -t <modes>          - set TX_PUSH: [a]lways, [d]isable\n");
+  fprintf(stderr, "  -d <modes>          - act on data in addition to event, one or both of:\n");
+  fprintf(stderr, "                      - [r]ead data on packet arrival,\n");
+  fprintf(stderr, "                      - [p]eek at buffer ahead of arrival\n");
   fprintf(stderr, "  -o <filename>       - save raw timings to file\n");
   fprintf(stderr, "  -y <filename>       - save result data to file (YAML)\n");
   fprintf(stderr, "\n");
@@ -776,7 +839,7 @@ int main(int argc, char* argv[])
     p = (unsigned int)__v;                                   \
   } while( 0 );
 
-  while( (c = getopt (argc, argv, "n:s:w:c:pm:t:o:y:")) != -1 )
+  while( (c = getopt (argc, argv, "n:s:w:c:pm:t:d:o:y:")) != -1 )
     switch( c ) {
     case 'n':
       OPT_INT(optarg, cfg_iter);
@@ -851,6 +914,16 @@ int main(int argc, char* argv[])
         case 'd': cfg_vi_flags |= EF_VI_TX_PUSH_DISABLE; break;
         default:
           usage("Unknown mode '%c'", optarg[i]);
+        }
+      }
+      break;
+    case 'd':
+      for( i = 0; i < strlen(optarg); ++i ) {
+        switch( optarg[i] ) {
+        case 'r': cfg_data_read = true; break;
+        case 'p': cfg_data_peek = true; break;
+        default:
+          usage("Unknown data mode '%c'", optarg[i]);
         }
       }
       break;
