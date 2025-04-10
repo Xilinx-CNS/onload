@@ -22,6 +22,7 @@
 #include <ci/efhw/mc_driver_pcol.h>
 #include "../mcdi_common.h"
 #include "../ef10_ef100.h"
+#include "../tph.h"
 
 
 int force_ev_timer = 1;
@@ -30,7 +31,6 @@ MODULE_PARM_DESC(force_ev_timer,
                  "Set to 0 to avoid forcing allocation of event timer with wakeup queue");
 
 #define EFHW_CLIENT_ID_NONE (~0u)
-#define DEBUG_TLP 0
 
 #define MCDI_CHECK(op, rc, actual_len, rate_limit) \
 	ef10_mcdi_check_response(__func__, #op, (rc), op##_OUT_LEN, \
@@ -835,23 +835,12 @@ ef10_mcdi_cmd_get_vi_tlp_processing(struct efhw_nic *nic, unsigned instance,
   EFHW_MCDI_DECLARE_BUF(get_in, MC_CMD_GET_VI_TLP_PROCESSING_IN_LEN);
   EFHW_MCDI_INITIALISE_BUF(get_in);
 
-  EFHW_MCDI_SET_DWORD(get_in, GET_VI_TLP_PROCESSING_IN_INSTANCE, instance);
+  efhw_populate_get_vi_tlp_processing_mcdi_cmd(get_in, instance);
   rc = ef10_mcdi_rpc(nic, MC_CMD_GET_VI_TLP_PROCESSING, sizeof(get_in),
                      sizeof(get_out), &out_size, get_in, &get_out);
   MCDI_CHECK(MC_CMD_GET_VI_TLP_PROCESSING, rc, out_size, 0);
 
-  tlp->data = EFHW_MCDI_DWORD(get_out, GET_VI_TLP_PROCESSING_OUT_DATA);
-
-  tlp->tag1 = EFHW_MCDI_BYTE(get_out, GET_VI_TLP_PROCESSING_OUT_TPH_TAG1_RX);
-  tlp->tag2 = EFHW_MCDI_BYTE(get_out, GET_VI_TLP_PROCESSING_OUT_TPH_TAG2_EV);
-  tlp->relaxed = tlp->data &
-            (1u << MC_CMD_GET_VI_TLP_PROCESSING_OUT_RELAXED_ORDERING_LBN);
-  tlp->inorder =  tlp->data &
-            (1u << MC_CMD_GET_VI_TLP_PROCESSING_OUT_ID_BASED_ORDERING_LBN);
-  tlp->snoop = tlp->data &
-            (1u << MC_CMD_GET_VI_TLP_PROCESSING_OUT_NO_SNOOP_LBN);
-  tlp->tph = tlp->data &
-            (1u << MC_CMD_GET_VI_TLP_PROCESSING_OUT_TPH_ON_LBN);
+  efhw_extract_get_vi_tlp_processing_mcdi_cmd_result(get_out, tlp);
 
   EFHW_NOTICE("%s: tph now %x (data %x) (rc %d)", __FUNCTION__, tlp->tph,
               tlp->data, rc);
@@ -881,21 +870,7 @@ ef10_mcdi_cmd_set_vi_tlp_processing(struct efhw_nic *nic, uint instance,
   tlp.snoop = 0;
   tlp.inorder = 0;
 
-  /* The mcdi headers have awkward definitions of these values so do it
-   * manually */
-  EFHW_MCDI_SET_DWORD(set_in, SET_VI_TLP_PROCESSING_IN_INSTANCE, instance);
-  tlp.data = (unsigned)tlp.tag1 | ((unsigned)tlp.tag2 << (8));
-  if (tlp.relaxed)
-    tlp.data |= 1u <<
-                (MC_CMD_SET_VI_TLP_PROCESSING_IN_RELAXED_ORDERING_LBN-32);
-  if (tlp.inorder)
-    tlp.data |= 1u <<
-                (MC_CMD_SET_VI_TLP_PROCESSING_IN_ID_BASED_ORDERING_LBN-32);
-  if (tlp.snoop)
-    tlp.data |= 1u << (MC_CMD_SET_VI_TLP_PROCESSING_IN_NO_SNOOP_LBN-32);
-  if (tlp.tph)
-    tlp.data |= 1u << (MC_CMD_SET_VI_TLP_PROCESSING_IN_TPH_ON_LBN-32);
-  EFHW_MCDI_SET_DWORD(set_in, SET_VI_TLP_PROCESSING_IN_DATA, tlp.data);
+  efhw_populate_set_vi_tlp_processing_mcdi_cmd(set_in, instance, &tlp);
 
   EFHW_NOTICE("%s: setting tph %x (data %x)",
               __FUNCTION__, (tlp.data >> 19) & 1, tlp.data);
@@ -905,7 +880,7 @@ ef10_mcdi_cmd_set_vi_tlp_processing(struct efhw_nic *nic, uint instance,
 
 #if DEBUG_TLP
   /* read back the value to check it had an effect */
-  ef10_mcdi_cmd_read_vi_tlp_processing(nic, instance, &tlp);
+  ef10_mcdi_cmd_get_vi_tlp_processing(nic, instance, &tlp);
 #endif
 
   return rc;
@@ -1724,21 +1699,9 @@ ef10_dmaq_rx_q_init(struct efhw_nic *nic, struct efhw_dmaq_params *params)
   rc = ef10_mcdi_rpc(nic, MC_CMD_INIT_RXQ, MC_CMD_INIT_RXQ_V4_IN_LEN,
                      MC_CMD_INIT_RXQ_V4_OUT_LEN, &outlen, in, NULL);
 
-  if( rc == 0 && flag_enable_tph ) {
-    uint16_t tag = 0;
-    if( flag_tph_tag_mode != 0 ) {
-      /* TODO verify that raw_smp_processor_id() returns the right value */
-      rc = pcie_tph_get_cpu_st(nic->pci_dev, TPH_MEM_TYPE_VM, raw_smp_processor_id(), &tag);
-      if( rc != 0 )
-        EFHW_WARN("Failed to read steering tag (error %d), continuing without it\n", rc);
-    }
+  if( rc == 0 && flag_enable_tph )
+    efhw_set_tph_steering(nic, params->evq, flag_enable_tph, flag_tph_tag_mode);
 
-    rc = ef10_mcdi_cmd_set_vi_tlp_processing(nic, params->evq, flag_enable_tph, tag);
-    if( rc != 0 ) {
-      EFHW_WARN("Failed to set steering tag (error %d), continuing without it\n", rc);
-      rc = 0;
-    }
-  }
   if( rc == 0 )
     params->qid_out = params->dmaq;
 
@@ -2659,4 +2622,5 @@ struct efhw_func_ops ef10aux_char_functional_units = {
 	.piobuf_free = ef10_nic_piobuf_free,
 	.piobuf_link = ef10_nic_piobuf_link,
 	.piobuf_unlink = ef10_nic_piobuf_unlink,
+	.set_vi_tlp_processing = ef10_mcdi_cmd_set_vi_tlp_processing,
 };

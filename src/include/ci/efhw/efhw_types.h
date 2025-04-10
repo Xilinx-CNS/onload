@@ -514,6 +514,12 @@ struct efhw_func_ops {
 			   unsigned handle);
 	/*! Unlink any previously linked piobuf from a specific txq */
 	int (*piobuf_unlink)(struct efhw_nic* nic, unsigned txq);
+
+  /*--------------------- SDCI ---------------------- */
+
+	/*! Setup TLP Processing Hints */
+	int (*set_vi_tlp_processing)(struct efhw_nic *nic, uint instance,
+				     int set, uint8_t tag_mode);
 };
 
 

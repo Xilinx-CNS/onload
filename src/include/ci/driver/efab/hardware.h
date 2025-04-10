@@ -294,3 +294,10 @@
 #define efhw_nic_piobuf_unlink(nic, txq) \
 	((nic)->efhw_func->piobuf_unlink ? \
 	 (nic)->efhw_func->piobuf_unlink((nic), (txq)) : -EINVAL)
+
+/*----------------- SDCI --------------- */
+#define efhw_nic_set_vi_tlp_processing(nic, instance, set, tag_mode) \
+	((nic)->efhw_func->set_vi_tlp_processing ? \
+	 (nic)->efhw_func->set_vi_tlp_processing((nic), (instance), (set), \
+						 (tag_mode)) : \
+	 -EOPNOTSUPP)
