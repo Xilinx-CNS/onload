@@ -326,3 +326,10 @@
 #define efhw_nic_irq_free(nic, channel, irq) \
 	((nic)->efhw_func->irq_free ? \
 	 (nic)->efhw_func->irq_free((nic), (channel), (irq)) : -EOPNOTSUPP)
+
+/*----------------- SDCI --------------- */
+#define efhw_nic_set_vi_tlp_processing(nic, instance, set, tag_mode) \
+	((nic)->efhw_func->set_vi_tlp_processing ? \
+	 (nic)->efhw_func->set_vi_tlp_processing((nic), (instance), (set), \
+						 (tag_mode)) : \
+	 -EOPNOTSUPP)

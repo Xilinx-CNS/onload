@@ -563,6 +563,12 @@ struct efhw_func_ops {
 			 uint32_t *irq);
 	/*! Free an interrupt */
 	void (*irq_free)(struct efhw_nic *nic, uint32_t channel, uint32_t irq);
+
+  /*--------------------- SDCI ---------------------- */
+
+	/*! Setup TLP Processing Hints */
+	int (*set_vi_tlp_processing)(struct efhw_nic *nic, uint instance,
+				     int set, uint8_t tag_mode);
 };
 
 
