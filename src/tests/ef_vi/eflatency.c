@@ -476,12 +476,6 @@ generic_desc_check(struct eflatency_vi* vi, struct eflatency_vi *tx_vi,
         TEST(n_rx == 1);
         vi->i = ++i;
         return 1;
-      case EF_EVENT_TYPE_RX_MULTI_PKTS:
-        n_rx = evs[i].rx_multi_pkts.n_pkts;
-        TEST(n_rx == 1);
-        ef_vi_rxq_next_desc_id(&vi->vi);
-        vi->i = ++i;
-        return 1;
       case EF_EVENT_TYPE_RX_REF_DISCARD:
         handle_rx_ref(&vi->vi, evs[i].rx_ref_discard.pkt_id,
                       evs[i].rx_ref_discard.len);
