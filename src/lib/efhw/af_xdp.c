@@ -730,6 +730,8 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
   struct socket* sock;
   struct file* file;
   struct efab_af_xdp_offsets* user_offsets;
+  const struct cred *old_cred;
+  struct cred *cred;
 
   if( chunk_size == 0 ||
       chunk_size < headroom ||
@@ -749,18 +751,24 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
   if( sw_bt == NULL )
     return -EINVAL;
 
+  cred = prepare_kernel_cred(&init_task);
+  if( cred == NULL )
+    return -ENOMEM;
+  old_cred = override_creds(cred);
+
   /* We need to use network namespace of network device so that
    * ifindex passed in bpf syscalls makes sense
    * TODO AF_XDP: there is a race here with device changing netns
-   * TODO AF_XDP: this fails unless the user namespace has CAP_NET_RAW
    */
   rc = __sock_create(dev_net(nic->net_dev), AF_XDP, SOCK_RAW, 0, &sock, 0);
   if( rc < 0 )
-    return rc;
+    goto fail_cred;
 
   file = sock_alloc_file(sock, 0, NULL);
-  if( IS_ERR(file) )
-    return PTR_ERR(file);
+  if( IS_ERR(file) ) {
+    rc = PTR_ERR(file);
+    goto fail_cred;
+  }
   vi->sock = sock;
 
   rc = efhw_page_alloc_zeroed(&vi->user_offsets_page);
@@ -815,11 +823,17 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
     add_wait_queue(sk_sleep(vi->sock->sk), &vi->waiter.wait);
 
   user_offsets->mmap_bytes = efhw_page_map_bytes(page_map);
+
+  revert_creds(old_cred);
+  put_cred(cred);
   return 0;
 
  fail:
   vi->waiter.wait.func = NULL;
   xdp_release_vi(nic, vi);
+ fail_cred:
+  revert_creds(old_cred);
+  put_cred(cred);
   return rc;
 }
 
