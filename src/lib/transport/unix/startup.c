@@ -521,6 +521,7 @@ static void citp_opts_validate_env(void)
     "EF_VI_LOG_LEVEL",
     "EF_VI_EVQ_CLEAR_STRIDE",
     "EF_BUILDTREE_UL",
+    "EF_VI_COMPAT_MODE",
     NULL
   };
   char** env_name;
