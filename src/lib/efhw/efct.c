@@ -487,6 +487,7 @@ efct_nic_init_hardware(struct efhw_nic *nic,
   nic->flags |= NIC_FLAG_TX_CTPIO | NIC_FLAG_CTPIO_ONLY
              | NIC_FLAG_HW_RX_TIMESTAMPING | NIC_FLAG_HW_TX_TIMESTAMPING
              | NIC_FLAG_RX_SHARED
+             | NIC_FLAG_RX_KERNEL_SHARED
              | NIC_FLAG_HW_MULTICAST_REPLICATION
              | NIC_FLAG_SHARED_PD
              | NIC_FLAG_RX_POLL

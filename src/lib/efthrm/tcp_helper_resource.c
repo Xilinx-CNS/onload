@@ -1376,6 +1376,11 @@ get_vi_settings(ci_netif* ni, struct efhw_nic* nic,
   else
     info->oo_vi_flags &=~ OO_VI_FLAGS_RX_SHARED;
 
+  if( nic->flags & NIC_FLAG_RX_KERNEL_SHARED )
+    info->oo_vi_flags |= OO_VI_FLAGS_RX_KERNEL_SHARED;
+  else
+    info->oo_vi_flags &=~ OO_VI_FLAGS_RX_KERNEL_SHARED;
+
   if( nic->flags & NIC_FLAG_HW_MULTICAST_REPLICATION )
     info->oo_vi_flags |= OO_VI_FLAGS_HW_MULTICAST_REPLICATION;
   else
@@ -1493,11 +1498,23 @@ static int find_and_release_orphaned_stack(void)
   return rc;
 }
 
+static void choose_evq_size(struct vi_allocate_info* info)
+{
+  int evq_min = info->txq_capacity;
+
+  /* For kernel shared RX the kernel owns the EVQ, so we don't care about it
+   * for sizing purposes. */
+  if( ! (info->oo_vi_flags & OO_VI_FLAGS_RX_KERNEL_SHARED) )
+    evq_min += info->rxq_capacity;
+
+  for( info->evq_capacity = 512; info->evq_capacity <= evq_min;
+       info->evq_capacity *= 2 )
+    ;
+}
 
 static int allocate_vi(ci_netif* ni, struct vi_allocate_info* info)
 {
   int rc = -EDOM;  /* Placate compiler. */
-  unsigned evq_min;
 
   /* There are various VI flags that can be requested by the caller, and we
    * need to retry all combinations in the event of failure.  We achieve this
@@ -1545,12 +1562,7 @@ static int allocate_vi(ci_netif* ni, struct vi_allocate_info* info)
   size_t n_shm_rxqs;
 
   /* Choose DMA queue sizes, and calculate suitable size for EVQ. */
-  evq_min = info->txq_capacity;
-  if( ! (info->oo_vi_flags & OO_VI_FLAGS_RX_SHARED) )
-    evq_min += info->rxq_capacity;
-  for( info->evq_capacity = 512; info->evq_capacity <= evq_min;
-       info->evq_capacity *= 2 )
-    ;
+  choose_evq_size(info);
 
   /* Build masks of the features that are required or requested. */
   requested_feature_mask = 0;
