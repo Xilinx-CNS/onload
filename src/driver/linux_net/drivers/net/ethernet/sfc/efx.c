@@ -277,6 +277,8 @@ int efx_init_irq_moderation(struct efx_nic *efx, unsigned int tx_usecs,
 
 	efx->irq_rx_adaptive = rx_adaptive;
 	efx->irq_rx_moderation_us = rx_usecs;
+	efx->irq_tx_moderation_us = tx_usecs;
+
 	efx_for_each_channel(channel, efx) {
 		if (efx_channel_has_rx_queue(channel))
 			channel->irq_moderation_us = rx_usecs;
@@ -294,26 +296,7 @@ int efx_get_irq_moderation(struct efx_nic *efx, unsigned int *tx_usecs,
 {
 	*rx_adaptive = efx->irq_rx_adaptive;
 	*rx_usecs = efx->irq_rx_moderation_us;
-
-	if (efx->state != STATE_NET_UP)
-		return -ENETDOWN;
-
-	/* If channels are shared between RX and TX, so is IRQ
-	 * moderation.  Otherwise, IRQ moderation is the same for all
-	 * TX channels and is not adaptive.
-	 */
-	if (efx->tx_channel_offset == 0) {
-		*tx_usecs = *rx_usecs;
-	} else {
-		struct efx_channel *tx_channel;
-
-		tx_channel = efx_get_channel(efx, efx->tx_channel_offset);
-		if (!tx_channel) {
-			return -ENOENT;
-		}
-
-		*tx_usecs = tx_channel->irq_moderation_us;
-	}
+	*tx_usecs = efx->irq_tx_moderation_us;
 
 	return 0;
 }

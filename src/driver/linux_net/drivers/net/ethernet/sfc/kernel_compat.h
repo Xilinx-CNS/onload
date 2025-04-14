@@ -1865,6 +1865,9 @@ static inline void devlink_flash_update_timeout_notify(struct devlink *devlink,
 #ifndef DEVLINK_INFO_VERSION_GENERIC_FW_BUNDLE_ID
 #define DEVLINK_INFO_VERSION_GENERIC_FW_BUNDLE_ID	"fw.bundle_id"
 #endif
+#ifndef DEVLINK_INFO_VERSION_GENERIC_FW_BOOTLOADER
+#define DEVLINK_INFO_VERSION_GENERIC_FW_BOOTLOADER	"fw.bootloader"
+#endif
 
 #ifdef EFX_NEED_REFCOUNT_T
 typedef atomic_t refcount_t;

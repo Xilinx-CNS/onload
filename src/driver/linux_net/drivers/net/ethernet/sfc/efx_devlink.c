@@ -90,13 +90,13 @@ static void efx_devlink_info_board_cfg(struct efx_nic *efx,
 }
 
 #define EFX_VER_FLAG(_f)	\
-	(MC_CMD_GET_VERSION_V5_OUT_ ## _f ## _PRESENT_LBN)
+	(MC_CMD_GET_VERSION_V6_OUT_ ## _f ## _PRESENT_LBN)
 
 static void efx_devlink_info_running_versions(struct efx_nic *efx,
 					      struct devlink_info_req *req)
 {
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_GET_VERSION_EXT_IN_LEN);
-	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_VERSION_V5_OUT_LEN);
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_VERSION_V6_OUT_LEN);
 	char buf[EFX_MAX_VERSION_INFO_LEN];
 	unsigned int flags, build_id;
 	union {
@@ -362,6 +362,38 @@ static void efx_devlink_info_running_versions(struct efx_nic *efx,
 
 		devlink_info_version_running_put(req,
 						 DEVLINK_INFO_VERSION_GENERIC_FW_BUNDLE_ID,
+						 buf);
+	}
+
+	if (outlength < MC_CMD_GET_VERSION_V6_OUT_LEN)
+		return;
+
+	/* Handle V6 additions */
+	if (flags & BIT(EFX_VER_FLAG(BOOTLOADER_VERSION))) {
+		ver.dwords = (__le32 *)MCDI_PTR(outbuf,
+						GET_VERSION_V6_OUT_BOOTLOADER_VERSION);
+
+		snprintf(buf, EFX_MAX_VERSION_INFO_LEN, "%u.%u.%u.%u",
+			 le32_to_cpu(ver.dwords[0]), le32_to_cpu(ver.dwords[1]),
+			 le32_to_cpu(ver.dwords[2]),
+			 le32_to_cpu(ver.dwords[3]));
+
+		devlink_info_version_running_put(req,
+						 DEVLINK_INFO_VERSION_GENERIC_FW_BOOTLOADER,
+						 buf);
+	}
+
+	if (flags & BIT(EFX_VER_FLAG(EXPANSION_ROM_VERSION))) {
+		ver.dwords = (__le32 *)MCDI_PTR(outbuf,
+						GET_VERSION_V6_OUT_EXPANSION_ROM_VERSION);
+
+		snprintf(buf, EFX_MAX_VERSION_INFO_LEN, "%u.%u.%u.%u",
+			 le32_to_cpu(ver.dwords[0]), le32_to_cpu(ver.dwords[1]),
+			 le32_to_cpu(ver.dwords[2]),
+			 le32_to_cpu(ver.dwords[3]));
+
+		devlink_info_version_running_put(req,
+						 EFX_DEVLINK_INFO_VERSION_FW_UEFI,
 						 buf);
 	}
 }

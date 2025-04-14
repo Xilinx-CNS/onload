@@ -468,6 +468,7 @@ static void x4_mcdi_to_speed_duplex(struct efx_nic *efx, u32 tech,
 	}
 }
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_LINK_LANES)
 static void x4_mcdi_tech_to_lanes(struct efx_nic *efx, u32 tech, u32 *lanes)
 {
 	if (tech < ARRAY_SIZE(tech_map) &&
@@ -476,6 +477,7 @@ static void x4_mcdi_tech_to_lanes(struct efx_nic *efx, u32 tech, u32 *lanes)
 	else
 		*lanes = 0; /* unknown */
 }
+#endif
 
 static u32 x4_mcdi_to_ethtool_cap(struct efx_nic *efx, bool autoneg,
 				  const unsigned long *tech_mask, u32 pause)
@@ -796,6 +798,7 @@ int efx_x4_mcdi_link_state(struct efx_nic *efx)
 {
 	struct efx_x4_mcdi_port_data *port_data = efx->port_data;
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_LINK_STATE_OUT_V3_LEN);
+	DECLARE_BITMAP(tech_tmp, MC_CMD_ETH_TECH_TECH_WIDTH);
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_LINK_STATE_IN_LEN);
 	void *supported, *advertised, *partner;
 	size_t outlen;
@@ -832,17 +835,24 @@ int efx_x4_mcdi_link_state(struct efx_nic *efx)
 
 	supported = MCDI_PTR(outbuf,
 			     LINK_STATE_OUT_SUPPORTED_ABILITIES_TECH_MASK);
-	efx_x4_mcdi_tech_to_bitmap(port_data->supported.tech_mask, supported);
+	efx_x4_mcdi_tech_to_bitmap(tech_tmp, supported);
 
-	port_data->supported.fec =
-		MCDI_DWORD(outbuf,
-			   LINK_STATE_OUT_SUPPORTED_ABILITIES_FEC_MASK);
-	port_data->supported.requested_fec =
-		MCDI_DWORD(outbuf,
-			   LINK_STATE_OUT_SUPPORTED_ABILITIES_FEC_REQ);
-	port_data->supported.pause =
-		MCDI_BYTE(outbuf,
-			  LINK_STATE_OUT_SUPPORTED_ABILITIES_PAUSE_MASK);
+	/* Some X4 firmwares report empty supported abilities while
+	 * processing link control updates, so avoid using zeroed state.
+	 */
+	if (!bitmap_empty(tech_tmp, MC_CMD_ETH_TECH_TECH_WIDTH)) {
+		bitmap_copy(port_data->supported.tech_mask, tech_tmp,
+			    MC_CMD_ETH_TECH_TECH_WIDTH);
+		port_data->supported.fec =
+			MCDI_DWORD(outbuf,
+				   LINK_STATE_OUT_SUPPORTED_ABILITIES_FEC_MASK);
+		port_data->supported.requested_fec =
+			MCDI_DWORD(outbuf,
+				   LINK_STATE_OUT_SUPPORTED_ABILITIES_FEC_REQ);
+		port_data->supported.pause =
+			MCDI_BYTE(outbuf,
+				  LINK_STATE_OUT_SUPPORTED_ABILITIES_PAUSE_MASK);
+	}
 
 	/* Advertised abilities */
 	BUILD_BUG_ON(bitmap_size(MC_CMD_ETH_TECH_TECH_WIDTH) !=

@@ -92,7 +92,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.1.0.1004"
+#define EFX_DRIVER_VERSION	"6.1.0.1005"
 #endif
 
 #ifdef DEBUG
@@ -1423,6 +1423,7 @@ struct efx_mae;
  * @use_legacy_link_mgmt: Use legacy MCDI link management commands
  * @irq_mod_step_us: Adaptive IRQ moderation time step for RX event queues
  * @irq_rx_moderation_us: IRQ moderation time for RX event queues
+ * @irq_tx_moderation_us: IRQ moderation time for TX event queues
  * @rss_mode: RSS spreading mode
  * @msg_enable: Log message enable flags
  * @state: Device state number (%STATE_*). Serialised by the rtnl_lock.
@@ -1635,6 +1636,7 @@ struct efx_nic {
 #endif
 	unsigned int irq_mod_step_us;
 	unsigned int irq_rx_moderation_us;
+	unsigned int irq_tx_moderation_us;
 #if !defined(EFX_NOT_UPSTREAM)
 	enum efx_rss_mode rss_mode;
 #endif
