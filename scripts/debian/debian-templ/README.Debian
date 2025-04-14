@@ -20,4 +20,4 @@ The #TYPE#-source package can be used in several ways,
    for the Debian kernel-image package that you are using. See
    the "modules_image" section of the make-kpkg(1) man page.
 
- -- Support <support@solarflare.com>  Wed, 08 Apr 2015 17:20:35 +0100
+ -- AMD Solarflare NIC Support <support-nic@amd.com>  Wed, 08 Apr 2015 17:20:35 +0100

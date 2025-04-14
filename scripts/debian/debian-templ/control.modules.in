@@ -1,7 +1,7 @@
 Source: #TYPE#
 Section: unknown
 Priority: optional
-Maintainer: Support <support@solarflare.com>
+Maintainer: AMD Solarflare NIC Support <support-nic@amd.com>
 Build-Depends: debhelper (>= 7)
 Standards-Version: 3.9.3
 
