@@ -9,7 +9,7 @@ Homepage: http://www.openonload.org
 Package: #TYPE#-user
 Architecture: any
 Depends: adduser, psmisc, ${shlibs:Depends}, ${misc:Depends}, python3
-Suggests: #TYPE#-modules-${source:Version}, #TYPE#-dev
+Suggests: #TYPE#-modules (>= ${source:Version}), #TYPE#-dev
 Provides: onload-user
 Description: Onload TCP/IP stack - library
 Build-Profiles: <!pkg.#TYPE#.nouser>
