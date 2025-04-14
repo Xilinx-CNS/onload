@@ -1,12 +1,10 @@
-This is not a supported release version of Onload
-=================================================
+Onload-9.1~preview1
+===================
 
-
-Onload-9.1.x
-============
-
- This is a feature release of Onload including a new version of the
+ This is a feature preview of Onload including a new version of the
  sfc net driver.
+
+ This release is not generally supported.
 
  Please see the ChangeLog for a full list of changes.
 
@@ -26,9 +24,9 @@ Linux distribution support
 New ef_receive_poll() API call
 ------------------------------
 
-In this update release, the ef_vi API gains a facility to poll for
-receives separately from transmissions, for potential latency improvements
-in some situations.
+In this release, the ef_vi API gains a facility to poll for receives
+separately from transmissions, for potential latency improvements in some
+situations.
 
 
 SDCI
@@ -39,22 +37,25 @@ Support for SDCI is available when compiled in.
 
 X4 Functionality
 ----------------
+
 - Currently only 128 TXQs are available on the Express datapath
 - NIC reset is not handled
 - Shared queues are not available
 - Filter handling when interfaces change state does not operate correctly
 
+
 ef_vi Compatibility
 -------------------
+
 The ef_vi interface is still under development. As such there are no binary
 compatibility guarantees either backwards or forwards.
 
 
-X2 RX Timestamping with very old firmware versions
+X2 Rx Timestamping with very old firmware versions
 --------------------------------------------------
 
 A workaround for handling v7.1 firmware on X2 has been removed, which would
-lead to inaccurate timestamps if that firmware was in use. Anyone use this
+lead to inaccurate timestamps if that firmware was in use. Anyone using this
 outdated firmware should update to a supported version.
 
 
