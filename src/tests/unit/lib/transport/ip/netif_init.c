@@ -21,7 +21,11 @@ const char onload_product[] = "PRODUCT";
 
 int (*ci_sys_open)(const char*, int, ...);
 int (*ci_sys_close)(int);
+ssize_t (*ci_sys_send)(int, const void*, size_t, int);
+int (*ci_sys_connect)(int, const struct sockaddr*, socklen_t);
+ssize_t (*ci_sys_recv)(int, void *, size_t, int);
 ssize_t (*ci_sys_read)(int, void*, size_t);
+int (*ci_sys_socket)(int, int, int);
 int (*ci_sys_execvpe)(const char *, char *const [], char *const []);
 
 /* Parametrised test case */
