@@ -9,6 +9,7 @@
 #include <ci/efhw/eventq.h>
 #include <ci/efhw/checks.h>
 #include <ci/efhw/efhw_buftable.h>
+#include <ci/efhw/tph.h>
 
 #include <ci/driver/ci_ef10ct.h>
 #include <ci/tools/bitfield.h>
@@ -29,6 +30,7 @@
 #include "../sw_buffer_table.h"
 #include "../mcdi_common.h"
 #include "../ethtool_flow.h"
+#include "../tph.h"
 
 
 #if CI_HAVE_EF10CT
@@ -423,6 +425,80 @@ ef10ct_ptp_time_event_unsubscribe(struct efhw_nic *nic, uint32_t evq)
 
   if( rc < 0 )
     EFHW_ERR("%s failed rc %d", __func__, rc);
+
+  return rc;
+}
+
+
+static int
+ef10ct_mcdi_cmd_get_vi_tlp_processing(struct efhw_nic *nic, unsigned instance,
+                                      struct tlp_state *tlp)
+{
+  struct efx_auxdev_rpc rpc;
+  int rc;
+
+  EFHW_MCDI_DECLARE_BUF(out, MC_CMD_GET_VI_TLP_PROCESSING_OUT_LEN);
+  EFHW_MCDI_DECLARE_BUF(in, MC_CMD_GET_VI_TLP_PROCESSING_IN_LEN);
+  EFHW_MCDI_INITIALISE_BUF(in);
+
+  efhw_populate_get_vi_tlp_processing_mcdi_cmd(in, instance);
+
+  rpc = (struct efx_auxdev_rpc) {
+    .cmd = MC_CMD_GET_VI_TLP_PROCESSING,
+    .inlen = sizeof(in),
+    .inbuf = (void*)in,
+    .outlen = sizeof(out),
+    .outbuf = (void*)out
+  };
+  rc = ef10ct_fw_rpc(nic, &rpc);
+
+  efhw_extract_get_vi_tlp_processing_mcdi_cmd_result(out, tlp);
+
+  EFHW_NOTICE("%s: tph now %x (data %x) (rc %d)", __FUNCTION__, tlp->tph,
+              tlp->data, rc);
+
+  return rc;
+}
+
+
+static int
+ef10ct_mcdi_cmd_set_vi_tlp_processing(struct efhw_nic *nic, uint instance,
+                                      int set, uint8_t tag)
+{
+  struct efx_auxdev_rpc rpc;
+  struct tlp_state tlp;
+  int rc;
+
+  EFHW_MCDI_DECLARE_BUF(in, MC_CMD_SET_VI_TLP_PROCESSING_IN_LEN);
+  EFHW_MCDI_INITIALISE_BUF(in);
+
+  rc = ef10ct_mcdi_cmd_get_vi_tlp_processing(nic, instance, &tlp);
+  EFHW_NOTICE("%s: tph was %x (data %x, instance %d) (rc %d)",
+              __FUNCTION__, tlp.tph, tlp.data, instance, rc);
+
+  tlp.tph = set ? 1 : 0;
+  tlp.tag1 = tlp.tag2 = tag;
+  tlp.relaxed = 0;
+  tlp.snoop = 0;
+  tlp.inorder = 0;
+
+  efhw_populate_set_vi_tlp_processing_mcdi_cmd(in, instance, &tlp);
+
+  EFHW_NOTICE("%s: setting tph %x (data %x)",
+              __FUNCTION__, (tlp.data >> 19) & 1, tlp.data);
+  rpc = (struct efx_auxdev_rpc) {
+    .cmd = MC_CMD_SET_VI_TLP_PROCESSING,
+    .inlen = sizeof(in),
+    .inbuf = (void*)in,
+    .outlen = 0,
+    .outbuf = NULL
+  };
+  rc = ef10ct_fw_rpc(nic, &rpc);
+
+#if DEBUG_TLP
+  /* read back the value to check it had an effect */
+  ef10ct_mcdi_cmd_get_vi_tlp_processing(nic, instance, &tlp);
+#endif
 
   return rc;
 }
@@ -963,6 +1039,8 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
 {
   EFHW_MCDI_DECLARE_BUF(in, MC_CMD_INIT_RXQ_V5_IN_LEN);
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  int flag_tph_tag_mode = (params->flags & EFHW_VI_TPH_TAG_MODE) != 0;
+  int flag_enable_tph = (params->flags & EFHW_VI_ENABLE_TPH) != 0;
   int rxq_num = params->qid;
   int rxq_handle;
   int evq;
@@ -995,6 +1073,10 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
 
   rxq_handle = ef10ct_reconstruct_queue_handle(rxq_num,
                                                EF10CT_QUEUE_HANDLE_TYPE_RXQ);
+
+  /* Needs to be done before the queue is active */
+  if( flag_enable_tph )
+    efhw_set_tph_steering(nic, rxq_handle, flag_enable_tph, flag_tph_tag_mode);
 
   /* Choose which evq to bind this rxq to. */
   if( !real_evq ) {
@@ -1847,6 +1929,7 @@ struct efhw_func_ops ef10ct_char_functional_units = {
   .shared_rxq_refresh_kernel = ef10ct_nic_shared_rxq_refresh_kernel,
   .irq_alloc = ef10ct_irq_alloc,
   .irq_free = ef10ct_irq_free,
+  .set_vi_tlp_processing = ef10ct_mcdi_cmd_set_vi_tlp_processing,
 };
 
 #endif

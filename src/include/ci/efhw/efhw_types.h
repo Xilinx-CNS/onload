@@ -159,6 +159,7 @@ struct efhw_shared_bind_params {
 	struct efab_efct_rxq_uk_shm_q *shm;
 	unsigned wakeup_instance;
 	struct efhw_efct_rxq *rxq;
+	uint flags;
 };
 typedef void efhw_efct_rxq_free_func_t(struct efhw_efct_rxq*);
 

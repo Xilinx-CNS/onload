@@ -217,6 +217,7 @@ int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix, bool timestamp_req,
 		.hugetlb_alloc = hugetlb_alloc,
 		.shm = NULL,
 		.wakeup_instance = vi->rs.rs_instance,
+		.flags = vi->flags,
 	};
 	struct efhw_nic *nic;
 
