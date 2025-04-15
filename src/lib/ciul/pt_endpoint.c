@@ -23,6 +23,9 @@
 #include <stdio.h>
 #include <net/if.h>
 
+#include <etherfabric/shrub_shared.h>
+#include <etherfabric/shrub_adapter.h>
+
 #define CTPIO_MMAP_LEN CI_PAGE_SIZE
 
 /* ****************************************************************************
@@ -464,6 +467,7 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   void* p;
   int q_label;
   int state_bytes;
+  int shrub_controller_id;
 
   vi_flags |= get_vi_flags_from_env();
 
@@ -471,6 +475,12 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
     txq_capacity = atoi(s);
   if( rxq_capacity < 0 && (s = getenv("EF_VI_RXQ_SIZE")) )
     rxq_capacity = atoi(s);
+
+  if( (s = getenv("EF_SHRUB_CONTROLLER")) ) {
+    shrub_controller_id = atoi(s);
+  } else {
+    shrub_controller_id = -1;
+  }
 
   EF_VI_BUG_ON((evq == NULL) != (evq_capacity != 0));
   EF_VI_BUG_ON(! evq_capacity && ! rxq_capacity && ! txq_capacity);
@@ -623,8 +633,22 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
     /* Could also use nic_type.variant instead. */
     if( ra.u.vi_out.nic_arch == EFHW_ARCH_EFCT )
       rc = efct_kbufs_init(vi);
-    else if ( ra.u.vi_out.nic_arch == EFHW_ARCH_EF10CT )
+    else if ( ra.u.vi_out.nic_arch == EFHW_ARCH_EF10CT ) {
       rc = efct_ubufs_init(vi, pd, pd_or_vi_set_dh);
+      if ( rc == 0 && shrub_controller_id >= 0 ) {
+        rc = shrub_adapter_send_ifname(
+          shrub_adapter_send_request,
+          shrub_controller_id,
+          pd->pd_intf_name,
+          EF_SHRUB_TEMP_BC);
+        if ( rc < 0 ) {
+          LOGVV(ef_log("%s: failed to populate shrub request %d", __FUNCTION__, rc));
+          goto fail5;
+        }
+        rc = efct_ubufs_set_shared(vi, shrub_controller_id, rc);
+      }
+
+    }
     if( rc ) {
       LOGVV(ef_log("%s: mmap (efct reserve) %d", __FUNCTION__, rc));
       goto fail5;

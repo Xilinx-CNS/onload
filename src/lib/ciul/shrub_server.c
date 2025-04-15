@@ -86,6 +86,7 @@ struct ef_shrub_server {
   /* Array of size res->vi.efct_rxqs.max_qs. */
   struct ef_shrub_queue** shrub_queues;
   unsigned pd_excl_rxq_tok;
+  char socket_path[EF_SHRUB_SERVER_SOCKET_LEN];
 };
 
 /* Unix server operations */
@@ -137,6 +138,7 @@ static int unix_server_listen(struct ef_shrub_server* server, const char *server
   if( rc < 0 )
     goto fail;
 
+  strncpy(server->socket_path, server_addr, sizeof(server->socket_path));
   return listen(server->unix_server.listen, 32);
 
 fail:
@@ -176,6 +178,8 @@ static int unix_server_init(struct ef_shrub_server* server, const char* server_a
   int rc;
   epoll_data_t epoll_data;
 
+  remove(server_addr);
+
   rc = unix_server_epoll_create(server);
   if( rc < 0 )
     return rc;
@@ -201,6 +205,8 @@ static void unix_server_fini(struct ef_shrub_server* server)
 {
   close(server->unix_server.listen);
   close(server->unix_server.epoll);
+  if ( server->socket_path )
+    unlink(server->socket_path);
 }
 
 static int server_connection_opened(struct ef_shrub_server* server);
@@ -775,8 +781,7 @@ int ef_shrub_server_open(struct ef_vi* vi,
   if( server == NULL)
     return -ENOMEM;
 
-  remove(EF_SHRUB_CONTROLLER_PATH);
-  rc = unix_server_init(server, EF_SHRUB_CONTROLLER_PATH);
+  rc = unix_server_init(server, server_addr);
   if( rc < 0 )
     goto fail_unix_server_init;
 

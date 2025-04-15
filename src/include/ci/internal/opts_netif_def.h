@@ -119,7 +119,6 @@
 CI_CFG_OPTFILE_VERSION(100)
 #endif
 
-
 /************************* FLAGS SECTION *************************/
 
 CI_CFG_OPT("EF_URG_RFC", urg_rfc, ci_uint32,
@@ -1761,4 +1760,9 @@ CI_CFG_OPT("EF_DUMP_STACK_ON_EXIT", dump_stack_on_exit, ci_uint32,
 "It causes details of the stack to be emitted to the kernel log when the "
 "stack exits.",
            1, , 0, 0, 1, yesno)
+
+#define EF_SHRUB_MAX_CONTROLLER 9999
+CI_CFG_OPT("EF_SHRUB_CONTROLLER", shrub_controller_id ,ci_int32,
+"Spawn or join onto a shrub controller with the given shrub controller id. ",
+           , ,-1, -1, EF_SHRUB_MAX_CONTROLLER, count)
 

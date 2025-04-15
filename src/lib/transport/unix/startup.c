@@ -505,6 +505,7 @@ static void citp_opts_validate_env(void)
 #include <ci/internal/opts_citp_def.h>
 #include <ci/internal/opts_user_def.h>
     "EF_NAME",
+    "EF_SHRUB_CONTROLLER",
     "EF_USERBUILD",
     "EF_NO_PRELOAD_RESTORE",
     "EF_LD_PRELOAD",

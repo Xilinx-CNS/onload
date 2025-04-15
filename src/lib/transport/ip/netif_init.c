@@ -23,6 +23,9 @@
 #include <ci/tools/sysdep.h>
 
 #ifndef __KERNEL__
+#include <sys/un.h>
+#include <etherfabric/shrub_adapter.h>
+#include <etherfabric/shrub_shared.h>
 #include <cplane/cplane.h>
 #include <cplane/create.h>
 #include <net/if.h>
@@ -1328,6 +1331,9 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
 
   if( (s = getenv("EF_DUMP_STACK_ON_EXIT")) )
     opts->dump_stack_on_exit = atoi(s);
+
+  if( (s = getenv("EF_SHRUB_CONTROLLER")) )
+    opts->shrub_controller_id = atoi(s);
 }
 
 
@@ -1963,12 +1969,94 @@ static void oo_efct_superbuf_post(ef_vi* vi, int qid, int sbid, bool sentinel)
   // FIXME should we detect errors?
 }
 
+static int spawn_shrub_controller(ci_netif* ni)
+{
+  ci_assert(NI_OPTS(ni).shrub_controller_id >= 0);
+  ci_fd_t fp = ci_netif_get_driver_handle(ni);
+  shrub_ioctl_data_t shrub_args = {0};
+  shrub_args.controller_id = NI_OPTS(ni).shrub_controller_id;
+  return oo_resource_op(fp, OO_IOC_SHRUB_SPAWN_SERVER, &shrub_args);
+}
+
+int oo_send_shrub_request(int controller_id,
+                          shrub_controller_request_t *request) {
+  int rc;
+  ssize_t received_bytes;
+  int client_fd;
+  struct sockaddr_un addr;
+  char socket_path[EF_SHRUB_NEGOTIATION_SOCKET_LEN];
+
+  ci_assert(controller_id >= 0);
+
+  rc = snprintf(socket_path, sizeof(socket_path), EF_SHRUB_CONTROLLER_PATH_FORMAT
+                "%s", EF_SHRUB_SOCK_DIR_PATH, controller_id,
+                EF_SHRUB_NEGOTIATION_SOCKET);
+  if ( rc < 0 || rc >= sizeof(socket_path) )
+    return -EINVAL;
+
+  client_fd = ci_sys_socket(AF_UNIX, SOCK_SEQPACKET, 0);
+  if ( client_fd == -1 )
+    return -errno;
+
+  memset(&addr, 0, sizeof(addr));
+  addr.sun_family = AF_UNIX;
+  strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
+  addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
+
+  rc = ci_sys_connect(client_fd, (struct sockaddr *)&addr, sizeof(addr));
+  if ( rc < 0 ) {
+    rc = -errno;
+    goto clean_exit;
+  }
+
+  rc = ci_sys_send(client_fd, request, sizeof(*request), 0);
+  if ( rc == -1 ) {
+    rc = -errno;
+    goto clean_exit;
+  }
+
+  received_bytes = ci_sys_recv(client_fd, &rc, sizeof(int), 0);
+  if ( received_bytes == -1 ) {
+    rc = -errno;
+    goto clean_exit;
+  } else if ( received_bytes != sizeof(int) ) {
+    rc = -ENOMEM;
+    goto clean_exit;
+  }
+
+clean_exit:
+  ci_sys_close(client_fd);
+  return rc;
+}
+
+static int oo_init_shrub(ci_netif* ni, ef_vi* vi, ci_hwport_id_t hw_port) {
+  int rc = 0;
+#ifndef __KERNEL__
+  if ( NI_OPTS(ni).shrub_controller_id >= 0 ) {
+      rc = spawn_shrub_controller(ni);
+      if( rc < 0 )
+        return rc;
+
+      rc = shrub_adapter_send_hwport(
+        oo_send_shrub_request,
+        NI_OPTS(ni).shrub_controller_id,
+        hw_port,
+        EF_SHRUB_TEMP_BC
+      );
+      if ( rc < 0 )
+        return rc;
+      efct_ubufs_set_shared(vi, NI_OPTS(ni).shrub_controller_id, rc);
+    }
+#endif
+  return rc;
+}
+
 static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
                       int vi_io_offset, int vi_efct_shm_offset,
                       char** vi_mem_ptr,
                       ef_vi* vi, unsigned vi_instance,
                       int evq_bytes, int txq_size, ef_vi_stats* vi_stats,
-                      struct efab_nic_design_parameters* dp)
+                      struct efab_nic_design_parameters* dp, ci_hwport_id_t hw_port)
 {
   ef_vi_state* state = (void*) ((char*) ni->state + vi_state_offset);
   ci_netif_state_nic_t* nsn = &(ni->state->nic[nic_i]);
@@ -2003,6 +2091,13 @@ static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
     } else if( NI_OPTS(ni).multiarch_rx_datapath != EF_MULTIARCH_DATAPATH_FF &&
                nsn->vi_arch == EFHW_ARCH_EF10CT ) {
       rc = efct_ubufs_init_internal(vi);
+      if( rc < 0 )
+        return rc;
+
+      rc = oo_init_shrub(ni, vi, hw_port);
+      if ( rc < 0 )
+        return rc;
+    
       /* TODO support direct buffer posting when allowed */
       vi->efct_rxqs.ops->post = oo_efct_superbuf_post;
       vi->efct_rxqs.ops->refresh = oo_efct_superbuf_config_refresh;
@@ -2163,7 +2258,7 @@ static int netif_tcp_helper_build(ci_netif* ni)
                     vi_efct_shm_offset,
                     &vi_mem_ptr, vi, nsn->vi_instance,
                     nsn->vi_evq_bytes, nsn->vi_txq_size,
-                    &ni->state->vi_stats, &dp);
+                    &ni->state->vi_stats, &dp, ns->intf_i_to_hwport[nic_i]);
     if( rc )
       goto fail2;
     if( NI_OPTS(ni).tx_push )
