@@ -51,7 +51,7 @@ struct efhw_efct_urxq {
 struct efhw_efct_rxq {
   struct efhw_efct_rxq *next;
   unsigned qid;
-  unsigned qix;
+  int qix;
   uint32_t wake_at_seqno;
   unsigned wakeup_instance;
   union {

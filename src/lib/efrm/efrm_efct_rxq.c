@@ -285,7 +285,7 @@ void efrm_rxq_release(struct efrm_efct_rxq *rxq)
 #if CI_HAVE_EFCT_COMMON
 	if (__efrm_resource_release(&rxq->rs)) {
 		struct efrm_client* rs_client = rxq->rs.rs_client;
-		unsigned shm_ix = rxq->hw.qix;
+		int shm_ix = rxq->hw.qix;
 		if (shm_ix >= 0) {
 			efrm_fini_debugfs_efct_rxq(rxq);
 			rxq->vi->efct_shm->active_qs &= ~(1ull << shm_ix);
