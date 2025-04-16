@@ -38,6 +38,7 @@ int (*ci_sys_ioctl)(int, long unsigned int, ...) =
 
 struct shrub_controller_vi;
 static volatile sig_atomic_t is_running = 1;
+static volatile sig_atomic_t call_shrub_dump = 0;
 
 #define DEFAULT_BUFFER_COUNT 2048
 #define DEFAULT_BUFFER_SIZE 1024 * 1024
@@ -327,6 +328,7 @@ static void tear_down_servers(shrub_controller_config *config) {
     free(current_interface);
     current_interface = next_interface;
   }
+  config->server_config_head = NULL;
 }
 
 static int create_onload_config_socket(const char *socket_path, int epoll_fd) {
@@ -554,11 +556,19 @@ static int reactor_loop(shrub_controller_config *config) {
       current_interface = current_interface->next;
     }
     poll_socket(config);
+    if ( call_shrub_dump == 1 ) {
+      shrub_dump(config, "controller-signal.dump");
+      call_shrub_dump = 0;
+    }
   }
   return 0;
 }
 
 static void cleanup_controller(shrub_controller_config *config) {
+  if ( config->debug_mode ) {
+    fprintf(stdout, "controller finished, attempting to cleanup!\n");
+  }
+  
   tear_down_servers(config);
   cleanup_sockets(config);
   remove_directory_tree(config->controller_dir);
@@ -566,7 +576,14 @@ static void cleanup_controller(shrub_controller_config *config) {
   oo_fd_close(config->oo_fd_handle);
 }
 
-void signal_handler(int signal) { is_running = 0; }
+void signal_handler(int signal) {
+  if ( signal == SIGUSR1 )
+    call_shrub_dump = 1;
+  else if ( signal == SIGTERM )
+    is_running = 0;
+  else if ( signal == SIGINT )
+    is_running = 0;
+}
 
 int parse_interface(const char *arg, shrub_controller_config *config) {
   char *buffer_pos = strchr(arg, '/');
@@ -710,6 +727,7 @@ int main(int argc, char *argv[])
 
   signal(SIGINT, signal_handler);
   signal(SIGTERM, signal_handler);
+  signal(SIGUSR1, signal_handler);
   reactor_loop(&config);
   cleanup_controller(&config);
   free(config.cp);
