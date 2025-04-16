@@ -67,9 +67,17 @@ efhw_set_tph_steering(struct efhw_nic *nic, uint instance, int set,
   int rc;
 
   if( tag_mode != 0 ) {
-    /* TODO verify that raw_smp_processor_id() returns the right value */
-    rc = pcie_tph_get_cpu_st(nic->pci_dev, TPH_MEM_TYPE_VM,
-                             raw_smp_processor_id(), &tag);
+    struct pci_dev *nic_pci_dev = efhw_nic_get_pci_dev(nic);
+
+    if( nic_pci_dev ) {
+      /* TODO verify that raw_smp_processor_id() returns the right value */
+      rc = pcie_tph_get_cpu_st(nic_pci_dev, TPH_MEM_TYPE_VM,
+                               raw_smp_processor_id(), &tag);
+      pci_dev_put(nic_pci_dev);
+    } else {
+      rc = -ENODEV;
+    }
+
     if( rc != 0 )
       EFHW_WARN("Failed to read steering tag (error %d), continuing without it",
                 rc);
