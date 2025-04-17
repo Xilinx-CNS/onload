@@ -241,7 +241,9 @@ static void get_rx_timestamp(ci_netif* netif, ci_ip_pkt_fmt* pkt)
     return;
   }
 
-  if( (vi->nic_type.arch != EF_VI_ARCH_EFCT) &&
+  /* We skip timestamping rx_ref packets here as we no longer have a reference
+   * to them. Instead, we copy these earlier in get_efct_timestamp. */
+  if( ! (nsn->oo_vi_flags & OO_VI_FLAGS_RX_REF) &&
       (nsn->oo_vi_flags & OO_VI_FLAGS_RX_HW_TS_EN) ) {
     ef_precisetime stamp;
     int rc = ef_vi_receive_get_precise_timestamp(

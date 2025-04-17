@@ -1479,6 +1479,12 @@ get_vi_settings(ci_netif* ni, struct efhw_nic* nic,
     }
   }
 
+  if( (nic->flags & NIC_FLAG_RX_REF) ) {
+    info->oo_vi_flags |= OO_VI_FLAGS_RX_REF;
+  } else {
+    info->oo_vi_flags &= ~OO_VI_FLAGS_RX_REF;
+  }
+
   get_if_name(ni, info->intf_i, if_name);
 
   rc = check_timestamping_support(ni->state->pretty_name, "RX",
