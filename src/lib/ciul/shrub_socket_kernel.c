@@ -16,6 +16,11 @@
 #include <driver/linux_onload/onload_kernel_compat.h>
 #include <etherfabric/internal/efct_uk_api.h>
 
+// HACK: avoid building various bits of code on ancient kernels
+#ifndef VM_MAP_PUT_PAGES
+#define ANCIENT_KERNEL_HACK
+#endif
+
 int ef_shrub_socket_open(uintptr_t* socket_out)
 {
   int rc;
@@ -163,6 +168,9 @@ static unsigned bytes_to_buffers(size_t bytes)
 static int map_buffers(uint64_t* addr_out, struct file* file,
                        size_t bytes, const void** buffers)
 {
+#ifdef ANCIENT_KERNEL_HACK
+  return -EOPNOTSUPP;
+#else
   unsigned buffer_count, buffers_got;
   struct page* page;
   const char* buffer;
@@ -190,11 +198,15 @@ static int map_buffers(uint64_t* addr_out, struct file* file,
 fail:
   put_buffer_pages(buffers, buffers_got);
   return -EFAULT;
+#endif
 }
 
 static int map_fifo(uint64_t* addr_out, struct file* file,
                     size_t bytes, pgoff_t pgoff, pgprot_t prot)
 {
+#ifdef ANCIENT_KERNEL_HACK
+  return -EOPNOTSUPP;
+#else
   unsigned page_count, pages_got, i;
   struct page **pages;
   void* map;
@@ -227,6 +239,7 @@ fail:
   }
   kfree(pages);
   return -EFAULT;
+#endif
 }
 
 int ef_shrub_socket_mmap(uint64_t* mapping, void* addr, size_t size,

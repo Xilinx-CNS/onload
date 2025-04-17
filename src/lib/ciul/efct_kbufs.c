@@ -205,7 +205,8 @@ static int efct_kbufs_attach(ef_vi* vi,
 #endif
 }
 
-static int efct_kbufs_refresh_mappings(ef_vi*, int, uint64_t, uint64_t*)
+static int
+efct_kbufs_refresh_mappings(ef_vi* vi, int ix, uint64_t b, uint64_t* m)
 {
   /* Buffers are managed by efrm */
   return -EOPNOTSUPP;
