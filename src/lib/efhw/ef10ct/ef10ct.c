@@ -1044,7 +1044,7 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
   int rxq_num = params->qid;
   int rxq_handle;
   int evq;
-  int rc;
+  int rc = 0;
   struct efx_auxdev_rpc rpc;
   void **post_buffer_addr;
   bool suppress_events = false;
