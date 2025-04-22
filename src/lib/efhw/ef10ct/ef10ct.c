@@ -352,6 +352,35 @@ out:
 }
 
 
+static int
+ef10ct_ptp_time_event_unsubscribe(struct efhw_nic *nic, uint32_t evq)
+{
+  EFHW_MCDI_DECLARE_BUF(in, MC_CMD_PTP_IN_TIME_EVENT_UNSUBSCRIBE_LEN);
+  struct efx_auxdev_rpc rpc = (struct efx_auxdev_rpc) {
+    .cmd = MC_CMD_PTP,
+    .inlen = sizeof(in),
+    .inbuf = (void*)in,
+    .outlen = 0,
+    .outbuf = NULL,
+  };
+  int rc;
+
+  EFHW_MCDI_INITIALISE_BUF(in);
+  EFHW_MCDI_SET_DWORD(in, PTP_IN_OP, MC_CMD_PTP_OP_TIME_EVENT_UNSUBSCRIBE);
+  EFHW_MCDI_SET_DWORD(in, PTP_IN_PERIPH_ID, 0);
+  EFHW_MCDI_SET_DWORD(in, PTP_IN_TIME_EVENT_UNSUBSCRIBE_CONTROL,
+                      MC_CMD_PTP_IN_TIME_EVENT_UNSUBSCRIBE_SINGLE);
+  EFHW_MCDI_SET_DWORD(in, PTP_IN_TIME_EVENT_UNSUBSCRIBE_QUEUE, evq);
+
+  rc = ef10ct_fw_rpc(nic, &rpc);
+
+  if( rc < 0 )
+    EFHW_ERR("%s failed rc %d", __func__, rc);
+
+  return rc;
+}
+
+
 /* FIXME EF10CT
  * Need to handle timesync and credits
  * X3 net driver does dma mapping
@@ -465,6 +494,9 @@ ef10ct_nic_event_queue_disable(struct efhw_nic *nic,
   /* This is a dummy EVQ, so nothing to do. */
   if( evq_num >= ef10ct->evq_n )
     return;
+
+  if( time_sync_events_enabled )
+    ef10ct_ptp_time_event_unsubscribe(nic, evq_id);
 
   ef10ct_evq = &ef10ct->evq[evq_num];
 
