@@ -33,6 +33,10 @@
 
 #if CI_HAVE_EF10CT
 
+static void
+ef10ct_nic_event_queue_disable(struct efhw_nic *nic,
+                               uint evq_num, int time_sync_events_enabled);
+
 
 /*----------------------------------------------------------------------------
  *
@@ -353,6 +357,49 @@ out:
 
 
 static int
+ef10ct_ptp_time_event_subscribe_v2(struct efhw_nic *nic, uint32_t evq,
+                                   unsigned* out_flags)
+{
+  EFHW_MCDI_DECLARE_BUF(in, MC_CMD_PTP_IN_TIME_EVENT_SUBSCRIBE_V2_LEN);
+  struct efx_auxdev_rpc rpc = (struct efx_auxdev_rpc) {
+    .cmd = MC_CMD_PTP,
+    .inlen = sizeof(in),
+    .inbuf = (void*)in,
+    .outlen = 0,
+    .outbuf = NULL,
+  };
+  int sync_flag = EFHW_VI_CLOCK_SYNC_STATUS;
+  int rc;
+
+  EFHW_MCDI_INITIALISE_BUF(in);
+  EFHW_MCDI_SET_DWORD(in, PTP_IN_OP, MC_CMD_PTP_OP_TIME_EVENT_SUBSCRIBE_V2);
+  EFHW_MCDI_SET_DWORD(in, PTP_IN_PERIPH_ID, 0);
+  EFHW_MCDI_SET_DWORD(in, PTP_IN_TIME_EVENT_SUBSCRIBE_V2_QUEUE_ID, evq);
+  EFHW_MCDI_POPULATE_DWORD_1(in, PTP_IN_TIME_EVENT_SUBSCRIBE_V2_FLAGS,
+    PTP_IN_TIME_EVENT_SUBSCRIBE_V2_REPORT_SYNC_STATUS, 1);
+
+  /* We try subscribing to time sync events and requesting the sync status, but
+   * this setting is global so must be set to the same value as was used in the
+   * first subscription request. In absence of a way to find out what that was,
+   * we try subscribing first requesting time sync and secondly without. */
+  rc = ef10ct_fw_rpc(nic, &rpc);
+  if( rc < 0 ) {
+    sync_flag = 0;
+    EFHW_MCDI_POPULATE_DWORD_1(in, PTP_IN_TIME_EVENT_SUBSCRIBE_V2_FLAGS,
+      PTP_IN_TIME_EVENT_SUBSCRIBE_V2_REPORT_SYNC_STATUS, 0);
+    rc = ef10ct_fw_rpc(nic, &rpc);
+  }
+
+  if( rc < 0 )
+    EFHW_ERR("%s failed rc %d", __func__, rc);
+  else if( out_flags != NULL )
+    *out_flags |= sync_flag;
+
+  return rc;
+}
+
+
+static int
 ef10ct_ptp_time_event_unsubscribe(struct efhw_nic *nic, uint32_t evq)
 {
   EFHW_MCDI_DECLARE_BUF(in, MC_CMD_PTP_IN_TIME_EVENT_UNSUBSCRIBE_LEN);
@@ -393,6 +440,9 @@ ef10ct_nic_event_queue_enable(struct efhw_nic *nic,
   EFHW_MCDI_DECLARE_BUF(in, MC_CMD_INIT_EVQ_V2_IN_LEN(1));
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct efhw_nic_ef10ct_evq *ef10ct_evq;
+  /* We don't need time sync events to properly handle RX timestamping as all
+   * the data we require is given to us in the packet metadata. */
+  int enable_time_sync_events = !!(efhw_params->flags & EFHW_VI_TX_TIMESTAMPS);
   int rc;
 #ifndef NDEBUG
   int i;
@@ -462,6 +512,13 @@ ef10ct_nic_event_queue_enable(struct efhw_nic *nic,
   rpc.outlen = sizeof(out);
   rpc.outbuf = (void*)out;
   rc = ef10ct_fw_rpc(nic, &rpc);
+
+  if( rc == 0 && enable_time_sync_events ) {
+    rc = ef10ct_ptp_time_event_subscribe_v2(nic, evq_id,
+                                            &efhw_params->flags_out);
+    if( rc != 0 )
+      ef10ct_nic_event_queue_disable(nic, evq_num, 0);
+  }
 
   if( rc == 0 ) {
     ef10ct_evq->nic = nic;
