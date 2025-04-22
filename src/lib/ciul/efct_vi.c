@@ -989,7 +989,13 @@ static int efct_tx_handle_control_event(ef_vi* vi, ci_qword_t event,
       vi->ep_state->evq.sync_timestamp_minor = CI_QWORD_FIELD64(event, EFCT_TIME_SYNC_EVENT_TIME_HIGH) & 0xFFFF;
       time_sync = (CI_QWORD_FIELD(event, EFCT_TIME_SYNC_EVENT_CLOCK_IN_SYNC) ? EF_VI_SYNC_FLAG_CLOCK_IN_SYNC : 0);
       time_set = (CI_QWORD_FIELD(event, EFCT_TIME_SYNC_EVENT_CLOCK_IS_SET) ? EF_VI_SYNC_FLAG_CLOCK_SET : 0);
-      vi->ep_state->evq.sync_flags = time_sync | time_set;
+      /* If we managed to request reporting of the clock sync status in time
+       * sync events, then we should use those values, else default to assuming
+       * both set and in sync to match the behaviour in ef10_mcdi_event. */
+      vi->ep_state->evq.sync_flags =
+        (vi->vi_out_flags & EF_VI_OUT_CLOCK_SYNC_STATUS) ?
+        time_sync | time_set :
+        EF_VI_SYNC_FLAG_CLOCK_SET | EF_VI_SYNC_FLAG_CLOCK_IN_SYNC;
       vi->ep_state->evq.unsol_credit_seq++;
       efct_grant_unsol_credit(vi, false, vi->ep_state->evq.unsol_credit_seq);
       break;

@@ -623,6 +623,11 @@ efct_nic_event_queue_enable(struct efhw_nic *nic,
     efct_evq->capacity = efhw_params->evq_size;
     atomic_set(&efct_evq->queues_flushing, 0);
     INIT_DELAYED_WORK(&efct_evq->check_flushes, efct_check_for_flushes);
+
+    /* EFCT hardware has no notion of a time-sync without having reqeusted the
+     * clock sync status, so always output this result if we use time-sync */
+    if( qparams.subscribe_time_sync )
+      efhw_params->flags_out = EFHW_VI_CLOCK_SYNC_STATUS;
   }
 
   return rc;
