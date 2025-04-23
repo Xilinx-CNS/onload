@@ -509,9 +509,22 @@ failed:
 	return rc;
 }
 
+/* This is called when we fail to fully initialise the efrm_nic. Although the
+ * linux_efrm_nic_ctor takes a reference to the net dev for this NIC, the dtor
+ * expects the reference to have already been dropped before it is called.
+ * This is because the net dev ref is dropped on NIC unplug, but we retain
+ * the NIC at that point, to support hotplug. Because we haven't fully gone
+ * through the init stage here, we don't do a full unplug at this point, but
+ * instead just drop the net dev ref, allowing us to call the dtor to do the
+ * rest of the tidyup. */
 void
 efrm_nic_destroy(struct linux_efhw_nic *lnic)
 {
+	struct efhw_nic *nic = &lnic->efrm_nic.efhw_nic;
+	if(nic->net_dev) {
+		dev_put(nic->net_dev);
+		nic->net_dev = NULL;
+	}
 	linux_efrm_nic_dtor(lnic);
 	kfree(lnic);
 }
