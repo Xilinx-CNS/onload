@@ -836,7 +836,7 @@ void ef_shrub_server_close(struct ef_shrub_server* server)
   }
 
   free(server->shrub_queues);
-  server->vi->efct_rxqs.ops->cleanup(server->vi);
+  //server->vi->efct_rxqs.ops->cleanup(server->vi);
   unix_server_fini(server);
   free(server);
 }
