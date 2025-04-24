@@ -25,9 +25,9 @@
 
 static int parse_opts(int argc, char* argv[]);
 
-#define MAX_UDP_PAYLEN	(1500 - sizeof(ci_ip4_hdr) - sizeof(ci_udp_hdr))
 #define N_BUFS          1
 #define BUF_SIZE        2048
+#define PAGE_SIZE       4096
 
 /* This gives a frame len of 70, which is the same as:
 **   eth + ip + tcp + tso + 4 bytes payload
@@ -110,7 +110,7 @@ int main(int argc, char* argv[])
          (vi.vi_out_flags & EF_VI_OUT_CLOCK_SYNC_STATUS) != 0);
 
   /* Allocate memory for packet buffers, note alignment */
-  TEST(posix_memalign(&p, CI_PAGE_SIZE, BUF_SIZE) == 0);
+  TEST(posix_memalign(&p, PAGE_SIZE, BUF_SIZE) == 0);
   /* Register memory with NIC */
   TRY(ef_memreg_alloc(&mr, dh, &pd, dh, p, BUF_SIZE));
   /* Store DMA address of the packet buffer memory */

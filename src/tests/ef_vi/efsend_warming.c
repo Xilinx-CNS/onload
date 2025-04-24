@@ -40,7 +40,6 @@ static int parse_opts(int argc, char* argv[]);
 static void assert_capability(ef_driver_handle dh, int ifindex, int cap);
 static useconds_t usecs_since(const struct timespec* last_ts);
 
-#define MAX_UDP_PAYLEN	(1500 - sizeof(ci_ip4_hdr) - sizeof(ci_udp_hdr))
 #define BUF_SIZE        2048
 
 /* This gives a frame len of 70, which is the same as:

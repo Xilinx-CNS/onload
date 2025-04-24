@@ -13,10 +13,18 @@
 #include "utils.h"
 
 #include <etherfabric/vi.h>
-#include <ci/tools.h>
-#include <ci/tools/ipcsum_base.h>
-#include <ci/tools/ippacket.h>
-#include <ci/net/ipv4.h>
+#include <linux/if_ether.h>
+#include <netinet/ip.h>
+#include <netinet/udp.h>
+#include <stdarg.h>
+
+#define MAX_UDP_PAYLEN	(1500 - sizeof(struct iphdr) - sizeof(struct udphdr))
+
+struct vlanhdr {
+  __be16 ether_vtag;
+  __be16 ether_type;
+};
+
 
 extern void usage(void);
 

@@ -25,11 +25,11 @@
 static int parse_opts(int argc, char* argv[]);
 
 
-#define MAX_UDP_PAYLEN	(1500 - sizeof(ci_ip4_hdr) - sizeof(ci_udp_hdr))
 #define N_BUFS          1
 #define BUF_SIZE        2048
-  /* Must be >= EF_VI_EVENT_POLL_MIN_EVS, but deliberately setting
-   * larger to increase batching, and therefore throughput. */
+#define PAGE_SIZE       4096
+/* Must be >= EF_VI_EVENT_POLL_MIN_EVS, but deliberately setting
+ * larger to increase batching, and therefore throughput. */
 #define EVENT_BATCH_SIZE 64
 
 
@@ -142,11 +142,11 @@ int main(int argc, char* argv[])
 
   /* Allocate memory for packet buffers, note alignment */
   if (cfg_phys_mode)
-    min_page_size = CI_PAGE_SIZE;
+    min_page_size = PAGE_SIZE;
   else
     TRY(ef_vi_capabilities_get(dh, ifindex, EF_VI_CAP_MIN_BUFFER_MODE_SIZE,
                                &min_page_size));
-  alloc_size = CI_MAX(min_page_size, BUF_SIZE);
+  alloc_size = MAX(min_page_size, BUF_SIZE);
   if (min_page_size >= 2 * 1024 * 1024) {
     /* Assume this means huge pages are mandatory */
     p = mmap(NULL, alloc_size, PROT_READ | PROT_WRITE,

@@ -7,6 +7,7 @@
  */
 
 #include "efsend_common.h"
+#include <etherfabric/checksum.h>
 
 static uint8_t mcast_mac[6];
 static struct sockaddr_in sa_local, sa_mcast;
@@ -14,10 +15,10 @@ static struct sockaddr_in sa_local, sa_mcast;
 int init_udp_pkt(void* pkt_buf, int paylen, ef_vi *vi,
                  ef_driver_handle dh, int vlan, int ip_checksum)
 {
-  int ip_len = sizeof(ci_ip4_hdr) + sizeof(ci_udp_hdr) + paylen;
-  ci_ether_hdr* eth;
-  ci_ip4_hdr* ip4;
-  ci_udp_hdr* udp;
+  int ip_len = sizeof(struct iphdr) + sizeof(struct udphdr) + paylen;
+  struct ethhdr* eth;
+  struct iphdr* ip4;
+  struct udphdr* udp;
 
   eth = pkt_buf;
   int etherlen = ETH_HLEN + ((vlan >= 0) ? 4 : 0);
@@ -25,22 +26,24 @@ int init_udp_pkt(void* pkt_buf, int paylen, ef_vi *vi,
   udp = (void*) (ip4 + 1);
 
   if(vlan >= 0) {
-    ci_ethhdr_vlan_t* ethv = pkt_buf;
-    ethv->ether_vtype = htons(0x8100);
+    struct vlanhdr* ethv = (void*)((char*) pkt_buf + ETH_HLEN);
+    eth->h_proto = htons(0x8100);
     ethv->ether_vtag = htons(vlan);
     ethv->ether_type = htons(0x0800);
   }
   else {
-    eth->ether_type = htons(0x0800);
+    eth->h_proto = htons(0x0800);
   }
-  memcpy(eth->ether_dhost, mcast_mac, 6);
-  ef_vi_get_mac(vi, dh, eth->ether_shost);
+  memcpy(eth->h_dest, mcast_mac, 6);
+  ef_vi_get_mac(vi, dh, eth->h_source);
 
-  ci_ip4_hdr_init(ip4, CI_NO_OPTS, ip_len, 0, IPPROTO_UDP,
-		  sa_local.sin_addr.s_addr,
-		  sa_mcast.sin_addr.s_addr, ip_checksum);
-  ci_udp_hdr_init(udp, ip4, sa_local.sin_port,
-		  sa_mcast.sin_port, udp + 1, paylen, 0);
+  iphdr_init(ip4, ip_len, 0, IPPROTO_UDP,
+	     sa_local.sin_addr.s_addr,
+	     sa_mcast.sin_addr.s_addr);
+  udphdr_init(udp, ip4, sa_local.sin_port,
+	      sa_mcast.sin_port, paylen);
+  if( ip_checksum )
+    ip4->check = ef_ip_checksum(ip4);
 
   return etherlen + ip_len;
 }
