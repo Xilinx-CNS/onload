@@ -15,7 +15,6 @@
 #include <etherfabric/capabilities.h>
 #include <etherfabric/checksum.h>
 #include <etherfabric/efct_vi.h>
-#include <ci/tools.h>
 
 #include <stdarg.h>
 #include <stddef.h>
@@ -27,6 +26,57 @@
 #include <limits.h>
 #include <time.h>
 
+#if defined(__x86_64__)
+static inline uint64_t frc64_get(void) {
+  uint64_t val, low, high;
+  __asm__ __volatile__("rdtsc" : "=a" (low) , "=d" (high));
+  val = (high << 32) | low;
+  return val;
+}
+#else
+#error "X86_64 required"
+#endif
+
+static int measure_cpu_khz(unsigned* cpu_khz)
+{
+  int interval_usec = 100000;
+  struct timeval tv_s, tv_e;
+  uint64_t tsc_s, tsc_e, tsc_e2;
+  uint64_t tsc_gtod, min_tsc_gtod, usec = 0;
+  int n, skew = 0;
+
+  tsc_s = frc64_get();
+  gettimeofday(&tv_s, NULL);
+  tsc_e2 = frc64_get();
+  min_tsc_gtod = tsc_e2 - tsc_s;
+  n = 0;
+  do {
+    tsc_s = frc64_get();
+    gettimeofday(&tv_s, NULL);
+    tsc_e2 = frc64_get();
+    tsc_gtod = tsc_e2 - tsc_s;
+    if( tsc_gtod < min_tsc_gtod )
+      min_tsc_gtod = tsc_gtod;
+  } while( ++n < 20 || (tsc_gtod > min_tsc_gtod * 2 && n < 100) );
+
+  do {
+    tsc_e = frc64_get();
+    gettimeofday(&tv_e, NULL);
+    tsc_e2 = frc64_get();
+    if( tsc_e2 < tsc_e || timercmp(&tv_e, &tv_s, <) ) {
+      skew = 1;
+      break;
+    }
+    tsc_gtod = tsc_e2 - tsc_e;
+    usec = (tv_e.tv_sec - tv_s.tv_sec) * (uint64_t) 1000000;
+    usec += tv_e.tv_usec - tv_s.tv_usec;
+  } while( usec < interval_usec || tsc_gtod > min_tsc_gtod * 2 );
+
+  if( skew )
+    return 0;
+  *cpu_khz = (tsc_e - tsc_s) * 1000 / usec;
+  return 1;
+}
 
 /* Forward declarations. */
 struct eflatency_vi;
@@ -164,7 +214,7 @@ static void output_results(struct timeval start, struct timeval end)
   int usec = (end.tv_sec - start.tv_sec) * 1000000;
   usec += end.tv_usec - start.tv_usec;
 
-  ci_get_cpu_khz(&freq);
+  TRY(measure_cpu_khz(&freq));
   div = freq / 1e3;
   if( cfg_save_file ) {
     int i;
@@ -266,10 +316,10 @@ generic_ping(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi,
   gettimeofday(&start, NULL);
 
   for( i = 0; i < cfg_iter; ++i ) {
-    uint64_t start = ci_frc64_get();
+    uint64_t start = frc64_get();
     tx_send(tx_vi);
     poll_tx_and_wait_for_pkt(rx_vi, tx_vi, rx_wait);
-    uint64_t stop = ci_frc64_get();
+    uint64_t stop = frc64_get();
     timings[i] = stop - start;
   }
 
@@ -679,7 +729,7 @@ static const test_t* do_init(int mode, struct eflatency_vi* latency_vi,
 
   TRY(ef_memreg_alloc(&latency_vi->memreg, driver_handle, &latency_vi->pd,
                       driver_handle, pkt_mem,
-                      CI_ROUND_UP(pkt_mem_bytes, 4096)));
+                      ROUND_UP(pkt_mem_bytes, 4096)));
 
   /* Build the UDP packet inside the DMA buffer.  As well as being used for
    * straightforward DMA sends, it will also be used to fill alternatives, and
@@ -763,7 +813,7 @@ static void print_payload_len_array(FILE *out_stream, const char *prefix,
 }
 
 
-static CI_NORETURN usage(const char* fmt, ...)
+static __attribute__((noreturn)) void usage(const char* fmt, ...)
 {
   if( fmt ) {
     va_list args;
@@ -981,11 +1031,11 @@ int main(int argc, char* argv[])
     TRY(ef_pd_capabilities_get(driver_handle, &tx_vi.pd, driver_handle,
                                EF_VI_CAP_MIN_BUFFER_MODE_SIZE,
                                &min_page_size));
-    min_page_size = CI_MAX(rx_min_page_size, min_page_size);
+    min_page_size = MAX(rx_min_page_size, min_page_size);
   }
 
   pkt_mem_bytes = N_BUFS * BUF_SIZE;
-  pkt_mem_bytes = CI_MAX(min_page_size, pkt_mem_bytes);
+  pkt_mem_bytes = MAX(min_page_size, pkt_mem_bytes);
   if (min_page_size >= 2 * 1024 * 1024) {
     /* Assume this means huge pages are mandatory */
     pkt_mem = mmap(NULL, pkt_mem_bytes, PROT_READ | PROT_WRITE,
