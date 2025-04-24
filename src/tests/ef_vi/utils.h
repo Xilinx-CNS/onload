@@ -81,8 +81,8 @@
 # define LOGV(...)  do{ if( cfg_verbose)  printf(__VA_ARGS__); }while(0)
 #endif
 
-
-#define ROUND_UP(p, align)   (((p)+(align)-1u) & ~((align)-1u))
+#define MAX(x,y)             (((x) > (y)) ? (x) : (y))
+#define ROUND_UP(p, align)   (((p)+(align)-1u) & ~((typeof(p))(align)-1u))
 #define IS_POW2(n)           (((n) & (n - 1)) == 0)
 
 #define __BUILD_ASSERT_NAME(_x) __BUILD_ASSERT_CPP(_x)

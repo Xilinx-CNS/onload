@@ -23,19 +23,16 @@
 #include <etherfabric/memreg.h>
 #include <etherfabric/capabilities.h>
 #include <etherfabric/checksum.h>
-#include <ci/tools.h>
-#include <ci/tools/ipcsum_base.h>
-#include <ci/tools/ippacket.h>
-#include <ci/net/ipv4.h>
 #include <cplane/api.h>
 
 static int parse_opts(int argc, char* argv[], int *ifindex);
 
 #define PREFIX_RESERVED 64
-#define HEADER_LEN      (PREFIX_RESERVED + sizeof(ci_ip4_hdr) + sizeof(ci_udp_hdr))
+#define HEADER_LEN      (PREFIX_RESERVED + sizeof(struct iphdr) + sizeof(struct udphdr))
 #define MAX_UDP_PAYLEN  (1500 - HEADER_LEN)
 #define N_BUFS          1
 #define BUF_SIZE        4096
+#define PAGE_SIZE       4096
 #define BUF_HUGE_SIZE   (2 * 1024 * 1024)
   /* Must be >= EF_VI_EVENT_POLL_MIN_EVS, but deliberately setting
    * larger to increase batching, and therefore throughput. */
@@ -89,17 +86,16 @@ bool dest_is_mcast(void)
 
 void init_ip_udp_pkt(void* ip_pkt, int paylen)
 {
-  int ip_len = sizeof(ci_ip4_hdr) + sizeof(ci_udp_hdr) + paylen;
-  ci_ip4_hdr* ip4;
-  ci_udp_hdr* udp;
+  int ip_len = sizeof(struct iphdr) + sizeof(struct udphdr) + paylen;
+  struct iphdr* ip4;
+  struct udphdr* udp;
 
   ip4 = (void*) (ip_pkt);
   udp = (void*) (ip4 + 1);
 
-  ci_ip4_hdr_init(ip4, CI_NO_OPTS, ip_len, 0, IPPROTO_UDP,
-                  sa_local.sin_addr.s_addr, sa_dest.sin_addr.s_addr, 0);
-  ci_udp_hdr_init(udp, ip4, sa_local.sin_port, sa_dest.sin_port, udp + 1,
-                  paylen, 0);
+  iphdr_init(ip4, ip_len, 0, IPPROTO_UDP,
+	     sa_local.sin_addr.s_addr, sa_dest.sin_addr.s_addr);
+  udphdr_init(udp, ip4, sa_local.sin_port, sa_dest.sin_port, paylen);
 }
 
 static void handle_completions(ef_vi* vi)
@@ -166,8 +162,8 @@ static void allocate_packet_buffer(struct pkt_buf *buf)
     buf->p = NULL;
     buf->size = BUF_SIZE;
     if( cfg_phys_mode )
-      buf->size = CI_MAX(CI_PAGE_SIZE, buf->size);
-    TEST(posix_memalign(&buf->p, CI_PAGE_SIZE, buf->size) == 0);
+      buf->size = MAX(PAGE_SIZE, buf->size);
+    TEST(posix_memalign(&buf->p, PAGE_SIZE, buf->size) == 0);
   }
 
   /* Populate the IP and UDP headers of the packet. */
@@ -186,11 +182,11 @@ static void allocate_vi_memory(struct intf_state *intf, int ifindex,
 
   /* Make sure we have enough space, and fail with a message if not. */
   if (cfg_phys_mode)
-    min_page_size = CI_PAGE_SIZE;
+    min_page_size = PAGE_SIZE;
   else
     TRY(ef_vi_capabilities_get(dh, ifindex, EF_VI_CAP_MIN_BUFFER_MODE_SIZE,
                                &min_page_size));
-  alloc_size = CI_MAX(min_page_size, BUF_SIZE);
+  alloc_size = MAX(min_page_size, BUF_SIZE);
   if( alloc_size > buf->size ) {
     printf("Interface %d requires a buffer of size %zu, but we were only able "
            "to allocate a block of size %zu.", ifindex, alloc_size, buf->size);
@@ -313,8 +309,8 @@ static void resolve_route(struct ef_cp_handle *cp, struct pkt_buf *pkt_buf,
   void *pkt_ip = (char*)pkt_buf->p + prefix_space;
   int flags = (*ifindex == 0) ? EF_CP_RESOLVE_F_UNREGISTERED : 0;
   struct intf_state *intf;
-  ci_ip4_hdr *ip4;
-  ci_udp_hdr *udp;
+  struct iphdr *ip4;
+  struct udphdr *udp;
   struct iovec iov;
 
   /* If we are sending to a multicast address, route resolution could
@@ -355,18 +351,17 @@ static void resolve_route(struct ef_cp_handle *cp, struct pkt_buf *pkt_buf,
   /* Let's recalculate the checksums; this is not always necessary where the HW
    * being used can do this instead, but we just assume it can't. */
   ip4 = pkt_ip;
-  udp = (ci_udp_hdr*)(ip4 + 1);
+  udp = (struct udphdr*)(ip4 + 1);
   iov.iov_base = udp + 1;
   iov.iov_len = cfg_payload_len;
-  ip4->ip_check_be16 = ef_ip_checksum((const struct iphdr*)ip4);
-  udp->udp_check_be16 = ef_udp_checksum((const struct iphdr*)ip4,
-                                        (const struct udphdr*)udp, &iov, 1);
+  ip4->check = ef_ip_checksum(ip4);
+  udp->check = ef_udp_checksum(ip4, udp, &iov, 1);
 
   /* Update the DMA address to be the start of the packet headers, and
    * calculate the full length of the packet. */
   intf->dma_start = intf->dma_buf_addr + PREFIX_RESERVED - prefix_space;
   intf->tx_frame_len = cfg_payload_len + prefix_space +
-                       sizeof(ci_ip4_hdr) + sizeof(ci_udp_hdr);
+                       sizeof(struct iphdr) + sizeof(struct udphdr);
 }
 
 int main(int argc, char* argv[])
