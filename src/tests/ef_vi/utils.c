@@ -5,7 +5,6 @@
 #include <etherfabric/vi.h>
 #include <etherfabric/capabilities.h>
 #include "utils.h"
-#include <ci/app.h>
 
 #include <net/if.h>
 #include <stdlib.h>
@@ -16,6 +15,7 @@
 #include <ifaddrs.h>
 #include <arpa/inet.h>
 #include <stddef.h>
+#include <ctype.h>
 
 
 /* Parses a parameter of the form "param=val,", advancing *arg beyond the comma
@@ -40,6 +40,118 @@ static int consume_parameter(char **arg)
   *arg = strtok(NULL, "");
 
   return val;
+}
+
+
+/* Returns true if 'str' is pure numeric (and non-empty) */
+static int/*bool*/ all_digits(const char* str)
+{
+  if( ! *str )
+    return 0;
+  for( ; *str; ++str )
+    if( ! isdigit(*str & 0xff) )
+      return 0;
+  return 1;
+}
+
+
+/* Decode browser-style host and port specifiers, along with a port-only
+ * style which is allowed by most of our test tools.
+ * On return populates supplied pointers with bare host and port strings
+ * or NULL where not specified in input. Uses the supplied buffer if
+ * necessary, which must survive use of the returned strings.
+ */
+static int decode_hostport(char *str, size_t str_sz,
+                           const char *host,
+                           const char **host_found, const char **port_found)
+{
+  const char* port = NULL;
+  const char* firstcolon = strchr(host, ':');
+  const char* lastcolon = strrchr(host, ':');
+  const char* percent = strchr(host, '%');
+  const char* closesquare = strchr(host, ']');
+
+  /* strings we want to parse:
+   * 1234 (port-only)
+   * 1.2.3.4
+   * 1.2.3.4:1234
+   * ffff::ffff
+   * ffff::ffff%eth0
+   * ffff::ffff%eth0:1234
+   * [ffff::ffff]:1234
+   * dellr630a
+   * dellr630a:1234
+   */
+
+  if( all_digits(host) ) {
+    *host_found = NULL;
+    *port_found = host;
+    return 0;
+  }
+
+  /* Handle a specified port */
+  if( lastcolon &&
+      (firstcolon == lastcolon ||
+       (percent && lastcolon > percent) ||
+       (closesquare && closesquare < lastcolon)) ) {
+    int hostlen = lastcolon - host;
+    if( hostlen >= str_sz )
+      return -ENAMETOOLONG;
+    strncpy(str, host, hostlen);
+    str[hostlen] = '\0';
+    host = str;
+    port = lastcolon + 1;
+  }
+
+  /* Strip square brackets */
+  if( host && host[0] == '[' && host[strlen(host) - 1] == ']' ) {
+    if( host != str ) {
+      if( strlen(host) >= str_sz )
+        return -ENAMETOOLONG;
+      strcpy(str, host);
+    }
+    str[strlen(str) - 1] = '\0';
+    host = str + 1;
+  }
+
+  *port_found = port;
+  *host_found = host;
+  return 0;
+}
+
+
+int hostport_to_sockaddr(int hint_af, const char* hp,
+                         struct sockaddr_storage* addr_out)
+{
+  struct addrinfo hints;
+  struct addrinfo* ai;
+  char temp_str[256];
+  const char* host;
+  const char* port;
+  int rc;
+
+  rc = decode_hostport(temp_str, sizeof(temp_str), hp, &host, &port);
+  if (rc != 0)
+    return rc;
+
+  hints.ai_flags = AI_PASSIVE;
+  hints.ai_family = hint_af;
+  hints.ai_socktype = 0;
+  hints.ai_protocol = IPPROTO_TCP;
+  hints.ai_addrlen = 0;
+  hints.ai_addr = NULL;
+  hints.ai_canonname = NULL;
+  hints.ai_next = NULL;
+  if( getaddrinfo(host, port, &hints, &ai) )
+    return -EINVAL;
+
+  if( ! ai->ai_addrlen)
+    rc = -EPFNOSUPPORT;
+  else
+    memcpy(addr_out, ai->ai_addr, ai->ai_addrlen);
+
+  freeaddrinfo(ai);
+  return rc;
 }
 
 
@@ -93,8 +205,8 @@ int filter_parse(ef_filter_spec* fs, const char* s_in,
       remainder = strtok(NULL, "");
       if( remainder == NULL )
         goto out;
-      TRY(ci_hostport_to_sockaddr(AF_UNSPEC, hostport, &laddr.ss));
-      TRY(ci_hostport_to_sockaddr(laddr.ss.ss_family, remainder, &raddr.ss));
+      TRY(hostport_to_sockaddr(AF_UNSPEC, hostport, &laddr.ss));
+      TRY(hostport_to_sockaddr(laddr.ss.ss_family, remainder, &raddr.ss));
       if( laddr.ss.ss_family == AF_INET && raddr.ss.ss_family == AF_INET ) {
         TRY(ef_filter_spec_set_ip4_full(fs, protocol,
                                         laddr.s4.sin_addr.s_addr,
@@ -114,7 +226,7 @@ int filter_parse(ef_filter_spec* fs, const char* s_in,
       rc = 0;
     }
     else {
-      TRY(ci_hostport_to_sockaddr(AF_UNSPEC, strtok(remainder, ","), &laddr.ss));
+      TRY(hostport_to_sockaddr(AF_UNSPEC, strtok(remainder, ","), &laddr.ss));
       if( laddr.ss.ss_family == AF_INET ) {
         TRY(ef_filter_spec_set_ip4_local(fs, protocol,
                                          laddr.s4.sin_addr.s_addr,
