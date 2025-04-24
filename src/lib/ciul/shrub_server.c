@@ -205,7 +205,7 @@ static void unix_server_fini(struct ef_shrub_server* server)
 {
   close(server->unix_server.listen);
   close(server->unix_server.epoll);
-  if ( server->socket_path )
+  if ( server->socket_path[0] != '\0' )
     unlink(server->socket_path);
 }
 
