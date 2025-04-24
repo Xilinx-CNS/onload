@@ -694,3 +694,35 @@ int parse_interface_with_flags(const char* s, int* ifindex_out,
 
   return 1;
 }
+
+void iphdr_init(struct iphdr* ip4, int tot_len,
+		int id, int protocol, unsigned saddr_ne,
+		unsigned daddr_ne)
+{
+  assert(ip4);
+  assert(tot_len >= sizeof(*ip4));
+
+  memset(ip4, 0, sizeof(struct iphdr));
+  ip4->version = IPVERSION;
+  ip4->ihl = sizeof(struct iphdr) / 4; /* Assume no IP options */
+  ip4->tot_len = htons(tot_len);
+  ip4->id = htons(id);
+  ip4->protocol = protocol;
+  ip4->ttl = 64;
+  ip4->saddr = saddr_ne;
+  ip4->daddr = daddr_ne;
+}
+
+void udphdr_init(struct udphdr* udp, struct iphdr* ip4,
+		 unsigned sport_ne, unsigned dport_ne,
+		 int payload_len)
+{
+  assert(udp);
+  assert(ip4);
+  assert(ntohs(ip4->tot_len) ==
+	 payload_len + sizeof(*udp) + 4 * (ip4->ihl));
+
+  udp->source = sport_ne;
+  udp->dest = dport_ne;
+  udp->len = htons(payload_len + sizeof(*udp));
+}

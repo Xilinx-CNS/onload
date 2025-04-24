@@ -20,6 +20,8 @@
 #include <inttypes.h>
 #include <arpa/inet.h>
 #include <net/if.h>
+#include <netinet/ip.h>
+#include <netinet/udp.h>
 #include <netdb.h>
 #include <ifaddrs.h>
 #include <stddef.h>
@@ -153,5 +155,13 @@ extern int parse_interface_with_flags(const char* s, int* ifindex_out,
                                       enum ef_pd_flags *pd_flags_out,
                                       ef_driver_handle driver_handle);
 extern const char* get_pd_datapath_string(ef_pd *pd);
+
+/* Helper functions to build packet headers */
+extern void iphdr_init(struct iphdr* ip4, int tot_len,
+                       int id, int protocol, unsigned saddr_ne,
+                       unsigned daddr_ne);
+extern void udphdr_init(struct udphdr* udp, struct iphdr* ip4,
+                        unsigned sport_ne, unsigned dport_ne,
+                        int payload_len);
 
 #endif  /* __UTILS_H__ */
