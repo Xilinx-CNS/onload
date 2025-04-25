@@ -38,6 +38,9 @@
 static void
 ef10ct_nic_event_queue_disable(struct efhw_nic *nic,
                                uint evq_num, int time_sync_events_enabled);
+static int
+ef10ct_vi_io_region(struct efhw_nic* nic, int evq_num, size_t* size_out,
+                    resource_size_t* addr_out);
 
 
 /*----------------------------------------------------------------------------
@@ -513,8 +516,42 @@ ef10ct_nic_evq_requires_time_sync(struct efhw_nic *nic, uint flags)
 }
 
 
+static int ef10ct_grant_unsol_credit(struct efhw_nic *nic, int evq_num,
+                                     bool clear_overflow, uint32_t credit_seq)
+{
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  resource_size_t io_addr;
+  uint32_t *unsol_reg;
+  ci_qword_t qword = {0};
+  size_t io_size = 0;
+  void *io_page;
+  int rc = 0;
+
+  /* If this function fails to give us an io_region and rc == 0, then we're
+   * likely operating on a software evq so we can happily just exit here. */
+  rc = ef10ct_vi_io_region(nic, evq_num, &io_size, &io_addr);
+  if( rc < 0 || ! io_size )
+    goto out;
+
+  io_page = ci_ioremap(io_addr, io_size);
+  if( ! io_page )
+    goto out;
+
+  credit_seq &= ef10ct->efx_design_params.unsol_credit_seq_mask;
+
+  unsol_reg = (void*)(io_page + EFCT_EVQ_UNSOL_CREDIT_REGISTER_OFFSET);
+  CI_POPULATE_QWORD_2(qword,
+                      EFCT_EVQ_UNSOL_GRANT_SEQ, credit_seq,
+                      EFCT_EVQ_UNSOL_CLEAR_OVERFLOW, clear_overflow);
+  writel(qword.u64[0], unsol_reg);
+
+  iounmap(io_page);
+out:
+  return rc;
+}
+
+
 /* FIXME EF10CT
- * Need to handle timesync and credits
  * X3 net driver does dma mapping
  */
 static int
@@ -596,6 +633,22 @@ ef10ct_nic_event_queue_enable(struct efhw_nic *nic,
   rpc.outlen = sizeof(out);
   rpc.outbuf = (void*)out;
   rc = ef10ct_fw_rpc(nic, &rpc);
+
+  /* If we succeeded in creating an evq then we should give it some unsolicited
+   * event credits. This must be done before we try enabling time sync events
+   * as the NIC will try to immediately respond with a time sync event which
+   * would otherwise result in an unsolicited credits overflow event. */
+  if( rc == 0 ) {
+    const int starting_credits = CI_CFG_TIME_SYNC_EVENT_EVQ_CAPACITY - 1;
+    int rc2 = ef10ct_grant_unsol_credit(nic, evq_num, true, starting_credits);
+    /* The above call can fail, but it isn't necessarily fatal. We complain
+     * that we weren't able to grant credits, but this situation is handled
+     * gracefully as a credit overflow event (so we don't want to propagate
+     * this failure in rc into the following code). */
+    if( rc2 < 0 )
+      EFHW_ERR("%s: failed to grant unsolicited event credits, rc %d",
+               __func__, rc2);
+  }
 
   if( rc == 0 && enable_time_sync_events ) {
     rc = ef10ct_ptp_time_event_subscribe_v2(nic, evq_id,
