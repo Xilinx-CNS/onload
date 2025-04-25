@@ -41,7 +41,6 @@
 #include <etherfabric/memreg.h>
 #include <etherfabric/capabilities.h>
 #include <etherfabric/checksum.h>
-#include <ci/net/ethernet.h>
 #include <onload/extensions.h>
 #include "utils.h"
 
@@ -51,6 +50,7 @@
 #include <net/if.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <linux/if_ether.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <ifaddrs.h>
@@ -62,6 +62,7 @@
 #define N_TX_BUFS             1u
 #define FIRST_TX_BUF          0u
 #define PKT_BUF_SIZE          2048
+#define PAGE_SIZE             4096
 
 static bool        cfg_delegated;
 static int         cfg_rx_size = 300;
@@ -221,7 +222,7 @@ static void delegated_prepare(struct client_state* s)
     onload_delegated_send_tcp_update(&(s->ods), s->msg_len, 1);
     if( s->use_ctpio ) {
       /* for CPTIO we need to fill in the IP and TCP checksums */
-      struct ci_ether_hdr* eth = ((void*) s->ods.headers);
+      struct ethhdr* eth = ((void*) s->ods.headers);
       struct iphdr* ip4 = (void*) ((char*) eth + ETH_HLEN);
       struct tcphdr* tcp = (void*) (ip4 + 1);
 
@@ -387,7 +388,7 @@ static void ef_vi_init(struct client_state* cs)
 
   int bytes = N_TX_BUFS * PKT_BUF_SIZE;
   void* p;
-  TEST( posix_memalign(&p, CI_PAGE_SIZE, bytes) == 0 );
+  TEST( posix_memalign(&p, PAGE_SIZE, bytes) == 0 );
   TRY( ef_memreg_alloc(&cs->memreg, cs->dh,
                        &cs->pd, cs->dh, p, bytes) );
   int i;
