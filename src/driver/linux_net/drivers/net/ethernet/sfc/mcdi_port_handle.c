@@ -1669,8 +1669,10 @@ int efx_mcdi_x4_get_module_data(struct efx_nic *efx,
 		rc = -EIO;
 		goto fail;
 	}
+	datalen = min(page->length, datalen);
 	memcpy(page->data, MCDI_PTR(outbuf, GET_MODULE_DATA_OUT_DATA),
-	       min(page->length, datalen));
+	       datalen);
+	rc = datalen;
 
 fail:
 	kfree(outbuf);

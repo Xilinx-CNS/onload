@@ -4742,9 +4742,26 @@ static int efx_x4_rx_enable_timestamping(struct efx_channel *channel,
 	MCDI_SET_DWORD(inbuf, PTP_IN_PERIPH_ID, 0);
 	MCDI_SET_DWORD(inbuf, PTP_IN_TIME_EVENT_SUBSCRIBE_V2_QUEUE_ID,
 		       channel->channel);
+	MCDI_POPULATE_DWORD_1(inbuf, PTP_IN_TIME_EVENT_SUBSCRIBE_V2_FLAGS,
+			      PTP_IN_TIME_EVENT_SUBSCRIBE_V2_REPORT_SYNC_STATUS,
+			      1);
 
+	/* As with efx_ef10_rx_enable_timestamping, try enabling timestamping
+	 * with clock sync status reporting and fall back to not requesting it
+	 * in the case where something else has already not requested it.
+	 */
 	rc = efx_mcdi_rpc(channel->efx, MC_CMD_PTP,
 			  inbuf, sizeof(inbuf), NULL, 0, NULL);
+	if (rc) {
+		MCDI_POPULATE_DWORD_1(inbuf,
+				      PTP_IN_TIME_EVENT_SUBSCRIBE_V2_FLAGS,
+				      PTP_IN_TIME_EVENT_SUBSCRIBE_V2_REPORT_SYNC_STATUS,
+				      0);
+
+		rc = efx_mcdi_rpc(channel->efx, MC_CMD_PTP,
+				  inbuf, sizeof(inbuf), NULL, 0, NULL);
+	}
+
 	if (rc)
 		channel->sync_events_state = temp ? SYNC_EVENTS_QUIESCENT :
 						    SYNC_EVENTS_DISABLED;
