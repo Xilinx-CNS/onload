@@ -38,7 +38,8 @@ int test_multicast_sanity(void)
   cmp_ok(rc, "==", 0, "add endpoint");
 
   idx = IDX_FROM_CP_LINK(ci_dllist_head(&cp->idxs));
-  ooft_endpoint_expect_multicast_filters(e1, idx, inet_addr(group));
+  ooft_endpoint_expect_multicast_filters(e1, idx, idx->hwport_mask,
+                                         inet_addr(group));
   rc = ooft_endpoint_mcast_add(e1, inet_addr(group), idx);
   cmp_ok(rc, "==", 0, "mcast add endpoint");
 

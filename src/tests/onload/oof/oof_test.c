@@ -110,6 +110,9 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "multicast_sanity") )
     test_multicast_sanity();
 
+  if( all || !strcmp(argv[1], "replication_sanity") )
+    test_replication_sanity();
+
   if( all || !strcmp(argv[1], "namespace_sanity") )
     test_namespace_sanity();
 

@@ -383,6 +383,7 @@ void ooft_endpoint_expect_unicast_filters(struct ooft_endpoint* ep, int flags)
  */
 void ooft_endpoint_expect_multicast_filters(struct ooft_endpoint* ep,
                                             struct ooft_ifindex* idx,
+                                            unsigned hwport_mask,
                                             unsigned laddr_be)
 {
   ci_assert_equal(ep->proto, IPPROTO_UDP);
@@ -394,7 +395,7 @@ void ooft_endpoint_expect_multicast_filters(struct ooft_endpoint* ep,
   int vlans;
   struct ooft_hwport* hw;
   for( i = 0; i < CI_CFG_MAX_HWPORTS; i++ ) {
-    if( (1 << i) & idx->hwport_mask ) {
+    if( (1 << i) & hwport_mask ) {
       hw = HWPORT_FROM_CLIENT(oo_nics[i].efrm_client);
       vlans = hw->flags & OOF_HWPORT_FLAG_VLAN_FILTERS;
       ooft_client_expect_hw_add_ip(oo_nics[i].efrm_client,
