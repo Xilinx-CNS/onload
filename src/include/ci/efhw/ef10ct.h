@@ -97,6 +97,7 @@ struct efhw_nic_ef10ct {
   struct efrm_debugfs_dir debug_dir;
   struct xarray irqs;
   struct mutex irq_lock;
+  struct efx_design_params efx_design_params;
 };
 
 static inline u32 ef10ct_get_queue_num(u32 queue_handle)

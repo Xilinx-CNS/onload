@@ -72,21 +72,21 @@ static int ef10ct_resource_init(struct efx_auxdev *edev,
                                 struct vi_resource_dimensions *res_dim)
 {
   union efx_auxiliary_param_value val;
-  struct efx_design_params dp;
   int rc;
   int i;
 
-  val.design_params = &dp;
+  val.design_params = &ef10ct->efx_design_params;
   rc = edev->llct_ops->base_ops->get_param(client, EFX_DESIGN_PARAM, &val);
   if( rc < 0 )
     return rc;
 
-  rc = efct_filter_state_init(&ef10ct->filter_state, dp.num_filters,
-                              dp.rx_queues);
+  rc = efct_filter_state_init(&ef10ct->filter_state,
+                              ef10ct->efx_design_params.num_filters,
+                              ef10ct->efx_design_params.rx_queues);
 
   res_dim->efhw_ops = &ef10ct_char_functional_units;
 
-  ef10ct->evq_n = dp.ev_queues;
+  ef10ct->evq_n = ef10ct->efx_design_params.ev_queues;
   ef10ct->evq = vzalloc(sizeof(*ef10ct->evq) * ef10ct->evq_n);
   if( ! ef10ct->evq ) {
     rc = -ENOMEM;
@@ -100,7 +100,7 @@ static int ef10ct_resource_init(struct efx_auxdev *edev,
   for( i = 0; i < ef10ct->evq_n; i++ )
     ef10ct->evq[i].txq = EF10CT_EVQ_NO_TXQ;
 
-  ef10ct->rxq_n = dp.rx_queues;
+  ef10ct->rxq_n = ef10ct->efx_design_params.rx_queues;
   ef10ct->rxq = vzalloc(sizeof(*ef10ct->rxq) * ef10ct->rxq_n);
   if( ! ef10ct->rxq ) {
     rc = -ENOMEM;

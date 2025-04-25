@@ -1746,22 +1746,12 @@ ef10ct_vi_io_region(struct efhw_nic* nic, int evq_num, size_t* size_out,
 
 static int
 ef10ct_design_parameters(struct efhw_nic *nic,
-                         struct efab_nic_design_parameters *dp)
+                         struct efab_nic_design_parameters *efab_dp)
 {
-  struct device *dev;
-  struct efx_auxdev* edev;
-  struct efx_auxdev_client* cli;
-  union efx_auxiliary_param_value val;
-  struct efx_design_params params;
-  int rc = 0;
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  struct efx_design_params *efx_dp;
 
-  val.design_params = &params;
-  AUX_PRE(dev, edev, cli, nic, rc)
-  rc = edev->llct_ops->base_ops->get_param(cli, EFX_DESIGN_PARAM, &val);
-  AUX_POST(dev, edev, cli, nic, rc);
-
-  if( rc < 0 )
-    return rc;
+  efx_dp = &ef10ct->efx_design_params;
 
   /* Where older versions of ef_vi make assumptions about parameter values, we
    * must check that either they know about the parameter, or that the value
@@ -1771,30 +1761,30 @@ ef10ct_design_parameters(struct efhw_nic *nic,
    * compatibility issues.
    */
 #define SET(PARAM, VALUE) \
-  if( EFAB_NIC_DP_KNOWN(*dp, PARAM) ) \
-    dp->PARAM = (VALUE);  \
+  if( EFAB_NIC_DP_KNOWN(*efab_dp, PARAM) ) \
+    efab_dp->PARAM = (VALUE);  \
   else if( (VALUE) != EFAB_NIC_DP_DEFAULT(PARAM) ) \
     return -ENODEV;
 
-  SET(rx_superbuf_bytes, val.design_params->rx_buffer_len);
-  if( val.design_params->meta_location == 0 ) {
+  SET(rx_superbuf_bytes, efx_dp->rx_buffer_len);
+  if( efx_dp->meta_location == 0 ) {
     SET(rx_frame_offset, EFCT_RX_HEADER_NEXT_FRAME_LOC_0 - 2);
   }
-  else if( val.design_params->meta_location == 1 ) {
+  else if( efx_dp->meta_location == 1 ) {
     SET(rx_frame_offset, EFCT_RX_HEADER_NEXT_FRAME_LOC_1 - 2);
   }
   else {
     EFHW_ERR("%s: Could not determine frame offset from meta_location %u",
-             __func__, val.design_params->meta_location);
+             __func__, efx_dp->meta_location);
     return -EOPNOTSUPP;
   }
-  SET(rx_stride, val.design_params->rx_stride);
-  SET(rx_queues, val.design_params->rx_queues);
-  SET(tx_aperture_bytes, val.design_params->tx_aperture_size);
-  SET(tx_fifo_bytes, val.design_params->tx_fifo_size);
-  SET(timestamp_subnano_bits, val.design_params->ts_subnano_bit);
-  SET(unsol_credit_seq_mask, val.design_params->unsol_credit_seq_mask);
-  SET(md_location, val.design_params->meta_location);
+  SET(rx_stride, efx_dp->rx_stride);
+  SET(rx_queues, efx_dp->rx_queues);
+  SET(tx_aperture_bytes, efx_dp->tx_aperture_size);
+  SET(tx_fifo_bytes, efx_dp->tx_fifo_size);
+  SET(timestamp_subnano_bits, efx_dp->ts_subnano_bit);
+  SET(unsol_credit_seq_mask, efx_dp->unsol_credit_seq_mask);
+  SET(md_location, efx_dp->meta_location);
 
   return 0;
 }
