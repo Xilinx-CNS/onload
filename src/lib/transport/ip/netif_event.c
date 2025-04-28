@@ -221,26 +221,6 @@ static void get_rx_timestamp(ci_netif* netif, ci_ip_pkt_fmt* pkt)
   ci_netif_state_nic_t* nsn = &netif->state->nic[pkt->intf_i];
   ef_vi* vi = ci_netif_vi(netif, pkt->intf_i);
 
-  /* AF_XDP timestamps are read in ci_netif_poll_evq
-   * TODO: probably move here. we have all necessary data: vi and pkt */
-  if( vi->nic_type.arch == EF_VI_ARCH_AF_XDP ) {
-    struct onload_xdp_rx_meta {
-#define ONLOAD_XDP_RX_META_TSTAMP 0x1
-      uint64_t flags;
-      uint64_t tstamp;
-    } *meta;
-    const uint64_t ns_to_sec = 1000UL * 1000 * 1000;
-
-    meta = ((struct onload_xdp_rx_meta *)(pkt->dma_start + pkt->pkt_start_off)) - 1;
-    if (meta->flags & ONLOAD_XDP_RX_META_TSTAMP) {
-      pkt->hw_stamp.tv_sec = meta->tstamp / ns_to_sec;
-      pkt->hw_stamp.tv_nsec = meta->tstamp % ns_to_sec;
-      pkt->hw_stamp.tv_nsec_frac = 0;
-      pkt->hw_stamp.tv_flags = 0;
-    }
-    return;
-  }
-
   /* We skip timestamping rx_ref packets here as we no longer have a reference
    * to them. Instead, we copy these earlier in get_efct_timestamp. */
   if( ! (nsn->oo_vi_flags & OO_VI_FLAGS_RX_REF) &&
