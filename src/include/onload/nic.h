@@ -20,8 +20,10 @@ struct oo_nic {
   struct bpf_prog*    prog;
 #endif
 #endif
-  /* Set with OO_NIC_LL to indicate alternate fallback port for same net_dev */
-  int fallback_hwport;
+  /* Set with OO_NIC_LL to indicate alternate fallback port for same net_dev.
+   * Set with OO_NIC_FALLBACK to indicate alternate primary port for same
+   * net_dev. */
+  int alternate_hwport;
 };
 
 

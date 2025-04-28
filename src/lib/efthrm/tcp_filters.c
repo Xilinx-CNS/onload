@@ -431,15 +431,15 @@ static unsigned oo_hw_filter_fallback_ports(unsigned hwport_mask,
                                             unsigned *no_fallback_mask)
 {
   int hwport;
-  int fallback;
+  int alternate;
   unsigned fallback_mask = 0;
   *no_fallback_mask = 0;
 
   while(hwport_mask) {
     hwport = ffs(hwport_mask) - 1;
-    fallback = oo_nics[hwport].fallback_hwport;
-    if( fallback >= 0 )
-      fallback_mask |= 1u << fallback;
+    alternate = oo_nics[hwport].alternate_hwport;
+    if( alternate >= 0 && !(oo_nics[hwport].oo_nic_flags & OO_NIC_FALLBACK) )
+      fallback_mask |= 1u << alternate;
     else
       *no_fallback_mask |= 1u << hwport;
     hwport_mask &= ~(1u << hwport);

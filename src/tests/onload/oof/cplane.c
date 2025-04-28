@@ -196,7 +196,8 @@ void ooft_add_hwport_to_ifindex(struct ooft_ifindex* idx,
       struct ooft_hwport* ff_hw = ooft_hwport_from_id(port);
       ff_hw->hidden_by_ll = true;
       oo_nics[ff_hw->id].oo_nic_flags |= OO_NIC_FALLBACK;
-      oo_nics[hw->id].fallback_hwport = ff_hw->id;
+      oo_nics[ff_hw->id].alternate_hwport = hw->id;
+      oo_nics[hw->id].alternate_hwport = ff_hw->id;
     }
   }
   else {
@@ -210,7 +211,8 @@ void ooft_add_hwport_to_ifindex(struct ooft_ifindex* idx,
       struct ooft_hwport* ll_hw = ooft_hwport_from_id(port);
       hw->hidden_by_ll = true;
       oo_nics[hw->id].oo_nic_flags |= OO_NIC_FALLBACK;
-      oo_nics[ll_hw->id].fallback_hwport = hw->id;
+      oo_nics[hw->id].alternate_hwport = ll_hw->id;
+      oo_nics[ll_hw->id].alternate_hwport = hw->id;
     }
   }
 

@@ -156,7 +156,7 @@ struct oo_nic* oo_nic_add(const struct efhw_nic* nic)
 
   onic->efrm_client = efrm_client;
   onic->oo_nic_flags = 0;
-  onic->fallback_hwport = -1;
+  onic->alternate_hwport = -1;
 
   if( nic->flags & NIC_FLAG_LLCT ) {
     onic->oo_nic_flags |= OO_NIC_LL;
@@ -167,8 +167,9 @@ struct oo_nic* oo_nic_add(const struct efhw_nic* nic)
     if( alternate_efhw ) {
       alternate_oonic = oo_nic_find(alternate_efhw);
       if( alternate_oonic ) {
-        onic->fallback_hwport = oo_nic_hwport(alternate_oonic);
+        onic->alternate_hwport = oo_nic_hwport(alternate_oonic);
         alternate_oonic->oo_nic_flags |= OO_NIC_FALLBACK;
+        alternate_oonic->alternate_hwport = oo_nic_hwport(onic);
       }
     }
   }
@@ -179,8 +180,9 @@ struct oo_nic* oo_nic_add(const struct efhw_nic* nic)
     if( alternate_efhw ) {
       alternate_oonic = oo_nic_find(alternate_efhw);
       if( alternate_oonic ) {
-        alternate_oonic->fallback_hwport = oo_nic_hwport(onic);
+        alternate_oonic->alternate_hwport = oo_nic_hwport(onic);
         onic->oo_nic_flags |= OO_NIC_FALLBACK;
+        onic->alternate_hwport = oo_nic_hwport(alternate_oonic);
       }
     }
   }
@@ -193,8 +195,8 @@ struct oo_nic* oo_nic_add(const struct efhw_nic* nic)
            __func__, ifindex, i, rc);
   }
 
-  ci_log("%s: ifindex=%d oo_index=%d flags=%x fallback=%d", __FUNCTION__,
-         ifindex, i, onic->oo_nic_flags, onic->fallback_hwport);
+  ci_log("%s: ifindex=%d oo_index=%d flags=%x alternate=%d", __FUNCTION__,
+         ifindex, i, onic->oo_nic_flags, onic->alternate_hwport);
 
   return onic;
 
