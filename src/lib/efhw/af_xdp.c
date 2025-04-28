@@ -169,6 +169,7 @@ struct efhw_nic_af_xdp
   struct efhw_af_xdp_vi* vi;
   struct efhw_buddy_allocator vi_allocator;
   spinlock_t alloc_lock;
+  struct xdp_mmap_offsets mmap_offsets;
 };
 
 /*----------------------------------------------------------------------------
@@ -583,41 +584,39 @@ static int xdp_create_ring(struct socket* sock,
   return 0;
 }
 
-static int xdp_create_rings(struct socket* sock,
-                            struct efhw_page_map* page_map, void* kern_mem_base,
-                            long rxq_capacity, long txq_capacity,
-                            struct efab_af_xdp_offsets_rings* kern_offsets,
-                            struct efab_af_xdp_offsets_rings* user_offsets,
-                            struct ring_map* ring_mapping)
+static int xdp_get_mmap_offsets(struct xdp_mmap_offsets* mmap_offsets)
 {
-  int rc;
+  struct socket* sock;
   struct sys_call_area rw_area;
-  struct xdp_mmap_offsets* mmap_offsets;
+  struct xdp_mmap_offsets* mmap_offsets_user;
   int* optlen;
+  int rc;
 
-  EFHW_BUILD_ASSERT(EFAB_AF_XDP_DESC_BYTES == sizeof(struct xdp_desc));
+  rc = sock_create(AF_XDP, SOCK_RAW, 0, &sock);
+  if( rc < 0 )
+    return rc;
 
   /* We need a read-write area to call getsockopt().  We unmap it from UL
    * as soon as possible. */
   rc = sys_call_area_alloc(&rw_area);
   if( rc < 0 )
-    return rc;
+    goto out_release;
 
-  mmap_offsets = sys_call_area_ptr(&rw_area);
-  optlen = (void*)(mmap_offsets + 1);
-  *optlen = sizeof(*mmap_offsets);
+  mmap_offsets_user = sys_call_area_ptr(&rw_area);
+  optlen = (void*)(mmap_offsets_user + 1);
+  *optlen = sizeof(*mmap_offsets_user);
 
   /* For linux<=5.7 you can use kernel_getsockopt(),
    * but newer versions does not have this function, so we have all that
    * sys_call_area_*() calls. */
   rc = sock->ops->getsockopt(sock, SOL_XDP, XDP_MMAP_OFFSETS,
                              (void*)sys_call_area_user_addr(&rw_area,
-                                                            mmap_offsets),
+                                                            mmap_offsets_user),
                              (void*)sys_call_area_user_addr(&rw_area, optlen));
 
-  /* Security consideration: mmap_offsets is located in untrusted user
+  /* Security consideration: mmap_offsets_user is located in untrusted user
    * memory.  I.e. the process can overwrite all this data.
-   * However this is the process which can create an AF_XDP Onload stack,
+   * However this is the process which can load an XDP program,
    * so it runs with the root account, and it already can do
    * anything bad: reboot, execute arbitrary code, etc.
    *
@@ -626,44 +625,60 @@ static int xdp_create_rings(struct socket* sock,
   sys_call_area_unmap(&rw_area);
   if( rc < 0 ) {
     EFHW_ERR("%s: getsockopt(XDP_MMAP_OFFSETS) rc=%d", __func__, rc);
-    goto out;
+    goto out_unpin;
   }
-  EFHW_ASSERT(*optlen == sizeof(*mmap_offsets));
+  EFHW_ASSERT(*optlen == sizeof(*mmap_offsets_user));
+
+  memcpy(mmap_offsets, mmap_offsets_user, sizeof(*mmap_offsets_user));
+  rc = 0;
+
+out_unpin:
+  sys_call_area_unpin(&rw_area);
+out_release:
+  sock_release(sock);
+  return rc;
+}
+
+static int xdp_create_rings(struct socket* sock, struct efhw_nic_af_xdp* xdp,
+                            struct efhw_page_map* page_map, void* kern_mem_base,
+                            long rxq_capacity, long txq_capacity,
+                            struct efab_af_xdp_offsets_rings* kern_offsets,
+                            struct efab_af_xdp_offsets_rings* user_offsets,
+                            struct ring_map* ring_mapping)
+{
+  int rc;
+
+  EFHW_BUILD_ASSERT(EFAB_AF_XDP_DESC_BYTES == sizeof(struct xdp_desc));
 
   rc = xdp_create_ring(sock, page_map, kern_mem_base,
                        rxq_capacity, sizeof(struct xdp_desc),
                        XDP_RX_RING, XDP_PGOFF_RX_RING,
-                       &mmap_offsets->rx, &kern_offsets->rx, &user_offsets->rx,
+                       &xdp->mmap_offsets.rx, &kern_offsets->rx, &user_offsets->rx,
                        ring_mapping++);
   if( rc < 0 )
-    goto out;
+    return rc;
 
   rc = xdp_create_ring(sock, page_map, kern_mem_base,
                        txq_capacity, sizeof(struct xdp_desc),
                        XDP_TX_RING, XDP_PGOFF_TX_RING,
-                       &mmap_offsets->tx, &kern_offsets->tx, &user_offsets->tx,
+                       &xdp->mmap_offsets.tx, &kern_offsets->tx, &user_offsets->tx,
                        ring_mapping++);
   if( rc < 0 )
-    goto out;
+    return rc;
 
   rc = xdp_create_ring(sock, page_map, kern_mem_base,
                        rxq_capacity, sizeof(uint64_t),
                        XDP_UMEM_FILL_RING, XDP_UMEM_PGOFF_FILL_RING,
-                       &mmap_offsets->fr, &kern_offsets->fr, &user_offsets->fr,
+                       &xdp->mmap_offsets.fr, &kern_offsets->fr, &user_offsets->fr,
                        ring_mapping++);
   if( rc < 0 )
-    goto out;
+    return rc;
 
   rc = xdp_create_ring(sock, page_map, kern_mem_base,
                        txq_capacity, sizeof(uint64_t),
                        XDP_UMEM_COMPLETION_RING, XDP_UMEM_PGOFF_COMPLETION_RING,
-                       &mmap_offsets->cr, &kern_offsets->cr, &user_offsets->cr,
+                       &xdp->mmap_offsets.cr, &kern_offsets->cr, &user_offsets->cr,
                        ring_mapping);
-  if( rc < 0 )
-    goto out;
-
- out:
-  sys_call_area_unpin(&rw_area);
   return rc;
 }
 
@@ -730,6 +745,8 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
   struct socket* sock;
   struct file* file;
   struct efab_af_xdp_offsets* user_offsets;
+  const struct cred *old_cred;
+  struct cred *cred;
 
   if( chunk_size == 0 ||
       chunk_size < headroom ||
@@ -749,18 +766,24 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
   if( sw_bt == NULL )
     return -EINVAL;
 
+  cred = prepare_kernel_cred(&init_task);
+  if( cred == NULL )
+    return -ENOMEM;
+  old_cred = override_creds(cred);
+
   /* We need to use network namespace of network device so that
    * ifindex passed in bpf syscalls makes sense
    * TODO AF_XDP: there is a race here with device changing netns
-   * TODO AF_XDP: this fails unless the user namespace has CAP_NET_RAW
    */
   rc = __sock_create(dev_net(nic->net_dev), AF_XDP, SOCK_RAW, 0, &sock, 0);
   if( rc < 0 )
-    return rc;
+    goto fail_cred;
 
   file = sock_alloc_file(sock, 0, NULL);
-  if( IS_ERR(file) )
-    return PTR_ERR(file);
+  if( IS_ERR(file) ) {
+    rc = PTR_ERR(file);
+    goto fail_cred;
+  }
   vi->sock = sock;
 
   rc = efhw_page_alloc_zeroed(&vi->user_offsets_page);
@@ -776,7 +799,7 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
   if( rc < 0 )
     goto fail;
 
-  rc = xdp_create_rings(sock, page_map, &vi->kernel_offsets,
+  rc = xdp_create_rings(sock, nic->arch_extra, page_map, &vi->kernel_offsets,
                         vi->rxq_capacity, vi->txq_capacity,
                         &vi->kernel_offsets.rings, &user_offsets->rings,
                         vi->ring_mapping);
@@ -815,11 +838,17 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
     add_wait_queue(sk_sleep(vi->sock->sk), &vi->waiter.wait);
 
   user_offsets->mmap_bytes = efhw_page_map_bytes(page_map);
+
+  revert_creds(old_cred);
+  put_cred(cred);
   return 0;
 
  fail:
   vi->waiter.wait.func = NULL;
   xdp_release_vi(nic, vi);
+ fail_cred:
+  revert_creds(old_cred);
+  put_cred(cred);
   return rc;
 }
 
@@ -926,6 +955,10 @@ __af_xdp_nic_init_hardware(struct efhw_nic *nic,
 	nic->sw_bts = (struct efhw_sw_bt*) (xdp->vi + nic->vi_lim);
 
 	spin_lock_init(&xdp->alloc_lock);
+
+	rc = xdp_get_mmap_offsets(&xdp->mmap_offsets);
+	if( rc < 0 )
+		goto fail_map;
 
 	rc = af_xdp_vi_allocator_ctor(xdp, nic->vi_min, nic->vi_lim);
 	if( rc < 0 )
