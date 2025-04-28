@@ -342,6 +342,8 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
                              map, map_bytes, 0);
   if( rc < 0 ) {
     munmap(map, map_bytes);
+    LOG(ef_log("%s: Unable to alloc buffers (%d). Are sufficient hugepages available?",
+               __FUNCTION__, rc));
     return rc;
   }
 
@@ -421,14 +423,15 @@ int efct_ubufs_shared_attach_internal(ef_vi* vi, int ix, int qid, void* superbuf
   EF_VI_ASSERT(ubufs->shrub_controller_id >= 0);
   EF_VI_ASSERT(ubufs->shrub_token_id >= 0);
 
-  memset( attach_path, 0, sizeof( attach_path ) );
-  rc = snprintf( attach_path, sizeof( attach_path ), EF_SHRUB_CONTROLLER_PATH_FORMAT
-                 EF_SHRUB_SHRUB_FORMAT, EF_SHRUB_SOCK_DIR_PATH, ubufs->shrub_controller_id,
-                 ubufs->shrub_token_id );
-  if ( rc < 0 || rc >= sizeof( attach_path ) )
+  memset(attach_path, 0, sizeof(attach_path));
+  rc = snprintf(attach_path, sizeof(attach_path),
+                EF_SHRUB_CONTROLLER_PATH_FORMAT EF_SHRUB_SHRUB_FORMAT,
+                EF_SHRUB_SOCK_DIR_PATH, ubufs->shrub_controller_id,
+                ubufs->shrub_token_id);
+  if ( rc < 0 || rc >= sizeof(attach_path) )
     return -EINVAL;
 
-  attach_path[sizeof( attach_path ) - 1] = '\0';
+  attach_path[sizeof(attach_path) - 1] = '\0';
 
   rc = ef_shrub_client_open(client, superbuf, attach_path, qid);
   if ( rc < 0 ) {
@@ -443,7 +446,8 @@ int efct_ubufs_shared_attach_internal(ef_vi* vi, int ix, int qid, void* superbuf
 
   rc = efct_vi_sync_rxq(vi, ix, qid);
   if ( rc < 0 ) {
-    LOG(ef_log("%s: ERROR syncing shrub_client to rxq! rc=%d", __FUNCTION__, rc));
+    LOG(ef_log("%s: ERROR syncing shrub_client to rxq! rc=%d", __FUNCTION__,
+               rc));
     return rc;
   }
   return ix;
@@ -465,13 +469,14 @@ static int efct_ubufs_pre_attach(ef_vi* vi, bool shared_mode)
 
   ubufs = get_ubufs(vi);
   if( !ubufs->is_shrub_token_set ) {
-    memset( attach_path, 0, sizeof( attach_path ) );
-    rc = snprintf( attach_path, sizeof( attach_path ), EF_SHRUB_CONTROLLER_PATH_FORMAT
-                   EF_SHRUB_SHRUB_FORMAT, EF_SHRUB_SOCK_DIR_PATH, ubufs->shrub_controller_id,
-                   ubufs->shrub_token_id );
-    if ( rc < 0 || rc >= sizeof( attach_path ) )
+    memset(attach_path, 0, sizeof(attach_path));
+    rc = snprintf(attach_path, sizeof(attach_path),
+                  EF_SHRUB_CONTROLLER_PATH_FORMAT EF_SHRUB_SHRUB_FORMAT,
+                  EF_SHRUB_SOCK_DIR_PATH, ubufs->shrub_controller_id,
+                  ubufs->shrub_token_id);
+    if ( rc < 0 || rc >= sizeof(attach_path) )
       return -EINVAL;
-    attach_path[sizeof( attach_path ) - 1] = '\0';
+    attach_path[sizeof(attach_path) - 1] = '\0';
 
     rc = ef_shrub_client_request_token(attach_path, &response);
     if( rc )
