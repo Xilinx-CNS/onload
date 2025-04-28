@@ -966,6 +966,13 @@ _ef10_mcdi_cmd_ptp_time_event_unsubscribe(struct efhw_nic *nic, uint32_t evq,
 }
 
 
+static int
+ef10_nic_evq_requires_time_sync(struct efhw_nic *nic, uint flags)
+{
+  return !!(flags & (EFHW_VI_RX_TIMESTAMPS | EFHW_VI_TX_TIMESTAMPS));
+}
+
+
 /* This function will enable the given event queue with the requested
  * properties.
  */
@@ -975,8 +982,7 @@ ef10_nic_event_queue_enable(struct efhw_nic *nic,
 {
   int rc;
   int flags = params->flags;
-  int enable_time_sync_events = (flags & (EFHW_VI_RX_TIMESTAMPS |
-                                          EFHW_VI_TX_TIMESTAMPS)) != 0;
+  int enable_time_sync_events = ef10_nic_evq_requires_time_sync(nic, flags);
   int enable_cut_through = (flags & EFHW_VI_NO_EV_CUT_THROUGH) == 0;
   int enable_rx_merging = ((flags & EFHW_VI_RX_PACKED_STREAM) != 0) ||
                           ((flags & EFHW_VI_ENABLE_RX_MERGE) != 0);
@@ -2567,6 +2573,7 @@ struct efhw_func_ops ef10aux_char_functional_units = {
 	.release_hardware = ef10_nic_release_hardware,
 	.event_queue_enable = ef10_nic_event_queue_enable,
 	.event_queue_disable = ef10_nic_event_queue_disable,
+	.evq_requires_time_sync = ef10_nic_evq_requires_time_sync,
 	.wakeup_request = ef10_nic_wakeup_request,
 	.sw_event = ef10_nic_sw_event,
 	.handle_event = ef10_handle_event,

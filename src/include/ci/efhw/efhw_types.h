@@ -295,6 +295,9 @@ struct efhw_func_ops {
 	void (*event_queue_disable) (struct efhw_nic *nic, uint evq,
 				     int time_sync_events_enabled);
 
+	/*! Determine if time sync events are required for some flags */
+	int (*evq_requires_time_sync) (struct efhw_nic *nic, uint flags);
+
 	/*! request wakeup from the NIC on a given event Q */
 	void (*wakeup_request) (struct efhw_nic *nic,
 				volatile void __iomem* io_page, int vi_id,

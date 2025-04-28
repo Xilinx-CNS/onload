@@ -92,6 +92,10 @@
 	((nic)->efhw_func->event_queue_disable(nic, evq,		\
 					       time_sync_events_enabled))
 
+#define efhw_nic_evq_requires_time_sync(nic, efhw_vi_flags) \
+	((nic)->efhw_func->evq_requires_time_sync ? \
+	 (nic)->efhw_func->evq_requires_time_sync((nic), (efhw_vi_flags)) : 0)
+
 #define efhw_nic_wakeup_request(nic, iopage, vi_id, rd_ptr)                   \
 	((nic)->efhw_func->wakeup_request((nic), (iopage), (vi_id), (rd_ptr)))
 

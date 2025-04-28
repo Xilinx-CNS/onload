@@ -560,6 +560,13 @@ efct_nic_irq_free(struct efhw_nic *nic, uint32_t channel, uint32_t irq)
   mutex_unlock(&efct->irq_allocator.lock);
 }
 
+static int
+efct_nic_evq_requires_time_sync(struct efhw_nic *nic, uint flags)
+{
+  return !!(flags & EFHW_VI_TX_TIMESTAMPS);
+}
+
+
 /* This function will enable the given event queue with the requested
  * properties.
  */
@@ -570,6 +577,8 @@ efct_nic_event_queue_enable(struct efhw_nic *nic,
   struct device *dev;
   struct xlnx_efct_device* edev;
   struct xlnx_efct_client* cli;
+  int requires_time_sync =
+    efct_nic_evq_requires_time_sync(nic, efhw_params->flags);
   struct xlnx_efct_evq_params qparams = {
     .qid = efhw_params->evq,
     .entries = efhw_params->evq_size,
@@ -579,8 +588,8 @@ efct_nic_event_queue_enable(struct efhw_nic *nic,
     .q_page = pfn_to_page(efhw_params->dma_addrs[0] >> PAGE_SHIFT),
     .page_offset = 0,
     .q_size = efhw_params->evq_size * sizeof(efhw_event_t),
-    .subscribe_time_sync = efhw_params->flags & EFHW_VI_TX_TIMESTAMPS,
-    .unsol_credit = efhw_params->flags & EFHW_VI_TX_TIMESTAMPS ? CI_CFG_TIME_SYNC_EVENT_EVQ_CAPACITY  - 1 : 0,
+    .subscribe_time_sync = requires_time_sync,
+    .unsol_credit = requires_time_sync ? CI_CFG_TIME_SYNC_EVENT_EVQ_CAPACITY - 1 : 0,
     .irq = efhw_params->wakeup_channel,
   };
   struct efhw_nic_efct *efct = nic->arch_extra;
@@ -1184,6 +1193,7 @@ struct efhw_func_ops efct_char_functional_units = {
   .release_hardware = efct_nic_release_hardware,
   .event_queue_enable = efct_nic_event_queue_enable,
   .event_queue_disable = efct_nic_event_queue_disable,
+  .evq_requires_time_sync = efct_nic_evq_requires_time_sync,
   .wakeup_request = efct_nic_wakeup_request,
   .vi_alloc = efct_vi_alloc,
   .vi_free = efct_vi_free,

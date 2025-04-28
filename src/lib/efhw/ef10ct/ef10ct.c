@@ -504,6 +504,15 @@ ef10ct_mcdi_cmd_set_vi_tlp_processing(struct efhw_nic *nic, uint instance,
 }
 
 
+static int
+ef10ct_nic_evq_requires_time_sync(struct efhw_nic *nic, uint flags)
+{
+  /* We don't need time sync events to properly handle RX timestamping as all
+   * the data we require is given to us in the packet metadata. */
+  return !!(flags & EFHW_VI_TX_TIMESTAMPS);
+}
+
+
 /* FIXME EF10CT
  * Need to handle timesync and credits
  * X3 net driver does dma mapping
@@ -516,9 +525,8 @@ ef10ct_nic_event_queue_enable(struct efhw_nic *nic,
   EFHW_MCDI_DECLARE_BUF(in, MC_CMD_INIT_EVQ_V2_IN_LEN(1));
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct efhw_nic_ef10ct_evq *ef10ct_evq;
-  /* We don't need time sync events to properly handle RX timestamping as all
-   * the data we require is given to us in the packet metadata. */
-  int enable_time_sync_events = !!(efhw_params->flags & EFHW_VI_TX_TIMESTAMPS);
+  int enable_time_sync_events =
+    ef10ct_nic_evq_requires_time_sync(nic, efhw_params->flags);
   int rc;
 #ifndef NDEBUG
   int i;
@@ -1895,6 +1903,7 @@ struct efhw_func_ops ef10ct_char_functional_units = {
   .release_hardware = ef10ct_nic_release_hardware,
   .event_queue_enable = ef10ct_nic_event_queue_enable,
   .event_queue_disable = ef10ct_nic_event_queue_disable,
+  .evq_requires_time_sync = ef10ct_nic_evq_requires_time_sync,
   .wakeup_request = ef10ct_nic_wakeup_request,
   .vi_alloc = ef10ct_vi_alloc,
   .vi_free = ef10ct_vi_free,

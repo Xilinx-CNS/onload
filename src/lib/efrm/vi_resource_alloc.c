@@ -1089,8 +1089,6 @@ __efrm_vi_q_flush(struct efhw_nic* nic, struct efrm_vi* virs,
 	int rc;
 	struct efrm_vi_q *q = &virs->q[queue_type];
 	int evq = efrm_vi_evq_id(virs, queue_type);
-	int time_sync_events_enabled = (virs->flags &
-			(EFHW_VI_RX_TIMESTAMPS | EFHW_VI_TX_TIMESTAMPS)) != 0;
 
 	switch (queue_type) {
 	case EFHW_RXQ:
@@ -1100,9 +1098,14 @@ __efrm_vi_q_flush(struct efhw_nic* nic, struct efrm_vi* virs,
 		rc = efhw_nic_flush_tx_dma_channel(nic, q->qid, evq);
 		break;
 	case EFHW_EVQ:
-		/* flushing EVQ is as good as disabling it */
-		efhw_nic_event_queue_disable(nic, q->qid,
-					     time_sync_events_enabled);
+		{
+			int time_sync_events_enabled =
+				efhw_nic_evq_requires_time_sync(nic,
+								virs->flags);
+			/* flushing EVQ is as good as disabling it */
+			efhw_nic_event_queue_disable(nic, q->qid,
+						     time_sync_events_enabled);
+		}
 		rc = 0;
 		break;
 	default:
