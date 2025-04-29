@@ -29,6 +29,7 @@
 #include <onload/oof_nat.h>
 #include <onload/oof_socket.h>
 #include <onload/debug.h>
+#include <onload/nic.h>
 #include "oo_hw_filter.h"
 #include "tcp_filters_internal.h"
 #include "oof_filters_deps.h"
@@ -3959,6 +3960,8 @@ oof_mcast_filter_installable_hwports(struct oof_manager* fm,
 {
   unsigned hwport_mask = mf->mf_hwport_mask;
   struct oof_mcast_filter* mf2;
+  int hwport;
+  int alternate;
 
   CI_DLLIST_FOR_EACH2(struct oof_mcast_filter, mf2, mf_lp_link,
                       &lp->lp_mcast_filters)
@@ -3969,6 +3972,29 @@ oof_mcast_filter_installable_hwports(struct oof_manager* fm,
                                                    mf->mf_vlan_id, mf2);
       hwport_mask &= ~oof_mcast_filter_duplicate_hwports(fm, mf, mf2);
     }
+
+  /* In the case that we're using a multipath NIC and already have a filter
+   * on one port we don't want to switch to the other even if a theoretically
+   * better option becomes available. If we did so we'd need to ensure such
+   * switch happened atomically to avoid a situation where packets were
+   * delivered either to both paths or neither. This logic applies in both
+   * directions, though later filter install logic would stop the downgrade
+   * case anyway. In theory we could take advantage of filter move ops to do
+   * this, but it would require a fair amount of rejiggery, so for now we
+   * just live with this. */
+  for( hwport = 0; hwport < CI_CFG_MAX_HWPORTS; ++hwport ) {
+    if( mf->mf_filter.filter_id[hwport] >= 0 ) {
+      alternate = oo_nics[hwport].alternate_hwport;
+      if( alternate >= 0 ) {
+        /* When clearing out alternate hwports we assume we are protected by
+         * the install phase from having filters on both ports, otherwise we
+         * would end up clearing both of them from the mask. */
+        ci_assert(mf->mf_filter.filter_id[alternate] < 0);
+        hwport_mask &= ~(1u << alternate);
+      }
+    }
+  }
+
   return hwport_mask;
 }
 
