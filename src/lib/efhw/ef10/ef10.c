@@ -1699,7 +1699,9 @@ ef10_dmaq_rx_q_init(struct efhw_nic *nic, struct efhw_dmaq_params *params)
   rc = ef10_mcdi_rpc(nic, MC_CMD_INIT_RXQ, MC_CMD_INIT_RXQ_V4_IN_LEN,
                      MC_CMD_INIT_RXQ_V4_OUT_LEN, &outlen, in, NULL);
 
-  if( rc == 0 && flag_enable_tph )
+  /* Always set TPH steering even if flag_enable_tph == 0 to clear
+   * previous state. */
+  if( rc == 0 )
     efhw_set_tph_steering(nic, params->evq, flag_enable_tph, flag_tph_tag_mode);
 
   if( rc == 0 )
