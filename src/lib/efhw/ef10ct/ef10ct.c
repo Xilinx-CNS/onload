@@ -1136,8 +1136,7 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
                                                EF10CT_QUEUE_HANDLE_TYPE_RXQ);
 
   /* Needs to be done before the queue is active */
-  if( flag_enable_tph )
-    efhw_set_tph_steering(nic, rxq_handle, flag_enable_tph, flag_tph_tag_mode);
+  efhw_set_tph_steering(nic, rxq_handle, flag_enable_tph, flag_tph_tag_mode);
 
   /* Choose which evq to bind this rxq to. */
   if( !real_evq ) {
