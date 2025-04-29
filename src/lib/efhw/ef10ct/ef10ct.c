@@ -457,8 +457,8 @@ ef10ct_mcdi_cmd_get_vi_tlp_processing(struct efhw_nic *nic, unsigned instance,
 
   efhw_extract_get_vi_tlp_processing_mcdi_cmd_result(out, tlp);
 
-  EFHW_NOTICE("%s: tph now %x (data %x) (rc %d)", __FUNCTION__, tlp->tph,
-              tlp->data, rc);
+  EFHW_TRACE("%s: tph now %x (data %x) (rc %d)", __FUNCTION__, tlp->tph,
+             tlp->data, rc);
 
   return rc;
 }
@@ -476,8 +476,8 @@ ef10ct_mcdi_cmd_set_vi_tlp_processing(struct efhw_nic *nic, uint instance,
   EFHW_MCDI_INITIALISE_BUF(in);
 
   rc = ef10ct_mcdi_cmd_get_vi_tlp_processing(nic, instance, &tlp);
-  EFHW_NOTICE("%s: tph was %x (data %x, instance %d) (rc %d)",
-              __FUNCTION__, tlp.tph, tlp.data, instance, rc);
+  EFHW_TRACE("%s: tph was %x (data %x, instance %d) (rc %d)",
+             __FUNCTION__, tlp.tph, tlp.data, instance, rc);
 
   tlp.tph = set ? 1 : 0;
   tlp.tag1 = tlp.tag2 = tag;
@@ -487,8 +487,8 @@ ef10ct_mcdi_cmd_set_vi_tlp_processing(struct efhw_nic *nic, uint instance,
 
   efhw_populate_set_vi_tlp_processing_mcdi_cmd(in, instance, &tlp);
 
-  EFHW_NOTICE("%s: setting tph %x (data %x)",
-              __FUNCTION__, (tlp.data >> 19) & 1, tlp.data);
+  EFHW_TRACE("%s: setting tph %x (data %x)",
+             __FUNCTION__, (tlp.data >> 19) & 1, tlp.data);
   rpc = (struct efx_auxdev_rpc) {
     .cmd = MC_CMD_SET_VI_TLP_PROCESSING,
     .inlen = sizeof(in),
