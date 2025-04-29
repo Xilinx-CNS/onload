@@ -3909,11 +3909,13 @@ static int efx_ef10_ev_process(struct efx_channel *channel, int quota)
 	efx_qword_t event, *p_event, *cl_base, *old_cl_base = NULL;
 	bool fresh = false;
 	unsigned int read_ptr, cr_ptr;
+	unsigned int wrap_ptr;
 	int ev_code;
 	int spent = 0;
 	int rc;
 
 	read_ptr = channel->eventq_read_ptr;
+	wrap_ptr = read_ptr & channel->eventq_mask;
 
 	EFX_WARN_ON_ONCE_PARANOID(!IS_ALIGNED((uintptr_t)channel->eventq.addr,
 					      L1_CACHE_BYTES));
@@ -4012,6 +4014,17 @@ static int efx_ef10_ev_process(struct efx_channel *channel, int quota)
 				  " (data " EFX_QWORD_FMT ")\n",
 				  channel->channel, ev_code,
 				  EFX_QWORD_VAL(event));
+		}
+		if ((read_ptr & channel->eventq_mask) == wrap_ptr) {
+			/* We have consumed an entire ring's worth of events,
+			 * probably scrambling to keep up with TX completions,
+			 * without seeing enough RX to spend our budget.
+			 * Finish this NAPI poll here, reporting the budget as
+			 * fully spent, so that the core can reschedule before
+			 * calling us again.
+			 */
+			spent = quota;
+			goto out;
 		}
 	}
 
