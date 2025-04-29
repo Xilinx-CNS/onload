@@ -16,14 +16,13 @@
 #include <etherfabric/checksum.h>
 #include <etherfabric/efct_vi.h>
 #include <ci/tools.h>
-#include <ci/tools/ipcsum_base.h>
-#include <ci/tools/ippacket.h>
 
 #include <stdarg.h>
 #include <stddef.h>
 #include <inttypes.h>
 #include <arpa/inet.h>
 #include <net/if.h>
+#include <linux/if_ether.h>
 #include <netdb.h>
 #include <limits.h>
 #include <time.h>
@@ -70,7 +69,7 @@ static enum ef_pd_flags cfg_tx_pd_flags = EF_PD_LLCT;
 #define N_BUFS          (N_RX_BUFS + N_TX_BUFS)
 #define FIRST_TX_BUF    N_RX_BUFS
 #define BUF_SIZE        2048
-#define MAX_UDP_PAYLEN	(1500 - sizeof(ci_ip4_hdr) - sizeof(ci_udp_hdr))
+#define MAX_UDP_PAYLEN	(1500 - sizeof(struct iphdr) - sizeof(struct udphdr))
 /* Protocol header length: Ethernet + IP + UDP. */
 #define HEADER_SIZE     (14 + 20 + 8)
 
@@ -112,32 +111,31 @@ static char app_buf[BUF_SIZE];
 
 static void init_udp_pkt(void* pkt_buf, int paylen)
 {
-  int ip_len = sizeof(ci_ip4_hdr) + sizeof(ci_udp_hdr) + paylen;
-  ci_ether_hdr* eth;
-  ci_ip4_hdr* ip4;
-  ci_udp_hdr* udp;
+  int ip_len = sizeof(struct iphdr) + sizeof(struct udphdr) + paylen;
+  struct ethhdr* eth;
+  struct iphdr* ip4;
+  struct udphdr* udp;
   struct iovec iov;
 
   /* Use a broadcast destination MAC to ensure that the packet is not dropped
    * by 5000- and 6000-series NICs. */
   const uint8_t remote_mac[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 
-  eth = (ci_ether_hdr*) pkt_buf;
+  eth = (struct ethhdr*) pkt_buf;
   ip4 = (void*) ((char*) eth + 14);
   udp = (void*) (ip4 + 1);
 
-  memcpy(eth->ether_dhost, remote_mac, sizeof(remote_mac));
-  ef_vi_get_mac(&rx_vi.vi, driver_handle, eth->ether_shost);
-  eth->ether_type = htons(0x0800);
-  ci_ip4_hdr_init(ip4, CI_NO_OPTS, ip_len, 0, IPPROTO_UDP, htonl(laddr_he),
-                  htonl(raddr_he), 0);
-  ci_udp_hdr_init(udp, ip4, htons(port_he), htons(port_he), udp + 1, paylen, 0);
+  memcpy(eth->h_dest, remote_mac, sizeof(remote_mac));
+  ef_vi_get_mac(&rx_vi.vi, driver_handle, eth->h_source);
+  eth->h_proto = htons(0x0800);
+  iphdr_init(ip4, ip_len, 0, IPPROTO_UDP, htonl(laddr_he),
+             htonl(raddr_he));
+  udphdr_init(udp, ip4, htons(port_he), htons(port_he), paylen);
 
   iov.iov_base = udp + 1;
   iov.iov_len = paylen;
-  ip4->ip_check_be16 = ef_ip_checksum((const struct iphdr*) ip4);
-  udp->udp_check_be16 = ef_udp_checksum((const struct iphdr*) ip4,
-                                        (const struct udphdr*) udp, &iov, 1);
+  ip4->check = ef_ip_checksum(ip4);
+  udp->check = ef_udp_checksum(ip4, udp, &iov, 1);
 }
 
 
@@ -547,7 +545,7 @@ generic_desc_check(struct eflatency_vi* vi, struct eflatency_vi *tx_vi,
           rx_post(&vi->vi);
           break;
         }
-        ci_fallthrough;
+        __attribute__((__fallthrough__));
       default:
         fprintf(stderr, "ERROR: unexpected event "EF_EVENT_FMT"\n",
                 EF_EVENT_PRI_ARG(evs[i]));
