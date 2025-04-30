@@ -11,6 +11,9 @@ enum {
   OO_OP_SHRUB_SPAWN_SERVER = OO_OP_DSHM_END,
 #define OO_IOC_SHRUB_SPAWN_SERVER OO_IOC_W(SHRUB_SPAWN_SERVER, shrub_ioctl_data_t)
 
+  OO_OP_SHRUB_SET_SOCKETS,
+#define OO_IOC_SHRUB_SET_SOCKETS OO_IOC_W(SHRUB_SET_SOCKETS, shrub_socket_ioctl_data_t)
+
   OO_OP_SHRUB_END  /* This had better be last! */
 };
 

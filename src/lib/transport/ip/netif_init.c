@@ -1971,11 +1971,26 @@ static void oo_efct_superbuf_post(ef_vi* vi, int qid, int sbid, bool sentinel)
 
 static int spawn_shrub_controller(ci_netif* ni)
 {
-  ci_assert(NI_OPTS(ni).shrub_controller_id >= 0);
   ci_fd_t fp = ci_netif_get_driver_handle(ni);
   shrub_ioctl_data_t shrub_args = {0};
+
+  ci_assert(NI_OPTS(ni).shrub_controller_id >= 0);
+
   shrub_args.controller_id = NI_OPTS(ni).shrub_controller_id;
   return oo_resource_op(fp, OO_IOC_SHRUB_SPAWN_SERVER, &shrub_args);
+}
+
+static int set_shrub_sockets(ci_netif* ni, int shrub_socket_id, uint32_t intf_i) {
+  ci_fd_t fp = ci_netif_get_driver_handle(ni);
+  shrub_socket_ioctl_data_t shrub_args = {0};
+
+  ci_assert(NI_OPTS(ni).shrub_controller_id >= 0);
+  ci_assert(shrub_socket_id >= 0);
+
+  shrub_args.controller_id = NI_OPTS(ni).shrub_controller_id;
+  shrub_args.intf_i = intf_i;
+  shrub_args.shrub_socket_id = shrub_socket_id;
+  return oo_resource_op(fp, OO_IOC_SHRUB_SET_SOCKETS, &shrub_args);
 }
 
 int oo_send_shrub_request(int controller_id,
@@ -2029,22 +2044,30 @@ clean_exit:
   return rc;
 }
 
-static int oo_init_shrub(ci_netif* ni, ef_vi* vi, ci_hwport_id_t hw_port) {
+static int oo_init_shrub(ci_netif* ni, ef_vi* vi, ci_hwport_id_t hw_port, int nic_i) {
   int rc = 0;
+  int shrub_socket_id = -1;
 #ifndef __KERNEL__
   if ( NI_OPTS(ni).shrub_controller_id >= 0 ) {
       rc = spawn_shrub_controller(ni);
       if( rc < 0 )
         return rc;
 
-      rc = shrub_adapter_send_hwport(
+      shrub_socket_id = shrub_adapter_send_hwport(
         oo_send_shrub_request,
         NI_OPTS(ni).shrub_controller_id,
         hw_port,
         EF_SHRUB_TEMP_BC
       );
+      if ( shrub_socket_id < 0 ) {
+        rc = shrub_socket_id;
+        return rc;
+      }
+
+      rc = set_shrub_sockets(ni, shrub_socket_id, nic_i);
       if ( rc < 0 )
         return rc;
+
       efct_ubufs_set_shared(vi, NI_OPTS(ni).shrub_controller_id, rc);
     }
 #endif
@@ -2094,7 +2117,7 @@ static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
       if( rc < 0 )
         return rc;
 
-      rc = oo_init_shrub(ni, vi, hw_port);
+      rc = oo_init_shrub(ni, vi, hw_port, nic_i);
       if ( rc < 0 )
         return rc;
     

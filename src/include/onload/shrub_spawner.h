@@ -9,5 +9,6 @@
 #include <onload/fd_private.h>
 
 extern int oo_shrub_spawn_server(ci_private_t *priv, void *arg);
+extern int oo_shrub_set_sockets(ci_private_t * priv, void* arg);
 
 #endif

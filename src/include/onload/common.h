@@ -444,6 +444,12 @@ typedef struct {
   ci_uint32 controller_id;
 } shrub_ioctl_data_t;
 
+typedef struct {
+  uint32_t intf_i;
+  ci_uint32 controller_id;
+  ci_uint32 shrub_socket_id;
+} shrub_socket_ioctl_data_t;
+
 
 /*----------------------------------------------------------------------------
  *

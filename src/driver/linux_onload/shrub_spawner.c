@@ -56,3 +56,15 @@ int oo_shrub_spawn_server(ci_private_t *priv, void *arg) {
     return -EINVAL;
   return shrub_spawn_server(controller_id);
 }
+
+int oo_shrub_set_sockets(ci_private_t *priv, void* arg) {
+  int rc;
+  shrub_socket_ioctl_data_t *shrub_data = (shrub_socket_ioctl_data_t *) arg;
+  tcp_helper_resource_t* trs;
+  struct ef_vi* vi;
+  if (priv->thr == NULL)
+    return -EINVAL;
+  trs = priv->thr;
+  vi = ci_netif_vi(&trs->netif, shrub_data->intf_i);
+  return efct_ubufs_set_shared(vi, shrub_data->controller_id, shrub_data->shrub_socket_id);
+}
