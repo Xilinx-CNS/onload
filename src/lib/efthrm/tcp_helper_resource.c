@@ -971,7 +971,10 @@ void tcp_helper_get_filter_params(tcp_helper_resource_t* trs, int hwport,
     ef_vi* vi = &trs->netif.nic_hw[intf_i].vi;
     *vi_id = EFAB_VI_RESOURCE_INSTANCE(tcp_helper_vi(trs, intf_i));
     pd = efrm_vi_get_pd(tcp_helper_vi(trs, intf_i));
-    *exclusive_rxq_token = efrm_pd_shared_rxq_token_get(pd);
+    if( NI_OPTS_TRS(trs).llct_test_shrub )
+      *exclusive_rxq_token = efrm_pd_shared_rxq_token_get(pd);
+    else
+      *exclusive_rxq_token = efrm_pd_exclusive_rxq_token_get(pd);
     if( NI_OPTS_TRS(trs).shared_rxq_num >= 0 ) {
       *rxq = NI_OPTS_TRS(trs).shared_rxq_num;
       *flags |= EFHW_FILTER_F_PREF_RXQ;
