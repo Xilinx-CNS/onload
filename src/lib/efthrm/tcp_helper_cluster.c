@@ -264,6 +264,14 @@ static int thc_alloc(const char* cluster_name, int protocol, int port_be16,
     if( oo_nics[i].efrm_client == NULL ||
         ! oo_check_nic_suitable_for_onload(&(oo_nics[i])) )
       continue;
+
+    /* We know upfront that the LLCT datapath does not support RSS.  Thus,
+     * avoid trying to preallocate VI sets and letting the workflow to decide
+     * later whether it is acceptable for the given stack configuration.
+     */
+    if( oo_check_nic_llct(&oo_nics[i]) )
+      continue;
+
     rc = efrm_pd_alloc(&pd, oo_nics[i].efrm_client, pd_flags);
     if( rc != 0 )
       goto fail;

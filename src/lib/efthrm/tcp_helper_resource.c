@@ -1327,7 +1327,8 @@ static int allocate_pd(ci_netif* ni, struct vi_allocate_info* info,
     info->vi_set = NULL;
   }
 
-  if( info->cluster == NULL || !(nic->flags & NIC_FLAG_SHARED_PD) ) {
+  if( info->cluster == NULL || !(nic->flags & NIC_FLAG_SHARED_PD) ||
+      (nic->flags & NIC_FLAG_LLCT) ) {
     rc = efrm_pd_alloc(&info->pd, info->client,
         ((info->ef_vi_flags & EF_VI_RX_PHYS_ADDR) ?
             EFRM_PD_ALLOC_FLAG_PHYS_ADDR_MODE : 0) |
@@ -1890,6 +1891,13 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     rc = oo_cp_get_hwport_properties(ni->cplane, hwport, NULL, NULL, NULL);
     if( rc < 0 )
       goto error_out;
+
+    /* Cannot configure RSS with the LLCT RX datapath. */
+    if( thc && oo_check_nic_llct(&oo_nics[hwport]) &&
+        NI_OPTS(ni).multiarch_rx_datapath != EF_MULTIARCH_DATAPATH_FF) {
+      rc = -EOPNOTSUPP;
+      goto error_out;
+    }
 
     alloc_info.client = trs_nic->thn_oo_nic->efrm_client;
     alloc_info.pd = NULL;
