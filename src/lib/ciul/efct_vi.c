@@ -1414,10 +1414,15 @@ const void* efct_vi_rx_future_peek(ef_vi* vi)
     {
       const char* start = (char*)efct_rx_header(vi, pkt_id) +
                           EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
-      uint64_t v = *(volatile uint64_t*)(start - 2);
+      const char* poison_addr = start - 2;
+      uint64_t v = *(volatile uint64_t*)poison_addr;
       if(CI_LIKELY( v != CI_EFCT_DEFAULT_POISON )) {
         vi->future_qid = qid;
         return start;
+      }
+      else {
+        ci_prefetch_multiline_4(poison_addr, 1);
+        ci_prefetch_multiline_4(poison_addr, 5);
       }
     }
   }

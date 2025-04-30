@@ -1993,15 +1993,14 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
     }
   }
 
-  /* The first and second lines should already be cached. Empirically, on some
-   * platforms, there seems to be a small advantage to prefetching a couple
-   * more at this point, ahead of copying the packet data.
-   */
-  for( i = 2; i < 5; ++i )
-    ci_prefetch(dma + i * CI_CACHE_LINE_SIZE);
 
   ++ni->state->in_poll;
   if( EF_EVENT_TYPE(ev[0]) == EF_EVENT_TYPE_RX ) {
+    /* The first and second lines should already be cached. Empirically, on some
+     * platforms, there seems to be a small advantage to prefetching a couple
+     * more at this point, ahead of copying the packet data.
+     */
+    ci_prefetch_multiline_4(pkt->dma_start, 2);
     ci_assert_equal(OO_PP_ID(OO_PKT_P(pkt)), EF_EVENT_RX_RQ_ID(ev[0]));
     if( (ev[0].rx.flags & (EF_EVENT_FLAG_SOP | EF_EVENT_FLAG_CONT))
                                                        == EF_EVENT_FLAG_SOP ) {
@@ -2010,6 +2009,7 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
     }
   }
   else if( EF_EVENT_TYPE(ev[0]) == EF_EVENT_TYPE_RX_REF ) {
+    /* prefetch has already taken place in efct_vi_rx_future_peek */
 #ifndef NDEBUG
     {
       const void* pkt_start = efct_vi_rxpkt_get(evq, ev[0].rx_ref.pkt_id);

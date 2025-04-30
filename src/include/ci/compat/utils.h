@@ -200,5 +200,14 @@ typedef struct {
 #define CI_USER_PTR_GET(p)    ((void *)((ci_uintptr_t)((p).ptr)))
 #define CI_USER_PTR_SET(p,x)  ((p).ptr = (ci_uint64)(ci_uintptr_t)(x))
 
+
+/* prefetch 4 cache lines from an offset */
+#define ci_prefetch_multiline_4(base, offset_lines) do {                    \
+            ci_prefetch((base) + ((offset_lines)    )*CI_CACHE_LINE_SIZE);  \
+            ci_prefetch((base) + ((offset_lines) + 1)*CI_CACHE_LINE_SIZE);  \
+            ci_prefetch((base) + ((offset_lines) + 2)*CI_CACHE_LINE_SIZE);  \
+            ci_prefetch((base) + ((offset_lines) + 3)*CI_CACHE_LINE_SIZE);  \
+        } while(0);
+
 #endif  /* __CI_COMPAT_UTILS_H__ */
 /*! \cidoxg_end */
