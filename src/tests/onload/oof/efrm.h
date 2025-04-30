@@ -53,6 +53,11 @@ extern void ooft_client_expect_hw_add_ip(struct efrm_client* client,
                                          int vlan, int proto,
                                          unsigned laddr_be, int lport_be,
                                          unsigned raddr_be, int rport_be);
+extern void ooft_client_expect_hw_remove_ip(struct efrm_client* client,
+                                            int dmaq_id, int stack_id,
+                                            int vlan, int proto,
+                                            unsigned laddr_be, int lport_be,
+                                            unsigned raddr_be, int rport_be);
 extern void ooft_client_expect_hw_remove(struct efrm_client* client,
                                          struct ooft_hw_filter* filter);
 extern void ooft_client_expect_hw_remove_all(struct efrm_client* client);

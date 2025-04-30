@@ -409,6 +409,33 @@ void ooft_endpoint_expect_multicast_filters(struct ooft_endpoint* ep,
   }
 }
 
+void ooft_endpoint_expect_multicast_filters_remove(struct ooft_endpoint* ep,
+                                                   struct ooft_ifindex* idx,
+                                                   unsigned hwport_mask,
+                                                   unsigned laddr_be)
+{
+  int i;
+  int vlans;
+  struct ooft_hwport* hw;
+
+  ci_assert_equal(ep->proto, IPPROTO_UDP);
+
+  for( i = 0; i < CI_CFG_MAX_HWPORTS; i++ ) {
+    if( (1 << i) & hwport_mask ) {
+      hw = HWPORT_FROM_CLIENT(oo_nics[i].efrm_client);
+      vlans = hw->flags & OOF_HWPORT_FLAG_VLAN_FILTERS;
+      ooft_client_expect_hw_remove_ip(oo_nics[i].efrm_client,
+                                      tcp_helper_rx_vi_id(ep->thr, i),
+                                      tcp_helper_vi_hw_stack_id(ep->thr, i),
+                                      vlans ? idx->vlan_id :
+                                              EFX_FILTER_VID_UNSPEC,
+                                      ep->proto, laddr_be, ep->lport_be,
+                                      vlans ? 0 : ep->raddr_be,
+                                      vlans ? 0 : ep->rport_be);
+    }
+  }
+}
+
 
 /* Check that everything we expect to happen has, and that nothing that we
  * didn't expect happened for all sockets in the stack.  Returns 0 if

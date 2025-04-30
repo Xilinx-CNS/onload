@@ -145,17 +145,12 @@ void ooft_client_expect_hw_remove_all(struct efrm_client* client)
 }
 
 
-/* Expect the addition of a HW filter with the specific field values */
-void ooft_client_expect_hw_add_ip(struct efrm_client* client, int dmaq_id,
-                                  int stack_id, int vlan, int proto,
-                                  unsigned laddr_be, int lport_be,
-                                  unsigned raddr_be, int rport_be)
+void ooft_client_filter_def_to_spec(struct efx_filter_spec* spec, int dmaq_id,
+                                    int stack_id, int vlan, int proto,
+                                    unsigned laddr_be, int lport_be,
+                                    unsigned raddr_be, int rport_be)
 {
-  struct ooft_hw_filter* filter;
-  filter = ooft_client_add_hw_filter(&client->hw_filters_to_add, NULL);
-  struct efx_filter_spec* spec = &filter->spec;
   int rc;
-
   int flags = EFX_FILTER_FLAG_RX_SCATTER;
   efx_filter_init_rx(spec, EFX_FILTER_PRI_REQUIRED, flags, dmaq_id);
   efx_filter_set_stack_id(spec, stack_id);
@@ -170,8 +165,42 @@ void ooft_client_expect_hw_add_ip(struct efrm_client* client, int dmaq_id,
   if( vlan != EFX_FILTER_VID_UNSPEC )
     rc = efx_filter_set_eth_local(spec, vlan, NULL);
   ci_assert_equal(rc, 0);
+}
+
+
+/* Expect the addition of a HW filter with the specific field values */
+void ooft_client_expect_hw_add_ip(struct efrm_client* client, int dmaq_id,
+                                  int stack_id, int vlan, int proto,
+                                  unsigned laddr_be, int lport_be,
+                                  unsigned raddr_be, int rport_be)
+{
+  struct ooft_hw_filter* filter;
+  filter = ooft_client_add_hw_filter(&client->hw_filters_to_add, NULL);
+  struct efx_filter_spec* spec = &filter->spec;
+
+  ooft_client_filter_def_to_spec(spec, dmaq_id, stack_id, vlan, proto,
+                                 laddr_be, lport_be, raddr_be, rport_be);
 
   LOG_FILTER_OP(ooft_log_hw_filter_op(client, spec, 1, "INSERT"));
+}
+
+
+/* Expect the removal of a HW filter with the specific field values */
+void ooft_client_expect_hw_remove_ip(struct efrm_client* client, int dmaq_id,
+                                     int stack_id, int vlan, int proto,
+                                     unsigned laddr_be, int lport_be,
+                                     unsigned raddr_be, int rport_be)
+{
+  struct efx_filter_spec spec;
+  ci_dllist to_remove;
+  ci_dllist_init(&to_remove);
+
+  ooft_client_filter_def_to_spec(&spec, dmaq_id, stack_id, vlan, proto,
+                                 laddr_be, lport_be, raddr_be, rport_be);
+
+  ooft_client_hw_filter_matches(&client->hw_filters_added, &to_remove,
+                                &spec, 0xffffffff);
+  ooft_hw_filter_expect_remove_list(&to_remove);
 }
 
 

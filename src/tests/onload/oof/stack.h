@@ -135,6 +135,11 @@ extern void ooft_endpoint_expect_multicast_filters(struct ooft_endpoint* ep,
                                                    struct ooft_ifindex* idx,
                                                    unsigned hwport_mask,
                                                    unsigned laddr_be);
+extern void ooft_endpoint_expect_multicast_filters_remove(
+                                                   struct ooft_endpoint* ep,
+                                                   struct ooft_ifindex* idx,
+                                                   unsigned hwport_mask,
+                                                   unsigned laddr_be);
 
 extern int ooft_endpoint_check_sw_filters(struct ooft_endpoint* ep);
 extern int ooft_stack_check_sw_filters(tcp_helper_resource_t* thr);
