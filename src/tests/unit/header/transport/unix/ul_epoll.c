@@ -4,10 +4,6 @@
 #include <limits.h>
 #include <stdlib.h>
 
-/* 9.765432GHz */
-
-static const unsigned cpu_khz_vals[] = { 10000000, 9765432, 500000, 100000, 12345, 2};
-
 __attribute__ ((weak)) unsigned oo_timesync_cpu_khz;
 
 /* Modules under test. Define UNIT_TEST_EPOLL to compile in oo_epoll_frc_to_ts
@@ -19,6 +15,10 @@ __attribute__ ((weak)) unsigned oo_timesync_cpu_khz;
 #include "unit_test.h"
 
 __attribute__ ((weak)) citp_globals_t citp;
+
+static const unsigned cpu_khz_vals[] = {OO_EPOLL_MAX_CPU_KHZ, 9765432, 500000,
+                                        OO_EPOLL_MIN_CPU_KHZ};
+
 
 static void test_oo_epoll_ms_to_frc(void)
 {
@@ -77,8 +77,9 @@ static void test_oo_epoll_frc_to_ts(void)
   CHECK(ts.tv_sec, ==, 0);
   CHECK(ts.tv_nsec, ==, 0);
 
-  oo_epoll_frc_to_ts(INT64_MAX, &ts);
-  nanos = ((ci_uint128)INT64_MAX * 1000000) / oo_timesync_cpu_khz;
+  oo_epoll_frc_to_ts(OO_EPOLL_MAX_TIMEOUT_FRC, &ts);
+  nanos = ((ci_uint128)OO_EPOLL_MAX_TIMEOUT_FRC * 1000000) /
+          oo_timesync_cpu_khz;
   CHECK(ts.tv_sec, ==, nanos / 1000000000);
   CHECK(ts.tv_nsec, ==, nanos % 1000000000);
 }
@@ -89,7 +90,8 @@ static void test_oo_epoll_frc_to_ms(void)
   /* Timout should always round up due to the coarseness of millis */
   CHECK(oo_epoll_frc_to_ms(1, citp.cpu_khz), ==, 1);
   CHECK(oo_epoll_frc_to_ms(oo_timesync_cpu_khz - 1, citp.cpu_khz), ==, 1);
-  CHECK(oo_epoll_frc_to_ms(INT64_MAX, citp.cpu_khz), ==, 0x7fffffff);
+  CHECK(oo_epoll_frc_to_ms(OO_EPOLL_MAX_TIMEOUT_FRC, citp.cpu_khz), ==,
+                           0x7fffffff);
   /* Testing rounding up - Does not work at 1KHz */
   CHECK(oo_epoll_frc_to_ms(oo_timesync_cpu_khz * 0xBEEFULL +
         (oo_timesync_cpu_khz >> 1), citp.cpu_khz), ==, 0xBEF0);
@@ -116,7 +118,7 @@ static void test_oo_epoll_frc_to_ns(void)
   int i;
   CHECK(oo_epoll_frc_to_ns(0), ==, 0);
 
-  test_frc_to_ns(INT64_MAX);
+  test_frc_to_ns(OO_EPOLL_MAX_TIMEOUT_FRC);
   test_frc_to_ns(1345);
   for(i = 0; i < 5; i++) {
     test_frc_to_ns(rand());
@@ -147,9 +149,9 @@ static void run_tests_with_seed(unsigned seed) {
     run_tests(cpu_khz_vals[i]);
   }
 
-  /* Test arbitrary frequencies > 2HZ */
+  /* Test arbitrary frequencies > OO_EPOLL_MIN_CPU_KHZ */
   for(i = 0; i < 5; i++) {
-    run_tests(rand() % 10000000 + 2);
+    run_tests(rand() % (10000000 - OO_EPOLL_MIN_CPU_KHZ) + OO_EPOLL_MIN_CPU_KHZ);
   }
 }
 

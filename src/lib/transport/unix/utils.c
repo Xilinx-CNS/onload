@@ -14,7 +14,7 @@
 /*! \cidoxg_lib_transport_unix */
 
 #include <internal.h>
-
+#include <onload/timesync.h>
 
 static inline int citp_timestamp_compare(const ci_int64 a_sec,
                                          const ci_uint32 a_nsec,
@@ -70,7 +70,7 @@ void citp_oo_get_cpu_khz(ci_uint32* cpu_khz)
   ef_driver_handle fd;
 
   /* set up a constant value for the case everything goes wrong */
-  *cpu_khz = 1000;
+  *cpu_khz = TIMESYNC_MIN_CPU_KHZ ;
 
   if( ef_onload_driver_open(&fd, OO_STACK_DEV, 1) != 0 ) {
     fprintf(stderr, "%s: Failed to open /dev/onload\n", __FUNCTION__);

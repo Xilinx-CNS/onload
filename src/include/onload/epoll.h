@@ -22,13 +22,6 @@
 /* Allow this kernel function to be tested in ul_epoll.c unit tests */
 #if defined(__KERNEL__) || defined(UNIT_TEST_EPOLL)
 
-#if !defined(UNIT_TEST_EPOLL)
-#include <linux/eventpoll.h>
-#else
-#define NSEC_PER_MSEC 1000000L
-#define NSEC_PER_SEC  1000000000L
-#endif /* !defined(UNIT_TEST_EPOLL) */
-
 #include <linux/time_types.h>
 
 /* Convert timeout in cycles to a kernel timespec. */

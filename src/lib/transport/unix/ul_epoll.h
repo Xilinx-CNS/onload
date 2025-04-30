@@ -3,8 +3,10 @@
 #ifndef __UNIX_UL_EPOLL_H__
 #define __UNIX_UL_EPOLL_H__
 
+#include <limits.h>
 #include <sys/epoll.h>
 #include <onload/ul/wqlock.h>
+#include <onload/timesync.h>
 #include "internal.h"
 #include "ul_poll.h"
 #include "nonsock.h"
@@ -269,10 +271,19 @@ struct oo_ul_epoll_state {
   int phase;
 };
 
+#define OO_EPOLL_MIN_CPU_KHZ TIMESYNC_MIN_CPU_KHZ
+#define OO_EPOLL_MAX_CPU_KHZ TIMESYNC_MAX_CPU_KHZ
 
 /* Maximum timeout_hr we can handle.
- * timeout=-1 is converted to this value. */
-#define OO_EPOLL_MAX_TIMEOUT_FRC INT64_MAX
+ * timeout=-1 is converted to this value.
+ */
+#define OO_EPOLL_MAX_TIMEOUT_FRC ((INT64_MAX / NSEC_PER_MSEC) * \
+                                  OO_EPOLL_MIN_CPU_KHZ)
+
+/* Ensure oo_epoll_ms_to_frc can never return a value greater than
+ * OO_EPOLL_MAX_TIMEOUT_FRC.
+ */
+CI_BUILD_ASSERT(INT_MAX * OO_EPOLL_MAX_CPU_KHZ <= OO_EPOLL_MAX_TIMEOUT_FRC);
 
 /* Convert a ms timeout to one in cycles. */
 static inline ci_int64 oo_epoll_ms_to_frc(int ms_timeout)
@@ -287,13 +298,21 @@ static inline ci_int64 oo_epoll_ms_to_frc(int ms_timeout)
 #define OO_EPOLL_MAX_TV_SEC ((OO_EPOLL_MAX_TIMEOUT_FRC \
                              / (10ULL*1000*1000*1000)) - 1)
 
+
+/* Ensure oo_epoll_ts_to_frc can never return a value greater than
+ * OO_EPOLL_MAX_TIMEOUT_FRC.
+ */
+CI_BUILD_ASSERT(OO_EPOLL_MAX_TV_SEC * 1000 * OO_EPOLL_MAX_CPU_KHZ +
+                ((NSEC_PER_MSEC * OO_EPOLL_MAX_CPU_KHZ) / NSEC_PER_MSEC) <=
+                OO_EPOLL_MAX_TIMEOUT_FRC);
+
 /* Convert a timespec to a timeout in cycles */
 static inline ci_int64 oo_epoll_ts_to_frc(const struct timespec *ts)
 {
   if( ts == NULL || ts->tv_sec > OO_EPOLL_MAX_TV_SEC )
     return OO_EPOLL_MAX_TIMEOUT_FRC;
   return ts->tv_sec * 1000 * citp.cpu_khz +
-         ((ts->tv_nsec * citp.cpu_khz) / 1000000);
+         ((ts->tv_nsec * citp.cpu_khz) / NSEC_PER_MSEC);
 }
 
 /* Maximum timeout in ns we could have if running on a 10GHz processor */

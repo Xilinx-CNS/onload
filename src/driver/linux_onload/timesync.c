@@ -3,6 +3,7 @@
 #include <driver/linux_onload/onload_kernel_compat.h>
 
 #include <onload/debug.h>
+#include <onload/timesync.h>
 #include <onload/tcp_helper_fns.h>
 
 /*****************************************************************************
@@ -72,7 +73,8 @@ static void oo_timesync_stabilize_cpu_khz(struct oo_timesync* oo_ts)
                         oo_ts->smoothed_ns;
 
   /* Warn if the oo_timesync_cpu_khz computation over or under flowed. */
-  if( oo_timesync_cpu_khz < 400000 || oo_timesync_cpu_khz > 10000000 )
+  if( oo_timesync_cpu_khz < TIMESYNC_MIN_CPU_KHZ ||
+      oo_timesync_cpu_khz > TIMESYNC_MAX_CPU_KHZ )
     if( ! cpu_khz_warned ) {
       cpu_khz_warned = 1;
       ci_log("WARNING: cpu_khz computed to be %d which may not be correct\n",
