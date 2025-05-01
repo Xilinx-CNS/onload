@@ -1,3 +1,14 @@
+This is not a supported release version of Onload
+=================================================
+
+X4 Functionality
+----------------
+
+A placeholder to outline the application clustering support in X4.
+(SO_REUSEPORT is only supported with EF_MULTIARCH_RX_DATAPATH=ff,
+i.e. the "Enterprise" datapath in X4. FIXME: ON-16338.)
+
+
 Onload-9.1~preview1
 ===================
 
