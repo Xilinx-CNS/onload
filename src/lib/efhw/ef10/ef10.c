@@ -179,10 +179,6 @@ static int ef10_nic_arch_extra_ctor(struct efhw_nic *nic, int min, int lim)
 static int ef10_nic_sw_ctor(struct efhw_nic *nic,
                             const struct vi_resource_dimensions *res)
 {
-  nic->q_sizes[EFHW_EVQ] = 512 | 1024 | 2048 | 4096 | 8192 | 16384 | 32768;
-  nic->q_sizes[EFHW_TXQ] = 512 | 1024 | 2048;
-  nic->q_sizes[EFHW_RXQ] = 512 | 1024 | 2048 | 4096;
-
   switch (nic->devtype.variant) {
     case 'C':
       nic->ctr_ap_bar = EF10_MEDFORD2_P_CTR_AP_BAR;
@@ -394,10 +390,16 @@ static int _ef10_nic_check_capabilities(struct efhw_nic *nic,
 
   EFHW_MCDI_DECLARE_BUF(ver_out, MC_CMD_GET_VERSION_OUT_LEN);
   EFHW_MCDI_DECLARE_BUF(in, MC_CMD_GET_CAPABILITIES_V2_IN_LEN);
-  EFHW_MCDI_DECLARE_BUF(out, MC_CMD_GET_CAPABILITIES_V3_OUT_LEN);
+  EFHW_MCDI_DECLARE_BUF(out, MC_CMD_GET_CAPABILITIES_V10_OUT_LEN);
   EFHW_MCDI_INITIALISE_BUF(ver_out);
   EFHW_MCDI_INITIALISE_BUF(in);
   EFHW_MCDI_INITIALISE_BUF(out);
+
+  /* Set default queue sizes in case we fail MC_CMD_GET_CAPABILITIES or V10
+   * isn't supported. */
+  nic->q_sizes[EFHW_EVQ] = 512 | 1024 | 2048 | 4096 | 8192 | 16384 | 32768;
+  nic->q_sizes[EFHW_TXQ] = 512 | 1024 | 2048;
+  nic->q_sizes[EFHW_RXQ] = 512 | 1024 | 2048 | 4096;
 
   rc = ef10_mcdi_rpc(nic, MC_CMD_GET_CAPABILITIES, sizeof(in), sizeof(out),
                      &out_size, in, out);
@@ -509,6 +511,14 @@ static int _ef10_nic_check_capabilities(struct efhw_nic *nic,
 
   nic->rx_variant = EFHW_MCDI_WORD(out, GET_CAPABILITIES_OUT_RX_DPCPU_FW_ID);
   nic->tx_variant = EFHW_MCDI_WORD(out, GET_CAPABILITIES_OUT_TX_DPCPU_FW_ID);
+
+  if (out_size >= MC_CMD_GET_CAPABILITIES_V10_OUT_LEN) {
+    ci_uint32 q_sizes =
+      EFHW_MCDI_DWORD(out, GET_CAPABILITIES_V10_OUT_SUPPORTED_QUEUE_SIZES);
+    nic->q_sizes[EFHW_EVQ] = q_sizes;
+    nic->q_sizes[EFHW_TXQ] = q_sizes;
+    nic->q_sizes[EFHW_RXQ] = q_sizes;
+  }
 
   return rc;
 }
