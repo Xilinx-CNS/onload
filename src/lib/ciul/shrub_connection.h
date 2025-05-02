@@ -30,6 +30,9 @@ ef_shrub_connection_alloc(struct ef_shrub_connection** connection_out,
 
 int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection);
 
+int ef_shrub_connection_send_token(struct ef_shrub_connection* connection,
+                                   unsigned token);
+
 struct ef_shrub_client_state*
 ef_shrub_connection_client_state(struct ef_shrub_connection* connection);
 

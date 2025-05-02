@@ -10,8 +10,11 @@
 /* Dependencies */
 #include <stdint.h>
 #include <string.h>
+
+#include <ci/efch/op_types.h>
 #include <etherfabric/shrub_shared.h>
 #include <etherfabric/ef_vi.h>
+
 #include "shrub_queue.h"
 #include "shrub_connection.h"
 #include "shrub_server_sockets.h"
@@ -19,11 +22,13 @@
 static const char server_addr[] = "path/to/server/socket";
 static const size_t buffer_bytes = 64;
 static const size_t buffer_count = 32;
+static const unsigned shared_rxq_token = 32435768; /* arbitrary */
 
 static struct epoll_event* epoll_event;
 static int last_accept_fd = 42; /* arbitrary */
 static uint64_t last_qid = 413732132; /* arbitrary */
 static epoll_data_t last_epoll_data;
+static enum ef_shrub_request_type shrub_request_type = EF_SHRUB_REQUEST_QUEUE;
 
 static struct ef_vi* vi;
 static struct ef_shrub_server* server;
@@ -38,8 +43,10 @@ static struct call_state
   int close;
   int attach;
   int detach;
-  int send;
+  int send_metrics;
   int cleanup;
+  int send_token;
+  int resource_op;
 
   /* Function arguments */
   int fd;
@@ -105,14 +112,35 @@ int ef_shrub_server_recv(int fd, void* data, size_t bytes)
   struct ef_shrub_request* req = data;
   CHECK(bytes, ==, sizeof(*req));
   req->server_version = client_shrub_version;
-  req->type = EF_SHRUB_REQUEST_QUEUE;
-  req->requests.queue.qid = ++last_qid;
+  req->type = shrub_request_type;
+  switch(shrub_request_type) {
+    case EF_SHRUB_REQUEST_QUEUE:
+      req->requests.queue.qid = ++last_qid;
+      break;
+    default:
+      break;
+  }
   return bytes;
+}
+
+int ef_shrub_connection_send_token(struct ef_shrub_connection* connection,
+                                   unsigned token)
+{
+  CHECK(token, ==, shared_rxq_token);
+  calls->send_token++;
+  return 0;
 }
 
 int ef_shrub_server_resource_op(int fd, struct ci_resource_op_s* op)
 {
-  // TODO should check how this is called
+  calls->resource_op++;
+  switch(op->op) {
+    case CI_RSOP_PD_EXCL_RXQ_TOKEN_GET:
+      op->u.pd_excl_rxq_tok_get.token = shared_rxq_token;
+      break;
+    default:
+      break;
+  }
   return 0;
 }
 
@@ -201,7 +229,7 @@ void ef_shrub_queue_detached(struct ef_shrub_queue* queue,
 
 int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection)
 {
-  calls->send++;
+  calls->send_metrics++;
   return 0;
 }
 
@@ -222,6 +250,7 @@ static void init_test(void)
 
   vi = vi_;
   calls = calls_;
+  epoll_event = NULL;
 
   vi->efct_rxqs.ops = &mock_ops;
   STATE_STASH(vi);
@@ -230,6 +259,7 @@ static void init_test(void)
 static void open_server(void)
 {
   ef_shrub_server_open(vi, &server, server_addr, buffer_bytes, buffer_count);
+  STATE_CHECK(calls, resource_op, 1);
   STATE_REVERT(calls);
 }
 
@@ -247,9 +277,17 @@ static void open_server(void)
 #define POLL_CHECK_ATTACHED \
   ef_shrub_server_poll(server); \
   STATE_CHECK(calls, attach, 1); \
-  STATE_CHECK(calls, send, 1); \
+  STATE_CHECK(calls, send_metrics, 1); \
   STATE_ACCEPT(calls, connection); \
   STATE_ACCEPT(calls, queue); \
+  STATE_CHECK_UNCHANGED(calls); \
+
+/* Expect server to send token then close the connection. */
+#define POLL_CHECK_GOT_TOKEN \
+  ef_shrub_server_poll(server); \
+  STATE_CHECK(calls, send_token, 1); \
+  STATE_CHECK(calls, close, 1); \
+  STATE_CHECK(calls, fd, last_accept_fd); \
   STATE_CHECK_UNCHANGED(calls); \
 
 #define POLL_CHECK_DETACHED \
@@ -265,7 +303,6 @@ static void open_server(void)
   ef_shrub_server_poll(server); \
   STATE_CHECK(calls, close, 1); \
   STATE_CHECK(calls, fd, last_accept_fd); \
-  STATE_CHECK_UNCHANGED(calls); \
 
 static void do_connect(void)
 {
@@ -277,6 +314,7 @@ static void do_connect(void)
   POLL_CHECK_ACCEPTED
 
   event.data = last_epoll_data;
+  shrub_request_type = EF_SHRUB_REQUEST_QUEUE;
   POLL_CHECK_ATTACHED
 
   epoll_event = NULL;
@@ -307,6 +345,7 @@ static void test_shrub_server_open(void)
   CHECK(rc, ==, 0);
   STATE_CHECK(calls, sockets_open, 1);
   STATE_CHECK(calls, remove, 1);
+  STATE_CHECK(calls, resource_op, 1);
   STATE_CHECK_UNCHANGED(calls);
 
   ef_shrub_server_close(server);
@@ -327,6 +366,7 @@ static void test_shrub_server_connect(void)
 
   init_test();
   open_server();
+  shrub_request_type = EF_SHRUB_REQUEST_QUEUE;
 
   POLL_CHECK_NOTHING
 
@@ -341,6 +381,29 @@ static void test_shrub_server_connect(void)
   event.data = last_epoll_data;
   event.events = EPOLLIN | EPOLLHUP;
   POLL_CHECK_DETACHED
+
+  STATE_FREE(calls);
+  STATE_FREE(vi);
+}
+
+/* Connect and check that shrub rxq shared token is sent */
+static void test_shrub_server_get_token(void)
+{
+  struct epoll_event event;
+
+  init_test();
+  open_server();
+  shrub_request_type = EF_SHRUB_REQUEST_TOKEN;
+
+  POLL_CHECK_NOTHING
+
+  epoll_event = &event;
+  event.events = EPOLLIN;
+  event.data.ptr = NULL;
+  POLL_CHECK_ACCEPTED
+
+  event.data = last_epoll_data;
+  POLL_CHECK_GOT_TOKEN
 
   STATE_FREE(calls);
   STATE_FREE(vi);
@@ -450,6 +513,7 @@ static void test_shrub_server_bad_proto(void)
 
   init_test();
   open_server();
+  shrub_request_type = EF_SHRUB_REQUEST_QUEUE;
 
   epoll_event = &event;
 
@@ -503,5 +567,6 @@ int main(void) {
   TEST_RUN(test_shrub_server_multi);
   TEST_RUN(test_shrub_server_share);
   TEST_RUN(test_shrub_server_bad_proto);
+  TEST_RUN(test_shrub_server_get_token);
   TEST_END();
 }

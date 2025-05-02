@@ -145,7 +145,7 @@ int ef_shrub_server_recv(int fd, void* data, size_t bytes)
 
 int ef_shrub_server_send(int fd, void* data, size_t bytes)
 {
-  return send(fd, data, bytes, 0);
+  return ret(send(fd, data, bytes, 0));
 }
 
 int ef_shrub_server_sendmsg(int fd, struct msghdr* msg)

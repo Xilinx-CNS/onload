@@ -53,6 +53,22 @@ fail_fifo:
   return rc;
 }
 
+int ef_shrub_connection_send_token(struct ef_shrub_connection* connection,
+                                   unsigned token)
+{
+  struct ef_shrub_token_response response = {0};
+  int rc;
+
+  response.shared_rxq_token = token;
+  rc = ef_shrub_server_send(connection->socket, &response, sizeof(response));
+  if( rc < 0 )
+    return rc;
+  if( rc < sizeof(response) )
+    return -EIO;
+
+  return 0;
+}
+
 int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection)
 {
   int rc;
