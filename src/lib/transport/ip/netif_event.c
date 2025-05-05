@@ -1934,6 +1934,7 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
   // TODO EF10CT
   if( evq->nic_type.arch == EF_VI_ARCH_EFCT ||
       evq->nic_type.arch == EF_VI_ARCH_EF10CT ) {
+    /* Peek to ensure we really have a packet and get dma addr */
     dma = efct_vi_rx_future_peek(evq);
     if( dma == NULL )
       return 0;
@@ -1948,16 +1949,16 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
     dma = pkt->dma_start;
     if( pkt == NULL )
       return 0;
-  }
 
-  /* When we first detect the incoming packet we do so without the stack
-   * lock. We've re-checked what the next expected packet is, now that we
-   * have the lock, so we now need to check that this packet does indeed have
-   * a packet arriving.
-   */
-  if( ci_netif_rx_pkt_is_poisoned(pkt) ) {
-    CITP_STATS_NETIF_INC(ni, rx_future_contend);
-    goto free_out;
+    /* When we first detect the incoming packet we do so without the stack
+     * lock. We've re-checked what the next expected packet is, now that we
+     * have the lock, so we now need to check that this packet does indeed have
+     * a packet arriving.
+     */
+    if( ci_netif_rx_pkt_is_poisoned(pkt) ) {
+      CITP_STATS_NETIF_INC(ni, rx_future_contend);
+      goto free_out;
+    }
   }
 
   ci_assert_equal(pkt->intf_i, intf_i);
