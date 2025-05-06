@@ -15,7 +15,7 @@ ONLOAD_SRCS	:= driver.c timesync.c \
 		ossock_calls.c mmap.c \
 		epoll_device.c onloadfs.c \
 		dshm.c cplane.c cplane_prot.c \
-		shrub_spawner.c linux_syscall.c
+		shrub_fns.c linux_syscall.c
 
 # This is a kernel makefile, so gets re-called by kbuild with 'src' set
 src ?= .

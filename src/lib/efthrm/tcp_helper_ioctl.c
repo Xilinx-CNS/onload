@@ -22,7 +22,7 @@
 #include <onload/nic.h>
 #include "onload_kernel_compat.h"
 #include <onload/cplane_driver.h>
-#include <onload/shrub_spawner.h>
+#include <onload/shrub_fns.h>
 #include <ci/efrm/vi_resource_manager.h>
 #include <ci/efrm/efrm_client.h>
 #include "oof_impl.h"
