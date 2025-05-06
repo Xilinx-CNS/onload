@@ -14,7 +14,7 @@ MMAKE_LIB_DEPS	:= $(CIIP_LIB_DEPEND) $(CIAPP_LIB_DEPEND) \
 		   $(CITOOLS_LIB_DEPEND) $(CIUL_LIB_DEPEND) \
 		   $(CPLANE_LIB_DEPEND)
 
-CFLAGS := -I$(BUILDPATH)
+CFLAGS += -I$(BUILDPATH)
 
 $(shrub_controller): shrub_controller.o $(MMAKE_LIB_DEPS)
 	(libs="$(MMAKE_LIBS) $(MMAKE_STACKDUMP_LIBS)"; $(MMakeLinkCApp))
