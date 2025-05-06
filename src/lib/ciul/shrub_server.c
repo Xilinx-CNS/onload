@@ -322,7 +322,6 @@ void ef_shrub_server_close(struct ef_shrub_server* server)
     ef_shrub_queue_close(&server->queues[i]);
 
   ef_shrub_server_close_fd(server->client_fifo_fd);
-  server->vi->efct_rxqs.ops->cleanup(server->vi);
   ef_shrub_server_sockets_close(&server->sockets);
   if ( server->socket_path[0] != '\0' )
     ef_shrub_server_remove(server->socket_path);

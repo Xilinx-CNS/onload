@@ -311,7 +311,6 @@ static void test_shrub_server_open(void)
 
   ef_shrub_server_close(server);
   STATE_CHECK(calls, sockets_close, 1);
-  STATE_CHECK(calls, cleanup, 1);
   STATE_CHECK(calls, remove, 1);
   STATE_CHECK(calls, close, 1);
   STATE_ACCEPT(calls, fd); /* maybe should check it's client_fifo_fd */
