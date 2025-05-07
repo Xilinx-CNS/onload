@@ -83,7 +83,8 @@ typedef struct
 } shrub_controller_config;
 
 static int search_for_existing_server(shrub_controller_config *config,
-                                      cicp_hwport_mask_t new_hw_ports) {
+                                      cicp_hwport_mask_t new_hw_ports)
+{
   shrub_if_config_t *current_interface = config->server_config_head;
   while ( current_interface != NULL ) {
     if ( current_interface->hw_ports == new_hw_ports ) {
@@ -99,14 +100,16 @@ static int search_for_existing_server(shrub_controller_config *config,
 }
 
 static cicp_hwport_mask_t
-convert_ifindex_to_hwport(shrub_controller_config *config, int ifindex) {
+convert_ifindex_to_hwport(shrub_controller_config *config, int ifindex)
+{
   cicp_hwport_mask_t hwport_mask = 0;
   oo_cp_find_llap(config->cp, ifindex, NULL, NULL, &hwport_mask, NULL, NULL);
   return hwport_mask;
 }
 
 static int convert_hwport_to_ifindex(shrub_controller_config *config,
-                                     cicp_hwport_mask_t hw_port) {
+                                     cicp_hwport_mask_t hw_port)
+{
   ci_ifid_t ifindex;
   struct cp_mibs *mib;
   cp_version_t version;
@@ -120,7 +123,8 @@ static int convert_hwport_to_ifindex(shrub_controller_config *config,
 
 static int add_server_config(shrub_controller_config *config,
                              cicp_hwport_mask_t hw_port, int ifindex,
-                             uint32_t buffer_count) {
+                             uint32_t buffer_count)
+{
 
   shrub_if_config_t *new_shrub_config;
   
@@ -148,7 +152,8 @@ static int add_server_config(shrub_controller_config *config,
   return 0;
 }
 
-static void shrub_server_fini(shrub_if_config_t *config) {
+static void shrub_server_fini(shrub_if_config_t *config)
+{
   if ( config->server_started ) {
     ef_shrub_server_close(config->shrub_server);
     ef_vi_free(&config->res.vi, config->res.dh);
@@ -158,7 +163,8 @@ static void shrub_server_fini(shrub_if_config_t *config) {
 }
 
 static void remove_and_stop_interface(shrub_controller_config *config,
-                                      int intf_token) {
+                                      int intf_token)
+{
   shrub_if_config_t *prev_interface = NULL;
   shrub_if_config_t *current_interface = config->server_config_head;
 
@@ -184,7 +190,8 @@ static void remove_and_stop_interface(shrub_controller_config *config,
 }
 
 static int shrub_server_init(shrub_controller_config *config,
-                             shrub_if_config_t *interface_config) {
+                             shrub_if_config_t *interface_config)
+{
   int rc;
   unsigned vi_flags = EF_VI_FLAGS_DEFAULT;
   unsigned pd_flags = EF_PD_DEFAULT;
@@ -238,21 +245,24 @@ fail_pd_alloc:
   return rc;
 }
 
-static int directory_exists(const char *path) {
+static int directory_exists(const char *path)
+{
   struct stat path_stat;
   return (stat(path, &path_stat) == 0 && S_ISDIR(path_stat.st_mode) ? 1 : 0);
 }
 
-static int create_directory(const char *path) {
+static int create_directory(const char *path)
+{
   int rc = 0;
   if ( mkdir(path, 0755) == 0 || errno == EEXIST )
     return rc;
   rc = -errno;
-  fprintf(stderr, "failed to create '%s'\n", EF_SHRUB_SOCK_DIR_PATH);
+  fprintf(stderr, "failed to create '%s'\n", path);
   return rc;
 }
 
-static int remove_directory(const char *path, const struct stat *s, int type) {
+static int remove_directory(const char *path, const struct stat *s, int type)
+{
   int rc;
 
   if ( type == FTW_D )
@@ -265,11 +275,13 @@ static int remove_directory(const char *path, const struct stat *s, int type) {
   return -rc;
 }
 
-static int remove_directory_tree(const char *path) {
+static int remove_directory_tree(const char *path)
+{
   return ftw(path, remove_directory, 64);
 }
 
-static int shrub_dump(shrub_controller_config *config, const char *file_name) {
+static int shrub_dump(shrub_controller_config *config, const char *file_name)
+{
   char file_path[EF_SHRUB_LOG_LEN];
   int rc = 0;
   shrub_if_config_t *server_config;
@@ -313,7 +325,8 @@ static int shrub_dump(shrub_controller_config *config, const char *file_name) {
   return rc;
 }
 
-static void tear_down_servers(shrub_controller_config *config) {
+static void tear_down_servers(shrub_controller_config *config)
+{
   shrub_if_config_t *current_interface = config->server_config_head;
   shrub_if_config_t *next_interface;
   while ( current_interface != NULL ) {
@@ -331,7 +344,8 @@ static void tear_down_servers(shrub_controller_config *config) {
   config->server_config_head = NULL;
 }
 
-static int create_onload_config_socket(const char *socket_path, int epoll_fd) {
+static int create_onload_config_socket(const char *socket_path, int epoll_fd)
+{
   int rc = 0;
   int server_fd = 0;
   struct sockaddr_un addr = {0};
@@ -381,7 +395,8 @@ cleanup_socket:
 
 static int process_create_command(shrub_controller_config *config,
                                   cicp_hwport_mask_t hw_port, int ifindex,
-                                  uint32_t buffer_count, int client_fd) {
+                                  uint32_t buffer_count, int client_fd)
+{
   int rc = search_for_existing_server(config, hw_port);
 
   // Either rc is -1 and the cplane can't recognise the intf or we have a
@@ -423,7 +438,8 @@ static int process_create_command(shrub_controller_config *config,
   return config->server_config_head->token_id;
 }
 
-static int poll_socket(shrub_controller_config *config) {
+static int poll_socket(shrub_controller_config *config)
+{
   int rc = 0;
   ssize_t recevied_bytes = 0;
   const int max_events = 1;
@@ -519,7 +535,8 @@ static int poll_socket(shrub_controller_config *config) {
   return rc;
 }
 
-static void cleanup_sockets(shrub_controller_config *config) {
+static void cleanup_sockets(shrub_controller_config *config)
+{
   close(config->epoll_fd);
   if ( config->server_fd != -1 ) {
     close(config->server_fd);
@@ -529,7 +546,8 @@ static void cleanup_sockets(shrub_controller_config *config) {
   }
 }
 
-static int create_sockets(shrub_controller_config *config) {
+static int create_sockets(shrub_controller_config *config)
+{
   int rc = 0;
   config->epoll_fd = epoll_create1(0);
   if ( config->epoll_fd == -1 ) {
@@ -548,7 +566,8 @@ static int create_sockets(shrub_controller_config *config) {
   return 0;
 }
 
-static int reactor_loop(shrub_controller_config *config) {
+static int reactor_loop(shrub_controller_config *config)
+{
   while ( is_running ) {
     shrub_if_config_t *current_interface = config->server_config_head;
     while ( current_interface != NULL ) {
@@ -564,7 +583,8 @@ static int reactor_loop(shrub_controller_config *config) {
   return 0;
 }
 
-static void cleanup_controller(shrub_controller_config *config) {
+static void cleanup_controller(shrub_controller_config *config)
+{
   if ( config->debug_mode ) {
     fprintf(stdout, "controller finished, attempting to cleanup!\n");
   }
@@ -574,15 +594,6 @@ static void cleanup_controller(shrub_controller_config *config) {
   remove_directory_tree(config->controller_dir);
   oo_cp_destroy(config->cp);
   oo_fd_close(config->oo_fd_handle);
-}
-
-void signal_handler(int signal) {
-  if ( signal == SIGUSR1 )
-    call_shrub_dump = 1;
-  else if ( signal == SIGTERM )
-    is_running = 0;
-  else if ( signal == SIGINT )
-    is_running = 0;
 }
 
 int parse_interface(const char *arg, shrub_controller_config *config) {
@@ -634,7 +645,8 @@ int parse_interface(const char *arg, shrub_controller_config *config) {
   return add_server_config(config, hwport, ifindex, buffer_count);
 }
 
-static void usage(void) {
+static void usage(void)
+{
   fprintf(stderr, "usage:\n");
   fprintf(stderr, " shrub_controller <flags> "
                   "[<interface>[/<buffer_count>]]...\n");
@@ -642,7 +654,38 @@ static void usage(void) {
   fprintf(stderr, "  -d       debug\n");
   fprintf(stderr, "  -c       controller_id\n");
   fprintf(stderr, "\n");
-  // TODO fill out the rest of this
+}
+
+void controller_signal_handler(int signal, siginfo_t* info, void* context)
+{
+  if ( signal == SIGUSR1 )
+    call_shrub_dump = 1;
+  else if ( signal == SIGTERM || signal == SIGINT || signal == SIGQUIT )
+    is_running = 0;
+}
+
+static void controller_init_signals(void)
+{
+  struct sigaction act = {0};
+  int rc;
+
+  act.sa_flags = SA_SIGINFO;
+  act.sa_sigaction = controller_signal_handler;
+  rc = sigaction(SIGINT, &act, NULL);
+  if ( rc < 0 )
+    fprintf(stderr, "sigaction(SIGINT) failed: %s\n", strerror(errno));
+
+  rc = sigaction(SIGTERM, &act, NULL);
+  if ( rc < 0 )
+    fprintf(stderr, "sigaction(SIGTERM) failed: %s\n", strerror(errno));
+  rc = sigaction(SIGUSR1, &act, NULL);
+
+  if ( rc < 0 )
+    fprintf(stderr, "sigaction(SIGUSR1) failed: %s\n", strerror(errno));
+
+  rc = sigaction(SIGQUIT, &act, NULL);
+  if ( rc < 0 )
+    fprintf(stderr, "sigaction(SIGQUIT) failed: %s\n", strerror(errno));
 }
 
 int main(int argc, char *argv[])
@@ -669,6 +712,8 @@ int main(int argc, char *argv[])
       return EXIT_FAILURE;
     }
   }
+
+  controller_init_signals();
 
   rc = snprintf(config.log_dir, sizeof(config.log_dir),
                 EF_SHRUB_CONTROLLER_PATH_FORMAT, "/var/log/",
@@ -725,9 +770,6 @@ int main(int argc, char *argv[])
     }
   }
 
-  signal(SIGINT, signal_handler);
-  signal(SIGTERM, signal_handler);
-  signal(SIGUSR1, signal_handler);
   reactor_loop(&config);
   cleanup_controller(&config);
   free(config.cp);
