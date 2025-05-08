@@ -15,10 +15,69 @@
 
 #if CI_HAVE_EF10CT
 
-static int ef10ct_handler(struct efx_auxdev_client *client,
-                        const struct efx_auxdev_event *event)
+static void ef10ct_reset_suspend(struct efx_auxdev_client * client,
+                                 struct efhw_nic *nic)
 {
-  EFRM_TRACE("%s: ev %d", __func__, event->type);
+  EFRM_NOTICE("%s: %s", __func__, dev_name(&client->auxdev->auxdev.dev));
+
+  efrm_nic_reset_suspend(nic);
+  ci_atomic32_or(&nic->resetting, NIC_RESETTING_FLAG_RESET);
+}
+
+
+static void ef10ct_handle_reset(struct efx_auxdev_client *client,
+                                struct efhw_nic *nic, int result)
+{
+  switch(result) {
+    case EFX_IN_RESET:
+      ef10ct_reset_suspend(client, nic);
+      break;
+    case EFX_NOT_IN_RESET:
+      EFRM_ERR("%s: WARNING: %s post reset resume not supported", __func__,
+               dev_name(&client->auxdev->auxdev.dev));
+      break;
+    case EFX_HARDWARE_DISABLED:
+      /* We treat this in the same way as if the NIC never came back, by
+       * just ignoring it. */
+      EFRM_ERR("%s: ERROR: %s not available post reset", __func__,
+               dev_name(&client->auxdev->auxdev.dev));
+      break;
+    default:
+      EFRM_ERR("%s: ERROR: Unknown result %d for dev %s post reset", __func__,
+               result, dev_name(&client->auxdev->auxdev.dev));
+      break;
+  };
+}
+
+
+static int ef10ct_handler(struct efx_auxdev_client *client,
+                          const struct efx_auxdev_event *event)
+{
+  union efx_auxiliary_param_value val;
+  struct efhw_nic *nic;
+  int rc;
+
+  rc = client->auxdev->llct_ops->base_ops->get_param(client, EFX_DRIVER_DATA,
+                                                     &val);
+  if (rc < 0 )
+    return rc;
+
+  nic = (struct efhw_nic*)val.driver_data;
+  if( !nic )
+    return -ENODEV;
+
+  switch(event->type) {
+    case EFX_AUXDEV_EVENT_IN_RESET:
+      ef10ct_handle_reset(client, nic, event->value);
+      break;
+    default:
+      /* We should only be getting events we asked for. */
+      EFRM_ASSERT(false);
+      break;
+  };
+
+  /* The return from the handler is ignored in all cases other than a poll,
+   * which we don't use, so doesn't really matter what we return here. */
   return 0;
 }
 
@@ -292,6 +351,7 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
   struct efhw_nic_ef10ct *ef10ct = NULL;
   struct vi_resource_dimensions res_dim = {};
   union efx_auxiliary_param_value val;
+  struct net_device *net_dev;
   int rc, i, shared_n = 0;
 
   rc = efhw_check_aux_abi_version(edev, id);
@@ -317,7 +377,8 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
   if( rc < 0 )
     goto fail2;
 
-  EFRM_NOTICE("%s probe of dev %s as %s.%d ", __func__, val.net_dev->name,
+  net_dev = val.net_dev;
+  EFRM_NOTICE("%s probe of dev %s as %s.%d ", __func__, net_dev->name,
               id->name, auxdev->id);
 
   rc = ef10ct_devtype_init(edev, client, &dev_type);
@@ -333,13 +394,13 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
     goto fail2;
 
   rtnl_lock();
-  rc = efrm_nic_create(client, &auxdev->dev, &dev_type, val.net_dev, &lnic,
+  rc = efrm_nic_create(client, &auxdev->dev, &dev_type, net_dev, &lnic,
                        &res_dim, 0);
   if( rc < 0 )
     goto fail3;
 
   nic = &lnic->efrm_nic.efhw_nic;
-  nic->mtu = val.net_dev->mtu + ETH_HLEN;
+  nic->mtu = net_dev->mtu + ETH_HLEN;
   nic->arch_extra = ef10ct;
 
   /* Init shared evqs for use with rx vis. */
@@ -360,7 +421,13 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
   /* Setting the nic here marks the device as ready for use. */
   ef10ct->nic = nic;
 
-  efrm_notify_nic_probe(nic, val.net_dev);
+  val.driver_data = nic;
+  rc = edev->llct_ops->base_ops->set_param(client, EFX_DRIVER_DATA, &val);
+  /* The only reason this can fail is if we're using an invalid handle, which
+   * we're not. */
+  EFRM_ASSERT(rc == 0);
+
+  efrm_notify_nic_probe(nic, net_dev);
   rtnl_unlock();
 
   efhw_init_debugfs_ef10ct(nic);
@@ -417,7 +484,9 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
   /* flush all outstanding dma queues */
   efrm_nic_flush_all_queues(nic, 0);
 
-  /* Disable/free all shared evqs */
+  /* Disable/free all shared evqs. We do this even in the case that the NIC
+   * is being reset, as some of the resources here are host side, such as
+   * dma mappings and the os irq. */
   for(i = 0; i < ef10ct->shared_n; i++)
     ef10ct_nic_free_shared_evq(nic, i);
 
@@ -427,6 +496,7 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
       continue;
     edev->llct_ops->irq_free(client, entry);
   }
+
   xa_destroy(&ef10ct->irqs);
   mutex_destroy(&ef10ct->irq_lock);
 

@@ -372,7 +372,10 @@ static void ef10ct_irq_free(struct efhw_nic *nic, uint32_t channel,
   AUX_PRE(dev, edev, cli, nic, rc);
   edev->llct_ops->irq_free(cli, auxdev_irq);
   AUX_POST(dev, edev, cli, nic, rc);
-  EFHW_ASSERT(!rc); /* rc may be updated in AUX_PRE */
+  /* This can fail in the case that the NIC is currently under reset.
+   * FIXME EF10CT net driver behaviour needs checking here - we don't want
+   * it to reset any state post reset. */
+  EFHW_ASSERT(nic->resetting || !rc); /* rc may be updated in AUX_PRE */
 
 out:
   mutex_unlock(&ef10ct->irq_lock);
