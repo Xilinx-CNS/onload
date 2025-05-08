@@ -82,6 +82,17 @@ typedef struct
   char config_socket[EF_SHRUB_NEGOTIATION_SOCKET_LEN];
 } shrub_controller_config;
 
+static void usage(void)
+{
+  fprintf(stderr, "usage:\n");
+  fprintf(stderr, " shrub_controller <flags> "
+                  "[<interface>[/<buffer_count>]]...\n");
+  fprintf(stderr, "options:\n");
+  fprintf(stderr, "  -d       debug\n");
+  fprintf(stderr, "  -c       controller_id\n");
+  fprintf(stderr, "\n");
+}
+
 static int search_for_existing_server(shrub_controller_config *config,
                                       cicp_hwport_mask_t new_hw_ports)
 {
@@ -261,25 +272,6 @@ static int create_directory(const char *path)
   return rc;
 }
 
-static int remove_directory(const char *path, const struct stat *s, int type)
-{
-  int rc;
-
-  if ( type == FTW_D )
-    rc = rmdir(path);
-  else
-    rc = unlink(path);
-
-  if ( rc )
-    perror(path);
-  return -rc;
-}
-
-static int remove_directory_tree(const char *path)
-{
-  return ftw(path, remove_directory, 64);
-}
-
 static int shrub_dump(shrub_controller_config *config, const char *file_name)
 {
   char file_path[EF_SHRUB_LOG_LEN];
@@ -323,25 +315,6 @@ static int shrub_dump(shrub_controller_config *config, const char *file_name)
 
   fclose(file);
   return rc;
-}
-
-static void tear_down_servers(shrub_controller_config *config)
-{
-  shrub_if_config_t *current_interface = config->server_config_head;
-  shrub_if_config_t *next_interface;
-  while ( current_interface != NULL ) {
-    next_interface = current_interface->next;
-
-    if ( current_interface->client_fd >= 0 )
-      close(current_interface->client_fd);
-
-    if ( current_interface->server_started )
-      shrub_server_fini(current_interface);
-
-    free(current_interface);
-    current_interface = next_interface;
-  }
-  config->server_config_head = NULL;
 }
 
 static int create_onload_config_socket(const char *socket_path, int epoll_fd)
@@ -535,7 +508,7 @@ static int poll_socket(shrub_controller_config *config)
   return rc;
 }
 
-static void cleanup_sockets(shrub_controller_config *config)
+static void cleanup_config_socket(shrub_controller_config *config)
 {
   close(config->epoll_fd);
   if ( config->server_fd != -1 ) {
@@ -546,7 +519,7 @@ static void cleanup_sockets(shrub_controller_config *config)
   }
 }
 
-static int create_sockets(shrub_controller_config *config)
+static int create_config_socket(shrub_controller_config *config)
 {
   int rc = 0;
   config->epoll_fd = epoll_create1(0);
@@ -559,9 +532,10 @@ static int create_sockets(shrub_controller_config *config)
   config->server_fd =
       create_onload_config_socket(config->config_socket, config->epoll_fd);
   if ( config->server_fd < 0 ) {
-    fprintf(stderr, "Failed to create onload socket\n");
+    close(config->epoll_fd);
     return config->server_fd;
   }
+
   chmod(config->config_socket, 0666);
   return 0;
 }
@@ -581,19 +555,6 @@ static int reactor_loop(shrub_controller_config *config)
     }
   }
   return 0;
-}
-
-static void cleanup_controller(shrub_controller_config *config)
-{
-  if ( config->debug_mode ) {
-    fprintf(stdout, "controller finished, attempting to cleanup!\n");
-  }
-  
-  tear_down_servers(config);
-  cleanup_sockets(config);
-  remove_directory_tree(config->controller_dir);
-  oo_cp_destroy(config->cp);
-  oo_fd_close(config->oo_fd_handle);
 }
 
 int parse_interface(const char *arg, shrub_controller_config *config) {
@@ -645,15 +606,41 @@ int parse_interface(const char *arg, shrub_controller_config *config) {
   return add_server_config(config, hwport, ifindex, buffer_count);
 }
 
-static void usage(void)
+static void tear_down_servers(shrub_controller_config *config)
 {
-  fprintf(stderr, "usage:\n");
-  fprintf(stderr, " shrub_controller <flags> "
-                  "[<interface>[/<buffer_count>]]...\n");
-  fprintf(stderr, "options:\n");
-  fprintf(stderr, "  -d       debug\n");
-  fprintf(stderr, "  -c       controller_id\n");
-  fprintf(stderr, "\n");
+  shrub_if_config_t *current_interface = config->server_config_head;
+  shrub_if_config_t *next_interface;
+  while ( current_interface != NULL ) {
+    next_interface = current_interface->next;
+
+    if ( current_interface->client_fd >= 0 )
+      close(current_interface->client_fd);
+
+    if ( current_interface->server_started )
+      shrub_server_fini(current_interface);
+
+    free(current_interface);
+    current_interface = next_interface;
+  }
+  config->server_config_head = NULL;
+}
+
+static int controller_servers_init(shrub_controller_config *config,
+                                   char **intfs, int n_intfs)
+{
+  int rc;
+  int i;
+
+  config->server_config_head = NULL;
+  for (i = 0; i < n_intfs; i++) {
+    if ( (rc = parse_interface(intfs[i], config)) < 0 ||
+        (rc = shrub_server_init(config, config->server_config_head)) < 0) {
+      tear_down_servers(config);
+      usage();
+      return  rc;
+    }
+  }
+  return 0;
 }
 
 void controller_signal_handler(int signal, siginfo_t* info, void* context)
@@ -688,10 +675,83 @@ static void controller_init_signals(void)
     fprintf(stderr, "sigaction(SIGQUIT) failed: %s\n", strerror(errno));
 }
 
+static int controller_init_paths(shrub_controller_config *config)
+{
+  int rc;
+
+  rc = snprintf(config->log_dir, sizeof(config->log_dir),
+                EF_SHRUB_CONTROLLER_PATH_FORMAT, "/var/log/",
+                config->controller_id);
+  if ( rc < 0 || rc >= sizeof(config->log_dir) )
+    return -EINVAL;
+
+  rc = snprintf(config->controller_dir, sizeof(config->controller_dir),
+                EF_SHRUB_CONTROLLER_PATH_FORMAT, EF_SHRUB_SOCK_DIR_PATH,
+                config->controller_id);
+  if ( rc < 0 || rc >= sizeof(config->controller_dir) )
+    return -EINVAL;
+
+  rc = snprintf(config->config_socket, sizeof(config->config_socket), "%s%s",
+                config->controller_dir, EF_SHRUB_NEGOTIATION_SOCKET);
+  if ( rc < 0 || rc >= sizeof(config->config_socket) )
+    return -EINVAL;
+
+  return 0;
+}
+
+static int controller_create_directories(shrub_controller_config *config)
+{
+  int rc;
+
+  if ( (rc = create_directory(EF_SHRUB_SOCK_DIR_PATH)) < 0 )
+    return rc;
+
+  if ( (rc = create_directory(config->controller_dir)) < 0 )
+    return rc;
+
+  return 0;
+}
+
+static int controller_cplane_connect(shrub_controller_config *config)
+{
+  int rc;
+
+  rc = oo_fd_open(&config->oo_fd_handle);
+  if ( rc ) {
+    fprintf(stderr, "Can't open main cplane fd: %s. Is Onload installed?\n",
+            strerror(-rc));
+    return rc;
+  }
+
+  config->cp = malloc(sizeof(*config->cp));
+  if ( !config->cp ) {
+    rc = -ENOMEM;
+    goto fail_alloc;
+  }
+
+  rc = oo_cp_create(config->oo_fd_handle, config->cp, CP_SYNC_LIGHT, 0);
+  if ( rc )
+    goto fail_cp_create;
+
+  return rc;
+
+fail_cp_create:
+  free(config->cp);
+fail_alloc:
+  oo_fd_close(config->oo_fd_handle);
+  return rc;
+}
+
+static void controller_cplane_disconnect(shrub_controller_config *config)
+{
+  oo_cp_destroy(config->cp);
+  free(config->cp);
+  oo_fd_close(config->oo_fd_handle);
+}
+
 int main(int argc, char *argv[])
 {
-  int i;
-  int rc;
+  int rc = 0;
   int option;
   shrub_controller_config config = {0};
   config.interface_token = 1;
@@ -714,64 +774,35 @@ int main(int argc, char *argv[])
   }
 
   controller_init_signals();
-
-  rc = snprintf(config.log_dir, sizeof(config.log_dir),
-                EF_SHRUB_CONTROLLER_PATH_FORMAT, "/var/log/",
-                config.controller_id);
-  if ( rc < 0 || rc >= sizeof(config.log_dir) )
-    return -EINVAL;
-
-  rc = snprintf(config.controller_dir, sizeof(config.controller_dir),
-                EF_SHRUB_CONTROLLER_PATH_FORMAT, EF_SHRUB_SOCK_DIR_PATH,
-                config.controller_id);
-  if ( rc < 0 || rc >= sizeof(config.controller_dir) )
-    return -EINVAL;
-
-  rc = snprintf(config.config_socket, sizeof(config.config_socket), "%s%s",
-                config.controller_dir, EF_SHRUB_NEGOTIATION_SOCKET);
-  if ( rc < 0 || rc >= sizeof(config.config_socket) )
-    return -EINVAL;
-
-  if ( directory_exists(config.controller_dir) ) {
-    fprintf(stderr, "Pre-existing controller is already running!\n");
-    return -EEXIST;
-  }
-
-  if ( (rc = create_directory(EF_SHRUB_SOCK_DIR_PATH)) < 0 )
+  rc = controller_init_paths(&config);
+  if ( rc )
     return rc;
 
-  if ( (rc = create_directory(config.controller_dir)) < 0 )
+  rc = controller_create_directories(&config);
+  if ( rc )
     return rc;
 
-  if ( (rc = create_sockets(&config)) < 0 ) {
-    remove_directory_tree(config.controller_dir);
-    return rc;
-  }
+  rc = create_config_socket(&config);
+  if ( rc )
+    goto fail_create_config_socket;
 
-  CI_TRY(oo_fd_open(&config.oo_fd_handle));
+  rc = controller_cplane_connect(&config);
+  if ( rc )
+    goto fail_cplane_connect;
 
-  config.cp =
-      (struct oo_cplane_handle *)malloc(sizeof(struct oo_cplane_handle));
-  if ( !config.cp ) {
-    fprintf(stderr, "Error: unable to malloc memory for config.cp\n");
-    cleanup_controller(&config);
-    return -ENOMEM;
-  }
-
-  CI_TRY(oo_cp_create(config.oo_fd_handle, config.cp, CP_SYNC_LIGHT, 0));
-
-  config.server_config_head = NULL;
-  for (i = optind; i < argc; i++) {
-    if ( parse_interface(argv[i], &config ) < 0 ||
-        shrub_server_init(&config, config.server_config_head) < 0) {
-      usage();
-      is_running = 0;
-      break;
-    }
-  }
+  rc = controller_servers_init(&config, &argv[optind], argc - optind);
+  if ( rc )
+    goto fail_servers_init;
 
   reactor_loop(&config);
-  cleanup_controller(&config);
-  free(config.cp);
-  return EXIT_SUCCESS;
+
+  tear_down_servers(&config);
+fail_servers_init:
+  controller_cplane_disconnect(&config);
+fail_cplane_connect:
+  cleanup_config_socket(&config);
+fail_create_config_socket:
+  rmdir(config.controller_dir);
+
+  return rc;
 }
