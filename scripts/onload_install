@@ -257,15 +257,9 @@ install_userland() {
               "$i_usrbin/onload_mibdump"
     install_x "$u64/tools/shrub_controller/shrub_controller" \
               "$i_usrbin/shrub_controller"
-    [ -f "$u64/tools/onload_helper/onload_helper" ] && \
-      install_x "$u64/tools/onload_helper/onload_helper" "$i_usrbin/onload_helper"
-    [ -f "$u64/tools/ip/onload_fe" ] && install_x "$u64/tools/ip/onload_fe" "$i_usrbin/onload_fe"
-    failorm=true
-    [ -f "$u64/tools/onload_remote_monitor/orm_json" ] && {
-      install_x "$u64/tools/onload_remote_monitor/orm_json" "$i_usrbin/orm_json"
-      install_x "$TOP/src/tools/onload_remote_monitor/orm_webserver" "$i_usrbin/orm_webserver"
-      failorm=false
-    }
+    install_x "$u64/tools/onload_remote_monitor/orm_json" "$i_usrbin/orm_json"
+    install_x "$TOP/src/tools/onload_remote_monitor/orm_webserver" \
+              "$i_usrbin/orm_webserver"
     install_solar_clusterd
   fi
 
@@ -663,7 +657,6 @@ do=
 docd=cd
 verbose=
 listfiles=false
-failorm=false
 setuid=false
 force=false
 allow_unsupported_cpu=false
@@ -809,14 +802,6 @@ $headers              && install_all_headers
 
 
 logprog "Install complete."
-
-if $failorm; then
-  err
-  log "Note: Onload Remote Monitor (ORM) was not installed." \
-      "If ORM is required, please check availability of libtool, autoconf and" \
-      "automake, then rebuild. See build log for further details."
-  err
-fi
 
 if $sfccheck && { [ "$kernelfiles" = "true" ] || [ "$all" = "true" ] ; } ; then
   if /sbin/lsmod | grep -qw sfc; then
