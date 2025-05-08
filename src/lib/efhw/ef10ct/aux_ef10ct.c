@@ -306,10 +306,10 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
   client = edev->llct_ops->base_ops->open(auxdev, &ef10ct_handler,
                                           BIT(EFX_AUXDEV_EVENT_IN_RESET));
 
-  EFRM_NOTICE("%s name %s", __func__, id->name);
-
   if( IS_ERR(client) ) {
     rc = PTR_ERR(client);
+    EFRM_ERR("%s: Failed to probe %s.%d (%d)", __func__, id->name,
+             auxdev->id, rc);
     goto fail1;
   }
 
@@ -317,7 +317,8 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
   if( rc < 0 )
     goto fail2;
 
-  EFRM_NOTICE("%s probe of dev %s", __func__, val.net_dev->name);
+  EFRM_NOTICE("%s probe of dev %s as %s.%d ", __func__, val.net_dev->name,
+              id->name, auxdev->id);
 
   rc = ef10ct_devtype_init(edev, client, &dev_type);
   if( rc < 0 )
