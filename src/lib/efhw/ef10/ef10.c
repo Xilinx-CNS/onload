@@ -3,6 +3,7 @@
 
 #include <linux/ethtool.h>
 
+#include <ci/driver/kernel_compat.h>
 #include <ci/driver/efab/hardware.h>
 #include <ci/efhw/debug.h>
 #include <ci/efhw/iopage.h>
