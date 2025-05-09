@@ -11,7 +11,7 @@
 #endif
 #include <stdbool.h>
 
-#if ! (defined bool) && ! (defined __cplusplus)
+#if ! (defined bool) && ! (defined __cplusplus) && (__STDC_VERSION__ < 202311L)
 #undef false
 #undef true
 typedef enum {
