@@ -69,7 +69,7 @@ parallel=-j$(nproc 2> /dev/null || echo 4)
 while [ $# -gt 0 ]; do
   case "$1" in
   --kernelver)  [ $# -gt 1 ] || usage; KVER="$2"; export KVER; shift;;
-  --kernelver=*)KVER=${1#--kernelver=};;
+  --kernelver=*)KVER=${1#--kernelver=}; export KVER;;
   --user)       all=false; user=true;;
   --user32)     err "No 32-bit build support"; exit 2;;
   --user64)     all=false; user64=true;;
