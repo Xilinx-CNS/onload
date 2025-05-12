@@ -20,7 +20,7 @@ efhw_nic_release_auxdev(struct efhw_nic* nic, struct efx_auxdev_client* cli)
   efhw_nic_release_drv_device(nic, cli);
 }
 
-#define AUX_PRE(dev, auxdev, auxcli, nic, rc) \
+#define AUX_PRE_CHECK(dev, auxdev, auxcli, nic, rc, check_reset) \
 { \
   (dev) = efhw_nic_get_dev(nic); \
   (auxdev) = to_efx_auxdev(to_auxiliary_dev(dev)); \
@@ -30,7 +30,7 @@ efhw_nic_release_auxdev(struct efhw_nic* nic, struct efx_auxdev_client* cli)
   if (!dev) { \
     rc = -ENETDOWN; \
   } \
-  else if ((nic)->resetting || (auxcli) == NULL) { \
+  else if ((check_reset && (nic)->resetting) || (auxcli) == NULL) { \
     /* [nic->resetting] means we have detected that we are in a reset.
      * There is potentially a period after [nic->resetting] is cleared
      * but before the aux client is re-enabled, during which time [auxcli]
@@ -54,6 +54,11 @@ efhw_nic_release_auxdev(struct efhw_nic* nic, struct efx_auxdev_client* cli)
   efhw_nic_release_auxdev((nic), (auxcli)); \
   put_device((dev)); \
 }
+
+#define AUX_PRE_ALLOW_RESET(dev, auxdev, auxcli, nic, rc) \
+        AUX_PRE_CHECK(dev, auxdev, auxcli, nic, rc, false)
+#define AUX_PRE(dev, auxdev, auxcli, nic, rc) \
+        AUX_PRE_CHECK(dev, auxdev, auxcli, nic, rc, true)
 
 static inline int
 efhw_check_aux_abi_version(const struct efx_auxdev *edev,

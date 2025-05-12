@@ -1764,7 +1764,10 @@ ef10ct_get_pci_dev(struct efhw_nic* nic)
   union efx_auxiliary_param_value val;
   int rc = 0;
 
-  AUX_PRE(dev, edev, cli, nic, rc)
+  /* We want to allow this even if the NIC is being reset, as some host side
+   * resources (dma mappings) are linked to the pci_dev and still need
+   * cleanup. */
+  AUX_PRE_ALLOW_RESET(dev, edev, cli, nic, rc)
   rc = edev->llct_ops->base_ops->get_param(cli, EFX_PCI_DEV, &val);
   /* Ensure auxbus is still present when we increment the refcount to the pci
    * dev. This means it will not be used after free. */
