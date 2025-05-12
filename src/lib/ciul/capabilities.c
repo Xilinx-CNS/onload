@@ -117,7 +117,7 @@ int ef_vi_capabilities_get_from_pd_flags(ef_driver_handle handle,
                                          enum ef_vi_capability cap,
                                          unsigned long* value)
 {
-  pd_flags = ef_pd_flags_from_env(pd_flags);
+  pd_flags = ef_pd_flags_from_env(pd_flags, handle, ifindex);
 
   if( pd_flags & EF_PD_LLCT )
     cap |= EF_VI_CAP_F_LLCT;

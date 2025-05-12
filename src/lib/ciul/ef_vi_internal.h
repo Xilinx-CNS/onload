@@ -288,7 +288,9 @@ extern enum ef_compat_mode ef_vi_compat_mode_get_from_env(void);
 extern int ef_vi_compat_init(ef_vi*);
 extern void ef_vi_compat_free(ef_vi*);
 
-extern enum ef_pd_flags ef_pd_flags_from_env(enum ef_pd_flags flags);
+extern enum ef_pd_flags ef_pd_flags_from_env(enum ef_pd_flags flags,
+                                             ef_driver_handle pd_dh,
+                                             int ifindex);
 
 struct ef_shrub_client;
 extern int

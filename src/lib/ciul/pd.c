@@ -13,6 +13,7 @@
 
 #include <etherfabric/base.h>
 #include <etherfabric/pd.h>
+#include <etherfabric/capabilities.h>
 #include "ef_vi_internal.h"
 #include "driver_access.h"
 #include "logging.h"
@@ -25,7 +26,7 @@ static int __ef_tok_eq(const char* tok, size_t tok_len, const char* tmpl)
     return l == tok_len && ! strncmp(tok, tmpl, l);
 }
 
-enum ef_pd_flags ef_pd_flags_from_env(enum ef_pd_flags flags)
+static enum ef_pd_flags __ef_pd_flags_from_env(enum ef_pd_flags flags)
 {
     const char* s = getenv("EF_VI_PD_FLAGS");
     if( s == NULL )
@@ -54,6 +55,31 @@ enum ef_pd_flags ef_pd_flags_from_env(enum ef_pd_flags flags)
     return new_flags != 0 ? new_flags : flags;
 }
 
+static enum ef_pd_flags ef_pd_extra_flags_for_compat(ef_driver_handle pd_dh,
+                                                     int ifindex)
+{
+  enum ef_compat_mode mode = ef_vi_compat_mode_get_from_env();
+  if( mode == EF_COMPAT_MODE_EF10 ) {
+    /* For X4 we want to select Express datapath too */
+    unsigned long capability_val;
+    /* Can't use ef_vi_capabilities_get() here, as it calls
+       ef_pd_flags_from_env() and would end up in an infinite loop */
+    int rc = __ef_vi_capabilities_get(pd_dh, ifindex, -1, -1,
+                                      EF_VI_CAP_EXTRA_DATAPATHS,
+                                      &capability_val);
+    if( rc == 0 && (capability_val & EF_VI_EXTRA_DATAPATH_LLCT) )
+      return EF_PD_LLCT;
+  }
+  return 0;
+}
+
+enum ef_pd_flags ef_pd_flags_from_env(enum ef_pd_flags flags,
+                                        ef_driver_handle pd_dh,
+                                        int ifindex)
+{
+  return __ef_pd_flags_from_env(flags) |
+    ef_pd_extra_flags_for_compat(pd_dh, ifindex);
+}
 
 static int __ef_pd_alloc(ef_pd* pd, ef_driver_handle pd_dh,
 			 int ifindex, enum ef_pd_flags flags, int vlan_id)
@@ -61,7 +87,7 @@ static int __ef_pd_alloc(ef_pd* pd, ef_driver_handle pd_dh,
   ci_resource_alloc_t ra;
   int rc;
 
-  flags = ef_pd_flags_from_env(flags);
+  flags = ef_pd_flags_from_env(flags, pd_dh, ifindex);
 
   if( flags & EF_PD_VF )
     flags |= EF_PD_PHYS_MODE;
