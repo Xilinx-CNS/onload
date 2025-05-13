@@ -10,7 +10,7 @@ on:
 
 jobs:
   perform_developing_md_build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: onload_internal
         uses: actions/checkout@v4
