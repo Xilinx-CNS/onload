@@ -43,6 +43,10 @@ static volatile sig_atomic_t call_shrub_dump = 0;
 #define DEFAULT_BUFFER_COUNT 2048
 #define DEFAULT_BUFFER_SIZE 1024 * 1024
 
+#define EF_SHRUB_CONFIG_SOCKET_LOCK EF_SHRUB_NEGOTIATION_SOCKET "_lock"
+#define EF_SHRUB_CONFIG_SOCKET_LOCK_LEN (EF_SHRUB_SOCKET_DIR_LEN + \
+                                         sizeof(EF_SHRUB_CONFIG_SOCKET_LOCK))
+
 struct shrub_controller_vi
 {
   ef_vi vi;
@@ -70,9 +74,10 @@ typedef struct shrub_if_config_s
 typedef struct
 {
   int interface_token;
-  int server_fd;
+  int config_socket_fd;
   int epoll_fd;
   int controller_id;
+  int config_socket_lock_fd;
   shrub_if_config_t *server_config_head;
   struct oo_cplane_handle *cp;
   int oo_fd_handle;
@@ -80,6 +85,7 @@ typedef struct
   char controller_dir[EF_SHRUB_SOCKET_DIR_LEN];
   char log_dir[EF_SHRUB_LOG_LEN];
   char config_socket[EF_SHRUB_NEGOTIATION_SOCKET_LEN];
+  char config_socket_lock[EF_SHRUB_CONFIG_SOCKET_LOCK_LEN];
 } shrub_controller_config;
 
 static void usage(void)
@@ -320,14 +326,14 @@ static int shrub_dump(shrub_controller_config *config, const char *file_name)
 static int create_onload_config_socket(const char *socket_path, int epoll_fd)
 {
   int rc = 0;
-  int server_fd = 0;
+  int config_socket_fd = 0;
   struct sockaddr_un addr = {0};
   struct epoll_event event;
 
   unlink(socket_path);
 
-  server_fd = socket(AF_UNIX, SOCK_SEQPACKET, 0);
-  if ( server_fd == -1 ) {
+  config_socket_fd = socket(AF_UNIX, SOCK_SEQPACKET, 0);
+  if ( config_socket_fd == -1 ) {
     rc = -errno;
     fprintf(stderr, "onload socket config failed\n");
     return rc;
@@ -338,31 +344,31 @@ static int create_onload_config_socket(const char *socket_path, int epoll_fd)
   strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
   addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
 
-  if ( (bind(server_fd, (struct sockaddr *)&addr, sizeof(addr)) == -1) ) {
+  if ( (bind(config_socket_fd, (struct sockaddr *)&addr, sizeof(addr)) == -1) ) {
     rc = -errno;
     fprintf(stderr, "onload socket bind failed\n");
     goto cleanup_socket;
   }
 
-  if ( listen(server_fd, 5) == -1 ) {
+  if ( listen(config_socket_fd, 5) == -1 ) {
     rc = -errno;
     fprintf(stderr, "onload listen failed\n");
     goto cleanup_socket;
   }
 
-  // Add server_fd to the epoll instance
-  event.data.fd = server_fd;
+  // Add config_socket_fd to the epoll instance
+  event.data.fd = config_socket_fd;
   event.events = EPOLLIN;
-  if ( epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_fd, &event) == -1 ) {
+  if ( epoll_ctl(epoll_fd, EPOLL_CTL_ADD, config_socket_fd, &event) == -1 ) {
     rc = -errno;
-    fprintf(stderr, "epoll_ctl failed to add server_fd\n");
+    fprintf(stderr, "epoll_ctl failed to add config_socket_fd\n");
     goto cleanup_socket;
   }
 
-  return server_fd;
+  return config_socket_fd;
 
 cleanup_socket:
-  close(server_fd);
+  close(config_socket_fd);
   return rc;
 }
 
@@ -427,8 +433,8 @@ static int poll_socket(shrub_controller_config *config)
   int num_events = epoll_wait(config->epoll_fd, events, max_events, 0);
 
   for (i = 0; i < num_events; ++i) {
-    if ( events[i].data.fd == config->server_fd ) {
-      client_fd = accept(config->server_fd, NULL, NULL);
+    if ( events[i].data.fd == config->config_socket_fd ) {
+      client_fd = accept(config->config_socket_fd, NULL, NULL);
       if ( client_fd == -1 ) {
         rc = -errno;
         if ( config->debug_mode )
@@ -511,8 +517,8 @@ static int poll_socket(shrub_controller_config *config)
 static void cleanup_config_socket(shrub_controller_config *config)
 {
   close(config->epoll_fd);
-  if ( config->server_fd != -1 ) {
-    close(config->server_fd);
+  if ( config->config_socket_fd != -1 ) {
+    close(config->config_socket_fd);
     unlink(config->config_socket);
     if ( config->debug_mode )
       printf("socket closed and cleaning up! \n");
@@ -529,11 +535,11 @@ static int create_config_socket(shrub_controller_config *config)
     return rc;
   }
 
-  config->server_fd =
+  config->config_socket_fd =
       create_onload_config_socket(config->config_socket, config->epoll_fd);
-  if ( config->server_fd < 0 ) {
+  if ( config->config_socket_fd < 0 ) {
     close(config->epoll_fd);
-    return config->server_fd;
+    return config->config_socket_fd;
   }
 
   chmod(config->config_socket, 0666);
@@ -699,6 +705,71 @@ static int controller_init_paths(shrub_controller_config *config)
   return 0;
 }
 
+static int controller_config_socket_lock_create(shrub_controller_config *config)
+{
+  int rc;
+  int fd;
+  char pid[16];
+  struct flock file_lock = {
+    .l_type = F_WRLCK,
+    .l_start = 0,
+    .l_whence = SEEK_SET,
+    .l_len = 0
+  };
+
+  config->config_socket_lock_fd = -1;
+  rc = snprintf(config->config_socket_lock, sizeof(config->config_socket_lock),
+                "%s%s", config->controller_dir, EF_SHRUB_CONFIG_SOCKET_LOCK);
+  if ( rc < 0 || rc >= sizeof(config->config_socket_lock) )
+    return -EINVAL;
+
+  fd = open(config->config_socket_lock, O_CREAT | O_RDWR,
+            S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+  if ( fd < 0 ) {
+    fprintf(stderr, "Failed to open %s: %s\n", config->config_socket_lock,
+            strerror(errno));
+    return -errno;
+  }
+
+  if ( fcntl(fd, F_SETLK, &file_lock) < 0 ) {
+    if( errno == EACCES || errno == EAGAIN ) {
+      fprintf(stderr,
+              "%s is already locked. Is another shrub controller running?\n",
+              config->config_socket_lock);
+    } else {
+      fprintf(stderr, "Failed to lock %s: %s", config->config_socket_lock,
+              strerror(errno));
+    }
+    close(fd);
+    return -errno;
+  }
+
+  /* Truncating the file does not set the file offset so if the file
+   * already existed then the file offset will not be zero. Explicitly set the
+   * seek position back to the start of the file. Ignore unlikely errors at
+   * this stage. */
+  if ( -1 == ftruncate(fd, 0) ||
+       -1 == lseek(fd, 0, SEEK_SET) ||
+       -1 == sprintf(pid, "%ld\n", (long)getpid()) ||
+       -1 == write(fd, pid, strlen(pid)+1) ) {
+    fprintf(stderr, "Failed to write to lock file: %s\n", strerror(errno));
+    close(fd);
+    return -errno;
+  }
+
+  config->config_socket_lock_fd = fd;
+  return 0;
+}
+
+static void
+controller_config_socket_lock_destroy(shrub_controller_config *config)
+{
+  if (config->config_socket_lock_fd != -1) {
+    close(config->config_socket_lock_fd);
+    unlink(config->config_socket_lock);
+  }
+}
+
 static int controller_create_directories(shrub_controller_config *config)
 {
   int rc;
@@ -782,6 +853,10 @@ int main(int argc, char *argv[])
   if ( rc )
     return rc;
 
+  rc = controller_config_socket_lock_create(&config);
+  if ( rc )
+    goto fail_socket_lock_create;
+
   rc = create_config_socket(&config);
   if ( rc )
     goto fail_create_config_socket;
@@ -802,6 +877,8 @@ fail_servers_init:
 fail_cplane_connect:
   cleanup_config_socket(&config);
 fail_create_config_socket:
+  controller_config_socket_lock_destroy(&config);
+fail_socket_lock_create:
   rmdir(config.controller_dir);
 
   return rc;
