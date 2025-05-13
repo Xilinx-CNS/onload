@@ -1629,10 +1629,8 @@ void efx_x4_mcdi_process_module_change(struct efx_nic *efx, efx_qword_t *ev)
 	schedule_work(&efx->link_change_work);
 }
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_EEPROM_BY_PAGE)
-int efx_mcdi_x4_get_module_data(struct efx_nic *efx,
-				const struct ethtool_module_eeprom *page,
-				struct netlink_ext_ack *extack)
+static int efx_mcdi_get_module_data(struct efx_nic *efx,
+				    const struct ethtool_module_eeprom *page)
 {
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_GET_MODULE_DATA_IN_V2_LEN);
 	efx_dword_t *outbuf;
@@ -1655,9 +1653,10 @@ int efx_mcdi_x4_get_module_data(struct efx_nic *efx,
 	MCDI_SET_BYTE(inbuf, GET_MODULE_DATA_IN_V2_OFFSET, page->offset);
 	MCDI_SET_DWORD(inbuf, GET_MODULE_DATA_IN_V2_LENGTH, page->length);
 
-	rc = efx_mcdi_rpc(efx, MC_CMD_GET_MODULE_DATA, inbuf, sizeof(inbuf),
-			  outbuf, MC_CMD_GET_MODULE_DATA_OUT_LENMAX_MCDI2,
-			  &outlen);
+	rc = efx_mcdi_rpc_quiet(efx, MC_CMD_GET_MODULE_DATA,
+				inbuf, sizeof(inbuf), outbuf,
+				MC_CMD_GET_MODULE_DATA_OUT_LENMAX_MCDI2,
+				&outlen);
 	if (rc)
 		goto fail;
 	if (outlen < MC_CMD_GET_MODULE_DATA_OUT_LENMIN) {
@@ -1677,5 +1676,106 @@ int efx_mcdi_x4_get_module_data(struct efx_nic *efx,
 fail:
 	kfree(outbuf);
 	return rc;
+}
+
+int efx_mcdi_x4_get_module_info(struct efx_nic *efx,
+				struct ethtool_modinfo *modinfo)
+{
+	struct ethtool_module_eeprom page;
+	u8 code = 0;
+	int rc;
+
+	/* Check transceiver type (SFF-8024 table 4-1) */
+	page.i2c_address = 0x50;
+	page.bank = 0;
+	page.page = 0;
+	page.offset = 0;
+	page.length = 1;
+	page.data = &code;
+	rc = efx_mcdi_get_module_data(efx, &page);
+	if (rc < 0)
+		return rc;
+	if (rc != 1)
+		return -EIO;
+
+	switch (code) {
+	case 0x03: /* SFP/SFP+/SFP28 or later, SFF-8472 management */
+		modinfo->type = ETH_MODULE_SFF_8472;
+		modinfo->eeprom_len = ETH_MODULE_SFF_8472_LEN;
+		return 0;
+
+	case 0x0c: /* QSFP */
+	case 0x0d: /* QSFP+ or later, SFF-8636 or SFF-8436 management */
+	case 0x11: /* QSFP28 or later, SFF-8636 management */
+		modinfo->type = ETH_MODULE_SFF_8436;
+		modinfo->eeprom_len = ETH_MODULE_SFF_8436_MAX_LEN;
+		return 0;
+
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
+#define SFP_PAGE_SIZE	128u
+
+int efx_mcdi_x4_get_module_eeprom(struct efx_nic *efx,
+				  struct ethtool_eeprom *ee,
+				  u8 *data)
+{
+	struct ethtool_module_eeprom page;
+	u32 offset = ee->offset;
+	u32 space = ee->len;
+	u32 page_off;
+	int rc;
+
+	page_off = offset % SFP_PAGE_SIZE;
+
+	while (space) {
+		if (offset < SFP_PAGE_SIZE) {
+			/* Lower memory (offset 0..127) */
+			page.i2c_address = 0x50;
+			page.bank = 0;
+			page.page = 0;
+			page.offset = page_off;
+			page.length = min(space, SFP_PAGE_SIZE - page_off);
+			page.data = data;
+		} else {
+			/* Upper memory (offset 128..255), page 0..N */
+			page.i2c_address = 0x50;
+			page.bank = 0;
+			page.page = (offset - SFP_PAGE_SIZE) / SFP_PAGE_SIZE;
+			page.offset = SFP_PAGE_SIZE + page_off;
+			page.length = min(space, SFP_PAGE_SIZE - page_off);
+			page.data = data;
+		}
+		rc = efx_mcdi_get_module_data(efx, &page);
+		if (rc == 0)
+			goto out;
+		if (rc < 0) {
+			if (page.page == 0)
+				goto out;
+
+			/* Ignore missing page 1..N (QSFP etc) */
+			rc = page.length;
+			memset(data, 0, page.length);
+		}
+		space -= rc;
+		offset += rc;
+		data += rc;
+		page_off = 0;
+		rc = 0;
+	}
+
+out:
+	ee->len -= space;
+	return rc;
+}
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_EEPROM_BY_PAGE)
+int efx_mcdi_x4_get_module_data(struct efx_nic *efx,
+				const struct ethtool_module_eeprom *page,
+				struct netlink_ext_ack *extack)
+{
+	return efx_mcdi_get_module_data(efx, page);
 }
 #endif

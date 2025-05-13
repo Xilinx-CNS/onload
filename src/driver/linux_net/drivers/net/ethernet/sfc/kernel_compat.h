@@ -330,6 +330,17 @@
 	#define kernel_ethtool_ts_info ethtool_ts_info
 #endif
 
+#ifndef EFX_HAVE_ETHTOOL_EEPROM_BY_PAGE
+struct ethtool_module_eeprom {
+	u32	offset;
+	u32	length;
+	u8	page;
+	u8	bank;
+	u8	i2c_address;
+	u8	*data;
+};
+#endif
+
 #ifndef RXH_XFRM_SYM_XOR
 /* We want to use this struct even if older kernels do not have it, so old
  * APIs can use it.

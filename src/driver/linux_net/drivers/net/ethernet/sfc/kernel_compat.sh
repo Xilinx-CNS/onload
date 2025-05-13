@@ -105,6 +105,7 @@ EFX_NEED_SKB_VLAN_TAG_GET		nsymbol	skb_vlan_tag_get	include/linux/if_vlan.h
 EFX_NEED_IPV6_NFC			nsymbol	ethtool_tcpip6_spec	include/uapi/linux/ethtool.h
 EFX_HAVE_SKB_HASH			member	struct_sk_buff hash	include/linux/skbuff.h
 EFX_HAVE_INDIRECT_CALL_WRAPPERS		file				include/linux/indirect_call_wrapper.h
+EFX_HAVE_QUEUE_TRANS_TIMEOUT_ATOMIC	memtype	struct_netdev_queue trans_timeout	include/linux/netdevice.h	atomic_long_t
 
 # Stuff needed in code other than the linux net driver
 EFX_NEED_PCI_ENABLE_MSIX_RANGE          nsymbol pci_enable_msix_range include/linux/pci.h

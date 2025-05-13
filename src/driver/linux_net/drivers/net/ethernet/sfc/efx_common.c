@@ -786,20 +786,26 @@ void efx_print_stopped_queues(struct efx_nic *efx)
 	struct efx_channel *channel;
 
 	netif_info(efx, tx_err, efx->net_dev,
-		   "TX queue timeout: printing stopped queue data\n");
+		   "TX queue timeout: printing queues with timeouts\n");
 
 	efx_for_each_channel(channel, efx) {
 		struct netdev_queue *core_txq = channel->tx_queues[0].core_txq;
 		long unsigned int busy_poll_state = 0xffff;
+		unsigned long trans_timeout;
 		struct efx_tx_queue *tx_queue;
 
 		if (!efx_channel_has_tx_queues(channel))
 			continue;
 
 		/* The netdev watchdog must have triggered on a queue that had
-		 * stopped transmitting, so ignore other queues.
+		 * timed out, so ignore other queues.
 		 */
-		if (!netif_xmit_stopped(core_txq))
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_QUEUE_TRANS_TIMEOUT_ATOMIC)
+		trans_timeout = atomic_long_read(&core_txq->trans_timeout);
+#else
+		trans_timeout = core_txq->trans_timeout;
+#endif
+		if (!trans_timeout)
 			continue;
 
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
@@ -808,12 +814,12 @@ void efx_print_stopped_queues(struct efx_nic *efx)
 #endif
 #endif
 		netif_info(efx, tx_err, efx->net_dev,
-			   "Channel %u: %senabled Busy poll %#lx NAPI state %#lx Doorbell %sheld %scoalescing Xmit state %#lx\n",
+			   "Channel %u: %senabled Busy poll %#lx NAPI state %#lx Doorbell %sheld %scoalescing Xmit state %#lx timeouts %lu\n",
 			   channel->channel, (channel->enabled ? "" : "NOT "),
 			   busy_poll_state, channel->napi_str.state,
 			   (channel->holdoff_doorbell ? "" : "not "),
 			   (channel->tx_coalesce_doorbell ? "" : "not "),
-			   core_txq->state);
+			   core_txq->state, trans_timeout);
 		efx_for_each_channel_tx_queue(tx_queue, channel)
 			netif_info(efx, tx_err, efx->net_dev,
 				   "Tx queue: insert %u, write %u (%dms), read %u (%dms)\n",

@@ -87,6 +87,12 @@ int efx_x4_mcdi_enable_netport_events(struct efx_nic *efx);
 void efx_x4_mcdi_process_link_change(struct efx_nic *efx, efx_qword_t *ev);
 void efx_x4_mcdi_process_module_change(struct efx_nic *efx, efx_qword_t *ev);
 
+int efx_mcdi_x4_get_module_info(struct efx_nic *efx,
+				struct ethtool_modinfo *modinfo);
+int efx_mcdi_x4_get_module_eeprom(struct efx_nic *efx,
+				  struct ethtool_eeprom *ee,
+				  u8 *data);
+
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_EEPROM_BY_PAGE)
 int efx_mcdi_x4_get_module_data(struct efx_nic *efx,
 				const struct ethtool_module_eeprom *page,

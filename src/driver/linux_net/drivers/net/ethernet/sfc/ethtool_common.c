@@ -2130,22 +2130,28 @@ int efx_ethtool_get_module_eeprom(struct net_device *net_dev,
 				  u8 *data)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
+	int rc;
 
 	if (efx_nic_port_handle_supported(efx))
-		return -EOPNOTSUPP;
+		rc = efx_mcdi_x4_get_module_eeprom(efx, ee, data);
+	else
+		rc = efx_mcdi_phy_get_module_eeprom(efx, ee, data);
 
-	return efx_mcdi_phy_get_module_eeprom(efx, ee, data);
+	return rc;
 }
 
 int efx_ethtool_get_module_info(struct net_device *net_dev,
 				struct ethtool_modinfo *modinfo)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
+	int rc;
 
 	if (efx_nic_port_handle_supported(efx))
-		return -EOPNOTSUPP;
+		rc = efx_mcdi_x4_get_module_info(efx, modinfo);
+	else
+		rc = efx_mcdi_phy_get_module_info(efx, modinfo);
 
-	return efx_mcdi_phy_get_module_info(efx, modinfo);
+	return rc;
 }
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_EEPROM_BY_PAGE)
@@ -2154,10 +2160,13 @@ int efx_ethtool_get_module_eeprom_by_page(struct net_device *net_dev,
 					  struct netlink_ext_ack *extack)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
+	int rc;
 
 	if (efx_nic_port_handle_supported(efx))
-		return efx_mcdi_x4_get_module_data(efx, page, extack);
+		rc = efx_mcdi_x4_get_module_data(efx, page, extack);
+	else
+		rc = -EOPNOTSUPP; /* Fallback to get_module_{info,eeprom} */
 
-	return -EOPNOTSUPP; /* Fallback to get_module_{info,eeprom} */
+	return rc;
 }
 #endif

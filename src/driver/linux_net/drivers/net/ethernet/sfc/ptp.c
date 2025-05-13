@@ -99,8 +99,6 @@ static const u8 ptp_peer_delay_addr_ether[ETH_ALEN] __aligned(2) = {
 /* One billion: maximum ppb adjustment that is sane to express in API */
 #define ONE_BILLION		1000000000
 
-#define PTP_SYNC_ATTEMPTS	4
-
 /**
  * struct efx_ptp_timeset - Synchronisation between host and MC
  * @host_start: Host time immediately before hardware timestamp taken
@@ -371,7 +369,7 @@ struct efx_ptp_data {
 	/** @last_sync_delta: Last time between event and synchronisation. */
 	unsigned int last_sync_delta;
 	/** @sync_window_last: Last synchronisation window. */
-	int sync_window_last[PTP_SYNC_ATTEMPTS];
+	int sync_window_last[PTP_DEFAULT_SYNC_SAMPLE_SIZE];
 	/** @sync_window_min: Minimum synchronisation window seen. */
 	int sync_window_min;
 	/** @sync_window_max: Maximum synchronisation window seen. */
@@ -381,7 +379,7 @@ struct efx_ptp_data {
 	/**
 	 * @corrected_sync_window_last: Last corrected synchronisation window.
 	 */
-	int corrected_sync_window_last[PTP_SYNC_ATTEMPTS];
+	int corrected_sync_window_last[PTP_DEFAULT_SYNC_SAMPLE_SIZE];
 	/**
 	 * @corrected_sync_window_min: Minimum corrected synchronisation
 	 *			       window seen.
@@ -1273,7 +1271,7 @@ static void efx_ptp_sync_stats_update_window(struct efx_ptp_data *ptp,
 					     unsigned int idx, s32 window,
 					     s32 corrected)
 {
-	if (idx < PTP_SYNC_ATTEMPTS)
+	if (idx < PTP_DEFAULT_SYNC_SAMPLE_SIZE)
 		ptp->sync_window_last[idx] = window;
 	if (window < ptp->sync_window_min)
 		ptp->sync_window_min = window;
@@ -1287,7 +1285,7 @@ static void efx_ptp_sync_stats_update_window(struct efx_ptp_data *ptp,
 		(AVERAGE_LENGTH - 1) * ptp->sync_window_average + window,
 		AVERAGE_LENGTH);
 
-	if (idx < PTP_SYNC_ATTEMPTS)
+	if (idx < PTP_DEFAULT_SYNC_SAMPLE_SIZE)
 		ptp->corrected_sync_window_last[idx] = corrected;
 	if (corrected < ptp->corrected_sync_window_min)
 		ptp->corrected_sync_window_min = corrected;
@@ -1657,13 +1655,18 @@ static s64 efx_x4_ptp_get_the_time_delay(struct efx_nic *efx)
 	return diff_min >> 1;
 }
 
+/* Testing suggests that 1000 ns isn't quite enough time to guarantee that no
+ * false positives are identified. Use same limit as the X3 net driver.
+ */
+#define X4_MAX_SYNCHRONISATION_NS 1400
+
 int efx_x4_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings)
 {
-	struct timespec64 diff, mc_time, delta, window;
+	struct timespec64 diff, mc_time, delta, window, last_time_real, last_time_raw;
 	s64 diff_avg, diff_total, diff_min, d, time;
 	struct efx_ptp_data *ptp = efx->ptp_data;
+	struct system_time_snapshot last_time;
 	struct efx_x4_ptp_timeset *timeset;
-	struct pps_event_time last_time;
 #ifdef EFX_NOT_UPSTREAM
 	struct timespec64 last_delta;
 #endif
@@ -1689,7 +1692,7 @@ int efx_x4_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings)
 		window = timespec64_sub(timeset[ngood].host_end,
 					timeset[ngood].host_start);
 		timeset[ngood].window = timespec64_to_ktime(window);
-		if (timeset[ngood].window > MAX_SYNCHRONISATION_NS) {
+		if (timeset[ngood].window > X4_MAX_SYNCHRONISATION_NS) {
 			++ptp->sw_stats.invalid_sync_windows;
 		} else {
 			diff = timespec64_sub(mc_time,
@@ -1700,7 +1703,9 @@ int efx_x4_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings)
 		}
 	}
 
-	pps_get_ts(&last_time);
+	ktime_get_snapshot(&last_time);
+	last_time_real = ktime_to_timespec64(last_time.real);
+	last_time_raw = ktime_to_timespec64(last_time.raw);
 
 	if (ngood == 0) {
 		rc = -EAGAIN;
@@ -1731,7 +1736,7 @@ int efx_x4_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings)
 	/* Calculate delta between time taken immediately after taking
 	 * samples and the last good sample.
 	 */
-	delta = timespec64_sub(last_time.ts_real,
+	delta = timespec64_sub(last_time_real,
 			       timeset[last_good].host_start);
 	if (delta.tv_sec > 1) {
 		netif_warn(efx, hw, efx->net_dev,
@@ -1740,10 +1745,9 @@ int efx_x4_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings)
 		goto out;
 	}
 
-	ptp->last_host_time_real = timespec64_sub(last_time.ts_real, delta);
-#ifdef CONFIG_NTP_PPS
-	ptp->last_host_time_raw = timespec64_sub(last_time.ts_raw, delta);
-#endif
+	ptp->last_host_time_real = timespec64_sub(last_time_real, delta);
+	ptp->last_host_time_raw = timespec64_sub(last_time_raw, delta);
+
 #ifdef EFX_NOT_UPSTREAM
 	last_delta = timespec64_sub(mc_time, ptp->last_host_time_real);
 	ptp->last_delta = last_delta;
@@ -1752,7 +1756,10 @@ int efx_x4_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings)
 
 	/* Calculate delay from NIC top of second to last time */
 	delta.tv_nsec += ptp->last_mc_time.tv_nsec;
-	ptp->host_time_pps = last_time;
+	ptp->host_time_pps.ts_real = last_time_real;
+#ifdef CONFIG_NTP_PPS
+	ptp->host_time_pps.ts_raw = last_time_raw;
+#endif
 	pps_sub_ts(&ptp->host_time_pps, delta);
 	rc = 0;
 
@@ -2198,7 +2205,7 @@ static int efx_ptp_restart(struct efx_nic *efx)
 	{
 		int rc = efx_ptp_start(efx);
 		if (!rc)
-		       rc = efx_ptp_synchronize(efx, PTP_SYNC_ATTEMPTS);
+		       rc = efx_ptp_synchronize(efx);
 		return rc;
 	}
 #endif
@@ -2224,7 +2231,7 @@ static void efx_ptp_pps_worker(struct work_struct *work)
 		return;
 	kref_get(&ptp->kref);
 
-	if (efx_ptp_synchronize(efx, PTP_SYNC_ATTEMPTS))
+	if (efx_ptp_synchronize(efx))
 		goto out;
 
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
@@ -2369,6 +2376,27 @@ static int efx_phc_enable(struct ptp_clock_info *ptp,
 	}
 	return 0;
 }
+
+static int efx_x4_phc_enable(struct ptp_clock_info *ptp,
+			     struct ptp_clock_request *request,
+			     int enable)
+{
+	struct efx_ptp_data *ptp_data = container_of(ptp,
+						     struct efx_ptp_data,
+						     phc_clock_info);
+
+	switch (request->type) {
+	case PTP_CLK_REQ_PPS:
+		if (enable)
+			ptp_data->usr_evt_enabled |= BIT(request->type);
+		else
+			ptp_data->usr_evt_enabled &= ~BIT(request->type);
+		break;
+	default:
+		return -EOPNOTSUPP;
+	}
+	return 0;
+}
 #endif
 
 #if defined(EFX_NOT_UPSTREAM)
@@ -2450,6 +2478,14 @@ static void efx_ptp_destroy_pps(struct efx_ptp_data *ptp)
 #endif
 
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+static void efx_x4_ptp_nic_to_ts64(struct timespec64 *ts, u32 secs,
+				   u32 ns, u32 qns)
+{
+	ts->tv_sec = secs;
+	/* Round quarter nanosecond count to the closest nanosecond */
+	ts->tv_nsec = ns + DIV_ROUND_CLOSEST(qns, 4);
+}
+
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PTP_CLOCK_GETTIMEX64)
 static int efx_phc_gettimex64(struct ptp_clock_info *ptp, struct timespec64 *ts,
 			      struct ptp_system_timestamp *sts)
@@ -2488,6 +2524,38 @@ static int efx_phc_gettimex64(struct ptp_clock_info *ptp, struct timespec64 *ts,
 	*ts = ktime_to_timespec64(kt);
 	return 0;
 }
+
+static int efx_x4_phc_gettimex64(struct ptp_clock_info *ptp, struct timespec64 *ts,
+			         struct ptp_system_timestamp *sts)
+{
+	struct efx_ptp_data *ptp_data = container_of(ptp,
+						     struct efx_ptp_data,
+						     phc_clock_info);
+	struct efx_nic *efx = ptp_data->efx;
+	struct system_time_snapshot snap;
+	u32 secs, ns, qns;
+	efx_qword_t time;
+
+	if (sts)
+		ktime_get_snapshot(&snap);
+
+	time.u64[0] = _efx_readq(efx, ER_IZ_THE_TIME);
+
+	if (sts) {
+		ktime_get_snapshot(&snap);
+
+		sts->pre_ts = ktime_to_timespec64(snap.real);
+		sts->post_ts = ktime_to_timespec64(snap.real);
+	}
+
+	secs = EFX_QWORD_FIELD(time, ERF_IZ_THE_TIME_SECS);
+	ns = EFX_QWORD_FIELD(time, ERF_IZ_THE_TIME_NANOS);
+	qns = EFX_QWORD_FIELD(time, ERF_IZ_THE_TIME_QNS);
+
+	efx_x4_ptp_nic_to_ts64(ts, secs, ns, qns);
+
+	return 0;
+}
 #endif
 
 static int efx_phc_verify(struct ptp_clock_info *ptp, unsigned int pin,
@@ -2515,7 +2583,7 @@ static int efx_phc_getcrosststamp(struct ptp_clock_info *ptp,
 	if (!efx->ptp_data)
 		return -ENOTTY;
 
-	rc = efx_ptp_synchronize(efx, PTP_SYNC_ATTEMPTS);
+	rc = efx_ptp_synchronize(efx);
 	if (rc == -EAGAIN)
 		return -EBUSY; /* keep phc2sys etc happy */
 	if (rc)
@@ -2665,10 +2733,16 @@ static const struct ptp_clock_info efx_x4_phc_clock_info = {
 	.name		= "sfc",
 	.max_adj	= MAX_PPB, /* unused, ptp_data->max_adjfreq used instead */
 	.n_alarm	= 0,
+	.pps		= 1,
 	.adjfine	= efx_x4_phc_adjfine,
 	.adjtime	= efx_x4_phc_adjtime,
 	.gettime64	= efx_x4_phc_gettime,
 	.settime64	= efx_x4_phc_settime,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PTP_CLOCK_GETTIMEX64)
+	.gettimex64	= efx_x4_phc_gettimex64,
+#endif
+	.getcrosststamp = efx_phc_getcrosststamp,
+	.enable		= efx_x4_phc_enable,
 };
 
 void efx_x4_phc_set_clock_info(struct efx_nic *efx)
@@ -3132,7 +3206,8 @@ int efx_ptp_change_mode(struct efx_nic *efx, bool enable_wanted,
 #endif
 			rc = efx_ptp_start(efx);
 		if (rc == 0) {
-			rc = efx_ptp_synchronize(efx, PTP_SYNC_ATTEMPTS * 2);
+			rc = efx_ptp_synchronize_sample_size(efx,
+					efx->type->ptp_sync_sample_size * 2);
 			if (rc != 0)
 				efx_ptp_stop(efx);
 		}
@@ -3275,7 +3350,7 @@ int efx_ptp_ts_sync(struct efx_nic *efx, struct efx_ts_sync *sync)
 	if (!efx->ptp_data)
 		return -ENOTTY;
 
-	rc = efx_ptp_synchronize(efx, PTP_SYNC_ATTEMPTS);
+	rc = efx_ptp_synchronize(efx);
 	if (rc == 0) {
 		sync->ts.tv_sec = efx->ptp_data->last_delta.tv_sec;
 		sync->ts.tv_nsec = efx->ptp_data->last_delta.tv_nsec;
@@ -3574,7 +3649,7 @@ static int efx_phc_adjtime(struct ptp_clock_info *ptp, s64 delta)
 
 	if (!rc)
 		return rc;
-	return efx_ptp_synchronize(efx, PTP_SYNC_ATTEMPTS);
+	return efx_ptp_synchronize(efx);
 #else
 	return efx_mcdi_rpc(efx, MC_CMD_PTP, inbuf, sizeof(inbuf),
 			    NULL, 0, NULL);
@@ -3607,7 +3682,7 @@ static int efx_x4_phc_adjtime(struct ptp_clock_info *ptp, s64 delta)
 	rc = efx_mcdi_rpc(efx, MC_CMD_PTP, inbuf, sizeof(inbuf), NULL, 0, NULL);
 	if (!rc)
 		return rc;
-	return efx_ptp_synchronize(efx, PTP_SYNC_ATTEMPTS);
+	return efx_ptp_synchronize(efx);
 #else
 	return efx_mcdi_rpc(efx, MC_CMD_PTP, inbuf, sizeof(inbuf),
 			    NULL, 0, NULL);
@@ -3638,14 +3713,6 @@ static int efx_phc_gettime(struct ptp_clock_info *ptp, struct timespec64 *ts)
 		MCDI_DWORD(outbuf, PTP_OUT_READ_NIC_TIME_MINOR), 0);
 	*ts = ktime_to_timespec64(kt);
 	return 0;
-}
-
-static void efx_x4_ptp_nic_to_ts64(struct timespec64 *ts, u32 secs,
-				   u32 ns, u32 qns)
-{
-	ts->tv_sec = secs;
-	/* Round quarter nanosecond count to the closest nanosecond */
-	ts->tv_nsec = ns + DIV_ROUND_CLOSEST(qns, 4);
 }
 
 static int efx_x4_phc_gettime(struct ptp_clock_info *ptp, struct timespec64 *ts)

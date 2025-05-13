@@ -92,7 +92,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.1.0.1008"
+#define EFX_DRIVER_VERSION	"6.1.0.1009"
 #endif
 
 #ifdef DEBUG
@@ -2222,6 +2222,7 @@ struct mae_mport_desc;
  * @ptp_rx_enable_ts: Subscribe to receive periodic time sync events on channel
  * @ptp_get_attributes: Get PTP attributes
  * @ptp_synchronize: Synchronize times between the host and the NIC
+ * @ptp_sync_sample_size: Default sample size used in ptp_synchronize()
  * @ptp_write_host_time: Send host time to MC as part of sync protocol
  * @ptp_set_ts_sync_events: Enable or disable sync events for inline RX
  *	timestamping, possibly only temporarily for the purposes of a reset.
@@ -2470,6 +2471,7 @@ struct efx_nic_type {
 	int (*ptp_rx_enable_ts)(struct efx_channel *channel, bool temp);
 	int (*ptp_get_attributes)(struct efx_nic *efx);
 	int (*ptp_synchronize)(struct efx_nic *efx, unsigned int num_readings);
+	unsigned int ptp_sync_sample_size;
 	void (*ptp_write_host_time)(struct efx_nic *efx, u32 host_time);
 	int (*ptp_set_ts_sync_events)(struct efx_nic *efx, bool en, bool temp);
 	int (*ptp_set_ts_config)(struct efx_nic *efx,
@@ -2916,12 +2918,21 @@ static inline int efx_rx_enable_timestamping(struct efx_channel *channel,
 	return -EOPNOTSUPP;
 }
 
-static inline int efx_ptp_synchronize(struct efx_nic *efx,
-				      unsigned int num_readings)
+static inline int efx_ptp_synchronize_sample_size(struct efx_nic *efx,
+						  unsigned int num_readings)
 {
 #ifdef CONFIG_SFC_PTP
 	if (efx->type->ptp_synchronize)
 		return efx->type->ptp_synchronize(efx, num_readings);
+#endif
+	return -EOPNOTSUPP;
+}
+
+static inline int efx_ptp_synchronize(struct efx_nic *efx)
+{
+#ifdef CONFIG_SFC_PTP
+	return efx_ptp_synchronize_sample_size(efx,
+					efx->type->ptp_sync_sample_size);
 #endif
 	return -EOPNOTSUPP;
 }

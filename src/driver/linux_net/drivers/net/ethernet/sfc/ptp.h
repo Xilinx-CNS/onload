@@ -159,6 +159,10 @@ void efx_x4_phc_set_clock_info(struct efx_nic *efx);
 #ifdef CONFIG_SFC_PTP
 int efx_ef10_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings);
 int efx_x4_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings);
+
+
+#define PTP_DEFAULT_SYNC_SAMPLE_SIZE	4
+#define PTP_X4_SYNC_SAMPLE_SIZE		10
 #endif
 
 #endif /* EFX_PTP_H */

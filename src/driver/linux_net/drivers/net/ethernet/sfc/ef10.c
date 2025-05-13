@@ -4822,15 +4822,12 @@ static int efx_ef10_ptp_set_ts_sync_events(struct efx_nic *efx, bool en,
 	      efx_rx_enable_timestamping :
 	      efx_ef10_rx_disable_timestamping;
 
-	channel = efx_ptp_channel(efx);
-	if (channel) {
+	efx_for_each_channel(channel, efx) {
 		rc = set(channel, temp);
 		if (en && rc != 0) {
 			efx_ef10_ptp_set_ts_sync_events(efx, false, temp);
 			return rc;
 		}
-	} else {
-		return -EOPNOTSUPP;
 	}
 
 	return 0;
@@ -6266,6 +6263,7 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 	.ptp_rx_enable_ts = efx_ef10_rx_enable_timestamping,
 	.ptp_get_attributes = efx_ef10_ptp_get_attributes,
 	.ptp_synchronize = efx_ef10_ptp_synchronize,
+	.ptp_sync_sample_size = PTP_DEFAULT_SYNC_SAMPLE_SIZE,
 	.ptp_write_host_time = efx_ef10_ptp_write_host_time,
 	.ptp_set_ts_config = efx_ef10_ptp_set_ts_config,
 #endif
@@ -6424,6 +6422,7 @@ const struct efx_nic_type efx_x4_vf_nic_type = {
 	.ptp_rx_enable_ts = efx_x4_rx_enable_timestamping,
 	.ptp_get_attributes = efx_x4_ptp_get_attributes,
 	.ptp_synchronize = efx_x4_ptp_synchronize,
+	.ptp_sync_sample_size = PTP_X4_SYNC_SAMPLE_SIZE,
 	.ptp_write_host_time = efx_ef10_ptp_write_host_time,
 	.ptp_set_ts_config = efx_ef10_ptp_set_ts_config,
 #endif
@@ -6602,6 +6601,7 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.ptp_rx_enable_ts = efx_ef10_rx_enable_timestamping,
 	.ptp_get_attributes = efx_ef10_ptp_get_attributes,
 	.ptp_synchronize = efx_ef10_ptp_synchronize,
+	.ptp_sync_sample_size = PTP_DEFAULT_SYNC_SAMPLE_SIZE,
 	.ptp_write_host_time = efx_ef10_ptp_write_host_time,
 	.ptp_set_ts_sync_events = efx_ef10_ptp_set_ts_sync_events,
 	.ptp_set_ts_config = efx_ef10_ptp_set_ts_config,
@@ -6803,6 +6803,7 @@ const struct efx_nic_type efx_x4_nic_type = {
 	.ptp_rx_enable_ts = efx_x4_rx_enable_timestamping,
 	.ptp_get_attributes = efx_x4_ptp_get_attributes,
 	.ptp_synchronize = efx_x4_ptp_synchronize,
+	.ptp_sync_sample_size = PTP_X4_SYNC_SAMPLE_SIZE,
 	.ptp_write_host_time = efx_ef10_ptp_write_host_time,
 	.ptp_set_ts_sync_events = efx_ef10_ptp_set_ts_sync_events,
 	.ptp_set_ts_config = efx_ef10_ptp_set_ts_config,
