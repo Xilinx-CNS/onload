@@ -38,6 +38,9 @@ int shrub_spawn_server(char* controller_id)
                                                     | UMH_KILLABLE
     #endif
                                   );
+  if ( rc == -ENOENT )
+    LOG_E(ci_log("%s: No such file %s. Is onload installed properly?",
+                 __FUNCTION__, argv_cmd));
   return rc;
 }
 
