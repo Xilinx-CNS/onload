@@ -1072,12 +1072,18 @@ static void test_efct_future(void)
     strcpy(q0->next_pkt, "FUTURE");
   }
   else {
-    /* In principle, future_poll could handle rollover, but
-     * we conservatively disable future_peek in that case.
-     * Maybe that behaviour could be improved. */
+    /* Peeking the final packet will see data */
     strcpy(q0->next_pkt, "FUTURE");
-    CHECK(efct_vi_rx_future_peek(t->vi), ==, NULL);
-    efct_test_rollover(t, 0, 1, 1);
+    CHECK(efct_vi_rx_future_peek(t->vi), ==, q0->next_pkt);
+
+    /* Polling will roll to the next buffer to find the metadata,
+     * but won't find it yet */
+    q0->next_sbid = 1;
+    q0->next_sentinel = 1;
+    CHECK(efct_vi_rx_future_poll(t->vi, evs, 16), ==, 0);
+    STATE_CHECK(t->mock_ops, anything_called, 1);
+    STATE_CHECK(t->mock_ops, next_called, 1);
+    STATE_CHECK(t->mock_ops, next_qid, 0);
   }
 
   CHECK(efct_vi_rx_future_peek(t->vi), ==, q0->next_pkt);

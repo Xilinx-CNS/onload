@@ -1391,10 +1391,26 @@ const void* efct_vi_rx_future_peek(ef_vi* vi)
 
     /* Skip queues that have pending non-packet related work
      * The work will be picked up by poll or noticed by efct_rxq_check_event */
-    if( efct_rxq_need_rollover(rxq_ptr)  ||
-        efct_rxq_need_config(&vi->efct_rxqs.q[qid]) )
+    if( efct_rxq_need_config(&vi->efct_rxqs.q[qid]) )
       continue;
+
+    /* Beware: under onload, the kernel may be polling and updating `rxq_ptr`
+     * under our feet, so make sure we only rely on one value, read once. It's
+     * fine if this changes after we read it; we'll spot a packet that's already
+     * being handled, and trigger a poll which will ignore it.
+     *
+     * Do not check `efct_rxq_need_rollover` as that might read an inconsistent
+     * value of `meta_pkt`. This check is equivalent (if the metadata is with
+     * the data) and good enough otherwise; if we find data when rollover is
+     * needed, then that will be sorted out on the subsequent poll.
+     *
+     * `superbuf_pkts` is safe to read as it is not updated after queue
+     * attachment.
+     */
     pkt_id = OO_ACCESS_ONCE(rxq_ptr->data_pkt);
+    if( pkt_id_to_index_in_superbuf(pkt_id) >= rxq_ptr->superbuf_pkts )
+      continue;
+
     {
       const char* start = (char*)efct_rx_header(vi, pkt_id) +
                           EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
