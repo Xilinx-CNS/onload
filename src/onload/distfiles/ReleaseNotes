@@ -1,14 +1,6 @@
 This is not a supported release version of Onload
 =================================================
 
-X4 Functionality
-----------------
-
-A placeholder to outline the application clustering support in X4.
-(SO_REUSEPORT is only supported with EF_MULTIARCH_RX_DATAPATH=ff,
-i.e. the "Enterprise" datapath in X4. FIXME: ON-16338.)
-
-
 Onload-9.1~preview1
 ===================
 
@@ -50,9 +42,19 @@ X4 Functionality
 ----------------
 
 - Currently only 128 TXQs are available on the Express datapath
-- NIC reset is not handled
+- NIC reset is not handled. A driver reload is required post reset.
 - Shared queues are not available
 - Filter handling when interfaces change state does not operate correctly
+
+X4 Datapath Restrictions
+------------------------
+
+- The Wire Order API (WODA) is only guaranteed to operate correctly where
+  only the Enterprise RX path is selected (EF_MULTIARCH_RX_DATAPATH=ff)
+
+A placeholder to outline the application clustering support in X4.
+(SO_REUSEPORT is only supported with EF_MULTIARCH_RX_DATAPATH=ff,
+i.e. the "Enterprise" datapath in X4. FIXME: ON-16338.)
 
 
 ef_vi Compatibility
