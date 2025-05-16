@@ -57,6 +57,13 @@ A placeholder to outline the application clustering support in X4.
 i.e. the "Enterprise" datapath in X4. FIXME: ON-16338.)
 
 
+X4 Known Bugs
+-------------
+
+- Onload TX event processing can become starved, leading to EVQ overflow,
+  manifesting as an assertion failure or kernel panic in efct_poll_tx()
+
+
 ef_vi Compatibility
 -------------------
 

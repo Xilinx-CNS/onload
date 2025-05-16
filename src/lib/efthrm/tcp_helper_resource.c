@@ -1537,8 +1537,17 @@ static void choose_evq_size(struct vi_allocate_info* info)
 
   /* For kernel shared RX the kernel owns the EVQ, so we don't care about it
    * for sizing purposes. */
-  if( ! (info->oo_vi_flags & OO_VI_FLAGS_RX_KERNEL_SHARED) )
+  if( ! (info->oo_vi_flags & OO_VI_FLAGS_RX_KERNEL_SHARED) ) {
     evq_min += info->rxq_capacity;
+
+    /* This is the case where we're getting RX_REF events delivered to our
+     * EVQ. Because RX and TX poll are handled separately we currently have
+     * an issue where TX (and hence EVQ) poll can get starved. To reduce
+     * the impact of this until we have a fix we bump up the EVQ size a bit.
+     */
+    if( info->oo_vi_flags & OO_VI_FLAGS_RX_SHARED )
+      evq_min += info->rxq_capacity;
+  }
 
   for( info->evq_capacity = 512; info->evq_capacity <= evq_min;
        info->evq_capacity *= 2 )
