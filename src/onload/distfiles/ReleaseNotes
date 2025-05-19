@@ -41,21 +41,26 @@ Support for SDCI is available when compiled in.
 X4 Functionality
 ----------------
 
+There are several limitations on the currently available functionality in
+this preview release.
+
 - Currently only 128 TXQs are available on the Express datapath
 - NIC reset is not handled. A driver reload is required post reset.
 - Shared queues are not available
 - Filter handling when interfaces change state does not operate correctly
+- Multicast replication between the Express and Enterprise datapath is not
+  supported. To use multicast replication onload must be forced to use only
+  the Enterprise datapath with EF_MULTIARCH_RX_DATAPATH=ff. Note that when
+  this option is set unicast traffic will also be using the Enterprise
+  datapath.
 
 X4 Datapath Restrictions
 ------------------------
 
 - The Wire Order API (WODA) is only guaranteed to operate correctly where
   only the Enterprise RX path is selected (EF_MULTIARCH_RX_DATAPATH=ff)
-
-A placeholder to outline the application clustering support in X4.
-(SO_REUSEPORT is only supported with EF_MULTIARCH_RX_DATAPATH=ff,
-i.e. the "Enterprise" datapath in X4. FIXME: ON-16338.)
-
+- Application clustering (SO_REUSEPORT/EF_CLUSTER_SIZE) is only supported with
+  EF_MULTIARCH_RX_DATAPATH=ff
 
 X4 Known Bugs
 -------------
