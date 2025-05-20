@@ -4,18 +4,21 @@
 name: "perform_developing_md_build"
 
 on:
+  workflow_dispatch:
   push:
   pull_request:
-    types: [opened]
+    types: [opened, synchronize, reopened]
 
 jobs:
   perform_developing_md_build:
     runs-on: ubuntu-latest
+    env:
+      ONLOAD_TREE: ${{ github.workspace }}/onload
     steps:
-      - name: onload_internal
-        uses: actions/checkout@v4
+      - name: Checkout Onload
+        uses: actions/checkout@v5
         with:
-          path: onload_internal
+          path: ${{ env.ONLOAD_TREE }}
 
       - name: Install Onload Deps
         run: |
@@ -25,16 +28,14 @@ jobs:
 
       - name: setup Env
         run: |
-          echo "$GITHUB_WORKSPACE/onload_internal/scripts" >> $GITHUB_PATH
+          echo "${{ env.ONLOAD_TREE }}/scripts" >> $GITHUB_PATH
 
       - name: mmake buildtrees
+        working-directory: ${{ env.ONLOAD_TREE }}
         run: |
-          cd $GITHUB_WORKSPACE/onload_internal
           mmakebuildtree --user
 
       - name: build NDEBUG driver
-        env:
-          BUILD_EFCT_TEST: 1
         run: |
           make -C "$(mmaketool --toppath)" -j $(nproc) NDEBUG=1
 
@@ -43,15 +44,14 @@ jobs:
           make -C "$(mmaketool --toppath)/build/$(mmaketool --userbuild)" -j $(nproc) NDEBUG=1
 
       - name: Remake mmake buildtrees
+        working-directory: ${{ env.ONLOAD_TREE }}
         run: |
-          cd $GITHUB_WORKSPACE/onload_internal
           rm -rf build
           mmakebuildtree --user
 
       - name: build DEBUG driver (cloud)
         env:
           TRANSPORT_CONFIG_OPT_HDR: ci/internal/transport_config_opt_cloud.h
-          BUILD_EFCT_TEST: 1
         run: |
           make -C "$(mmaketool --toppath)" -j $(nproc)
 
@@ -91,8 +91,8 @@ jobs:
 
       - name: cplane unit tests
         if: ${{ ! cancelled() && steps.cloud_build_user.conclusion == 'success' }}
+        working-directory: ${{ env.ONLOAD_TREE }}/build/gnu_x86_64
         run: |
-          cd $GITHUB_WORKSPACE/onload_internal/build/gnu_x86_64
           {
             echo "# Test Summary"
             echo "## CPlane Unit Tests"
@@ -103,8 +103,8 @@ jobs:
 
       - name: cplane system tests
         if: ${{ ! cancelled() && steps.cloud_build_user.conclusion == 'success' }}
+        working-directory: ${{ env.ONLOAD_TREE }}/build/gnu_x86_64
         run: |
-          cd $GITHUB_WORKSPACE/onload_internal/build/gnu_x86_64
           {
             echo "## CPlane System Tests"
             echo "\`\`\`"
@@ -114,8 +114,8 @@ jobs:
 
       - name: orm tests
         if: ${{ ! cancelled() && steps.cloud_build_user.conclusion == 'success' }}
+        working-directory: ${{ env.ONLOAD_TREE }}/build/gnu_x86_64
         run: |
-          cd $GITHUB_WORKSPACE/onload_internal/build/gnu_x86_64
           {
             echo "## Onload Remote Monitor Unit Tests"
             echo "\`\`\`"
@@ -125,8 +125,8 @@ jobs:
 
       - name: oof tests
         if: ${{ ! cancelled() && steps.cloud_build_user.conclusion == 'success' }}
+        working-directory: ${{ env.ONLOAD_TREE }}/build/gnu_x86_64
         run: |
-          cd $GITHUB_WORKSPACE/onload_internal/build/gnu_x86_64
           {
             echo "## OOF Unit Tests"
             echo "\`\`\`"

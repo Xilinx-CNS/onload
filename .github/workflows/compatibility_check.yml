@@ -3,8 +3,11 @@
 
 name: "repo_compatibility_check"
 
-
-on: push
+on:
+  workflow_dispatch:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened]
 
 jobs:
   ssa:
@@ -15,12 +18,12 @@ jobs:
       ONLOAD_TREE: ${{ github.workspace }}/onload
     steps:
       - name: Checkout Onload
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: ${{ env.ONLOAD_TREE }}
 
       - name: Checkout SSA
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: ${{ github.repository_owner }}/simple_sockets_apps
           ssh-key: ${{ secrets.SIMPLE_SOCKET_APPS_READ_PRIVATE_KEY }}
@@ -30,6 +33,35 @@ jobs:
         working-directory: ${{ env.SSA_TREE }}
         run: make -j $(nproc)
 
+  onload_tools:
+    if: vars.INTERNAL_REPO
+    runs-on: ubuntu-latest
+    env:
+      ONLOAD_TOOLS_TREE: ${{ github.workspace }}/onload_tools
+      ONLOAD_TREE: ${{ github.workspace }}/onload
+    steps:
+      - name: Checkout Onload
+        uses: actions/checkout@v5
+        with:
+          path: ${{ env.ONLOAD_TREE }}
+
+      - name: Install Onload Deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcap-dev libmnl-dev python3 python3-pip
+          sudo pip3 install pytest pyroute2
+
+      - name: Checkout onload_tools
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ github.repository_owner }}/onload_tools
+          ssh-key: ${{ secrets.ONLOAD_TOOLS_READ_PRIVATE_KEY }}
+          path: ${{ env.ONLOAD_TOOLS_TREE }}
+
+      - name: Build Onload Tools
+        working-directory: ${{ env.ONLOAD_TOOLS_TREE }}
+        run: |
+          make -j $(nproc)
 
   tcpdirect:
     runs-on: ubuntu-latest
@@ -39,7 +71,7 @@ jobs:
       ONLOAD_TREE: ${{ github.workspace }}/onload
     steps:
       - name: Checkout Onload
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: ${{ env.ONLOAD_TREE }}
 
@@ -55,7 +87,7 @@ jobs:
       - name: Checkout TCPDirect development branch
         id: primary_tcpdirect_checkout
         continue-on-error: true
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: ${{ github.repository_owner }}/tcpdirect
           path: ${{ env.TCPDIRECT_TREE }}
@@ -66,7 +98,7 @@ jobs:
         run: rm -rf "$TCPDIRECT_TREE"
 
       - name: Checkout TCPDirect
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         if: ${{ ! cancelled() && steps.primary_tcpdirect_checkout.outcome == 'failure' }}
         with:
           repository: ${{ github.repository_owner }}/tcpdirect
@@ -74,7 +106,7 @@ jobs:
           ref: ${{ env.TCPDIRECT_VERSION }}
 
       - name: Checkout packetdrill
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         continue-on-error: true
         with:
           repository: ${{ github.repository_owner }}/packetdrill-tcpdirect
