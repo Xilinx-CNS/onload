@@ -357,18 +357,6 @@ static unsigned efhw_nic_get_netns_id(struct efhw_nic* nic)
 }
 
 
-static int
-efrm_vi_irq_flush_handler(void *arg, int is_timeout, struct efhw_nic *nic,
-                          int budget)
-{
-	struct efrm_vi *virs = arg;
-
-	/* N.B. it should be fine to just check for flushes directly here. Both
-	 * rx and tx flush cases will schedule some work rather than handle it
-	 * in the irq context. */
-	return efhw_nic_check_for_flushes(nic, virs->rs.rs_instance);
-}
-
 void efrm_vi_check_flushes(struct work_struct *data)
 {
 	struct efrm_nic_vi *nvi;
@@ -557,10 +545,6 @@ void efrm_pt_flush(struct efrm_vi *virs)
 			      &nvi->close_pending);
 		completed = true;
 	}
-
-	if (virs->rs.rs_client->nic->flags & NIC_FLAG_EVQ_IRQ)
-		efrm_eventq_register_callback(virs, efrm_vi_irq_flush_handler,
-		                              virs);
 
 	list_for_each_safe(pos, temp, &virs->efct_rxq_list) {
 		rxq = efrm_rxq_from_vi_list(pos);
@@ -813,8 +797,6 @@ void efrm_vi_rm_delayed_free(struct work_struct *data)
 		flags = virs->flags;
 		if (virs->flush_callback_fn != NULL)
 			virs->flush_callback_fn(virs->flush_callback_arg);
-		if (virs->rs.rs_client->nic->flags & NIC_FLAG_EVQ_IRQ)
-			efrm_eventq_kill_callback(virs);
 		if (flags & EFRM_VI_RELEASED)
 			efrm_vi_rm_free_flushed_resource(virs);
 	}

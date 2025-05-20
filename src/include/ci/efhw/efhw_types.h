@@ -325,12 +325,6 @@ struct efhw_func_ops {
 	 */
 	void (*vi_free) (struct efhw_nic *nic, int instance, unsigned n_vis);
 
-	/*! Check for flush events on the specified evq.
-	 * Processes at most one flush event.
-	 * Returns negative error code on failure, or 0 on successful check.
-	 */
-	int (*check_for_flushes) (struct efhw_nic *nic, unsigned evq_num);
-
   /*-------------- DMA support  ------------ */
 
 	/*! Initialise NIC state for a given TX DMAQ

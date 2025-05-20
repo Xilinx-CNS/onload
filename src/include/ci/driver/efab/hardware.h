@@ -116,10 +116,6 @@
 #define efhw_nic_vi_free(nic, instance, n_vis) \
 	((nic)->efhw_func->vi_free((nic), (instance), (n_vis)))
 
-#define efhw_nic_check_for_flushes(nic, evq_num) \
-	((nic)->efhw_func->check_for_flushes ? \
-	 (nic)->efhw_func->check_for_flushes((nic), (evq_num)) : -EOPNOTSUPP)
-
 /*-------------- DMA support  ------------ */
 #define efhw_nic_dmaq_tx_q_init(nic, params) \
 	((nic)->efhw_func->dmaq_tx_q_init((nic), (params)))
