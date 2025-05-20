@@ -526,6 +526,8 @@ oo_fop_mmap(struct file* file, struct vm_area_struct* vma)
   case OO_MMAP_TYPE_DSHM:
     return oo_dshm_mmap_impl(vma);
 #endif
+  case OO_MMAP_TYPE_UBUF_POST:
+    return oo_ubuf_post_mmap(file, vma);
   default:
     ci_log("%s: Invalid mapping type %d", __FUNCTION__, map_type);
     return -EINVAL;

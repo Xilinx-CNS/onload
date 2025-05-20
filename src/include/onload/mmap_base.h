@@ -22,9 +22,10 @@
 #ifdef __x86_64__
 # define OO_MMAP_TYPE_DSHM        2
 #endif
+#define OO_MMAP_TYPE_UBUF_POST    3
 
-#define OO_MMAP_TYPE_MASK        0x3
-#define OO_MMAP_TYPE_WIDTH       2
+#define OO_MMAP_TYPE_MASK        0x7
+#define OO_MMAP_TYPE_WIDTH       3
 #define OO_MMAP_TYPE_SHIFT       CI_PAGE_SHIFT
 #define OO_MMAP_ID_SHIFT         (OO_MMAP_TYPE_WIDTH + OO_MMAP_TYPE_SHIFT)
 #define OO_MMAP_TYPE(offset) \

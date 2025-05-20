@@ -1958,7 +1958,8 @@ static int oo_efct_superbuf_config_refresh(ef_vi* vi, int qid)
   return oo_resource_op(vi->dh, OO_IOC_EFCT_SUPERBUF_CONFIG_REFRESH, &op);
 }
 
-static void oo_efct_superbuf_post(ef_vi* vi, int qid, int sbid, bool sentinel)
+static void oo_efct_superbuf_post_ioctl(ef_vi* vi, int qid, int sbid,
+                                        bool sentinel)
 {
   oo_efct_superbuf_post_t op;
   op.intf_i = vi->efct_rxqs.ops->user_data;
@@ -1967,6 +1968,49 @@ static void oo_efct_superbuf_post(ef_vi* vi, int qid, int sbid, bool sentinel)
   op.sentinel = sentinel;
   oo_resource_op(vi->dh, OO_IOC_EFCT_SUPERBUF_POST, &op);
   // FIXME should we detect errors?
+}
+
+static int map_efct_ubuf_rxq_io_windows(ef_vi* vi, int intf_i)
+{
+#ifdef __KERNEL__
+  return -EOPNOTSUPP;
+#else
+  void *p;
+  int ix;
+
+  CI_BUILD_ASSERT((1ull << OO_MMAP_UBUF_POST_INTF_I_WIDTH) >=
+                  CI_CFG_MAX_INTERFACES);
+  CI_BUILD_ASSERT((1ull << OO_MMAP_UBUF_POST_IX_WIDTH) >= EF_VI_MAX_EFCT_RXQS);
+
+  ci_assert(intf_i < CI_CFG_MAX_INTERFACES);
+  ci_assert(vi->efct_rxqs.max_qs <= EF_VI_MAX_EFCT_RXQS);
+
+  for( ix = 0; ix < vi->efct_rxqs.max_qs; ix++ ) {
+    int rc = oo_resource_mmap(vi->dh, OO_MMAP_TYPE_UBUF_POST,
+                              OO_MMAP_UBUF_POST_MAKE_ID(ix, intf_i),
+                              CI_ROUND_UP(sizeof(uint64_t), CI_PAGE_SIZE),
+                              OO_MMAP_FLAG_DEFAULT, &p);
+
+    if( rc < 0 )
+      LOG_NV(ci_log("%s: oo_resource_mmap ubuf post intf_i %d ix %d rc %d",
+                    __FUNCTION__, intf_i, ix, rc));
+    else
+      efct_ubufs_set_rxq_io_window(vi, ix, (volatile uint64_t*)p);
+  }
+
+  return 0;
+#endif
+}
+
+static void unmap_efct_ubuf_rxq_io_windows(ef_vi* vi)
+{
+  int ix;
+
+  for( ix = 0; ix < vi->efct_rxqs.max_qs; ix++ ) {
+    oo_resource_munmap(vi->dh, (void *)efct_ubufs_get_rxq_io_window(vi, ix),
+                       CI_ROUND_UP(sizeof(uint64_t), CI_PAGE_SIZE));
+    efct_ubufs_set_rxq_io_window(vi, ix, NULL);
+  }
 }
 
 static int spawn_shrub_controller(ci_netif* ni)
@@ -2120,9 +2164,16 @@ static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
       rc = oo_init_shrub(ni, vi, hw_port, nic_i);
       if ( rc < 0 )
         return rc;
-    
-      /* TODO support direct buffer posting when allowed */
-      vi->efct_rxqs.ops->post = oo_efct_superbuf_post;
+
+      if( vi->vi_flags & EF_VI_RX_PHYS_ADDR ) {
+        map_efct_ubuf_rxq_io_windows(vi, nic_i);
+        /* TODO: directly post superbufs when onload kernel allocated bufs have
+         * been mapped (ON-16320). */
+        vi->efct_rxqs.ops->post = oo_efct_superbuf_post_ioctl;
+      } else {
+        vi->efct_rxqs.ops->post = oo_efct_superbuf_post_ioctl;
+      }
+
       vi->efct_rxqs.ops->refresh = oo_efct_superbuf_config_refresh;
       vi->efct_rxqs.ops->user_data = nic_i;
     }
@@ -2151,8 +2202,10 @@ static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
 
 static void cleanup_ef_vi(ef_vi* vi)
 {
-  if( vi->efct_rxqs.ops )
+  if( vi->efct_rxqs.ops ) {
+    unmap_efct_ubuf_rxq_io_windows(vi);
     vi->efct_rxqs.ops->cleanup(vi);
+  }
 }
 
 
