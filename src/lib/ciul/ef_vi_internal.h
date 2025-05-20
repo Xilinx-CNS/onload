@@ -279,6 +279,12 @@ __ef_vi_capabilities_get(ef_driver_handle handle, int ifindex, int pd_id,
 
 extern unsigned ef_vi_evq_clear_stride(void);
 
+enum ef_compat_mode {
+  EF_COMPAT_MODE_NONE,
+  EF_COMPAT_MODE_EF10,
+  EF_COMPAT_MODE_INVALID = -1,
+};
+extern enum ef_compat_mode ef_vi_compat_mode_get_from_env(void);
 extern int ef_vi_compat_init(ef_vi*);
 extern void ef_vi_compat_free(ef_vi*);
 

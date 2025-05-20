@@ -274,20 +274,31 @@ int ef_vi_compat_init_ef10(ef_vi* vi)
   return 0;
 }
 
-int ef_vi_compat_init(ef_vi* vi)
+enum ef_compat_mode ef_vi_compat_mode_get_from_env(void)
 {
-  const char *s = NULL;
-
-  s = getenv("EF_VI_COMPAT_MODE");
+  const char *s = getenv("EF_VI_COMPAT_MODE");
   if( ! s )
-    return 0;
+    return EF_COMPAT_MODE_NONE;
 
   if( strcasecmp(s, "ef10") == 0 )
+    return EF_COMPAT_MODE_EF10;
+
+  return EF_COMPAT_MODE_INVALID;
+}
+
+int ef_vi_compat_init(ef_vi* vi)
+{
+  enum ef_compat_mode mode = ef_vi_compat_mode_get_from_env();
+  switch( mode ) {
+  case EF_COMPAT_MODE_NONE:
+    return 0;
+  case EF_COMPAT_MODE_EF10:
     return ef_vi_compat_init_ef10(vi);
-
-  ef_log("Unrecognised EF_VI_COMPAT_MODE %s", s);
-
-  return -EINVAL;
+  default:
+    const char *s = getenv("EF_VI_COMPAT_MODE");
+    ef_log("Unrecognised EF_VI_COMPAT_MODE %s", s ? s : "");
+    return -EINVAL;
+  }
 }
 
 void ef_vi_compat_free(ef_vi* vi)
