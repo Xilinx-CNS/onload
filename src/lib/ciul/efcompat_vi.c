@@ -295,9 +295,11 @@ int ef_vi_compat_init(ef_vi* vi)
   case EF_COMPAT_MODE_EF10:
     return ef_vi_compat_init_ef10(vi);
   default:
-    const char *s = getenv("EF_VI_COMPAT_MODE");
-    ef_log("Unrecognised EF_VI_COMPAT_MODE %s", s ? s : "");
-    return -EINVAL;
+    {
+      const char *s = getenv("EF_VI_COMPAT_MODE");
+      ef_log("Unrecognised EF_VI_COMPAT_MODE %s", s ? s : "");
+      return -EINVAL;
+    }
   }
 }
 
