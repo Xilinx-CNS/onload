@@ -1870,6 +1870,7 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.get_phys_port_id = efx_ef100_get_phys_port_id,
 #endif
 
+	.ev_label_mask = BIT(ESF_GZ_EV_RXPKTS_Q_LABEL_WIDTH) - 1,
 	.rx_prefix_size = ESE_GZ_RX_PKT_PREFIX_LEN,
 	.rx_hash_offset = ESF_GZ_RX_PREFIX_RSS_HASH_LBN / 8,
 	.rx_ts_offset = ESF_GZ_RX_PREFIX_PARTIAL_TSTAMP_LBN / 8,
@@ -2003,6 +2004,7 @@ const struct efx_nic_type ef100_vf_nic_type = {
 	.vlan_rx_add_vid = efx_mcdi_filter_add_vid,
 	.vlan_rx_kill_vid = efx_mcdi_filter_del_vid,
 
+	.ev_label_mask = BIT(ESF_GZ_EV_RXPKTS_Q_LABEL_WIDTH) - 1,
 	.rx_prefix_size = ESE_GZ_RX_PKT_PREFIX_LEN,
 	.rx_hash_offset = ESF_GZ_RX_PREFIX_RSS_HASH_LBN / 8,
 	.rx_ts_offset = ESF_GZ_RX_PREFIX_PARTIAL_TSTAMP_LBN / 8,

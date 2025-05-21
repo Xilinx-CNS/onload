@@ -6279,6 +6279,7 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 #endif
 	.revision = EFX_REV_HUNT_A0,
 	.max_dma_mask = DMA_BIT_MASK(ESF_DZ_TX_KER_BUF_ADDR_WIDTH),
+	.ev_label_mask = BIT(ESF_DZ_RX_QLABEL_WIDTH) - 1,
 	.rx_prefix_size = ES_DZ_RX_PREFIX_SIZE,
 	.rx_hash_offset = ES_DZ_RX_PREFIX_HASH_OFST,
 	.rx_ts_offset = ES_DZ_RX_PREFIX_TSTAMP_OFST,
@@ -6438,6 +6439,7 @@ const struct efx_nic_type efx_x4_vf_nic_type = {
 #endif
 	.revision = EFX_REV_X4,
 	.max_dma_mask = DMA_BIT_MASK(ESF_DZ_TX_KER_BUF_ADDR_WIDTH),
+	.ev_label_mask = BIT(ESF_DZ_RX_QLABEL_WIDTH) - 1,
 	.rx_prefix_size = ES_DZ_RX_PREFIX_SIZE,
 	.rx_hash_offset = ES_DZ_RX_PREFIX_HASH_OFST,
 	.rx_ts_offset = ES_DZ_RX_PREFIX_TSTAMP_OFST,
@@ -6644,6 +6646,7 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 #endif
 	.revision = EFX_REV_HUNT_A0,
 	.max_dma_mask = DMA_BIT_MASK(ESF_DZ_TX_KER_BUF_ADDR_WIDTH),
+	.ev_label_mask = BIT(ESF_DZ_RX_QLABEL_WIDTH) - 1,
 	.rx_prefix_size = ES_DZ_RX_PREFIX_SIZE,
 	.rx_hash_offset = ES_DZ_RX_PREFIX_HASH_OFST,
 	.rx_ts_offset = ES_DZ_RX_PREFIX_TSTAMP_OFST,
@@ -6846,6 +6849,7 @@ const struct efx_nic_type efx_x4_nic_type = {
 #endif
 	.revision = EFX_REV_X4,
 	.max_dma_mask = DMA_BIT_MASK(ESF_DZ_TX_KER_BUF_ADDR_WIDTH),
+	.ev_label_mask = BIT(ESF_DZ_RX_QLABEL_WIDTH) - 1,
 	.rx_prefix_size = ES_DZ_RX_PREFIX_SIZE,
 	.rx_hash_offset = ES_DZ_RX_PREFIX_HASH_OFST,
 	.rx_ts_offset = ES_DZ_RX_PREFIX_TSTAMP_OFST,

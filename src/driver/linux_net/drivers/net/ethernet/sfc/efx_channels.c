@@ -1464,10 +1464,13 @@ void efx_set_channel_names(struct efx_nic *efx)
 	struct efx_channel *channel;
 
 	efx_for_each_channel(channel, efx) {
-		if (WARN_ON_ONCE(channel->irq_index < 0))
+		EFX_WARN_ON_ONCE_PARANOID(channel->irq_index < 0);
+		if (channel->irq_index < 0)
 			continue;
+
 		msi_context = xa_load(&pd->irq_pool, channel->irq_index);
-		if (WARN_ON_ONCE(!msi_context))
+		EFX_WARN_ON_ONCE_PARANOID(!msi_context);
+		if (!msi_context)
 			continue;
 
 		channel->type->get_name(channel, msi_context->name,

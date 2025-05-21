@@ -92,7 +92,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.1.0.1009"
+#define EFX_DRIVER_VERSION	"6.1.0.1010"
 #endif
 
 #ifdef DEBUG
@@ -2269,6 +2269,7 @@ struct mae_mport_desc;
  * @evq_ptr_tbl_base: Event queue pointer table base address
  * @evq_rptr_tbl_base: Event queue read-pointer table base address
  * @max_dma_mask: Maximum possible DMA mask
+ * @ev_label_mask: Label mask in RX and TX events
  * @rx_prefix_size: Size of RX prefix before packet data
  * @rx_hash_offset: Offset of RX flow hash within prefix
  * @rx_ts_offset: Offset of timestamp within prefix
@@ -2540,6 +2541,7 @@ struct efx_nic_type {
 	unsigned int evq_ptr_tbl_base;
 	unsigned int evq_rptr_tbl_base;
 	u64 max_dma_mask;
+	unsigned int ev_label_mask;
 	unsigned int rx_prefix_size;
 	unsigned int rx_hash_offset;
 	unsigned int rx_ts_offset;

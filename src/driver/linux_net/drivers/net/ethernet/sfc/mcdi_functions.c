@@ -307,7 +307,7 @@ int efx_mcdi_rx_init(struct efx_rx_queue *rx_queue, bool want_outer_classes)
 	struct efx_channel *channel = efx_rx_queue_channel(rx_queue);
 	size_t entries = DIV_ROUND_UP(rx_queue->rxd.len, EFX_BUF_SIZE);
 	struct efx_nic *efx = rx_queue->efx;
-	unsigned int buffer_size;
+	unsigned int buffer_size, label;
 	dma_addr_t dma_addr;
 	int rc;
 	int i;
@@ -320,9 +320,11 @@ int efx_mcdi_rx_init(struct efx_rx_queue *rx_queue, bool want_outer_classes)
 	else
 		buffer_size = 0;
 
+	label = efx_rx_queue_index(rx_queue) & efx->type->ev_label_mask;
+
 	MCDI_SET_DWORD(inbuf, INIT_RXQ_IN_SIZE, rx_queue->ptr_mask + 1);
 	MCDI_SET_DWORD(inbuf, INIT_RXQ_IN_TARGET_EVQ, channel->channel);
-	MCDI_SET_DWORD(inbuf, INIT_RXQ_IN_LABEL, efx_rx_queue_index(rx_queue));
+	MCDI_SET_DWORD(inbuf, INIT_RXQ_IN_LABEL, label);
 	MCDI_SET_DWORD(inbuf, INIT_RXQ_IN_INSTANCE,
 		       efx_rx_queue_instance(rx_queue));
 	MCDI_POPULATE_DWORD_3(inbuf, INIT_RXQ_IN_FLAGS,
