@@ -33,6 +33,7 @@ enum ooft_rx_mode {
   OOFT_RX_FF,
   OOFT_RX_LL,
   OOFT_RX_BOTH,
+  OOFT_RX_NONE,
 };
 
 /* There's a separate nic and hwport enum to allow tests to request a nic,
@@ -51,6 +52,7 @@ extern int test_sanity_no5tuple(void);
 extern int test_multicast_sanity(void);
 extern int test_replication_sanity(void);
 extern int test_multipath_replication(void);
+extern int test_multicast_local_addr(void);
 extern int test_namespace_sanity(void);
 extern int test_namespace_macvlan_move(void);
 extern int test_llct_sanity(void);
