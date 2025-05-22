@@ -17,6 +17,9 @@ ON-16079: return correct CMSG len for TCP recvmsg
 ON-16168: add ef_receive_poll() API call for polling for rx only
 ON-16191: do not convert TCP zero checksums to all ones
 ON-16195: add SDCI support
+ON-16454: fix file reference counting on fdtable update
+ON-16486: add eflatency options to copy and peek at received data
+#276: fix onload_build --kernelver=<KVER> specification
 
 
 onload-9.0.1.86
