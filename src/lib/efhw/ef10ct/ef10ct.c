@@ -1841,7 +1841,7 @@ ef10ct_design_parameters(struct efhw_nic *nic,
   else if( (VALUE) != EFAB_NIC_DP_DEFAULT(PARAM) ) \
     return -ENODEV;
 
-  SET(rx_superbuf_bytes, efx_dp->rx_buffer_len);
+  SET(rx_superbuf_bytes, 256 * 4096);
   if( efx_dp->meta_location == 0 ) {
     SET(rx_frame_offset, EFCT_RX_HEADER_NEXT_FRAME_LOC_0 - 2);
   }

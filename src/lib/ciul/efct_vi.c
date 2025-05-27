@@ -1222,15 +1222,7 @@ efct_design_parameters(struct ef_vi* vi, struct efab_nic_design_parameters* dp)
   if( GET(rx_superbuf_bytes) != EFCT_RX_SUPERBUF_BYTES ) {
     LOG(ef_log("%s: unsupported rx_superbuf_bytes, %ld != %d", __FUNCTION__,
                (long)GET(rx_superbuf_bytes), EFCT_RX_SUPERBUF_BYTES));
-    /* FIXME EF10CT: Firmware reports that the size of a superbuf is 0 bytes.
-     *               As a temporary measure if the reported size is 0, then just
-     *               treat it as if it were EFCT_RX_SUPERBUF_BYTES */
-    if( GET(rx_superbuf_bytes) == 0 ) {
-      LOG(ef_log("%s: rx_superbuf_bytes = %ld = 0, treating it as it were the standard value", __FUNCTION__,
-                 (long)GET(rx_superbuf_bytes)));
-    } else {
-      return -EOPNOTSUPP;
-    }
+    return -EOPNOTSUPP;
   }
 
   /* If the frame offset changes or is no longer fixed, we will need to
