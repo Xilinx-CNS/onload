@@ -231,7 +231,6 @@ int main(int argc, char* argv[])
   pthread_t trigger_thread_id;
   cpu_set_t cpuset;
   ef_memreg mr;
-  char pbuf[BUF_SIZE];
 
   /* set initial affinities to 0,1 */
   cfg_affinity[0] = 0;
