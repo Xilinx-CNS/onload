@@ -281,7 +281,7 @@ ef_vi_inline bool ef_vi_is_compat_vi(ef_vi* vi, enum ef_vi_arch compat_arch)
 
 /* Get the architecture used by the hardware for a given `vi`. Notably, this
  * will see through the architecture exposed by the compatibility layer. */
-ef_vi_inline enum ef_vi_arch ef_vi_get_real_arch(ef_vi* vi)
+ef_vi_inline enum ef_vi_arch ef_vi_get_real_arch(const ef_vi* vi)
 {
   /* `vi->nic_type.arch` is actually defined as `unsigned char`, but is always
    * assigned with values from `enum ef_vi_arch`, so we cast it here to

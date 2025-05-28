@@ -20,7 +20,6 @@
 /* Default rx metadata values */
 static uint64_t rx_len = 42;
 static uint64_t rx_flt = 7;
-static uint64_t rx_usr = 66;
 static uint16_t PKTS_PER_SB = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
 
 
@@ -430,8 +429,7 @@ static void efct_test_rx_meta_extra(struct efct_test* t, int qid,
   dest[0] = extra_meta | rx_len |
     (1 << EFCT_RX_HEADER_NEXT_FRAME_LOC_LBN) | /* fixed in current hardware */
     ((uint64_t)q->next_sentinel << EFCT_RX_HEADER_SENTINEL_LBN) |
-    (rx_flt << EFCT_RX_HEADER_FILTER_LBN) |
-    (rx_usr << EFCT_RX_HEADER_USER_LBN);
+    (rx_flt << EFCT_RX_HEADER_FILTER_LBN);
   q->next_meta += EFCT_PKT_STRIDE;
   if( q->next_meta == q->superbuf_end )
     q->next_meta = NULL;
@@ -488,8 +486,7 @@ static void fill_superbuf(char* superbuf, char* superbuf_end, int pkts_to_fill, 
     dest[0] = 0 | rx_len |
               (1 << EFCT_RX_HEADER_NEXT_FRAME_LOC_LBN) | /* fixed in current hardware */
               ((uint64_t)sent << EFCT_RX_HEADER_SENTINEL_LBN) |
-              (rx_flt << EFCT_RX_HEADER_FILTER_LBN) |
-              (rx_usr << EFCT_RX_HEADER_USER_LBN);
+              (rx_flt << EFCT_RX_HEADER_FILTER_LBN);
   }
 }
 
@@ -631,7 +628,6 @@ static void efct_test_check_rx_event(struct efct_test* t, int qid,
   CHECK((int)ev->rx_ref.len, ==, rx_len);
   CHECK((int)ev->rx_ref.q_id, ==, qid);
   CHECK((int)ev->rx_ref.filter_id, ==, rx_flt);
-  CHECK((int)ev->rx_ref.user, ==, rx_usr);
 
   const char* data = efct_vi_rxpkt_get(t->vi, ev->rx_ref.pkt_id);
   CHECK(data, ==, t->mock_rxqs.q[qid].next_pkt);
@@ -646,7 +642,6 @@ static void efct_test_rx_poll_discard(struct efct_test* t, int qid, int flags)
   CHECK((int)ev.rx_ref_discard.len, ==, rx_len);
   CHECK((int)ev.rx_ref_discard.q_id, ==, qid);
   CHECK((int)ev.rx_ref_discard.filter_id, ==, rx_flt);
-  CHECK((int)ev.rx_ref_discard.user, ==, rx_usr);
   CHECK((int)ev.rx_ref_discard.flags, ==, flags);
 
   const char* data = efct_vi_rxpkt_get(t->vi, ev.rx_ref_discard.pkt_id);

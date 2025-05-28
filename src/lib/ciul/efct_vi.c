@@ -173,8 +173,20 @@ static const ci_oword_t* efct_rx_next_header(const ef_vi* vi, uint32_t meta_pkt)
 {
   const ci_oword_t* header = efct_rx_header(vi, rxq_ptr_to_pkt_id(meta_pkt));
   int sentinel = CI_QWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL);
+  bool pkt_available = sentinel == rxq_ptr_to_sentinel(meta_pkt);
+#ifndef NDEBUG
+  /* Given that user specified extensions are not supported, we expect 'user' to
+   * be zero on efct when a packet has arrived. This is not guaranteed by the
+   * efct host spec but the RTL currently sets these bits to zero. It is very
+   * unlikely for this to change. This means we can later perform a 16 bit
+   * read of filter_id despite the field being 10 bits on efct but 16 bits on
+   * ef10ct.*/
+  uint8_t user = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_USER);
+  EF_VI_ASSERT(!(pkt_available && ef_vi_get_real_arch(vi) == EF_VI_ARCH_EFCT &&
+                 user != 0));
+#endif
 
-  return sentinel == rxq_ptr_to_sentinel(meta_pkt) ? header : NULL;
+  return pkt_available ? header : NULL;
 }
 
 /* Check for actions needed on an rxq. This must match the checks made in
@@ -779,8 +791,6 @@ static void efct_rx_discard(int qid, uint32_t pkt_id, uint16_t discard_flags,
   ev->rx_ref_discard.pkt_id = pkt_id;
   ev->rx_ref_discard.q_id = qid;
   ev->rx_ref_discard.filter_id = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_FILTER);
-  ev->rx_ref_discard.user = CI_OWORD_FIELD(*header,
-                                              EFCT_RX_HEADER_USER);
   ev->rx_ref_discard.flags = discard_flags;
 }
 
@@ -929,7 +939,6 @@ static inline int efct_poll_rx(ef_vi* vi, int ix, ef_event* evs, int evs_len)
        * qid */
       evs[i].rx_ref.q_id = qid;
       evs[i].rx_ref.filter_id = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_FILTER);
-      evs[i].rx_ref.user = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_USER);
     }
 
     /* This is only necessary for the final packet of each superbuf, storing

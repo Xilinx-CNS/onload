@@ -73,8 +73,13 @@
 #define EFCT_RX_HEADER_TIMESTAMP_STATUS_LBN 44
 #define EFCT_RX_HEADER_TIMESTAMP_STATUS_WIDTH 2
 
+/* Set filter_width to 16 bits since that is its size on ef10ct. Despite the
+ * width on efct being 10, it is ok to perform a 16 bit read on this
+ * architecture since the subsequent user field is always zero. This is very
+ * unlikely to change. If it does, we will need to use designparams decide how
+ * to properly mask the filter_id. */
 #define EFCT_RX_HEADER_FILTER_LBN 46
-#define EFCT_RX_HEADER_FILTER_WIDTH 10
+#define EFCT_RX_HEADER_FILTER_WIDTH 16
 
 #define EFCT_RX_HEADER_USER_LBN 56
 #define EFCT_RX_HEADER_USER_WIDTH 8
