@@ -343,6 +343,7 @@ efct_design_parameters(struct efhw_nic *nic,
   SET(timestamp_subnano_bits, xp->ts_subnano_bit);
   SET(unsol_credit_seq_mask, xp->unsol_credit_seq_mask);
   SET(md_location, 0); // should we get the driver to supply this?
+  SET(ct_thresh_min, 0);
 
   return 0;
 }

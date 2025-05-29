@@ -822,6 +822,10 @@ typedef struct {
   uint64_t         efct_fixed_header;
   /** Mask to keep EFCT writes within the aperture */
   uint32_t         efct_aperture_mask;
+  /** Minimum value to use for ct_thesh in ctpio transmits */
+  uint8_t          ct_thresh_min;
+  /** Unused */
+  uint8_t          reserved[3];
   /** Pointer to descriptors */
   void*            descriptors;
   /** Pointer to IDs */

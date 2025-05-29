@@ -1860,6 +1860,7 @@ ef10ct_design_parameters(struct efhw_nic *nic,
   SET(timestamp_subnano_bits, efx_dp->ts_subnano_bit);
   SET(unsol_credit_seq_mask, efx_dp->unsol_credit_seq_mask);
   SET(md_location, efx_dp->meta_location);
+  SET(ct_thresh_min, 2); /* Minimum value should be 2 to prevent underrun */
 
   return 0;
 }

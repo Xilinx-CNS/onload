@@ -233,6 +233,7 @@ struct efab_nic_design_parameters {
   uint64_t md_location;
   uint64_t rx_stride;
   uint64_t rx_queues;
+  uint64_t ct_thresh_min;
 
   /* New parameters must be added at the end */
 };
@@ -248,6 +249,7 @@ struct efab_nic_design_parameters {
 #define EFAB_NIC_DP_DEFAULT_md_location 0
 #define EFAB_NIC_DP_DEFAULT_rx_stride 4096
 #define EFAB_NIC_DP_DEFAULT_rx_queues 8
+#define EFAB_NIC_DP_DEFAULT_ct_thresh_min 0
 
 /* Initializer to set the known size according to the current context.
  * This (or equivalent) must be done before passing it to another context. */

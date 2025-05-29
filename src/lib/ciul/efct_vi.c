@@ -591,6 +591,7 @@ static void efct_ef_vi_transmitv_ctpio(ef_vi* vi, size_t len,
   else
     threshold = (threshold + threshold_extra) / EFCT_TX_ALIGNMENT;
 
+  threshold = CI_MAX((unsigned)vi->vi_txq.ct_thresh_min, threshold);
   efct_tx_word(&tx, efct_tx_pkt_header(vi, len, threshold));
 
   for( i = 0; i < iovcnt; ++i )
@@ -1262,6 +1263,7 @@ efct_design_parameters(struct ef_vi* vi, struct efab_nic_design_parameters* dp)
    * by one cache line to make their overflow tracking easier */
   vi->vi_txq.ct_fifo_bytes = ct_fifo_bytes - EFCT_TX_ALIGNMENT -
                                              EFCT_TX_HEADER_BYTES;
+  vi->vi_txq.ct_thresh_min = GET(ct_thresh_min);
   vi->ts_subnano_bits = GET(timestamp_subnano_bits);
   EF_VI_ASSERT(EF_VI_TX_TS_FRAC_NS_BITS >= vi->ts_subnano_bits);
   vi->unsol_credit_seq_mask = GET(unsol_credit_seq_mask);
