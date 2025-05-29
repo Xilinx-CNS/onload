@@ -38,6 +38,7 @@ usage() {
   err "  --udev         / --noudev         - Only install udev rules"
   err "  --ldconfig     / --noldconfig     - Only link new libraries with ldconfig"
   err "  --adduser      / --noadduser      - Only call 'onload_tool add_cplane_user'"
+  err "  --examples                        - Only install examples"
   err "  --modulesloadd / --nomodulesloadd - Only install config to modules-load.d"
   err "  --uninstall    / --nouninstall    - Only install onload_uninstall tool"
   err "  --baseheaders  / --nobaseheaders  - Only install ef_vi and extensions headers"
@@ -329,6 +330,17 @@ install_userland() {
 }
 
 
+install_examples() {
+    # Install sample app source code
+    install_dir "$i_examples"
+    try $docd "$TOP/src/tests/"
+    find -type f ! -name '*.mk' |
+	while read -r f; do
+	    install_f "$f" "$i_examples/$f"
+	done
+}
+
+
 install_ldconfig() {
   # Run ldconfig.
   [ -d "$i_lib64" ] && ldconfig -n "$i_lib64"
@@ -604,6 +616,10 @@ calculate_install_paths() {
     bindir="${usrdir}/bin"
   fi
 
+  if [ -z "${usrsharedir}" ]; then
+    usrsharedir="${usrdir}/share"
+  fi
+
   # Where do we put everything?
   i_usr="$i_prefix$usrdir"
   i_usrlibexec="$i_prefix$libexecdir/onload"
@@ -614,6 +630,7 @@ calculate_install_paths() {
   i_etc="$i_prefix$sysconfdir"
   i_include="$i_prefix$includedir"
   i_kernelmodules="$i_prefix$kernelmodulesdir/$KVER/${install_mod_dir#/}"
+  i_examples="$i_prefix$usrsharedir/doc/onload/examples"
 
   # look for biarch/multiarch library directories
 
@@ -653,6 +670,7 @@ base_headers=true
 uninstall=true
 test=false
 do=
+examples=false
 # docd is used for actually changing working dir in listfiles and test modes
 docd=cd
 verbose=
@@ -704,6 +722,7 @@ while [ $# -gt 0 ]; do
   --modprobe)	all=false; modprobe=true;;
   --modulesloadd) all=false; modulesloadd=true;;
   --udev) all=false; udev=true;;
+  --examples) all=false; examples=true;;
   --packaged) set -x; build=false; sfccheck=false; check_install=false uninstall=false;;
   --uninstall)  uninstall=true;;
   --nouserfiles)userfiles=false;;
@@ -797,6 +816,7 @@ ${modprobe:-$all}     && install_modprobe_conf
 ${adduser:-$all}      && install_adduser
 ${kernelfiles:-$all}  && install_kernel_modules
 ${udev:-$all}         && install_udev_rules
+$examples             && install_examples
 ${modulesloadd:-$all} && install_modules_load_d
 $headers              && install_all_headers
 

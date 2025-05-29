@@ -73,6 +73,7 @@
 %bcond_without devel # add option to skip devel package
 %bcond_without akmod # add option to skip Akmods package
 %bcond_without dkms # add option to skip DKMS package
+%bcond_without examples # add option to skip examples package
 
 %define pkgversion 20100910
 
@@ -331,6 +332,28 @@ dkms remove -m %{name} -v %{pkgversion} --all --rpm_safe_upgrade
 %endif
 
 ###############################################################################
+%if %{with examples}
+%package examples
+Summary:          OpenOnload sample app files
+Group:            System Environment/Kernel
+Requires:         openonload = %{version}-%{release}
+Suggests:         openonload-devel = %{version}-%{release}
+Provides:         openonload-examples = %{version}-%{release}
+
+%description examples
+OpenOnload is a high performance user-level network stack.
+
+This package provides sample applications for OpenOnload.
+These are provided as source code and can be built using `make`.
+
+Note that the openonload-devel package needs to be installed
+to build efsend_cplane.
+
+%files examples
+%defattr(-,root,root)
+%{_datadir}/doc/onload/examples/*
+%endif
+###############################################################################
 
 %prep
 [ "$RPM_BUILD_ROOT" != / ] && rm -rf "$RPM_BUILD_ROOT"
@@ -371,7 +394,7 @@ mkdir build
 %endif
 
 %install
-%if %{with user}%{with kmod}%{with devel}
+%if %{with user}%{with kmod}%{with devel}%{with examples}
 export i_prefix=%{buildroot}
 mkdir -p "$i_prefix/etc/modprobe.d"
 mkdir -p "$i_prefix/etc/depmod.d"
@@ -380,7 +403,8 @@ mkdir -p "$i_prefix/etc/depmod.d"
   %{?debug:--debug} %{?setuid:--setuid} %{?moddir:--moddir=%moddir} \
   %{?with_user: --userfiles --modprobe --modulesloadd --udev %{?_sysusersdir:--adduser}} \
   %{?with_kmod: --kernelfiles --kernelver "%{kernel}"} \
-  %{?with_devel: --headers}
+  %{?with_devel: --headers} \
+  %{?with_examples: --examples}
 %endif
 %if %{with user}
 # Removing these files is fine since they would only ever be generated on a build machine.
@@ -398,6 +422,7 @@ sed \
   -e "/bcond_without devel/ {s/without/with/; s/skip/include/}" \
   -e "/bcond_without akmod/ {s/without/with/; s/skip/include/}" \
   -e "/bcond_without dkms/ {s/without/with/; s/skip/include/}" \
+  -e "/bcond_without examples/ {s/without/with/; s/skip/include/}" \
   -e "/bcond_with kernel_package_deps/ {s/with/without/; s/include/skip/}" \
   -e '/define "moddir extra"/ s/.*/%%global moddir extra\/onload/' \
   %{?debug:-e '/define "debug true"/ s/.*/%%global debug true/'} \
