@@ -74,9 +74,9 @@ static const char* names[EF_VI_CAP_MAX + 1] = {
 
 
 int
-__ef_vi_capabilities_get(ef_driver_handle handle, int ifindex, int pd_id,
-                         ef_driver_handle pd_dh, enum ef_vi_capability cap,
-                         unsigned long* value)
+__ef_vi_capabilities_get_hw(ef_driver_handle handle, int ifindex, int pd_id,
+                            ef_driver_handle pd_dh, enum ef_vi_capability cap,
+                            unsigned long* value)
 {
   int rc;
   ci_capabilities_op_t op = (ci_capabilities_op_t) { 0 };
@@ -108,6 +108,21 @@ __ef_vi_capabilities_get(ef_driver_handle handle, int ifindex, int pd_id,
   else {
     return -ENOSYS;
   }
+}
+
+
+int
+__ef_vi_capabilities_get(ef_driver_handle handle, int ifindex, int pd_id,
+                         ef_driver_handle pd_dh, enum ef_vi_capability cap,
+                         unsigned long* value)
+{
+  int rc;
+
+  rc = ef_vi_compat_capability_get(cap, value);
+  if( rc != 0 && rc != -EOPNOTSUPP )
+    rc = __ef_vi_capabilities_get_hw(handle, ifindex, pd_id, pd_dh, cap, value);
+
+  return rc;
 }
 
 

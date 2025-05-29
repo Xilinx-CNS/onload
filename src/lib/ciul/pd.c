@@ -62,11 +62,13 @@ static enum ef_pd_flags ef_pd_extra_flags_for_compat(ef_driver_handle pd_dh,
   if( mode == EF_COMPAT_MODE_EF10 ) {
     /* For X4 we want to select Express datapath too */
     unsigned long capability_val;
-    /* Can't use ef_vi_capabilities_get() here, as it calls
-       ef_pd_flags_from_env() and would end up in an infinite loop */
-    int rc = __ef_vi_capabilities_get(pd_dh, ifindex, -1, -1,
-                                      EF_VI_CAP_EXTRA_DATAPATHS,
-                                      &capability_val);
+    /* Directly query the hardware capabilities to avoid ending up in an
+     * infinite loop due to ef_vi_capabilities_get() calling
+     * ef_pd_flags_from_env(), and avoid getting the overwritten compat
+     * capability value. */
+    int rc = __ef_vi_capabilities_get_hw(pd_dh, ifindex, -1, -1,
+                                         EF_VI_CAP_EXTRA_DATAPATHS,
+                                         &capability_val);
     if( rc == 0 && (capability_val & EF_VI_EXTRA_DATAPATH_EXPRESS) )
       return EF_PD_EXPRESS;
   }

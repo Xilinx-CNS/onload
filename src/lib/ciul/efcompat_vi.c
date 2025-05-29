@@ -9,6 +9,7 @@
 #include "logging.h"
 #include <etherfabric/efct_vi.h>
 #include <etherfabric/internal/efct_uk_api.h>
+#include <etherfabric/capabilities.h>
 #include <ci/efhw/common.h>
 #include <ci/tools/byteorder.h>
 #include <ci/tools/sysdep.h>
@@ -221,6 +222,38 @@ static int ef10compat_ef_eventq_poll(ef_vi *vi, ef_event *evs, int evs_len)
 
   return ev_count;
 }
+
+
+int ef10compat_capability_get(enum ef_vi_capability cap, unsigned long* value)
+{
+#define UNSUPPORTED_CAP(c) case (c): *value = 0; return -EOPNOTSUPP
+#define SUPPORTED_CAP_VAL(c, v) case (c): *value = (v); return 0
+
+  switch( cap & ~EF_VI_CAP_F_ALL ) {
+  UNSUPPORTED_CAP(EF_VI_CAP_CTPIO_ONLY);
+  UNSUPPORTED_CAP(EF_VI_CAP_RX_POLL);
+  UNSUPPORTED_CAP(EF_VI_CAP_RX_REF);
+  SUPPORTED_CAP_VAL(EF_VI_CAP_EXTRA_DATAPATHS, 0);
+  default:
+    /* Anything else should fall through to the underlying hardware support */
+    return -EINVAL;
+  }
+}
+
+
+int ef_vi_compat_capability_get(enum ef_vi_capability cap,
+                                unsigned long* value)
+{
+  enum ef_compat_mode compat_mode = ef_vi_compat_mode_get_from_env();
+
+  switch( compat_mode ) {
+  case EF_COMPAT_MODE_EF10:
+    return ef10compat_capability_get(cap, value);
+  default:
+    return -EINVAL;
+  }
+}
+
 
 static void ef_vi_compat_init_ef10_ops(ef_vi* vi)
 {

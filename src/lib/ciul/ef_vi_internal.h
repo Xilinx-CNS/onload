@@ -277,6 +277,11 @@ __ef_vi_capabilities_get(ef_driver_handle handle, int ifindex, int pd_id,
                          ef_driver_handle pd_dh, enum ef_vi_capability cap,
                          unsigned long* value);
 
+extern int
+__ef_vi_capabilities_get_hw(ef_driver_handle handle, int ifindex, int pd_id,
+                            ef_driver_handle pd_dh, enum ef_vi_capability cap,
+                            unsigned long* value);
+
 extern unsigned ef_vi_evq_clear_stride(void);
 
 enum ef_compat_mode {
@@ -287,6 +292,8 @@ enum ef_compat_mode {
 extern enum ef_compat_mode ef_vi_compat_mode_get_from_env(void);
 extern int ef_vi_compat_init(ef_vi*);
 extern void ef_vi_compat_free(ef_vi*);
+extern int ef_vi_compat_capability_get(enum ef_vi_capability cap,
+                                       unsigned long* value);
 
 extern enum ef_pd_flags ef_pd_flags_from_env(enum ef_pd_flags flags,
                                              ef_driver_handle pd_dh,
