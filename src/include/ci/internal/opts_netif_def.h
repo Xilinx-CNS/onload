@@ -1640,13 +1640,18 @@ CI_CFG_STR_OPT("EF_INTERFACE_BLACKLIST", iface_blacklist, ci_string256,
 #define EF_MULTIARCH_DATAPATH_LLCT 1
 #define EF_MULTIARCH_DATAPATH_BOTH 2
 
-CI_CFG_OPT("EF_MULTIARCH_TX_DATAPATH", multiarch_tx_datapath, ci_uint32,
-           "Select TX datapath on all multiarch NICs: 0=ff or 1=llct",
-           1, , 1, 0, 1, oneof:ff;llct)
+CI_CFG_OPT("EF_TX_DATAPATH", multiarch_tx_datapath, ci_uint32,
+           "Select TX datapath on all multiarch NICs:"
+           "  enterprise (fully featured)\n"
+           "  express (lowest latency)\n",
+           1, , 1, 0, 1, oneof:enterprise;express)
 
-CI_CFG_OPT("EF_MULTIARCH_RX_DATAPATH", multiarch_rx_datapath, ci_uint32,
-           "Select RX datapaths on all multiarch NICs: 0=ff, 1=llct, or 2=both",
-           2, , 2, 0, 2, oneof:ff;llct;both)
+CI_CFG_OPT("EF_RX_DATAPATH", multiarch_rx_datapath, ci_uint32,
+           "Select RX datapaths on all multiarch NICs:"
+           "  enterprise (fully featured)\n"
+           "  express (lowest latency)\n"
+           "  both (prefer express, fallback to enterprise)\n",
+           2, , 2, 0, 2, oneof:enterprise;express;both)
 
 CI_CFG_OPT("EF_LLCT_TEST_SHRUB", llct_test_shrub, ci_uint32,
            "Experimental: force llct datapath to use shrub not local rxqs",

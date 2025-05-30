@@ -1262,13 +1262,13 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
   handle_str_opt(opts, "EF_INTERFACE_BLACKLIST", opts->iface_blacklist,
                  sizeof(opts->iface_blacklist));
 
-  static const char* const multiarch_tx_opts[] = { "ff", "llct", 0 };
+  static const char* const multiarch_tx_opts[] = { "enterprise", "express", 0 };
   opts->multiarch_tx_datapath =
-    parse_enum(opts, "EF_MULTIARCH_TX_DATAPATH", multiarch_tx_opts, "llct");
+    parse_enum(opts, "EF_TX_DATAPATH", multiarch_tx_opts, "express");
 
-  static const char* const multiarch_rx_opts[] = { "ff", "llct", "both", 0 };
+  static const char* const multiarch_rx_opts[] = { "enterprise", "express", "both", 0 };
   opts->multiarch_rx_datapath =
-    parse_enum(opts, "EF_MULTIARCH_RX_DATAPATH", multiarch_rx_opts, "both");
+    parse_enum(opts, "EF_RX_DATAPATH", multiarch_rx_opts, "both");
 
   if( (s = getenv("EF_LLCT_TEST_SHRUB")) )
     opts->llct_test_shrub = atoi(s);
