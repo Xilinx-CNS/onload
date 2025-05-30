@@ -146,6 +146,12 @@ ifdef GCOV
   MMAKE_DIR_LINKFLAGS += -fprofile-arcs
 endif
 
+ifeq ($(HAVE_SDCI),1)
+  MMAKE_CFLAGS += -DCI_HAVE_SDCI=1
+else
+  MMAKE_CFLAGS += -DCI_HAVE_SDCI=0
+endif
+
 MMAKE_CFLAGS += -DTRANSPORT_CONFIG_OPT_HDR='<$(TRANSPORT_CONFIG_OPT_HDR)>'
 
 ######################################################################

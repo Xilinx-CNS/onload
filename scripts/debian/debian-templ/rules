@@ -63,6 +63,9 @@ endif
 ifneq ($(call get_build_config,noefct),)
   BUILD_FLAGS+=--no-efct
 endif
+ifneq ($(call get_build_config,havesdci),)
+  BUILD_FLAGS+=--have-sdci
+endif
 
 SETUID=
 ifneq ($(call get_build_config,setuid),)

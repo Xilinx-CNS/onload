@@ -1359,6 +1359,7 @@ get_vi_settings(ci_netif* ni, struct efhw_nic* nic,
   }
 #endif
 
+#if CI_HAVE_SDCI
   if( NI_OPTS(ni).tph_mode != 0 ) {
     info->ef_vi_flags |= EF_VI_ENABLE_TPH;
     info->efhw_flags |= EFHW_VI_ENABLE_TPH;
@@ -1367,6 +1368,7 @@ get_vi_settings(ci_netif* ni, struct efhw_nic* nic,
       info->efhw_flags |= EFHW_VI_TPH_TAG_MODE;
     }
   }
+#endif /* CI_HAVE_SDCI */
 
   get_if_name(ni, info->intf_i, if_name);
 

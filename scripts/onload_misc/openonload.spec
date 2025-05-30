@@ -67,6 +67,9 @@
 # If you want to fail the OpenOnload build if either AUX or EFCT
 # is unavailable at build time:
 #    --define "have_efct 1"
+#
+# If you want to build Onload with support for SDCI add:
+#    --define "have_sdci 1"
 
 %bcond_without user # add option to skip userland package
 %bcond_without kmod # add option to skip kmod package
@@ -362,7 +365,8 @@ export HAVE_EFCT=%{?have_efct:%have_efct}
   %{?build_profile:--build-profile %build_profile} \
   %{?debug:--debug} \
   %{?with_user: --user64} \
-  %{?with_kmod: --kernel --kernelver "%{kernel}"}
+  %{?with_kmod: --kernel --kernelver "%{kernel}"} \
+  %{?have_sdci: --have-sdci}
 %else
 %if %{with devel}
 # Satisfy onload_install sanity check
@@ -380,7 +384,8 @@ mkdir -p "$i_prefix/etc/depmod.d"
   %{?debug:--debug} %{?setuid:--setuid} %{?moddir:--moddir=%moddir} \
   %{?with_user: --userfiles --modprobe --modulesloadd --udev %{?_sysusersdir:--adduser}} \
   %{?with_kmod: --kernelfiles --kernelver "%{kernel}"} \
-  %{?with_devel: --headers}
+  %{?with_devel: --headers} \
+  %{?have_sdci: --have-sdci}
 %endif
 %if %{with user}
 # Removing these files is fine since they would only ever be generated on a build machine.

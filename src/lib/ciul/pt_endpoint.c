@@ -466,6 +466,16 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
 
   vi_flags |= get_vi_flags_from_env();
 
+#if ! CI_HAVE_SDCI
+  if( vi_flags & (EF_VI_ENABLE_TPH | EF_VI_TPH_TAG_MODE) ) {
+    LOG(ef_log("%s: failed to allocate a VI as TPH was requested, but support "
+               "is not compiled in. Please recompile onload with SDCI support "
+               "or avoid using EF_VI_ENABLE_TPH and EF_VI_TPH_TAG_MODE",
+               __FUNCTION__));
+    return -EINVAL;
+  }
+#endif /* ! CI_HAVE_SDCI */
+
   if( txq_capacity < 0 && (s = getenv("EF_VI_TXQ_SIZE")) )
     txq_capacity = atoi(s);
   if( rxq_capacity < 0 && (s = getenv("EF_VI_RXQ_SIZE")) )

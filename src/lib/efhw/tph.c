@@ -63,6 +63,7 @@ int
 efhw_set_tph_steering(struct efhw_nic *nic, uint instance, int set,
                       int tag_mode)
 {
+#if CI_HAVE_SDCI
   uint16_t tag = 0;
   int rc;
 
@@ -89,4 +90,7 @@ efhw_set_tph_steering(struct efhw_nic *nic, uint instance, int set,
               rc);
 
   return rc;
+#else /* CI_HAVE_SDCI */
+  return -EOPNOTSUPP;
+#endif /* CI_HAVE_SDCI */
 }

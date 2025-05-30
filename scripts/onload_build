@@ -85,6 +85,7 @@ while [ $# -gt 0 ]; do
   --cc)  [ $# -gt 1 ] || usage; use_cc="CC=$2"; export use_cc; shift;;
   --no-sfc)     export HAVE_SFC=0;;
   --no-efct)    export HAVE_EFCT=0;;
+  --have-sdci)  export HAVE_SDCI=1;;
   -*)           usage;;
   *)            break;;
   esac

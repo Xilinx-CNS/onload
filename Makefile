@@ -23,6 +23,7 @@ Options:
                     AF_XDP mode only
   HAVE_EFCT=0       Build without EFCT support.
   HAVE_EF10CT=0     Build without EF10CT support.
+  HAVE_SDCI=1       Build with SDCI support.
   BUILD_PROFILE=x   Onload configuration, e.g. "cloud" (default: extra)
   KBUILDTOP=<path>  Where to put driver build (default: build/$$KARCH_linux-$$KVER)
   KPATH=<path>      Kernel to build for (default: /lib/modules/`uname -r`/build)
@@ -99,6 +100,7 @@ endif
 
 export HAVE_EFCT ?=
 export HAVE_EF10CT ?= 1
+export HAVE_SDCI ?= 0
 
 export HAVE_SFC ?= 1
 ifeq ($(HAVE_SFC),1)
@@ -220,6 +222,16 @@ endif
 ONLOAD_CFLAGS += -Wno-missing-prototypes -Wno-missing-declarations -DEFX_NOT_UPSTREAM=1
 
 ONLOAD_MAKEFLAGS ?=
+
+ifeq ($(HAVE_SDCI),1)
+ifneq ($(HAVE_SFC),1)
+  $(error Unable to build Onload with SDCI support if not also building the SFC driver)
+endif
+  ONLOAD_MAKEFLAGS += CONFIG_SFC_TPH=y
+  ONLOAD_CFLAGS += -DCI_HAVE_SDCI=1
+else
+  ONLOAD_CFLAGS += -DCI_HAVE_SDCI=0
+endif
 
 ifeq ($(HAVE_SFC),1)
   ONLOAD_CFLAGS += -DCI_HAVE_SFC=1
