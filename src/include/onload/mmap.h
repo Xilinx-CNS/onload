@@ -50,6 +50,17 @@
      ((ci_uint64) (shm_class) << OO_MMAP_DSHM_BUFFER_ID_WIDTH))
 #endif
 
+#define OO_MMAP_UBUF_POST_IX_WIDTH 16
+#define OO_MMAP_UBUF_POST_INTF_I_WIDTH 16
+#define OO_MMAP_UBUF_POST_IX(map_id) \
+  ((map_id) & ((1ull << OO_MMAP_UBUF_POST_IX_WIDTH) - 1))
+#define OO_MMAP_UBUF_POST_INTF_I(map_id) \
+  (((map_id) >> OO_MMAP_UBUF_POST_IX_WIDTH) & \
+   ((1ull << OO_MMAP_UBUF_POST_INTF_I_WIDTH) - 1))
+#define OO_MMAP_UBUF_POST_MAKE_ID(ix, intf_i) \
+  ((ci_uint64) (ix) | \
+   ((ci_uint64) (intf_i) << OO_MMAP_UBUF_POST_IX_WIDTH))
+
 #define VMA_OFFSET(vma)  ((vma)->vm_pgoff << PAGE_SHIFT)
 
 #ifndef __KERNEL__
@@ -67,7 +78,8 @@ oo_resource_mmap(ci_fd_t fp, ci_uint8 map_type, unsigned long map_id,
   int saved_errno = errno;
 
 #ifndef OO_MMAP_TYPE_DSHM
-  ci_assert_equal(map_type, OO_MMAP_TYPE_NETIF);
+  ci_assert(map_type == OO_MMAP_TYPE_NETIF ||
+            map_type == OO_MMAP_TYPE_UBUF_POST);
 #endif
 
   if( ! (flags & OO_MMAP_FLAG_READONLY) )
@@ -106,6 +118,10 @@ oo_resource_op(ci_fd_t fp, ci_uint32 cmd, void* io)
   return r;
 }
 
-#endif /* __KERNEL__ */
+#else /* ! __KERNEL__ */
+
+int oo_ubuf_post_mmap(struct file *file, struct vm_area_struct *vma);
+
+#endif /* ! __KERNEL__ */
 
 #endif

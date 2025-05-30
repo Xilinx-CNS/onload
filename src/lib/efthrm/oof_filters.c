@@ -3960,8 +3960,6 @@ oof_mcast_filter_installable_hwports(struct oof_manager* fm,
 {
   unsigned hwport_mask = mf->mf_hwport_mask;
   struct oof_mcast_filter* mf2;
-  int hwport;
-  int alternate;
 
   CI_DLLIST_FOR_EACH2(struct oof_mcast_filter, mf2, mf_lp_link,
                       &lp->lp_mcast_filters)
@@ -3982,18 +3980,7 @@ oof_mcast_filter_installable_hwports(struct oof_manager* fm,
    * case anyway. In theory we could take advantage of filter move ops to do
    * this, but it would require a fair amount of rejiggery, so for now we
    * just live with this. */
-  for( hwport = 0; hwport < CI_CFG_MAX_HWPORTS; ++hwport ) {
-    if( mf->mf_filter.filter_id[hwport] >= 0 ) {
-      alternate = oo_nics[hwport].alternate_hwport;
-      if( alternate >= 0 ) {
-        /* When clearing out alternate hwports we assume we are protected by
-         * the install phase from having filters on both ports, otherwise we
-         * would end up clearing both of them from the mask. */
-        ci_assert(mf->mf_filter.filter_id[alternate] < 0);
-        hwport_mask &= ~(1u << alternate);
-      }
-    }
-  }
+  hwport_mask &= ~oo_hw_filter_hidden_ports(&mf->mf_filter, hwport_mask);
 
   return hwport_mask;
 }

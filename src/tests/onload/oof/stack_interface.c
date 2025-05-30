@@ -9,6 +9,7 @@ int tcp_helper_hwport_to_stack_id(tcp_helper_resource_t* trs, int hwport)
 {
   switch( trs->mode ) {
   case OOFT_RX_BOTH:
+  case OOFT_RX_NONE:
     return trs->stack_id;
   case OOFT_RX_LL:
     return oo_nics[hwport].oo_nic_flags & OO_NIC_LL ? trs->stack_id : -1;

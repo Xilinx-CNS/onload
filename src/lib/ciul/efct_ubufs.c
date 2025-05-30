@@ -292,6 +292,16 @@ static int efct_ubufs_init_rxq_resource(ef_vi *vi, int qid,
 }
 #endif
 
+volatile uint64_t* efct_ubufs_get_rxq_io_window(ef_vi* vi, int ix)
+{
+  return get_ubufs(vi)->q[ix].rx_post_buffer_reg;
+}
+
+void efct_ubufs_set_rxq_io_window(ef_vi* vi, int ix, volatile uint64_t* p)
+{
+  get_ubufs(vi)->q[ix].rx_post_buffer_reg = p;
+}
+
 static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
                                    unsigned n_superbufs)
 {

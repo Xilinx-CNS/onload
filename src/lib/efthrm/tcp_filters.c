@@ -420,9 +420,14 @@ static unsigned oo_hw_filter_primary_ports(unsigned hwport_mask)
   int hwport;
   unsigned primary_mask = hwport_mask;
 
-  for( hwport = 0; hwport < CI_CFG_MAX_HWPORTS; ++hwport )
-    if( oo_nics[hwport].oo_nic_flags & OO_NIC_FALLBACK )
+  for( hwport = 0; hwport < CI_CFG_MAX_HWPORTS; ++hwport ) {
+    struct oo_nic *nic = &oo_nics[hwport];
+    if( (hwport_mask & (1u << hwport)) &&
+        (nic->oo_nic_flags & OO_NIC_FALLBACK) &&
+        (nic->alternate_hwport >= 0) &&
+        (hwport_mask & (1u << nic->alternate_hwport)) )
       primary_mask &= ~(1u << hwport);
+  }
 
   return primary_mask;
 }
@@ -522,6 +527,33 @@ int oo_hw_filter_set(struct oo_hw_filter* oofilter,
 }
 
 
+/* Returns subset of hwports in mask that are hidden by existing filters */
+unsigned oo_hw_filter_hidden_ports(const struct oo_hw_filter* filter,
+                                   unsigned mask)
+{
+  int hwport;
+  int alternate;
+  unsigned hidden = 0;
+
+  for( hwport = 0; hwport < CI_CFG_MAX_HWPORTS; ++hwport ) {
+    /* Not using this port */
+    if( !(mask & (1ull << hwport)) )
+      continue;
+
+    alternate = oo_nics[hwport].alternate_hwport;
+    if( (alternate >= 0) && (filter->filter_id[alternate] >= 0) ) {
+      /* When clearing out alternate hwports we assume we are protected by
+       * the install phase from having filters on both ports, otherwise we
+       * would end up clearing both of them from the mask. */
+      ci_assert(filter->filter_id[hwport] < 0);
+      hidden |= 1ull << hwport;
+    }
+  }
+
+  return hidden;
+}
+
+
 int oo_hw_filter_update(struct oo_hw_filter* oofilter,
                         struct tcp_helper_resource_s* new_stack,
                         const struct oo_hw_filter_spec* oo_filter_spec,
@@ -591,6 +623,10 @@ int oo_hw_filter_update(struct oo_hw_filter* oofilter,
         redirect_hwports |= 1 << hwport;
       }
     }
+
+  /* Don't try adding filters for ports that already have a filter on an
+   * alternate port. */
+  add_hwports &= ~oo_hw_filter_hidden_ports(oofilter, add_hwports);
 
   /* Insert new filters for any other interfaces in hwport_mask. */
   oofilter->trs = new_stack;
