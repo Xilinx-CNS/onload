@@ -668,10 +668,10 @@ int parse_interface_with_flags(const char* s, int* ifindex_out,
   for( ; flags; flags = strchr(flags, ',') ) {
     flags++;
     if( flag_token_eq(FLAG_DP_LLCT, flags, strlen(FLAG_DP_LLCT)) ) {
-      *pd_flags_out |= EF_PD_LLCT;
+      *pd_flags_out |= EF_PD_EXPRESS;
       requested_llct = true;
     } else if( flag_token_eq(FLAG_DP_FF, flags, strlen(FLAG_DP_FF)) ) {
-      *pd_flags_out &= ~EF_PD_LLCT;
+      *pd_flags_out &= ~EF_PD_EXPRESS;
       requested_llct = false;
     } else if( flag_token_eq(FLAG_PHYS_MODE, flags, strlen(FLAG_PHYS_MODE)) ) {
       *pd_flags_out |= EF_PD_PHYS_MODE;
@@ -685,7 +685,7 @@ int parse_interface_with_flags(const char* s, int* ifindex_out,
   rc = ef_vi_capabilities_get(driver_handle, *ifindex_out,
                               EF_VI_CAP_EXTRA_DATAPATHS, &cap);
   if( rc != 0 || ! ( cap & EF_VI_EXTRA_DATAPATH_EXPRESS ) ) {
-    *pd_flags_out &= ~EF_PD_LLCT;
+    *pd_flags_out &= ~EF_PD_EXPRESS;
     if( requested_llct )
       fprintf(stderr,
               "WARNING: interface %s is not multi-arch, ignoring llct flag\n",

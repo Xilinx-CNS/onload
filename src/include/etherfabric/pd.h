@@ -44,8 +44,8 @@ enum ef_pd_flags {
   /** Bypass the /proc/driver/sfc_resource/.../enable blacklist feature.
    * Required CAP_NET_ADMIN */
   EF_PD_IGNORE_BLACKLIST = 0x40,
-  /** Protection domain supports low latency cut through interface */
-  EF_PD_LLCT            = 0x80,
+  /** Protection domain supports express datapath interface */
+  EF_PD_EXPRESS          = 0x80,
 };
 
 

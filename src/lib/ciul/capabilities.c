@@ -119,7 +119,7 @@ int ef_vi_capabilities_get_from_pd_flags(ef_driver_handle handle,
 {
   pd_flags = ef_pd_flags_from_env(pd_flags, handle, ifindex);
 
-  if( pd_flags & EF_PD_LLCT )
+  if( pd_flags & EF_PD_EXPRESS )
     cap |= EF_VI_CAP_F_LLCT;
 
   return __ef_vi_capabilities_get(handle, ifindex, -1, -1, cap, value);

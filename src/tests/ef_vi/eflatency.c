@@ -109,8 +109,8 @@ enum mode {
 };
 static unsigned         cfg_mode = MODE_DEFAULT;
 static enum ef_vi_flags cfg_vi_flags = 0;
-static enum ef_pd_flags cfg_rx_pd_flags = EF_PD_LLCT;
-static enum ef_pd_flags cfg_tx_pd_flags = EF_PD_LLCT;
+static enum ef_pd_flags cfg_rx_pd_flags = EF_PD_EXPRESS;
+static enum ef_pd_flags cfg_tx_pd_flags = EF_PD_EXPRESS;
 
 
 #define N_RX_BUFS       (1 << 8)

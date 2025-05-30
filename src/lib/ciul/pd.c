@@ -47,8 +47,8 @@ static enum ef_pd_flags __ef_pd_flags_from_env(enum ef_pd_flags flags)
             flags = 0;
         else if( __ef_tok_eq(s, tok_end - s, "mcast_loop") )
             new_flags |= EF_PD_MCAST_LOOP;
-        else if( __ef_tok_eq(s, tok_end - s, "llct") )
-            new_flags |= EF_PD_LLCT;
+        else if( __ef_tok_eq(s, tok_end - s, "express") )
+            new_flags |= EF_PD_EXPRESS;
         s = tok_end + 1;
     } while( *tok_end != '\0' );
 
@@ -68,7 +68,7 @@ static enum ef_pd_flags ef_pd_extra_flags_for_compat(ef_driver_handle pd_dh,
                                       EF_VI_CAP_EXTRA_DATAPATHS,
                                       &capability_val);
     if( rc == 0 && (capability_val & EF_VI_EXTRA_DATAPATH_EXPRESS) )
-      return EF_PD_LLCT;
+      return EF_PD_EXPRESS;
   }
   return 0;
 }
@@ -114,7 +114,7 @@ static int __ef_pd_alloc(ef_pd* pd, ef_driver_handle pd_dh,
     ra.u.pd.in_flags |= EFCH_PD_FLAG_RX_PACKED_STREAM;
   if( flags & EF_PD_IGNORE_BLACKLIST )
     ra.u.pd.in_flags |= EFCH_PD_FLAG_IGNORE_BLACKLIST;
-  if( flags & EF_PD_LLCT )
+  if( flags & EF_PD_EXPRESS )
     ra.u.pd.in_flags |= EFCH_PD_FLAG_LLCT;
   ra.u.pd.in_vlan_id = vlan_id;
 
