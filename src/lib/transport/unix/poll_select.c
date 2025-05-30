@@ -149,6 +149,36 @@ static inline int do_sys_select(const char* why, int nfds,
 }
 #endif
 
+#define ci_count_trailing_zeros(x) __builtin_ctzll(x)
+
+/*
+ * get next fd bit.
+ * /
+
+static inline ci_fd_mask ci_bitmap_next_set(ci_fd_mask *ai, ci_fd_mask i, int nwords)
+{
+  ci_fd_mask i0 = i / CI_NFDBITS;
+  ci_fd_mask i1 = i % CI_NFDBITS;
+  ci_fd_mask t;
+
+  if (i0 < nwords) {
+    t = (ai[i0] >> i1) << i1;
+
+    if (t) {
+      return ci_count_trailing_zeros(t) + i0 * CI_NFDBITS;
+    }
+
+    for (i0++; i0 < nwords; i0++) {
+      t = ai[i0];
+      if (t) {
+        return ci_count_trailing_zeros(t) + i0 * CI_NFDBITS;
+      }
+    }
+  }
+
+  return ~0;
+}
+
 /*
 ** Performs a select for user level entries in the fdset
 ** Input fdsets are {rd,wr,ex}in
@@ -158,6 +188,7 @@ static inline int do_sys_select(const char* why, int nfds,
 ci_inline int citp_ul_select(struct oo_ul_select_state*__restrict__ s)
 {
   int r, w, e, fd, n = 0;
+  int n_words, i, fd_min = -1;
 
 #if CI_CFG_SPIN_STATS
   s->stat_incremented = 0;
@@ -169,8 +200,26 @@ ci_inline int citp_ul_select(struct oo_ul_select_state*__restrict__ s)
     CITP_FDTABLE_LOCK_RD();
 
   s->is_kernel_fd = 0;
+  n_words = (s->nfds_inited + CI_NFDBITS - 1) / CI_NFDBITS;
+  ci_fd_mask union_fds[n_words];
+  ci_fd_mask *rdm = (ci_fd_mask*)s->rdi;
+  ci_fd_mask *wrm = (ci_fd_mask*)s->wri;
+  ci_fd_mask *exm = (ci_fd_mask*)s->exi;
+  ci_fd_mask rdvalue, wrvalue, exvalue;
 
-  for( fd = 0; fd < s->nfds_inited; ++fd ) {
+  for( i = 0; i < n_words; i++ ) {
+    rdvalue = rdm ? rdm[i] : 0;
+    wrvalue = wrm ? wrm[i] : 0;
+    exvalue = exm ? exm[i] : 0;
+
+    union_fds[i] = rdvalue | wrvalue | exvalue;
+    if (union_fds[i] != 0 && fd_min == -1) {
+      fd_min = i * CI_NFDBITS + ci_count_trailing_zeros(union_fds[i]);
+    }
+  }
+
+  for( fd = fd_min; fd < s->nfds_inited && fd != ~0;
+       fd = ci_bitmap_next_set( union_fds, fd + 1, n_words ) ) {
     r = FD_ISSET(fd, s->rdi);
     w = FD_ISSET(fd, s->wri);
     e = FD_ISSET(fd, s->exi);
