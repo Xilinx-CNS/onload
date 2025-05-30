@@ -392,7 +392,7 @@ int efch_capabilities_op(struct efch_capabilities_in* in,
     } else {
       efrm_client_put(llct_client);
       out->support_rc = 0;
-      out->val |= EF_VI_EXTRA_DATAPATH_LLCT;
+      out->val |= EF_VI_EXTRA_DATAPATH_EXPRESS;
     }
 
     rc = out->support_rc;

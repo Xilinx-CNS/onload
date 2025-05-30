@@ -67,7 +67,7 @@ static enum ef_pd_flags ef_pd_extra_flags_for_compat(ef_driver_handle pd_dh,
     int rc = __ef_vi_capabilities_get(pd_dh, ifindex, -1, -1,
                                       EF_VI_CAP_EXTRA_DATAPATHS,
                                       &capability_val);
-    if( rc == 0 && (capability_val & EF_VI_EXTRA_DATAPATH_LLCT) )
+    if( rc == 0 && (capability_val & EF_VI_EXTRA_DATAPATH_EXPRESS) )
       return EF_PD_LLCT;
   }
   return 0;

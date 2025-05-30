@@ -684,7 +684,7 @@ int parse_interface_with_flags(const char* s, int* ifindex_out,
 
   rc = ef_vi_capabilities_get(driver_handle, *ifindex_out,
                               EF_VI_CAP_EXTRA_DATAPATHS, &cap);
-  if( rc != 0 || ! ( cap & EF_VI_EXTRA_DATAPATH_LLCT ) ) {
+  if( rc != 0 || ! ( cap & EF_VI_EXTRA_DATAPATH_EXPRESS ) ) {
     *pd_flags_out &= ~EF_PD_LLCT;
     if( requested_llct )
       fprintf(stderr,
