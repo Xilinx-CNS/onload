@@ -251,6 +251,8 @@ ci_inline int citp_ul_select(struct oo_ul_select_state*__restrict__ s)
     }
   }
 
+  fd = s->nfds_inited - 1;
+	
   if( citp_fdtable_not_mt_safe() )
     CITP_FDTABLE_UNLOCK_RD();
 
