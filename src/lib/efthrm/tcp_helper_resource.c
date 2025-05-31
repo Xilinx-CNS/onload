@@ -6629,13 +6629,19 @@ static int tcp_helper_wakeup(tcp_helper_resource_t* trs, int intf_i, int budget)
 {
   ci_netif* ni = &trs->netif;
   int n = 0, prime_async;
+  bool primed;
 
   TCP_HELPER_RESOURCE_ASSERT_VALID(trs, -1);
   OO_DEBUG_RES(ci_log(FN_FMT, FN_PRI_ARGS(ni)));
   CITP_STATS_NETIF_INC(ni, interrupts);
 
   /* Must clear this before the poll rather than waiting till later */
-  ci_bit_clear(&ni->state->evq_primed, intf_i);
+  primed = ci_bit_test_and_clear(&ni->state->evq_primed, intf_i);
+
+  /* Do not handle events if we were not primed. */
+  if (!primed) {
+    return 0;
+  }
 
   if( budget <= 0 ) {
     defer_poll_and_prime(trs);
