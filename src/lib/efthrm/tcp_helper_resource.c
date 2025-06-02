@@ -955,6 +955,7 @@ void tcp_helper_get_filter_params(tcp_helper_resource_t* trs, int hwport,
 {
   int intf_i;
   struct efrm_pd *pd;
+  struct efhw_nic* nic;
 
   ci_assert_lt((unsigned) hwport, CI_CFG_MAX_HWPORTS);
 
@@ -970,9 +971,11 @@ void tcp_helper_get_filter_params(tcp_helper_resource_t* trs, int hwport,
 
   if( (intf_i = trs->netif.hwport_to_intf_i[hwport]) >= 0 ) {
     ef_vi* vi = &trs->netif.nic_hw[intf_i].vi;
+    nic = efrm_client_get_nic(trs->nic[intf_i].thn_oo_nic->efrm_client);
     *vi_id = EFAB_VI_RESOURCE_INSTANCE(tcp_helper_vi(trs, intf_i));
     pd = efrm_vi_get_pd(tcp_helper_vi(trs, intf_i));
-    if( NI_OPTS_TRS(trs).llct_test_shrub )
+    if( NI_OPTS_TRS(trs).llct_test_shrub ||
+        (nic->flags & NIC_FLAG_RX_KERNEL_SHARED) )
       *exclusive_rxq_token = efrm_pd_shared_rxq_token_get(pd);
     else
       *exclusive_rxq_token = efrm_pd_exclusive_rxq_token_get(pd);
