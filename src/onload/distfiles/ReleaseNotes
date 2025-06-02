@@ -29,13 +29,50 @@ New ef_receive_poll() API call
 
 In this release, the ef_vi API gains a facility to poll for receives
 separately from transmissions, for potential latency improvements in some
-situations.
+situations. API usage of ef_receive_poll() is identical to that of
+ef_eventq_poll() although usage should be gated by a check for support by
+the capabilities API (EF_VI_CAP_RX_POLL), for example:
+
+    rc = ef_vi_capabilities_get(driver_handle, ifindex, EF_VI_CAP_RX_POLL,
+                                &can_rx_poll);
+
+    if( rc == 0 && can_rx_poll )
+      num_events = ef_receive_poll(vi, events, max_events);
+    else
+      num_events = ef_eventq_poll(vi, events, max_events);
+
+    for( i = 0; i < num_events; i++ ) {
+      switch( EF_EVENT_TYPE(events[i]) ) {
+        /* handle rx events */
+      }
+    }
+
+See also the source code for eflatency which uses this feature.
 
 
 SDCI
 ----
 
-Support for SDCI is available when compiled in.
+Smart Data Cache Injection (SDCI) support has been added to allow steering of
+network packets directly to a core's L2 cache. Currently, SDCI is limited to
+X2 NICs and must be configured as documented below. The steering tag used is
+such that the data is steered to the core complex that the VI is created on.
+
+To use this feature with onload, the EF_TPH_MODE environment variable should be
+used, which has the following valid values:
+- Disable SDCI (default)           : EF_TPH_MODE=0
+- Enable SDCI without steering tags: EF_TPH_MODE=1
+- Enable SDCI with steering tags   : EF_TPH_MODE=2
+
+To use this feature with ef_vi, one can provide the following VI flags at VI
+allocation time:
+- Enable SDCI without steering tags: EF_VI_ENABLE_TPH
+- Enable SDCI with steering tags   : (EF_VI_ENABLE_TPH | EF_VI_TPH_TAG_MODE)
+
+A more coarse-grained solution also exists at the application level, which will
+apply to all VIs, using the EF_VI_EXTRA_VI_FLAGS environment variable:
+- Enable SDCI without steering tags: EF_VI_EXTRA_VI_FLAGS=tph_enable
+- Enable SDCI with steering tags   : EF_VI_EXTRA_VI_FLAGS=tph_enable,tph_mode
 
 
 X4 Functionality
