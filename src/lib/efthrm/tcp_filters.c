@@ -276,7 +276,11 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
          *  * does not know about our filter, let's better
          *    remove reference to it and try to add new instance
          *  * does not support move the move operation - we cannot leak the filter
+         *
+         * As a precaution, remove the filter, because some netdevs refuse to
+         * re-insert a duplicate filter.
          */
+        efrm_filter_remove(get_client(hwport), oofilter->filter_id[hwport]);
         oofilter->filter_id[hwport] = rc;
       }
       else {
