@@ -357,16 +357,29 @@ builddir=build/packages
 mkdir -p "$builddir" 2>/dev/null && builddir=$(realpath "$builddir" 2>/dev/null) || \
   builddir="$(mktemp -d --suffix=.onload)"
 
-read -r -a mkdist_args <<< "$mkdist_args"
-read -r -a rpmbuild_args <<< "$rpmbuild_args"
-read -r -a rpmbuild_source_args <<< "$rpmbuild_source_args"
-read -r -a rpmbuild_binary_args <<< "$rpmbuild_binary_args"
-read -r -a mock_args <<< "$mock_args"
-read -r -a mock_source_args <<< "$mock_source_args"
-read -r -a mock_binary_args <<< "$mock_binary_args"
-read -r -a devscripts_build_profiles <<< "$devscripts_build_profiles"
-read -r -a debuild_args <<< "$debuild_args"
-read -r -a dpkg_buildpackage_args <<< "$dpkg_buildpackage_args"
+read_args() {
+  if [ -z "${!1}" ]; then
+    declare -a "$1"
+  else
+    declare -n ref="$1"
+    declare -a output
+    while IFS='' read -r item
+      do output+=("$item")
+    done < <(xargs -n1 <<<"${!1}")
+    # shellcheck disable=SC2034 # recommended by shellcheck
+    ref=("${output[@]}")
+  fi
+}
+read_args mkdist_args
+read_args rpmbuild_args
+read_args rpmbuild_source_args
+read_args rpmbuild_binary_args
+read_args mock_args
+read_args mock_source_args
+read_args mock_binary_args
+read_args devscripts_build_profiles
+read_args debuild_args
+read_args dpkg_buildpackage_args
 
 usage() {
   err
