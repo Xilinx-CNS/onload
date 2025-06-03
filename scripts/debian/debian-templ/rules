@@ -44,6 +44,7 @@ userpackage:=#TYPE#-user
 pdkms:=#TYPE#-dkms
 
 develpackage:=#TYPE#-dev
+examplespackage:=#TYPE#-examples
 get_build_config = $(patsubst pkg.$(sname).%,%,\
                      $(filter pkg.$(sname).$(1),$(DEB_BUILD_PROFILES)))
 
@@ -239,6 +240,11 @@ ifneq (,$(filter #TYPE#-dev,$(DOPACKAGES)))
 	dh_installdirs -p$(develpackage) usr/include/
 	i_prefix=$(CURDIR)/debian/$(develpackage) scripts/onload_install \
 		--verbose --packaged --headers --nobaseheaders
+endif
+ifneq (,$(filter #TYPE#-examples,$(DOPACKAGES)))
+	dh_installdirs -p$(examplespackage) usr/share/doc/onload/examples
+	i_prefix=$(CURDIR)/debian/$(examplespackage) scripts/onload_install \
+		--verbose --packaged --examples
 endif
 	dh_builddeb -i
 

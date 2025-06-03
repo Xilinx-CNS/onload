@@ -9,7 +9,7 @@ Homepage: http://www.openonload.org
 Package: #TYPE#-user
 Architecture: any
 Depends: adduser, psmisc, ${shlibs:Depends}, ${misc:Depends}, python3
-Suggests: #TYPE#-modules (>= ${source:Version}), #TYPE#-dev
+Suggests: #TYPE#-modules (>= ${source:Version}), #TYPE#-dev, #TYPE#-examples
 Provides: onload-user
 Description: Onload TCP/IP stack - library
 Build-Profiles: <!pkg.#TYPE#.nouser>
@@ -37,3 +37,10 @@ Description: Onload development headers
 Enhances: #TYPE#-user
 Provides: onload-dev
 Build-Profiles: <!pkg.#TYPE#.nodev>
+
+Package: #TYPE#-examples
+Architecture: all
+Description: Onload and EF_VI sample applications
+Enhances: #TYPE#-user
+Provides: onload-examples
+Build-Profiles: <!pkg.#TYPE#.noexamples>
