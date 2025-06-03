@@ -24,6 +24,16 @@ Linux distribution support
  - Linux kernels 5.11 - 6.14
 
 
+Packaging changes
+-----------------
+
+Source code examples showcasing how to build applications to use certain
+features of Onload and ef_vi are now included in a new optional subpackage
+called 'onload-examples'. The examples were previously available in Onload
+tarball source release packages and could be extracted from RPM and Debian
+source packages.
+
+
 New ef_receive_poll() API call
 ------------------------------
 
