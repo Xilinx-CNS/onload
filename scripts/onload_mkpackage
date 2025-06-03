@@ -107,6 +107,7 @@ build_spec() {
   ! ${with_user:-$with_all} && sed_args+=(-e "/bcond_without user/ {s/without/with/; s/skip/include/}")
   ! ${with_kmod:-$with_all} && sed_args+=(-e "/bcond_without kmod/ {s/without/with/; s/skip/include/}")
   ! ${with_devel:-$with_all} && sed_args+=(-e "/bcond_without devel/ {s/without/with/; s/skip/include/}")
+  ! ${with_examples:-$with_all} && sed_args+=(-e "/bcond_without examples/ {s/without/with/; s/skip/include/}")
   ! ${with_akmod:-$with_all} && sed_args+=(-e "/bcond_without akmod/ {s/without/with/; s/skip/include/}")
   ! ${with_dkms:-$with_all} && sed_args+=(-e "/bcond_without dkms/ {s/without/with/; s/skip/include/}")
   ${with_debuginfo:-$with_all} && sed_args+=(-e "/bcond_with debuginfo/ {s/with/without/; s/include/skip/}")
@@ -329,6 +330,7 @@ with_all=true
 with_user=
 with_kmod=
 with_devel=
+with_examples=
 with_akmod=
 with_dkms=
 with_debuginfo=
@@ -380,6 +382,7 @@ usage() {
   err "Package options (defaults aligned to package specs):"
   err "  -u, --user                       With only user-space package"
   err "  -e, --devel                      With only headers package"
+  err "      --examples                   With only examples package"
   err "  -k, --kmod                       With only KMOD (DEB -source) package"
   err "  -a, --akmod                      With only AKMOD RPM package"
   err "  -d, --dkms                       With only DKMS package"
@@ -435,6 +438,7 @@ while [ $# -gt 0 ]; do
     # Package options
     -u|--user) with_all=false; with_user=true;;
     -e|--devel) with_all=false; with_devel=true;;
+    --examples) with_all=false; with_examples=true;;
     -k|--kmod) with_all=false; with_kmod=true;;
     -a|--akmod) with_all=false; with_akmod=true;;
     -d|--dkms) with_all=false; with_dkms=true;;
@@ -500,6 +504,7 @@ esac
 ! ${with_user:-$with_all} && rpmbuild_args+=(--without user) && mock_args+=(--without user) && build_profiles_short+=(nouser)
 ! ${with_kmod:-$with_all} && rpmbuild_args+=(--without kmod) && mock_args+=(--without kmod) && build_profiles_short+=(nosource)
 ! ${with_devel:-$with_all} && rpmbuild_args+=(--without devel) && mock_args+=(--without devel) && build_profiles_short+=(nodev)
+! ${with_examples:-$with_all} && rpmbuild_args+=(--without examples) && mock_args+=(--without examples) && build_profiles_short+=(noexamples)
 ! ${with_akmod:-$with_all} && rpmbuild_args+=(--without akmod) && mock_args+=(--without akmod)
 ! ${with_dkms:-$with_all} && rpmbuild_args+=(--without dkms) && mock_args+=(--without dkms) && build_profiles_short+=(nodkms)
 ${with_debuginfo:-$with_all} && rpmbuild_args+=(--with debuginfo) && mock_args+=(--with debuginfo)
