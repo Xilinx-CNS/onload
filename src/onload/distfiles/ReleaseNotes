@@ -1,7 +1,7 @@
 This is not a supported release version of Onload
 =================================================
 
-Onload-9.1~preview1
+Onload-9.1~preview2
 ===================
 
  This is a feature preview of Onload including a new version of the
@@ -97,23 +97,27 @@ this preview release.
 - Filter handling when interfaces change state does not operate correctly
 - Multicast replication between the Express and Enterprise datapath is not
   supported. To use multicast replication onload must be forced to use only
-  the Enterprise datapath with EF_MULTIARCH_RX_DATAPATH=ff. Note that when
+  the Enterprise datapath with EF_RX_DATAPATH=enterprise. Note that when
   this option is set unicast traffic will also be using the Enterprise
   datapath.
+- Filter redirection is not supported, which may lead to unexpected behaviour
+  in scenerios where port numbers are reused.
 
 X4 Datapath Restrictions
 ------------------------
 
 - The Wire Order API (WODA) is only guaranteed to operate correctly where
-  only the Enterprise RX path is selected (EF_MULTIARCH_RX_DATAPATH=ff)
+  only the Enterprise RX path is selected (EF_RX_DATAPATH=enterprise)
 - Application clustering (SO_REUSEPORT/EF_CLUSTER_SIZE) is only supported with
-  EF_MULTIARCH_RX_DATAPATH=ff
+  EF_RX_DATAPATH=enterprise
 
 X4 Known Bugs
 -------------
 
 - Onload TX event processing can become starved, leading to EVQ overflow,
   manifesting as an assertion failure or kernel panic in efct_poll_tx()
+- Certain stack tear down scenerios can fail with a backtrace indicating
+  problems with queue flush.
 
 
 ef_vi Compatibility
