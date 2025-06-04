@@ -20,6 +20,13 @@ Linux distribution support
  - Linux kernels 5.11 - 6.14
 
 
+X3522 driver
+------------
+
+The minimum compatible X3522 driver version to match the Onload supported OS
+list is v1.6.8.0.
+
+
 New ef_receive_poll() API call
 ------------------------------
 
