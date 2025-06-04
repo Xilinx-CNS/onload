@@ -155,7 +155,7 @@ static inline int do_sys_select(const char* why, int nfds,
  * get next fd bit.
  * /
 
-static inline ci_fd_mask ci_bitmap_next_set(ci_fd_mask *ai, ci_fd_mask i, int nwords)
+ci_inline ci_fd_mask ci_bitmap_next_set(ci_fd_mask *ai, ci_fd_mask i, int nwords)
 {
   ci_fd_mask i0 = i / CI_NFDBITS;
   ci_fd_mask i1 = i % CI_NFDBITS;
