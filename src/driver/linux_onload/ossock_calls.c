@@ -83,6 +83,7 @@ oo_fd_replace_file(struct file* old_filp, struct file* new_filp,
 {
   struct file* tmp_filp = NULL;
 
+  rcu_read_lock();
   task_lock(current);
   if( atomic_read(&current->files->count) != 1 ) {
     /* This is a multithreaded application, and someone can be already
@@ -96,7 +97,6 @@ oo_fd_replace_file(struct file* old_filp, struct file* new_filp,
     unsigned flags;
 
     task_unlock(current);
-    rcu_read_lock(); /* for files_fdtable() */
     flags = efrm_close_on_exec(old_fd, current->files) ? O_CLOEXEC : 0;
     rcu_read_unlock();
     new_fd = get_unused_fd_flags(flags);
@@ -117,6 +117,7 @@ oo_fd_replace_file(struct file* old_filp, struct file* new_filp,
     if( tmp_filp )
       fput(tmp_filp);
     task_unlock(current);
+    rcu_read_unlock();
     return -EINVAL;
   }
 
@@ -125,6 +126,7 @@ oo_fd_replace_file(struct file* old_filp, struct file* new_filp,
   get_file(new_filp);
   rcu_assign_pointer(files_fdtable(current->files)->fd[old_fd], new_filp);
   task_unlock(current);
+  rcu_read_unlock();
 
   /* No synchronize_rcu() is needed here.  See do_dup2() for an example,
    * and file_free() for the reason. */
