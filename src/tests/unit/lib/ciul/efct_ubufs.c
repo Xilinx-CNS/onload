@@ -61,19 +61,15 @@ int ef_memreg_alloc_flags(ef_memreg* mr, ef_driver_handle mr_dh,
                           struct ef_pd* pd, ef_driver_handle pd_dh,
                           void* p_mem, size_t len_bytes, unsigned flags)
 {
+  mr->mr_dma_addrs_base = mr->mr_dma_addrs =
+    calloc(len_bytes >> EFHW_NIC_PAGE_SHIFT, sizeof(ef_addr));
+  /* TODO populate and check usage */
   return 0;
-}
-
-int ef_memreg_alloc(ef_memreg* mr, ef_driver_handle mr_dh,
-                    struct ef_pd* pd, ef_driver_handle pd_dh,
-                    void* p_mem, size_t len_bytes)
-{
-  return ef_memreg_alloc_flags(mr, mr_dh, pd, pd_dh, p_mem, len_bytes,
-                               ef_pd_mr_flags(pd));
 }
 
 int ef_memreg_free(ef_memreg* mr, ef_driver_handle mr_dh)
 {
+  free(mr->mr_dma_addrs_base);
   return 0;
 }
 

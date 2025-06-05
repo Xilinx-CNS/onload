@@ -151,6 +151,8 @@ struct efct_rx_descriptor
   uint8_t  sentinel;
   uint8_t  final_ts_status;
   uint64_t final_timestamp;
+  ef_addr  dma_addr;
+  char     padding[8]; /* size needs to be a power of two */
 };
 
 #define EFCT_TX_DESCRIPTOR_BYTES sizeof(struct efct_tx_descriptor)

@@ -22,13 +22,6 @@
 struct efct_ubufs_rxq
 {
   struct ef_shrub_client shrub_client;
-
-  /* Buffer memory region */
-  ef_memreg memreg;
-
-  /* shared queue resource */
-  unsigned resource_id;
-
   volatile uint64_t *rx_post_buffer_reg;
 };
 
@@ -236,9 +229,7 @@ static bool efct_ubufs_available(const ef_vi* vi, int ix)
 #ifndef __KERNEL__
 static void efct_ubufs_post_direct(ef_vi* vi, int ix, int sbid, bool sentinel)
 {
-  ef_addr addr = ef_memreg_dma_addr(&get_ubufs(vi)->q[ix].memreg,
-                                    sbid * EFCT_RX_SUPERBUF_BYTES);
-  struct efct_ubufs_rxq *rxq = &get_ubufs(vi)->q[ix];
+  ef_addr addr = efct_rx_desc_for_sb(vi, ix, sbid)->dma_addr;
 
   ci_qword_t qword;
   CI_POPULATE_QWORD_3(qword,
@@ -246,13 +237,12 @@ static void efct_ubufs_post_direct(ef_vi* vi, int ix, int sbid, bool sentinel)
                       EFCT_RX_BUFFER_POST_SENTINEL, sentinel,
                       EFCT_RX_BUFFER_POST_ROLLOVER, 0); // TBD support for rollover?
 
-  *rxq->rx_post_buffer_reg = qword.u64[0];
+  *get_ubufs(vi)->q[ix].rx_post_buffer_reg = qword.u64[0];
 }
 
 static void efct_ubufs_post_kernel(ef_vi* vi, int ix, int sbid, bool sentinel)
 {
-  ef_addr addr = ef_memreg_dma_addr(&get_ubufs(vi)->q[ix].memreg,
-                                    sbid * EFCT_RX_SUPERBUF_BYTES);
+  ef_addr addr = efct_rx_desc_for_sb(vi, ix, sbid)->dma_addr;
 
   ci_resource_op_t op = {};
 
@@ -310,11 +300,13 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
   BUG();
   return -EOPNOTSUPP;
 #else
-  int ix, rc;
+  int ix, rc, sb;
   void* map;
   size_t map_bytes;
   struct efct_ubufs* ubufs = get_ubufs(vi);
   struct efct_ubufs_rxq* rxq;
+  ef_memreg memreg;
+  unsigned resource_id;
 
   int flags = (fd < 0 ? MAP_PRIVATE | MAP_ANONYMOUS : MAP_SHARED);
 
@@ -331,7 +323,7 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
     LOGVV(ef_log("%s: efct_ubufs_init_rxq_resource rxq %d", __FUNCTION__, rc));
     return rc;
   }
-  rxq->resource_id = rc;
+  resource_id = rc;
   /* FIXME SCJ cleanup on failure */
 
   map_bytes = CI_ROUND_UP((size_t)n_superbufs * EFCT_RX_SUPERBUF_BYTES,
@@ -348,7 +340,7 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
     return -ENOMEM;
   }
 
-  rc = ef_memreg_alloc_flags(&rxq->memreg, vi->dh, ubufs->pd, ubufs->pd_dh,
+  rc = ef_memreg_alloc_flags(&memreg, vi->dh, ubufs->pd, ubufs->pd_dh,
                              map, map_bytes, 0);
   if( rc < 0 ) {
     munmap(map, map_bytes);
@@ -357,10 +349,16 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
     return rc;
   }
 
+  for( sb = 0; sb < n_superbufs; ++sb )
+    efct_rx_desc_for_sb(vi, ix, sb)->dma_addr =
+      ef_memreg_dma_addr(&memreg, sb * EFCT_RX_SUPERBUF_BYTES);
+
+  ef_memreg_free(&memreg, vi->dh);
+
   if( vi->vi_flags & EF_VI_RX_PHYS_ADDR ) {
     void *p;
 
-    rc = ci_resource_mmap(vi->dh, rxq->resource_id, EFCH_VI_MMAP_RX_BUFFER_POST,
+    rc = ci_resource_mmap(vi->dh, resource_id, EFCH_VI_MMAP_RX_BUFFER_POST,
                           CI_ROUND_UP(sizeof(uint64_t), CI_PAGE_SIZE),
                           &p);
     if( rc < 0 ) {
@@ -412,7 +410,6 @@ static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd,
     LOGVV(ef_log("%s: efct_ubufs_init_rxq_resource rxq %d", __FUNCTION__, rc));
     return rc;
   }
-  get_ubufs(vi)->q[ix].resource_id = rc;
   /* FIXME SCJ cleanup on failure */
 
   return efct_ubufs_shared_attach_internal(vi, ix, qid,
@@ -550,7 +547,6 @@ static void efct_ubufs_cleanup(ef_vi* vi)
     if( ! rxq_is_local(vi, i) )
       ef_shrub_client_close(&rxq->shrub_client);
 #ifndef __KERNEL__
-    ef_memreg_free(&rxq->memreg, vi->dh);
     ci_resource_munmap(vi->dh, (void *)rxq->rx_post_buffer_reg,
                        CI_ROUND_UP(sizeof(uint64_t), CI_PAGE_SIZE));
 #endif

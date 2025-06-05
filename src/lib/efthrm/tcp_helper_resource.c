@@ -1101,15 +1101,26 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
       }
     }
     else if( vi->nic_type.arch == EF_VI_ARCH_EF10CT ) {
+      int pg, sb, superbufs = hugepages * CI_EFCT_SUPERBUFS_PER_PAGE;
+      const int pg_per_sb = EFCT_RX_SUPERBUF_BYTES / EFHW_NIC_PAGE_SIZE;
+      ef_addr* dma_addrs;
+
       efrm_rxq_refresh_kernel(vi->dh, rxq, vi->efct_rxqs.q[qix].superbufs);
       rc = tcp_helper_rxq_map(trs, intf_i, qix, hugepages,
                               vi->efct_rxqs.q[qix].superbufs,
-                              &vi->efct_rxqs.q[qix].dma_addrs);
-      /* FIXME EF10CT sort out the error path here */
-      if( rc != 0 )
+                              &dma_addrs);
+      if( rc < 0 ) {
         ci_log("%s: ERROR: tcp_helper_rxq_map failed (%d)", __func__, rc);
-      vi->owner_id = ni_nic->pd_owner;
-      efct_ubufs_local_attach_internal(vi, qix, rxq, hugepages * CI_EFCT_SUPERBUFS_PER_PAGE);
+        efrm_rxq_release(trs->nic[intf_i].thn_efct_rxq[qix]);
+        return rc;
+      }
+
+      vi->efct_rxqs.ops->user_data = ni_nic->pd_owner;
+      for( sb = pg = 0; sb < superbufs; sb += 1, pg += pg_per_sb )
+        efct_rx_desc_for_sb(vi, qix, sb)->dma_addr = dma_addrs[pg];
+      kfree(dma_addrs);
+
+      efct_ubufs_local_attach_internal(vi, qix, rxq, superbufs);
     }
     else {
       efct_vi_start_rxq(vi, qix, rxq);
@@ -1718,14 +1729,16 @@ static int tcp_helper_superbuf_config_refresh(ef_vi* vi, int ix)
   return efrm_rxq_refresh_kernel(vi->dh, efct_state->qid, rxq->superbufs);
 }
 
+/* TBD might it be better to provide the post register to ef_vi, and not
+ * override the ef_vi post function? Then we wouldn't need to rummage in
+ * ef_vi to extract the address and owner. */
 static void tcp_helper_post_superbuf(ef_vi* vi, int ix, int sbid, bool sentinel)
 {
-  ef_vi_efct_rxq *rxq = &vi->efct_rxqs.q[ix];
-  ef_vi_efct_rxq_state *efct_state = efct_get_rxq_state(vi, ix);
-  resource_size_t dma_addr = rxq->dma_addrs[sbid * 256];
+  int qid = efct_get_rxq_state(vi, ix)->qid;
+  ef_addr dma_addr = efct_rx_desc_for_sb(vi, ix, sbid)->dma_addr;
+  int owner_id = vi->efct_rxqs.ops->user_data;
 
-  efhw_nic_post_superbuf(vi->dh, efct_state->qid, dma_addr, sentinel, false,
-                         vi->owner_id);
+  efhw_nic_post_superbuf(vi->dh, qid, dma_addr, sentinel, false, owner_id);
   // FIXME should we check/handle errors?
 }
 
@@ -2171,7 +2184,6 @@ static void detach_efct_rxqs(tcp_helper_resource_t* trs)
 static void release_vi(tcp_helper_resource_t* trs)
 {
   int intf_i;
-  int i;
 
   /* Flush vis first to ensure our bufs won't be used any more */
   OO_STACK_FOR_EACH_INTF_I(&trs->netif, intf_i) {
@@ -2208,11 +2220,8 @@ static void release_vi(tcp_helper_resource_t* trs)
       efrm_ctpio_unmap_kernel(tcp_helper_vi(trs, intf_i),
                               trs_nic->thn_ctpio_io_mmap);
 #endif
-    if( vi->efct_rxqs.ops ) {
+    if( vi->efct_rxqs.ops )
       vi->efct_rxqs.ops->cleanup(vi);
-      for( i = 0; i < EF_VI_MAX_EFCT_RXQS; i++ )
-        kfree(vi->efct_rxqs.q[i].dma_addrs);
-    }
     efrm_vi_resource_release_flushed(tcp_helper_vi(trs, intf_i));
     trs->nic[intf_i].thn_vi_rs = NULL;
     CI_DEBUG_ZERO(ci_netif_vi(&trs->netif, intf_i));
