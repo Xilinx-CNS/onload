@@ -641,7 +641,7 @@ int parse_interface_with_flags(const char* s, int* ifindex_out,
                                ef_driver_handle driver_handle)
 {
   char *flags, ifname[IF_NAMESIZE];
-  bool requested_llct = false;
+  bool requested_express = false;
   unsigned long cap;
   int rc;
 
@@ -662,17 +662,17 @@ int parse_interface_with_flags(const char* s, int* ifindex_out,
   if( ! parse_interface(ifname, ifindex_out) )
     return 0;
 
-#define FLAG_DP_LLCT "llct"
-#define FLAG_DP_FF "ff"
+#define FLAG_DP_EXPRESS "express"
+#define FLAG_DP_ENTERPRISE "enterprise"
 #define FLAG_PHYS_MODE "phys"
   for( ; flags; flags = strchr(flags, ',') ) {
     flags++;
-    if( flag_token_eq(FLAG_DP_LLCT, flags, strlen(FLAG_DP_LLCT)) ) {
+    if( flag_token_eq(FLAG_DP_EXPRESS, flags, strlen(FLAG_DP_EXPRESS)) ) {
       *pd_flags_out |= EF_PD_EXPRESS;
-      requested_llct = true;
-    } else if( flag_token_eq(FLAG_DP_FF, flags, strlen(FLAG_DP_FF)) ) {
+      requested_express = true;
+    } else if( flag_token_eq(FLAG_DP_ENTERPRISE, flags, strlen(FLAG_DP_ENTERPRISE)) ) {
       *pd_flags_out &= ~EF_PD_EXPRESS;
-      requested_llct = false;
+      requested_express = false;
     } else if( flag_token_eq(FLAG_PHYS_MODE, flags, strlen(FLAG_PHYS_MODE)) ) {
       *pd_flags_out |= EF_PD_PHYS_MODE;
     } else {
@@ -686,9 +686,9 @@ int parse_interface_with_flags(const char* s, int* ifindex_out,
                               EF_VI_CAP_EXTRA_DATAPATHS, &cap);
   if( rc != 0 || ! ( cap & EF_VI_EXTRA_DATAPATH_EXPRESS ) ) {
     *pd_flags_out &= ~EF_PD_EXPRESS;
-    if( requested_llct )
+    if( requested_express )
       fprintf(stderr,
-              "WARNING: interface %s is not multi-arch, ignoring llct flag\n",
+              "WARNING: interface %s is not multi-arch, ignoring express flag\n",
               ifname);
   }
 

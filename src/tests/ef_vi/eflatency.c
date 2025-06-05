@@ -828,8 +828,8 @@ static __attribute__((noreturn)) void usage(const char* fmt, ...)
   fprintf(stderr, "\npositional arguments:\n");
   fprintf(stderr, "  <interface>         - the interface to send over, may\n");
   fprintf(stderr, "                        append /<flag>[,<flag>...] for:\n");
-  fprintf(stderr, "                        * llct - request LLCT datapath\n");
-  fprintf(stderr, "                        * ff - request FF datapath\n");
+  fprintf(stderr, "                        * express - request Express datapath\n");
+  fprintf(stderr, "                        * enterprise - request Enterprise datapath\n");
   fprintf(stderr, "                        * phys - request physical addressing mode\n");
   fprintf(stderr, "\noptions:\n");
   fprintf(stderr, "  -n <iterations>     - set number of iterations\n");
