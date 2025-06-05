@@ -36,7 +36,7 @@ export CONFIG_SFC_DRIVERLINK := n
 export CONFIG_SFC_BUSYPOLL := n
 export CONFIG_SFC_EF100 := n
 export CONFIG_SFC_VDPA := n
-export CONFIG_SFC_TPH := n
+export CONFIG_SFC_TPH := y
 
 ifndef CONFIG_SFC_SIENA
 export CONFIG_SFC_SIENA :=

@@ -155,6 +155,8 @@ enum {
  * @mc_stats: Scratch buffer for converting statistics to the kernel's format
  * @stats: Hardware statistics
  * @vf_stats_work: Work item to poll hardware statistics (VF driver only)
+ * @x4_stats_mask: Netport supported statistics mask
+ * @x4_stat_desc: Netport statistics descriptions
  * @workaround_35388: Flag: firmware supports workaround for bug 35388
  * @workaround_26807: Flag: firmware supports workaround for bug 26807
  * @workaround_61265: Flag: firmware supports workaround for bug 61265

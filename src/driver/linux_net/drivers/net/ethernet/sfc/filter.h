@@ -505,7 +505,7 @@ static inline void efx_filter_set_encap_tni(struct efx_filter_spec *spec,
 }
 
 /**
- * efx_filter_set_eth_local - specify outer Ethernet address for an
+ * efx_filter_set_encap_outer_loc_mac - specify outer Ethernet address for an
  *   encapsulated filter
  * @spec: Specification to initialise
  * @addr: Local Ethernet MAC address, or %NULL

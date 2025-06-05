@@ -1743,24 +1743,27 @@ void efx_fini_probe_data(struct efx_probe_data *probe_data)
 
 static void efx_set_max_channels(struct efx_nic *efx)
 {
+	unsigned int extra_channel_type;
 	int num_channels;
+	int tx_per_ev;
 #ifdef EFX_NOT_UPSTREAM
 	struct efx_design_params *design_params;
 #endif
 
-	/* For the normal netdev we need at most 2 interrupts per CPU (each CPU
-	 * may need a separate RX and TX channel).
-	 * For XDP we could need the CPU count minus 1 again.
-	 * And we need another one for PTP.
+	/* This is a reduced copy of part of efx_allocate_msix_channels(), to
+	 * predict how many channels it will want.
+	 * XXX This is utterly horrible and we need to rewrite this properly.
 	 */
-	num_channels = num_present_cpus();
+	num_channels = efx_wanted_parallelism(efx);
 	if (separate_tx_channels)
 		num_channels *= 2;
-	if (efx->xdp_tx)
-		num_channels += num_possible_cpus() - 1;
-#ifdef CONFIG_SFC_PTP
-	num_channels++;
-#endif
+	for (extra_channel_type = 0;
+	     extra_channel_type < EFX_MAX_EXTRA_CHANNELS;
+	     extra_channel_type++)
+		if (efx->extra_channel_type[extra_channel_type])
+			num_channels++;
+	tx_per_ev = efx_max_evtq_size(efx) / EFX_TXQ_MAX_ENT(efx);
+	num_channels += DIV_ROUND_UP(num_possible_cpus(), tx_per_ev);
 
 #ifdef EFX_NOT_UPSTREAM
 	design_params = efx_llct_get_design_parameters(efx);

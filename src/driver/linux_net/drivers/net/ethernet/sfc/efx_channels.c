@@ -1831,10 +1831,10 @@ int efx_channel_stop_xsk_queue(struct efx_channel *channel)
 
 int efx_start_channels(struct efx_nic *efx)
 {
-	struct efx_channel *channel;
+	int rc, tso_v2 = 0, no_tso = 0;
 	struct efx_tx_queue *tx_queue;
 	struct efx_rx_queue *rx_queue;
-	int rc;
+	struct efx_channel *channel;
 
 	efx_for_each_channel(channel, efx) {
 		if (channel->type->start) {
@@ -1846,6 +1846,13 @@ int efx_start_channels(struct efx_nic *efx)
 			rc = efx_init_tx_queue(tx_queue);
 			if (rc)
 				return rc;
+			if (tx_queue->tso_wanted_version == 2) {
+				if (tx_queue->tso_version == 2)
+					tso_v2++;
+				else
+					no_tso++;
+			}
+
 			atomic_inc(&efx->active_queues);
 		}
 
@@ -1860,6 +1867,11 @@ int efx_start_channels(struct efx_nic *efx)
 			efx_start_eventq(channel);
 		}
 	}
+
+	if (no_tso)
+		netif_warn(efx, probe, efx->net_dev,
+			   "Requested %d TSOv2 contexts, but only %d available\n",
+			   tso_v2 + no_tso, tso_v2);
 
 	return 0;
 }

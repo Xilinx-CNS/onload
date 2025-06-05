@@ -838,7 +838,7 @@ efx_ptp_mac_nic_to_ktime_correction(struct efx_nic *efx,
 	s16 delta;
 
 	if (!(nic_major & 0x80000000)) {
-		WARN_ON_ONCE(nic_major >> 16);
+		EFX_WARN_ON_ONCE_PARANOID(nic_major >> 16);
 
 		/* Medford provides 48 bits of timestamp, so we must get the top
 	         * 16 bits from the timesync event state.
@@ -1817,7 +1817,7 @@ static void efx_ptp_xmit_skb_queue(struct efx_nic *efx, struct sk_buff *skb)
 		efx_ptp_insert_unicast_filter(efx, skb);
 		dev_consume_skb_any(skb);
 	} else {
-		WARN_ONCE(1, "PTP channel has no timestamped tx queue\n");
+		EFX_WARN_ONCE_PARANOID(1, "PTP channel has no timestamped tx queue\n");
 		dev_kfree_skb_any(skb);
 	}
 }
@@ -2179,11 +2179,14 @@ static int efx_ptp_stop(struct efx_nic *efx)
 	struct efx_ptp_data *ptp = efx->ptp_data;
 	int rc = 0;
 
-	if (ptp == NULL)
+	if (!ptp)
 		return 0;
 
 	if (efx_nic_rev(efx) < EFX_REV_X4)
 		rc = efx_ptp_disable(efx);
+
+	if (!ptp->channel)
+		return 0;
 
 	efx_ptp_remove_filters(efx, &ptp->rxfilters_mcast);
 	efx_ptp_remove_filters(efx, &ptp->rxfilters_ucast);

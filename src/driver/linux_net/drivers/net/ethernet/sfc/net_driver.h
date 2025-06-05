@@ -92,15 +92,17 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.1.0.1010"
+#define EFX_DRIVER_VERSION	"6.1.0.1011"
 #endif
 
 #ifdef DEBUG
 #define EFX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)
 #define EFX_WARN_ON_PARANOID(x) WARN_ON(x)
+#define EFX_WARN_ONCE_PARANOID(x, format...) WARN_ONCE(x, format)
 #else
-#define EFX_WARN_ON_ONCE_PARANOID(x) do {} while (0)
-#define EFX_WARN_ON_PARANOID(x) do {} while (0)
+#define EFX_WARN_ON_ONCE_PARANOID(x) ({ !!(x); })
+#define EFX_WARN_ON_PARANOID(x) ({ !!(x); })
+#define EFX_WARN_ONCE_PARANOID(x, format...) ({ !!(x); })
 #endif
 
 #if defined(EFX_NOT_UPSTREAM)
@@ -276,6 +278,7 @@ struct efx_tx_buffer {
  *	as an index in to %efx_channel->tx_queues
  * @csum_offload: Is checksum offloading enabled for this queue?
  * @tso_version: Version of TSO in use for this queue.
+ * @tso_wanted_version: Version of TSO wanted for this queue
  * @tso_encap: Is encapsulated TSO supported? Supported in TSOv2 on 8000 series.
  * @channel: The associated channel
  * @core_txq: The networking core TX queue structure
@@ -362,6 +365,7 @@ struct efx_tx_queue {
 	unsigned int label;
 	unsigned int csum_offload;
 	unsigned int tso_version;
+	unsigned int tso_wanted_version;
 	bool tso_encap;
 	struct efx_channel *channel;
 	struct netdev_queue *core_txq;
@@ -1898,9 +1902,9 @@ struct efx_nic {
 	struct devlink_health_reporter *devlink_reporter_ramlog_clear;
 	/** @devlink_reporter_nvcfg_next: Devlink reporter for nvcfg-next */
 	struct devlink_health_reporter *devlink_reporter_nvcfg_next;
-	/** @devlink_reporter_nvcfg: Devlink reporter for nvcfg-active */
+	/** @devlink_reporter_nvcfg_active: Devlink reporter for nvcfg-active */
 	struct devlink_health_reporter *devlink_reporter_nvcfg_active;
-	/** @devlink_reporter_nvcfg: Devlink reporter for nvcfg-stored */
+	/** @devlink_reporter_nvcfg_stored: Devlink reporter for nvcfg-stored */
 	struct devlink_health_reporter *devlink_reporter_nvcfg_stored;
 #endif
 #endif
@@ -2099,6 +2103,7 @@ struct mae_mport_desc;
  * @map_reset_flags: Map ethtool reset flags to a reset method, if possible
  * @reset: Reset the controller hardware and possibly the PHY.  This will
  *	be called while the controller is uninitialised.
+ * @port_handle_supported: Is netport link management API supported
  * @probe_port: Probe the MAC and PHY
  * @remove_port: Free resources allocated by probe_port()
  * @handle_global_event: Handle a "global" event (may be %NULL)
