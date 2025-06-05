@@ -28,6 +28,7 @@ usage() {
   err "  --debug                           - Compile with debug enabled"
   err "  --require-optional-targets        - Compile with optional targets required"
   err "  --no-sfc                          - Compile without sfc module"
+  err "  --have-sdci                       - Compile onload with SDCI support"
   err "  --affinity     / --noaffinity     - Compile with sfc_affinity and add config"
   is_ppc &&
   err "  --ppc-at <path>                   - Specify path to IBM Advanced Toolchain"
@@ -725,7 +726,7 @@ while [ $# -gt 0 ]; do
   --examples) all=false; examples=true;;
   --packaged) set -x; build=false; sfccheck=false; check_install=false uninstall=false;;
   --uninstall)  uninstall=true;;
-  --nouserfiles)userfiles=false;;
+  --nouserfiles) userfiles=false;;
   --noldconfig) ldconfig=false;;
   --noadduser) adduser=false;;
   --nokernelfiles)kernelfiles=false;;
@@ -758,6 +759,7 @@ while [ $# -gt 0 ]; do
   --kernelmodulesdir=*) kernelmodulesdir=${1#--kernelmodulesdir=};;
   --moddir=*) install_mod_dir="${1#--moddir=}";;
   --no-sfc) nosfc=true;;
+  --have-sdci) buildargs="$buildargs $1";;
   --headers) all=false; headers=true;;
   --baseheaders) all=false; base_headers=true;;
   --nobaseheaders) base_headers=false;;

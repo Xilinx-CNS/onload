@@ -1160,7 +1160,12 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
     opts->time_wait_assassinate = atoi(s);
 
   if ( (s = getenv("EF_TPH_MODE")))
+#if CI_HAVE_SDCI
     opts->tph_mode = atoi(s);
+#else /* CI_HAVE_SDCI */
+    ci_log("EF_TPH_MODE found, but SDCI support is not compiled in. Please "
+           "recompile onload with SDCI support or avoid using EF_TPH_MODE.");
+#endif /* CI_HAVE_SDCI */
 
   /* Get our netifs to inherit flags if the O/S is being forced to */
   if (CITP_OPTS.accept_force_inherit_nonblock)
