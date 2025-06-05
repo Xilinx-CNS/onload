@@ -140,13 +140,17 @@ X4 Datapath Restrictions
 - Application clustering (SO_REUSEPORT/EF_CLUSTER_SIZE) is only supported with
   EF_RX_DATAPATH=enterprise
 
-X4 Known Bugs
--------------
+X4 Known Issues
+---------------
 
 - Onload TX event processing can become starved, leading to EVQ overflow,
   manifesting as an assertion failure or kernel panic in efct_poll_tx()
 - Certain stack tear down scenerios can fail with a backtrace indicating
   problems with queue flush.
+- When an onload stack is created using the Express datapath a log message
+  is emitted warning that the queue size has been rounded up. This is because
+  the minimum queue size on X4 is higher than the default value and is
+  harmless.
 
 
 ef_vi Compatibility
