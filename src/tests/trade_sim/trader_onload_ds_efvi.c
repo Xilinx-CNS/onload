@@ -358,15 +358,17 @@ static void ef_vi_init(struct client_state* cs)
   cs->pio_in_use = ! cfg_delegated;
   TRY( sock_get_ifindex(cs->tcp_sock, &ifindex) );
   TRY( ef_driver_open(&(cs->dh)) );
-  if( !ef_vi_capabilities_get(cs->dh, ifindex, EF_VI_CAP_EXTRA_DATAPATHS,
-			      &capability_val) &&
-      (capability_val & EF_VI_EXTRA_DATAPATH_EXPRESS) )
+  if( ef_vi_capabilities_get(cs->dh, ifindex, EF_VI_CAP_EXTRA_DATAPATHS,
+                             &capability_val) == 0 &&
+      (capability_val & EF_VI_EXTRA_DATAPATH_EXPRESS) ) {
+    fprintf(stderr, "Using Express datapath.\n");
     pd_flags |= EF_PD_EXPRESS; /* Prefer Express datapath if available */
+  }
   TRY( ef_pd_alloc(&(cs->pd), cs->dh, ifindex, pd_flags) );
 
   /* If NIC supports CTPIO use it */
   if( ! cfg_pio_only &&
-      ef_vi_capabilities_get(cs->dh, ifindex, EF_VI_CAP_CTPIO,
+      ef_pd_capabilities_get(cs->dh, &(cs->pd), cs->dh, EF_VI_CAP_CTPIO,
                              &capability_val) == 0 && capability_val ) {
     if( ef_vi_alloc_from_pd(&(cs->vi), cs->dh, &(cs->pd), cs->dh,
                             -1, 0, -1, NULL, -1, vi_flags) == 0 ) {
