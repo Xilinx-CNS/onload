@@ -72,7 +72,7 @@ SDCI
 
 Smart Data Cache Injection (SDCI) support has been added to allow steering of
 network packets directly to a core's L2 cache. Currently, SDCI is limited to
-X2 NICs and must be configured as documented below. The steering tag used is
+X2/X4 NICs and must be configured as documented below. The steering tag used is
 such that the data is steered to the core complex that the VI is created on.
 
 This feature requires a compile-time flag to be set. An onload compiled without
@@ -81,6 +81,21 @@ application will fail initialisation. Common workflows enable SDCI as below:
 - RPM packages: rpmbuild --define "have_sdci 1"
 - DEB packages: debuild --build-profiles=pkg.onload.havesdci
 - Build script: ./scripts/onload_build --have-sdci
+
+Note that SDCI support in the sfc net driver requires a kernel with TPH support
+(i.e., CONFIG_PCIE_TPH=y), otherwise the request for SDCI support will be
+overriden. To verify whether SDCI support is enabled after compilation, check
+the compilation log for lines of the format:
+
+    Kernel does not support PCIE_TPH
+    TPH functionality will be disabled
+
+Also be aware that use of an onload with SDCI support running on a machine that
+lacks CPU support will result in verbose logging from the sfc net driver when
+it fails to get the steering tags for each of its channels. This will result
+in messages of the following format being added to the kernel log (dmesg):
+
+    pcie_tph_get_cpu_st error(-22) channel <intf-name>-<channel>, cpu <cpu>
 
 To use this feature with onload, the EF_TPH_MODE environment variable should be
 used, which has the following valid values:
