@@ -664,13 +664,17 @@ int parse_interface_with_flags(const char* s, int* ifindex_out,
 
 #define FLAG_DP_EXPRESS "express"
 #define FLAG_DP_ENTERPRISE "enterprise"
+#define FLAG_DP_LLCT "llct" /* Deprecated - will remove before next release */
+#define FLAG_DP_FF "ff" /* Deprecated - will remove before next release */
 #define FLAG_PHYS_MODE "phys"
   for( ; flags; flags = strchr(flags, ',') ) {
     flags++;
-    if( flag_token_eq(FLAG_DP_EXPRESS, flags, strlen(FLAG_DP_EXPRESS)) ) {
+    if( flag_token_eq(FLAG_DP_EXPRESS, flags, strlen(FLAG_DP_EXPRESS)) ||
+        flag_token_eq(FLAG_DP_LLCT, flags, strlen(FLAG_DP_LLCT))) {
       *pd_flags_out |= EF_PD_EXPRESS;
       requested_express = true;
-    } else if( flag_token_eq(FLAG_DP_ENTERPRISE, flags, strlen(FLAG_DP_ENTERPRISE)) ) {
+    } else if( flag_token_eq(FLAG_DP_ENTERPRISE, flags, strlen(FLAG_DP_ENTERPRISE)) ||
+               flag_token_eq(FLAG_DP_FF, flags, strlen(FLAG_DP_FF)) ) {
       *pd_flags_out &= ~EF_PD_EXPRESS;
       requested_express = false;
     } else if( flag_token_eq(FLAG_PHYS_MODE, flags, strlen(FLAG_PHYS_MODE)) ) {
