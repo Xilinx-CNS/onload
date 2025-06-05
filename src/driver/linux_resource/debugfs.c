@@ -134,7 +134,7 @@ void efrm_init_debugfs_files(struct efrm_debugfs_dir *debug_dir,
                              void *ref)
 {
   struct efrm_debugfs_bound_param *bindings;
-  unsigned int pos;
+  unsigned int pos = 0;
 
   if (IS_ERR_OR_NULL(debug_dir->dir))
     return;
