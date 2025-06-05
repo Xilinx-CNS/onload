@@ -61,6 +61,13 @@ network packets directly to a core's L2 cache. Currently, SDCI is limited to
 X2 NICs and must be configured as documented below. The steering tag used is
 such that the data is steered to the core complex that the VI is created on.
 
+This feature requires a compile-time flag to be set. An onload compiled without
+support (default) will warn the user at application startup and for ef_vi the
+application will fail initialisation. Common workflows enable SDCI as below:
+- RPM packages: rpmbuild --define "have_sdci 1"
+- DEB packages: debuild --build-profiles=pkg.onload.havesdci
+- Build script: ./scripts/onload_build --have-sdci
+
 To use this feature with onload, the EF_TPH_MODE environment variable should be
 used, which has the following valid values:
 - Disable SDCI (default)           : EF_TPH_MODE=0
