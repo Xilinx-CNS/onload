@@ -1,18 +1,23 @@
-onload-9.1~preview1
+onload-9.1~preview2
 -------------------
 
-Update sfc net driver to v6.1.0.1005
+Update sfc net driver to v6.1.0.1011
+
+Add support for:
+ - gcc-15
 
 Changes:
 
 ON-15741: some legacy sample applications removed
+ON-16149: provide onload-examples package
 ON-16277: allow physical addressing mode selection in eflatency
 ON-16329: allow eflatency to parse payload length list as input
-ON-16330: Handle sending ICMP over CTPIO
+ON-16330: handle sending ICMP over CTPIO
+ON-16486: update eflatency to show impact of reading data
 
 
-onload-9.0.2 [Unreleased]
-------------
+onload-9.0.2.126
+----------------
 
 Update sfc net driver to v6.0.2.1008
 

@@ -1,6 +1,3 @@
-This is not a supported release version of Onload
-=================================================
-
 Onload-9.1~preview2
 ===================
 
@@ -78,9 +75,10 @@ such that the data is steered to the core complex that the VI is created on.
 This feature requires a compile-time flag to be set. An onload compiled without
 support (default) will warn the user at application startup and for ef_vi the
 application will fail initialisation. Common workflows enable SDCI as below:
-- RPM packages: rpmbuild --define "have_sdci 1"
-- DEB packages: debuild --build-profiles=pkg.onload.havesdci
-- Build script: ./scripts/onload_build --have-sdci
+
+ - RPM packages: rpmbuild --define "have_sdci 1"
+ - DEB packages: debuild --build-profiles=pkg.onload.havesdci
+ - Build script: ./scripts/onload_build --have-sdci
 
 Note that SDCI support in the sfc net driver requires a kernel with TPH support
 (i.e., CONFIG_PCIE_TPH=y), otherwise the request for SDCI support will be
@@ -99,19 +97,22 @@ in messages of the following format being added to the kernel log (dmesg):
 
 To use this feature with onload, the EF_TPH_MODE environment variable should be
 used, which has the following valid values:
-- Disable SDCI (default)           : EF_TPH_MODE=0
-- Enable SDCI without steering tags: EF_TPH_MODE=1
-- Enable SDCI with steering tags   : EF_TPH_MODE=2
+
+ - Disable SDCI (default)           : EF_TPH_MODE=0
+ - Enable SDCI without steering tags: EF_TPH_MODE=1
+ - Enable SDCI with steering tags   : EF_TPH_MODE=2
 
 To use this feature with ef_vi, one can provide the following VI flags at VI
 allocation time:
-- Enable SDCI without steering tags: EF_VI_ENABLE_TPH
-- Enable SDCI with steering tags   : (EF_VI_ENABLE_TPH | EF_VI_TPH_TAG_MODE)
+
+ - Enable SDCI without steering tags: EF_VI_ENABLE_TPH
+ - Enable SDCI with steering tags   : (EF_VI_ENABLE_TPH | EF_VI_TPH_TAG_MODE)
 
 A more coarse-grained solution also exists at the application level, which will
 apply to all VIs, using the EF_VI_EXTRA_VI_FLAGS environment variable:
-- Enable SDCI without steering tags: EF_VI_EXTRA_VI_FLAGS=tph_enable
-- Enable SDCI with steering tags   : EF_VI_EXTRA_VI_FLAGS=tph_enable,tph_mode
+
+ - Enable SDCI without steering tags: EF_VI_EXTRA_VI_FLAGS=tph_enable
+ - Enable SDCI with steering tags   : EF_VI_EXTRA_VI_FLAGS=tph_enable,tph_mode
 
 
 X4 Functionality
@@ -120,9 +121,9 @@ X4 Functionality
 There are several limitations on the currently available functionality in
 this preview release.
 
-- Currently only 128 TXQs are available on the Express datapath
+- Currently only 128 TXQs are available on the Express datapath.
 - NIC reset is not handled. A driver reload is required post reset.
-- Shared queues are not available
+- Shared queues are not available.
 - Filter handling when interfaces change state does not operate correctly
 - Multicast replication between the Express and Enterprise datapath is not
   supported. To use multicast replication onload must be forced to use only
@@ -132,6 +133,7 @@ this preview release.
 - Filter redirection is not supported, which may lead to unexpected behaviour
   in scenerios where port numbers are reused.
 
+
 X4 Datapath Restrictions
 ------------------------
 
@@ -140,11 +142,12 @@ X4 Datapath Restrictions
 - Application clustering (SO_REUSEPORT/EF_CLUSTER_SIZE) is only supported with
   EF_RX_DATAPATH=enterprise
 
+
 X4 Known Issues
 ---------------
 
 - Onload TX event processing can become starved, leading to EVQ overflow,
-  manifesting as an assertion failure or kernel panic in efct_poll_tx()
+  manifesting as an assertion failure or kernel panic in efct_poll_tx().
 - Certain stack tear down scenerios can fail with a backtrace indicating
   problems with queue flush.
 - When an onload stack is created using the Express datapath a log message

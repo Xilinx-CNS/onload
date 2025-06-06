@@ -1,6 +1,6 @@
 Solarflare 6.X Linux network driver
 ===================================
-Version:  v6_1_0_1005
+Version:  v6_1_0_1009
 
 
 Overview
@@ -58,7 +58,7 @@ kernel
 Installation of the driver can be confirmed by typing:
    modinfo sfc | grep version
 and checking for the line:
-   version: v6_1_0_1005
+   version: v6_1_0_1009
 
 All network interfaces available on the system can be found with:
   ifconfig -a
@@ -93,12 +93,36 @@ Please contact your local AMD support representative or email
 Changelog
 ---------
 
-### v6_1_0_1005
+### v6_1_0_1009
 [General changes]
 ~ Fixes for newer kernels
 ~ Removal of kcompat for older kernels
 ~ Added support for RHEL 9.6 and RHEL 10.0
 ~ Added support for X4 adapters
+
+SWNETLINUX-5584
+~ Allow users to retrieve coalescing settings via ethtool even when
+  the target interface is down.
+
+FWRIVERHD-11874
+~ Provide FSBL and UEFI version information to user via the devlink
+  dev info command.
+
+SWNETLINUX-5628
+~ Provide users with the ability to set and retrieve the number of
+  lanes via ethtool on X4 adapters.
+
+SWNETLINUX-5539
+~ Facilitate the retrieval of user config via devlink health.
+
+SWNETLINUX-5546
+~ Allow users to access the X4 ramlogs with the devlink health diagnose command.
+
+SWNETLINUX-5538
+~ Support flashing X4 firmware via devlink flash.
+
+SWNETLINUX-5091
+~ Implement nway_reset, ksettings, fecparams operations with ethtool.
 
 ### v6_0_2_1000
 [General changes]
