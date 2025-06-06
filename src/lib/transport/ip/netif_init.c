@@ -2208,7 +2208,10 @@ static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
 static void cleanup_ef_vi(ef_vi* vi)
 {
   if( vi->efct_rxqs.ops ) {
-    unmap_efct_ubuf_rxq_io_windows(vi);
+    /* TODO: revisit once an API is formalised as part of ON-16320 */
+    if ( vi->nic_type.arch == EFHW_ARCH_EF10CT ) {
+      unmap_efct_ubuf_rxq_io_windows(vi);
+    }
     vi->efct_rxqs.ops->cleanup(vi);
   }
 }
