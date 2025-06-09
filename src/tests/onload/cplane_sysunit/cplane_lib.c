@@ -4,7 +4,7 @@
 #include <cplane/cplane.h>
 #include <cplane/server.h>
 
-extern int cplane_ioctl(int, long unsigned int, void* );
+extern int cplane_ioctl(int, long unsigned int, ...);
 
 int (* ci_sys_ioctl)(int, long unsigned int, ...) = (void*) cplane_ioctl;
 
