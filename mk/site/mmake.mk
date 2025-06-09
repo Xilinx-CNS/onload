@@ -5,7 +5,7 @@ TRANSPORT_CONFIG_OPT_HDR ?= ci/internal/transport_config_opt_extra.h
 HAVE_EFCT ?=
 HAVE_EF10CT ?= 1
 HAVE_SFC ?= 1
-HAVE_SDCI ?= 0
+HAVE_SDCI ?= 1
 include $(BUILD)/config.mk
 include $(BUILDPATH)/options_config.mk
 include $(TOPPATH)/mk/before.mk
