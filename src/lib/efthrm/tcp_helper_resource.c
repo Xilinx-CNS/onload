@@ -995,20 +995,20 @@ void tcp_helper_get_filter_params(tcp_helper_resource_t* trs, int hwport,
   }
 }
 
-
-int tcp_helper_rxq_map(tcp_helper_resource_t* trs, int intf_i, int qix,
-                       int n_hugepages, const char** superbufs,
-                       ef_addr** hw_addrs)
+static int tcp_helper_rxq_map(tcp_helper_resource_t* trs, int intf_i, int qix,
+                              int n_hugepages, const char** superbufs,
+                              ef_addr** hw_addrs)
 {
   struct efrm_pd *pd = efrm_vi_get_pd(tcp_helper_vi(trs, intf_i));
   struct tcp_helper_nic *nic = &trs->nic[intf_i];
   struct oo_buffer_pages *oobp;
   struct oo_iobufset* iobs;
+  size_t n_addrs = (size_t)n_hugepages * (CI_HUGEPAGE_SIZE / EFHW_NIC_PAGE_SIZE);
   int map_order;
   int rc;
   int i;
 
-  *hw_addrs = kmalloc(n_hugepages * sizeof(resource_size_t) * 512, GFP_KERNEL);
+  *hw_addrs = kmalloc(n_addrs * sizeof(ef_addr), GFP_KERNEL);
   if( !*hw_addrs )
     return -ENOMEM;
 
@@ -1020,8 +1020,9 @@ int tcp_helper_rxq_map(tcp_helper_resource_t* trs, int intf_i, int qix,
   }
 
   for( i = 0; i < n_hugepages; i++ ) {
-    ci_assert(virt_addr_valid(superbufs[i*2]));
-    oobp->pages[i] = virt_to_page(superbufs[i * 2]);
+    const char* virt_addr = superbufs[i * CI_EFCT_SUPERBUFS_PER_PAGE];
+    ci_assert(virt_addr_valid(virt_addr));
+    oobp->pages[i] = virt_to_page(virt_addr);
   }
 
   rc = oo_iobufset_resource_alloc(oobp, pd, &iobs, *hw_addrs,
