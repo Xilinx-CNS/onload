@@ -280,7 +280,7 @@ static int do_checksums(ef_vi* vi, struct iovec* iov, int iov_len)
   ci_ether_hdr* eth = iov[0].iov_base;
   uint16_t last_ether_type;
   char* l3_header;
-  int num_vlans = 0;
+  int vlan_offset = 0;
   uint8_t protocol = 0;
   int l3_header_len = 0;
   int af = AF_INET;
@@ -289,15 +289,12 @@ static int do_checksums(ef_vi* vi, struct iovec* iov, int iov_len)
       == (EF_VI_TX_IP_CSUM_DIS | EF_VI_TX_TCPUDP_CSUM_DIS) )
     return 0;
 
- vlans:
-  last_ether_type = *((char*)&(eth->ether_type) + ETH_VLAN_HLEN * num_vlans);
-  l3_header = (char*)eth + ETH_HLEN + ETH_VLAN_HLEN * num_vlans;
-  if( l3_header > last )
-    return -EBADMSG;
-  if( ethertype_is_vlan(last_ether_type) ) {
-    ++num_vlans;
-    goto vlans;
-  }
+  do {
+    last_ether_type = *((uint16_t*)((char*)&(eth->ether_type) + vlan_offset));
+    l3_header = (char*)eth + ETH_HLEN + vlan_offset;
+    if( l3_header > last )
+      return -EBADMSG;
+  } while ( ethertype_is_vlan(last_ether_type) && (vlan_offset += ETH_VLAN_HLEN ));
 
   if( last_ether_type == htons(0x0800) ) {
     struct iphdr* ip4 = (void*) l3_header;
