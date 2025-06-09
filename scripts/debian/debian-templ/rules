@@ -199,7 +199,7 @@ ifneq (,$(filter #TYPE#-source,$(DOPACKAGES)))
 endif
 
 ifneq (,$(filter #TYPE#-dkms,$(DOPACKAGES)))
-	echo 'MAKE[0]+="$(BUILD_FLAGS)"' > dkms_override.conf
+	echo 'MAKE[0]+=" $(BUILD_FLAGS)"' > dkms_override.conf
 	install -D -m 644 dkms_override.conf debian/$(pdkms)/etc/dkms/$(sname).conf
 	dh_installdirs -p$(pdkms) usr/src/
 	tar xf ../#TYPE#_#VERSION#.orig.tar.gz -C debian/$(pdkms)/usr/src/
