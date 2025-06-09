@@ -213,7 +213,7 @@ static void citp_log_to_file(const char *s)
 {
   int fd;
   ci_assert(!CITP_OPTS.log_via_ioctl);
-  fd = open(s, O_WRONLY | O_CREAT | O_TRUNC, S_IREAD | S_IWRITE);
+  fd = ci_sys_open(s, O_WRONLY | O_CREAT | O_TRUNC, S_IREAD | S_IWRITE);
   if( fd >= 0 ) {
     if( citp.log_fd >= 0 )
       ci_sys_close(citp.log_fd);
