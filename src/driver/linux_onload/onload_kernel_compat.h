@@ -172,4 +172,11 @@ static inline bool efrm_close_on_exec(unsigned int fd,
 #endif
 
 
+#ifdef EFRM_HAVE_TIMER_DELETE_SYNC
+/* linux 6.1+ */
+#define efrm_timer_delete_sync timer_delete_sync
+#else
+#define efrm_timer_delete_sync del_timer_sync
+#endif
+
 #endif /* __ONLOAD_KERNEL_COMPAT_H__ */
