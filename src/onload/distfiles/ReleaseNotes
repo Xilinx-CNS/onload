@@ -85,6 +85,19 @@ apply to all VIs, using the EF_VI_EXTRA_VI_FLAGS environment variable:
 - Enable SDCI with steering tags   : EF_VI_EXTRA_VI_FLAGS=tph_enable,tph_mode
 
 
+DKMS RPM only available by building SRPM bundle
+-----------------------------------------------
+
+The standalone DKMS package, SF-120887-LS, that included a build of the
+Onload userspace along with the DKMS kernel module component, is no longer
+published. DKMS packages are not meant to include userspace code.
+
+To use DKMS, build and install the DKMS RPM and userspace RPM sub-packages
+together from the Source RPM. This follows the pattern already used by the
+Debian DKMS packaging and previewed for RPM users in the Onload-9.0.1.86
+Source RPM.
+
+
 Onload-9.0.1.86
 ===============
 
