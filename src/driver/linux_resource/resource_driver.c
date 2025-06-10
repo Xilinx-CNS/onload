@@ -73,6 +73,7 @@
 
 MODULE_AUTHOR("Solarflare Communications");
 MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("Common resource driver for onload and ef_vi");
 
 static struct efhw_ev_handler ev_handler = {
 	.wakeup_fn = efrm_handle_wakeup_event,
