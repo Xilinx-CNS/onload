@@ -9,45 +9,25 @@
 #include <ci/efch/mmap.h>
 #include <ci/efrm/efct_rxq.h>
 
-
-static int tcp_helper_rm_mmap_rx_io_window(tcp_helper_resource_t* trs,
-                                           unsigned long bytes,
-                                           struct vm_area_struct* vma,
-                                           uint64_t map_id)
-{
-  int intf_i = OO_MMAP_UBUF_POST_INTF_I(map_id);
-  int ix = OO_MMAP_UBUF_POST_IX(map_id);
-  unsigned long offset = 0;
-  int map_num = 0;
-  int rc;
-
-  TCP_HELPER_RESOURCE_ASSERT_VALID(trs, 0);
-  ci_assert(bytes > 0);
-
-  OO_DEBUG_VM(ci_log("%s: %u bytes=0x%lx map_id=0x%"PRIx64, __func__,
-                     trs->id, bytes, map_id));
-
-  rc = efab_rxq_mmap_buffer_post(trs->nic[intf_i].thn_efct_rxq[ix], &bytes,
-                                 vma, &map_num, &offset);
-  if( rc < 0 )
-    OO_DEBUG_VM(ci_log("%s: failed map_id=%"PRIx64" rc=%d", __FUNCTION__,
-                       map_id, rc));
-
-  return rc;
-}
-
-
 static vm_fault_t
 tcp_helper_rm_nopage_ubuf(tcp_helper_resource_t* trs, struct vm_area_struct *vma,
                           uint64_t map_id, unsigned long offset)
 {
   unsigned long bytes = vma->vm_end - vma->vm_start;
+  int intf_i = OO_MMAP_UBUF_POST_INTF_I(map_id);
+  int ix = OO_MMAP_UBUF_POST_IX(map_id);
+  resource_size_t io_addr;
   int rc;
 
-  OO_DEBUG_VM(ci_log("%s: %u", __FUNCTION__, trs->id));
+  TCP_HELPER_RESOURCE_ASSERT_VALID(trs, 0);
+  ci_assert(bytes > 0);
+  OO_DEBUG_VM(ci_log("%s: %u bytes=0x%lx map_id=0x%"PRIx64, __func__,
+                     trs->id, bytes, map_id));
 
-  rc = tcp_helper_rm_mmap_rx_io_window(trs, bytes, vma, map_id);
-
+  io_addr = efrm_rxq_superbuf_window(trs->nic[intf_i].thn_efct_rxq[ix]);
+  rc = io_remap_pfn_range(vma, vma->vm_start + offset, io_addr >> PAGE_SHIFT,
+                          CI_ROUND_UP(bytes, (unsigned long)CI_PAGE_SIZE),
+                          vma->vm_page_prot);
   if( rc == 0 )
     return VM_FAULT_NOPAGE;
 
@@ -109,7 +89,8 @@ int oo_ubuf_post_mmap(struct file *file, struct vm_area_struct *vma)
   /* Avoid compiler sadness in NDEBUG builds */
   (void)offset;
 
-  vm_flags_set(vma, EFRM_VM_BASE_FLAGS);
+  vm_flags_set(vma, EFRM_VM_IO_FLAGS);
+  vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
   vma->vm_private_data = (void *) priv->thr;
   vma->vm_ops = &vm_ops_ubuf;
 
