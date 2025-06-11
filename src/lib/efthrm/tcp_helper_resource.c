@@ -1080,8 +1080,9 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
     if( qix == -EALREADY )
       return 0;
 
-    rc = efrm_rxq_alloc(vi_rs, rxq, qix, true, true, hugepages,
-                        trs->trs_efct_alloc,
+    rc = efrm_rxq_alloc(vi_rs, rxq,
+                        nic->flags & NIC_FLAG_RX_KERNEL_SHARED ? qix : -1,
+                        true, true, hugepages, trs->trs_efct_alloc,
                         &trs->nic[intf_i].thn_efct_rxq[qix]);
     if( rc < 0 ) {
       if( rc != -EINTR )
