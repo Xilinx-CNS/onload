@@ -785,6 +785,9 @@ int efx_x4_mcdi_port_reconfigure(struct efx_nic *efx)
 	if (autoneg)
 		flags |= BIT(MC_CMD_LINK_FLAGS_AUTONEG_EN);
 
+	if (efx->phy_mode & PHY_MODE_LOW_POWER)
+		flags |= BIT(MC_CMD_LINK_FLAGS_LINK_DISABLE);
+
 	tech = efx_x4_link_tech(port_data, tech_mask, autoneg);
 	fec = ethtool_fec_to_x4_mcdi(port_data->supported.fec,
 				     efx->fec_config);

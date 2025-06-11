@@ -703,7 +703,7 @@ static void efx_set_tph_hint(struct efx_channel *channel, unsigned int cpu)
 
 	rc = pcie_tph_get_cpu_st(efx->pci_dev, TPH_MEM_TYPE_VM, cpu, &tag);
 	if (rc) {
-		netif_err(efx, probe, efx->net_dev,
+		netdev_err_once(efx->net_dev,
 			  "pcie_tph_get_cpu_st error(%d) channel %s, cpu %u\n",
 			  rc, msi_context->name, cpu);
 		return;
