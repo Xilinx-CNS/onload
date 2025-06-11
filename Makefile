@@ -225,7 +225,7 @@ ONLOAD_MAKEFLAGS ?=
 
 ifeq ($(HAVE_SDCI),1)
 ifneq ($(HAVE_SFC),1)
-  $(error Unable to build Onload with SDCI support if not also building the SFC driver)
+  $(warning Unable to build Onload with SDCI support if not also building the SFC driver)
 endif
   ONLOAD_MAKEFLAGS += CONFIG_SFC_TPH=y
   ONLOAD_CFLAGS += -DCI_HAVE_SDCI=1
