@@ -2172,9 +2172,6 @@ static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
 
       if( vi->vi_flags & EF_VI_RX_PHYS_ADDR ) {
         map_efct_ubuf_rxq_io_windows(vi, nic_i);
-        /* TODO: directly post superbufs when onload kernel allocated bufs have
-         * been mapped (ON-16320). */
-        vi->efct_rxqs.ops->post = oo_efct_superbuf_post_ioctl;
       } else {
         vi->efct_rxqs.ops->post = oo_efct_superbuf_post_ioctl;
       }
