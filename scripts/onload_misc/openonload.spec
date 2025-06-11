@@ -432,6 +432,9 @@ sed \
   -e '/define "moddir extra"/ s/.*/%%global moddir extra\/onload/' \
   %{?debug:-e '/define "debug true"/ s/.*/%%global debug true/'} \
   %{?setuid:-e '/define "setuid true"/ s/.*/%%global setuid true/'} \
+  %{?have_sdci:-e '/define "have_sdci 1"/ s/.*/%%global have_sdci %have_sdci/'} \
+  %{?build_profile:-e '/define "build_profile/ s/.*/%%global build_profile %build_profile/'} \
+  %{?have_efct:-e '/define "have_efct 1"/ s/.*/%%global have_efct %have_efct/'} \
   "%{_specdir}/openonload.spec" > %{_specdir}/%{name}-akmod.spec
 # Based on output of `kmodtool --akmod`
 mkdir -p %{buildroot}/%{_usrsrc}/akmods/
