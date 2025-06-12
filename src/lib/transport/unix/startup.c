@@ -677,6 +677,10 @@ int citp_do_init(int max_init_level)
   return rc;
 }
 
+/* LTO might throw away this (essential) function, leaving LD_PRELOAD'ed
+ * processes unaccelerated. Fix it by using the corresponding attribute.
+ */
+__attribute__((used))
 void _init(void)
 {
   if (getpagesize() != CI_PAGE_SIZE)
