@@ -471,18 +471,9 @@ static void handle_rx_pkt(ci_netif* netif, struct ci_netif_poll_state* ps,
 
 static ci_ip_pkt_fmt* alloc_rx_efct_pkt(ci_netif* ni, int intf_i, int pay_len)
 {
-  ci_ip_pkt_fmt* pkt;
-
-  if(CI_UNLIKELY( ni->state->n_rx_pkts >= NI_OPTS(ni).max_rx_packets )) {
-    CITP_STATS_NETIF_INC(ni, efct_rx_no_rx_pkts);
+  ci_ip_pkt_fmt* pkt = ci_netif_pkt_alloc(ni, 0);
+  if(CI_UNLIKELY( ! pkt ))
     return NULL;
-  }
-
-  pkt = ci_netif_pkt_alloc(ni, 0);
-  if(CI_UNLIKELY( ! pkt )) {
-    CITP_STATS_NETIF_INC(ni, efct_rx_no_pkts);
-    return NULL;
-  }
   pkt->pkt_start_off = 0;
   pkt->intf_i = intf_i;
   pkt->flags |= CI_PKT_FLAG_RX;
