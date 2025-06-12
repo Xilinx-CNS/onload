@@ -107,6 +107,8 @@
 
 %global __python %{__python3}
 
+%global _lto_cflags %{nil}
+
 ###############################################################################
 
 Summary:          OpenOnload user-space
