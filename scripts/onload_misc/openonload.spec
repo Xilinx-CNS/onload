@@ -408,7 +408,7 @@ mkdir -p "$i_prefix/etc/depmod.d"
   %{?with_user: --userfiles --modprobe --modulesloadd --udev %{?_sysusersdir:--adduser}} \
   %{?with_kmod: --kernelfiles --kernelver "%{kernel}"} \
   %{?with_devel: --headers} \
-  %{?with_examples: --examples}
+  %{?with_examples: --examples} \
   %{?have_sdci: --have-sdci}
 %endif
 %if %{with user}
