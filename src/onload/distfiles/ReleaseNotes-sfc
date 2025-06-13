@@ -1,6 +1,6 @@
 Solarflare 6.X Linux network driver
 ===================================
-Version:  v6_0_2_1000
+Version:  v6_1_0_1009
 
 
 Overview
@@ -58,7 +58,7 @@ kernel
 Installation of the driver can be confirmed by typing:
    modinfo sfc | grep version
 and checking for the line:
-   version: v6_0_2_1000
+   version: v6_1_0_1009
 
 All network interfaces available on the system can be found with:
   ifconfig -a
@@ -69,10 +69,11 @@ Linux distribution support for Solarflare Adapters
 
 This driver package is supported on:
  - RedHat Enterprise Linux                        8.6, 8.7, 8.8, 8.9, 8.10
- - RedHat Enterprise Linux                        9.2, 9.3, 9.4, 9.5
+ - RedHat Enterprise Linux                        9.2, 9.3, 9.4, 9.5, 9.6
+ - RedHat Enterprise Linux                        10.0
  - Canonical Ubuntu Server LTS                    22.04, 24.04
  - Debian 12 "Bookworm"                           12.0
- - Kernel.org linux kernels                       4.18 to 6.6
+ - Kernel.org linux kernels                       5.1 to 6.13
 
 
 AMD aims to support the current and previous major release of each
@@ -91,6 +92,37 @@ Please contact your local AMD support representative or email
 
 Changelog
 ---------
+
+### v6_1_0_1009
+[General changes]
+~ Fixes for newer kernels
+~ Removal of kcompat for older kernels
+~ Added support for RHEL 9.6 and RHEL 10.0
+~ Added support for X4 adapters
+
+SWNETLINUX-5584
+~ Allow users to retrieve coalescing settings via ethtool even when
+  the target interface is down.
+
+FWRIVERHD-11874
+~ Provide FSBL and UEFI version information to user via the devlink
+  dev info command.
+
+SWNETLINUX-5628
+~ Provide users with the ability to set and retrieve the number of
+  lanes via ethtool on X4 adapters.
+
+SWNETLINUX-5539
+~ Facilitate the retrieval of user config via devlink health.
+
+SWNETLINUX-5546
+~ Allow users to access the X4 ramlogs with the devlink health diagnose command.
+
+SWNETLINUX-5538
+~ Support flashing X4 firmware via devlink flash.
+
+SWNETLINUX-5091
+~ Implement nway_reset, ksettings, fecparams operations with ethtool.
 
 ### v6_0_2_1000
 [General changes]
@@ -3005,5 +3037,5 @@ Issue 50868:
 Copyright
 ---------
 Copyright (C) 2019-2022, Xilinx, Inc.
-Copyright (C) 2022-2024, Advanced Micro Devices, Inc.
+Copyright (C) 2022-2025, Advanced Micro Devices, Inc.
 All rights reserved. Use is subject to license terms.
