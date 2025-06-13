@@ -41,6 +41,7 @@
 MODULE_AUTHOR("Solarflare Communications");
 MODULE_LICENSE("GPL");
 MODULE_VERSION(ONLOAD_VERSION);
+MODULE_DESCRIPTION("Core onload module");
 
 int inject_kernel_gid = 0;
 module_param(inject_kernel_gid, int, S_IRUGO | S_IWUSR);

@@ -145,7 +145,7 @@ void oo_timesync_dtor(struct oo_timesync *oo_ts)
   /* ensure the timer is gone */
   signal_cpu_khz_stabilized = 2;
   ci_wmb();
-  del_timer_sync(&timer_node);
+  efrm_timer_delete_sync(&timer_node);
 }
 
 #define TIMESYNC_SMOOTH_SAMPLES 16

@@ -183,4 +183,11 @@ static inline struct sk_buff *efrm_skb_recv_datagram(struct sock *sk,
 #define efrm_skb_recv_datagram skb_recv_datagram
 #endif
 
+#ifdef EFRM_HAVE_TIMER_DELETE_SYNC
+/* linux 6.1+ */
+#define efrm_timer_delete_sync timer_delete_sync
+#else
+#define efrm_timer_delete_sync del_timer_sync
+#endif
+
 #endif /* __ONLOAD_KERNEL_COMPAT_H__ */
