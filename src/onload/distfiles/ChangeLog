@@ -16,8 +16,8 @@ ON-16330: handle sending ICMP over CTPIO
 ON-16486: update eflatency to show impact of reading data
 
 
-onload-9.0.2.134
-----------------
+onload-9.0.2
+------------
 
 Update sfc net driver to v6.1.0.1009
 
