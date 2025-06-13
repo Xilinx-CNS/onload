@@ -92,7 +92,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.0.2.1008"
+#define EFX_DRIVER_VERSION	"6.1.0.1009"
 #endif
 
 #ifdef DEBUG
@@ -193,6 +193,15 @@ enum efx_performance_profile {
 	EFX_PERFORMANCE_PROFILE_AUTO,
 	EFX_PERFORMANCE_PROFILE_THROUGHPUT,
 	EFX_PERFORMANCE_PROFILE_LATENCY,
+};
+#endif
+
+#ifdef EFX_NOT_UPSTREAM
+/* MCDI link management commands */
+enum efx_link_mgmt {
+	EFX_LINK_MGMT_AUTO,
+	EFX_LINK_MGMT_LEGACY,
+	EFX_LINK_MGMT_NETPORT,
 };
 #endif
 
@@ -1300,6 +1309,7 @@ struct efx_arfs_rule {
 /**
  * struct efx_async_filter_insertion - Request to asynchronously insert a filter
  * @net_dev: Reference to the netdevice
+ * @net_dev_tracker: reference tracker entry for @net_dev
  * @spec: The filter to insert
  * @work: Workitem for this request
  * @rxq_index: Identifies the channel for which this request was made
@@ -1307,6 +1317,7 @@ struct efx_arfs_rule {
  */
 struct efx_async_filter_insertion {
 	struct net_device *net_dev;
+	netdevice_tracker net_dev_tracker;
 	struct efx_filter_spec spec;
 	struct work_struct work;
 	u16 rxq_index;
@@ -1395,6 +1406,7 @@ struct efx_mae;
  * @type: Controller type attributes
  * @mgmt_dev: vDPA Management device
  * @port_num: Port number as reported by MCDI
+ * @port_handle: Port handle for MCDI MAC/link control/state commands.
  * @client_id: client ID of this PCIe function
  * @adapter_base_addr: MAC address of port0 (used as unique identifier)
  * @reset_work: Scheduled reset workitem
@@ -1410,8 +1422,10 @@ struct efx_mae;
  * @xdp_tx: Flag for whether XDP TX queues are supported
  * @irqs_hooked: Channel interrupts are hooked
  * @log_tc_errs: Error logging for TC filter insertion is enabled
+ * @use_legacy_link_mgmt: Use legacy MCDI link management commands
  * @irq_mod_step_us: Adaptive IRQ moderation time step for RX event queues
  * @irq_rx_moderation_us: IRQ moderation time for RX event queues
+ * @irq_tx_moderation_us: IRQ moderation time for TX event queues
  * @rss_mode: RSS spreading mode
  * @msg_enable: Log message enable flags
  * @state: Device state number (%STATE_*). Serialised by the rtnl_lock.
@@ -1438,8 +1452,8 @@ struct efx_mae;
  * @max_channels: Max available channels
  * @max_vis: Max available VI resources
  * @max_tx_channels: Max available TX channels
- * @supported_bitmap: Bitmap of supported ring sizes (EF100)
- * @guaranteed_bitmap: Bitmap of guaranteed ring sizes (EF100)
+ * @supported_bitmap: Bitmap of supported ring sizes
+ * @guaranteed_bitmap: Bitmap of guaranteed ring sizes
  * @n_combined_channels: Number of combined RX/TX channels
  * @n_extra_channels: Number of extra channels (for driver-internal uses)
  * @n_rx_only_channels: Number of channels used only for RX (after combined)
@@ -1493,6 +1507,8 @@ struct efx_mae;
  *	one of the rtnl_lock, mac_lock, or netif_tx_lock, but all three must
  *	be held to modify it.
  * @datapath_started: Is the datapath running ?
+ * @link_change_work: Work item for link change events
+ * @module_changed: Has a NIC module been inserted/removed ?
  * @mc_bist_for_other_fn: Is NIC unavailable due to BIST on another function ?
  * @port_initialized: Port initialized?
  * @net_dev: Operating system network device. Consider holding the rtnl lock
@@ -1502,6 +1518,7 @@ struct efx_mae;
  * @stats_initialised: Have initial stats counters been fetched ?
  * @num_mac_stats: Number of MAC stats reported by firmware (MAC_STATS_NUM_STATS
  *	field of %MC_CMD_GET_CAPABILITIES_V4 response, or %MC_CMD_MAC_NSTATS)
+ * @stats_dma_size: Size of DMA buffer for MAC stats.
  * @stats_period_ms: Interval between statistic updates in milliseconds.
  *	Set from ethtool -C parameter stats-block-usecs.
  * @stats_monitor_work: Work item to monitor periodic statistics updates
@@ -1516,6 +1533,7 @@ struct efx_mae;
  * @phy_type: PHY type
  * @phy_name: PHY name
  * @phy_data: PHY data
+ * @port_data: Port data for assigned logical port
  * @phy_mode: PHY operating mode. Serialised by @mac_lock.
  * @link_down_on_reset: force link down on reset
  * @phy_power_follows_link: PHY powers off when link is taken down.
@@ -1560,7 +1578,6 @@ struct efx_mae;
  * @netdev_notifier: Netdevice notifier.
  * @netevent_notifier: Netevent notifier (for neighbour updates).
  * @tc: state for TC offload (EF100).
- * @nvlog_data: state for nvlog dumping support
  * @mem_bar: The BAR that is mapped into membase.
  * @reg_base: Offset from the start of the bar to the function control window.
  * @mcdi_buf_mode: mcdi buffer allocation mode
@@ -1589,6 +1606,7 @@ struct efx_nic {
 	struct vdpa_mgmt_dev *mgmt_dev;
 #endif
 	unsigned int port_num;
+	u32 port_handle;
 	u32 client_id;
 	/* Aligned for efx_mcdi_get_board_cfg()+ether_addr_copy() */
 	u8 adapter_base_addr[ETH_ALEN] __aligned(2);
@@ -1613,8 +1631,14 @@ struct efx_nic {
 	bool xdp_tx;
 	bool irqs_hooked;
 	bool log_tc_errs;
+	bool use_legacy_link_mgmt;
+#ifdef EFX_NOT_UPSTREAM
+	/** @link_mgmt: Select MCDI link management command set */
+	enum efx_link_mgmt link_mgmt;
+#endif
 	unsigned int irq_mod_step_us;
 	unsigned int irq_rx_moderation_us;
+	unsigned int irq_tx_moderation_us;
 #if !defined(EFX_NOT_UPSTREAM)
 	enum efx_rss_mode rss_mode;
 #endif
@@ -1738,6 +1762,9 @@ struct efx_nic {
 	bool port_enabled;
 	bool datapath_started;
 
+	struct work_struct link_change_work;
+	atomic_t module_changed;
+
 	bool mc_bist_for_other_fn;
 	bool port_initialized;
 	struct net_device *net_dev;
@@ -1756,6 +1783,7 @@ struct efx_nic {
 	bool stats_enabled;
 	bool stats_initialised;
 	u16 num_mac_stats;
+	size_t stats_dma_size;
 	unsigned int stats_period_ms;
 
 	struct delayed_work stats_monitor_work;
@@ -1770,7 +1798,9 @@ struct efx_nic {
 	unsigned int phy_type;
 	char phy_name[20];
 	void *phy_data;
+	void *port_data;
 	enum efx_phy_mode phy_mode;
+
 	bool link_down_on_reset;
 	bool phy_power_follows_link;
 	bool phy_power_force_off;
@@ -1862,9 +1892,18 @@ struct efx_nic {
 	struct devlink_health_reporter *devlink_reporter_nvlog;
 	/** @devlink_reporter_nvlog_clear: Devlink reporter for nvlog-clear */
 	struct devlink_health_reporter *devlink_reporter_nvlog_clear;
+	/** @devlink_reporter_ramlog: Devlink reporter for RAM log */
+	struct devlink_health_reporter *devlink_reporter_ramlog;
+	/** @devlink_reporter_ramlog_clear: Devlink reporter for ramlog-clear */
+	struct devlink_health_reporter *devlink_reporter_ramlog_clear;
+	/** @devlink_reporter_nvcfg_next: Devlink reporter for nvcfg-next */
+	struct devlink_health_reporter *devlink_reporter_nvcfg_next;
+	/** @devlink_reporter_nvcfg: Devlink reporter for nvcfg-active */
+	struct devlink_health_reporter *devlink_reporter_nvcfg_active;
+	/** @devlink_reporter_nvcfg: Devlink reporter for nvcfg-stored */
+	struct devlink_health_reporter *devlink_reporter_nvcfg_stored;
 #endif
 #endif
-	struct efx_nvlog_data *nvlog_data;
 	unsigned int mem_bar;
 	u32 reg_base;
 	enum efx_buf_alloc_mode mcdi_buf_mode;
@@ -2066,6 +2105,7 @@ struct mae_mport_desc;
  * @fini_dmaq: Flush and finalise DMA queues (RX and TX queues)
  * @prepare_flr: Prepare for an FLR
  * @finish_flr: Clean up after an FLR
+ * @read_licensed_features: Retrieve licensed features
  * @describe_stats: Describe statistics for ethtool
  * @update_stats: Update statistics not provided by event handling.
  *	Must obtain and hold efx_nic::stats_lock on return.
@@ -2076,6 +2116,8 @@ struct mae_mport_desc;
  * @update_stats_period: Set interval for periodic stats fetching.
  * @push_irq_moderation: Apply interrupt moderation value
  * @reconfigure_port: Push loopback/power/txdis changes to the MAC and PHY
+ * @check_link_change: Poll once to check for link state changes
+ * @check_module_caps: Check advertised abilities after module change
  * @reconfigure_mac: Push MAC address, MTU, flow control and filter settings
  *	to the hardware.  Serialised by the mac_lock.
  *	Only change MTU if mtu_only is set.
@@ -2172,7 +2214,15 @@ struct mae_mport_desc;
  * @mtd_sync: Wait for write-back to complete on MTD partition.  This
  *	also notifies the driver that a writer has finished using this
  *	partition.
+ * @ptp_adapter_has_support: Query whether NIC supports PTP. If %NULL assume
+ *	PTP is supported.
+ * @ptp_tx_ts_support: Does NIC have the correct license for TX
+ *	timestamping. If %NULL assume TX timestamping supported.
  * @ptp_set_clock_info: Set PTP hardware clock structure
+ * @ptp_rx_enable_ts: Subscribe to receive periodic time sync events on channel
+ * @ptp_get_attributes: Get PTP attributes
+ * @ptp_synchronize: Synchronize times between the host and the NIC
+ * @ptp_sync_sample_size: Default sample size used in ptp_synchronize()
  * @ptp_write_host_time: Send host time to MC as part of sync protocol
  * @ptp_set_ts_sync_events: Enable or disable sync events for inline RX
  *	timestamping, possibly only temporarily for the purposes of a reset.
@@ -2255,12 +2305,14 @@ struct efx_nic_type {
 	enum reset_type (*map_reset_reason)(enum reset_type reason);
 	int (*map_reset_flags)(u32 *flags);
 	int (*reset)(struct efx_nic *efx, enum reset_type method);
+	bool (*port_handle_supported)(struct efx_nic *efx);
 	int (*probe_port)(struct efx_nic *efx);
 	void (*remove_port)(struct efx_nic *efx);
 	bool (*handle_global_event)(struct efx_channel *channel, efx_qword_t *);
 	int (*fini_dmaq)(struct efx_nic *efx);
 	void (*prepare_flr)(struct efx_nic *efx);
 	void (*finish_flr)(struct efx_nic *efx);
+	void (*read_licensed_features)(struct efx_nic *efx);
 	size_t (*describe_stats)(struct efx_nic *efx, u8 *names);
 	size_t (*update_stats)(struct efx_nic *efx, u64 *full_stats,
 			       struct rtnl_link_stats64 *core_stats)
@@ -2271,6 +2323,8 @@ struct efx_nic_type {
 	void (*update_stats_period)(struct efx_nic *efx);
 	void (*push_irq_moderation)(struct efx_channel *channel);
 	int (*reconfigure_port)(struct efx_nic *efx);
+	bool (*check_link_change)(struct efx_nic *efx);
+	void (*check_module_caps)(struct efx_nic *efx);
 	int (*reconfigure_mac)(struct efx_nic *efx, bool mtu_only);
 	bool (*check_mac_fault)(struct efx_nic *efx);
 	void (*get_wol)(struct efx_nic *efx, struct ethtool_wolinfo *wol);
@@ -2408,10 +2462,16 @@ struct efx_nic_type {
 			 size_t *retlen, const u8 *buffer);
 	int (*mtd_sync)(struct mtd_info *mtd);
 #endif
+	bool (*ptp_adapter_has_support)(struct efx_nic *efx);
+	bool (*ptp_tx_ts_support)(struct efx_nic *efx);
 #ifdef CONFIG_SFC_PTP
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
 	void (*ptp_set_clock_info)(struct efx_nic *efx);
 #endif
+	int (*ptp_rx_enable_ts)(struct efx_channel *channel, bool temp);
+	int (*ptp_get_attributes)(struct efx_nic *efx);
+	int (*ptp_synchronize)(struct efx_nic *efx, unsigned int num_readings);
+	unsigned int ptp_sync_sample_size;
 	void (*ptp_write_host_time)(struct efx_nic *efx, u32 host_time);
 	int (*ptp_set_ts_sync_events)(struct efx_nic *efx, bool en, bool temp);
 	int (*ptp_set_ts_config)(struct efx_nic *efx,
@@ -2815,6 +2875,65 @@ static inline int efx_phc_set_clock_info(struct efx_nic *efx)
 #endif
 #endif
 
+	return -EOPNOTSUPP;
+}
+
+static inline bool efx_ptp_adapter_has_support(struct efx_nic *efx)
+{
+	if (efx->type->ptp_adapter_has_support)
+		return efx->type->ptp_adapter_has_support(efx);
+
+	return true;
+}
+
+static inline bool efx_ptp_tx_ts_support(struct efx_nic *efx)
+{
+	if (efx->type->ptp_tx_ts_support)
+		return efx->type->ptp_tx_ts_support(efx);
+	return true;
+}
+
+static inline void efx_read_licensed_features(struct efx_nic *efx)
+{
+	if (efx->type->read_licensed_features)
+		efx->type->read_licensed_features(efx);
+}
+
+static inline int efx_ptp_get_attributes(struct efx_nic *efx)
+{
+#ifdef CONFIG_SFC_PTP
+	if (efx->type->ptp_get_attributes)
+		return efx->type->ptp_get_attributes(efx);
+#endif
+	return -EOPNOTSUPP;
+}
+
+static inline int efx_rx_enable_timestamping(struct efx_channel *channel,
+					     bool temp)
+{
+#ifdef CONFIG_SFC_PTP
+	if (channel->efx->type->ptp_rx_enable_ts)
+		return channel->efx->type->ptp_rx_enable_ts(channel, temp);
+#endif
+	return -EOPNOTSUPP;
+}
+
+static inline int efx_ptp_synchronize_sample_size(struct efx_nic *efx,
+						  unsigned int num_readings)
+{
+#ifdef CONFIG_SFC_PTP
+	if (efx->type->ptp_synchronize)
+		return efx->type->ptp_synchronize(efx, num_readings);
+#endif
+	return -EOPNOTSUPP;
+}
+
+static inline int efx_ptp_synchronize(struct efx_nic *efx)
+{
+#ifdef CONFIG_SFC_PTP
+	return efx_ptp_synchronize_sample_size(efx,
+					efx->type->ptp_sync_sample_size);
+#endif
 	return -EOPNOTSUPP;
 }
 

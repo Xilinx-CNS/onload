@@ -9,30 +9,29 @@
 #include "net_driver.h"
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER)
+struct efx_nvlog_data {
+	char *nvlog;
+	size_t nvlog_len;
+	size_t nvlog_max_len;
+};
+
+int efx_nvlog_to_devlink(struct efx_nvlog_data *nvlog_data,
+			 struct devlink_fmsg *fmsg);
+int efx_nvlog_do(struct efx_nic *efx, struct efx_nvlog_data *nvlog_data,
+		 u32 type, bool read, bool clear);
+#else
+struct devlink_fmsg;
 struct efx_nvlog_data;
 
-int efx_nvlog_init(struct efx_nic *efx);
-void efx_nvlog_fini(struct efx_nic *efx);
-
-int efx_nvlog_to_devlink(struct efx_nic *efx, struct devlink_fmsg *fmsg);
-int efx_nvlog_do(struct efx_nic *efx, u32 type, bool read, bool clear);
-#else
-static inline int efx_nvlog_init(struct efx_nic *efx)
-{
-	return -EOPNOTSUPP;
-}
-
-static inline void efx_nvlog_fini(struct efx_nic *efx) {}
-
-struct devlink_fmsg;
 static inline int efx_nvlog_to_devlink(struct efx_nic *efx,
 				       struct devlink_fmsg *fmsg)
 {
 	return -EOPNOTSUPP;
 }
 
-static inline int efx_nvlog_do(struct efx_nic *efx, u32 type, bool read,
-			       bool clear)
+static inline int efx_nvlog_do(struct efx_nic *efx,
+			       struct efx_nvlog_data *nvlog_data,
+			       u32 type, bool read, bool clear)
 {
 	return -EOPNOTSUPP;
 }

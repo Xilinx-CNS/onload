@@ -584,6 +584,29 @@ static void efx_stop_datapath(struct efx_nic *efx)
 		efx->type->filter_table_down(efx);
 }
 
+static void efx_link_change_work(struct work_struct *data)
+{
+	struct efx_nic *efx = container_of(data, struct efx_nic,
+					   link_change_work);
+
+	netif_dbg(efx, link, efx->net_dev, "linkchange work\n");
+
+	/* Refresh link state and report to clients and net core */
+	mutex_lock(&efx->mac_lock);
+	(void)efx->type->check_link_change(efx);
+
+	if (atomic_xchg(&efx->module_changed, 0)) {
+		/* Check if auto-negotiation advertised abilities are
+		 * supported by the module, and reconfigure if needed.
+		 */
+		if (efx->type->check_module_caps)
+			efx->type->check_module_caps(efx);
+	}
+
+	efx_link_status_changed(efx);
+	mutex_unlock(&efx->mac_lock);
+}
+
 static void efx_start_port(struct efx_nic *efx)
 {
 	netif_dbg(efx, ifup, efx->net_dev, "start port\n");
@@ -625,6 +648,7 @@ static void efx_stop_port(struct efx_nic *efx)
 
 	cancel_delayed_work_sync(&efx->monitor_work);
 	efx_selftest_async_cancel(efx);
+	cancel_work_sync(&efx->link_change_work);
 	cancel_work_sync(&efx->mac_work);
 }
 
@@ -662,7 +686,7 @@ int efx_start_all(struct efx_nic *efx)
 	 * to poll now because we could have missed a change
 	 */
 	mutex_lock(&efx->mac_lock);
-	if (efx_mcdi_phy_poll(efx))
+	if (efx->type->check_link_change(efx))
 		efx_link_status_changed(efx);
 	mutex_unlock(&efx->mac_lock);
 
@@ -762,20 +786,26 @@ void efx_print_stopped_queues(struct efx_nic *efx)
 	struct efx_channel *channel;
 
 	netif_info(efx, tx_err, efx->net_dev,
-		   "TX queue timeout: printing stopped queue data\n");
+		   "TX queue timeout: printing queues with timeouts\n");
 
 	efx_for_each_channel(channel, efx) {
 		struct netdev_queue *core_txq = channel->tx_queues[0].core_txq;
 		long unsigned int busy_poll_state = 0xffff;
+		unsigned long trans_timeout;
 		struct efx_tx_queue *tx_queue;
 
 		if (!efx_channel_has_tx_queues(channel))
 			continue;
 
 		/* The netdev watchdog must have triggered on a queue that had
-		 * stopped transmitting, so ignore other queues.
+		 * timed out, so ignore other queues.
 		 */
-		if (!netif_xmit_stopped(core_txq))
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_QUEUE_TRANS_TIMEOUT_ATOMIC)
+		trans_timeout = atomic_long_read(&core_txq->trans_timeout);
+#else
+		trans_timeout = core_txq->trans_timeout;
+#endif
+		if (!trans_timeout)
 			continue;
 
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
@@ -784,12 +814,12 @@ void efx_print_stopped_queues(struct efx_nic *efx)
 #endif
 #endif
 		netif_info(efx, tx_err, efx->net_dev,
-			   "Channel %u: %senabled Busy poll %#lx NAPI state %#lx Doorbell %sheld %scoalescing Xmit state %#lx\n",
+			   "Channel %u: %senabled Busy poll %#lx NAPI state %#lx Doorbell %sheld %scoalescing Xmit state %#lx timeouts %lu\n",
 			   channel->channel, (channel->enabled ? "" : "NOT "),
 			   busy_poll_state, channel->napi_str.state,
 			   (channel->holdoff_doorbell ? "" : "not "),
 			   (channel->tx_coalesce_doorbell ? "" : "not "),
-			   core_txq->state);
+			   core_txq->state, trans_timeout);
 		efx_for_each_channel_tx_queue(tx_queue, channel)
 			netif_info(efx, tx_err, efx->net_dev,
 				   "Tx queue: insert %u, write %u (%dms), read %u (%dms)\n",
@@ -966,7 +996,7 @@ int efx_reset_up(struct efx_nic *efx, enum reset_type method, bool ok)
 
 	if (efx->port_initialized && method != RESET_TYPE_INVISIBLE &&
 	    method != RESET_TYPE_DATAPATH) {
-		rc = efx_mcdi_port_reconfigure(efx);
+		rc = efx->type->reconfigure_port(efx);
 		if (rc && rc != -EPERM)
 			netif_err(efx, drv, efx->net_dev,
 				  "could not restore PHY settings\n");
@@ -1500,6 +1530,9 @@ static int efx_init_struct(struct efx_nic *efx, struct pci_dev *pci_dev)
 #endif
 	INIT_WORK(&efx->mac_work, efx_mac_work);
 	init_waitqueue_head(&efx->flush_wq);
+
+	INIT_WORK(&efx->link_change_work, efx_link_change_work);
+	atomic_set(&efx->module_changed, 0);
 
 #ifdef EFX_NOT_UPSTREAM
 	mutex_init(&efx->block_kernel_mutex);

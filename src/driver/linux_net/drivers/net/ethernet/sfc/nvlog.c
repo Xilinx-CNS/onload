@@ -11,16 +11,10 @@
 
 #define NV_LOG_VERSION 0
 
-struct efx_nvlog_data {
-	u32 flags;
-	char *nvlog;
-	size_t nvlog_len;
-	size_t nvlog_max_len;
-};
-
-static int efx_nvlog_read(struct efx_nic *efx, u32 type, u32 size)
+static int efx_nvlog_read(struct efx_nic *efx,
+			  struct efx_nvlog_data *nvlog_data,
+			  u32 type, u32 size)
 {
-	struct efx_nvlog_data *nvlog_data = efx->nvlog_data;
 	u32 offset;
 	u32 version_offset;
 	char buffer[EFX_MCDI_NVRAM_LEN_MAX];
@@ -129,9 +123,9 @@ out:
 	return rc;
 }
 
-static int efx_nvlog_copy(struct efx_nic *efx, char *src, size_t bytes)
+static int efx_nvlog_copy(struct efx_nvlog_data *nvlog_data,
+			  char *src, size_t bytes)
 {
-	struct efx_nvlog_data *nvlog_data = efx->nvlog_data;
 	size_t remaining = nvlog_data->nvlog_max_len - nvlog_data->nvlog_len;
 	char *dest = nvlog_data->nvlog + nvlog_data->nvlog_len;
 
@@ -146,9 +140,9 @@ static int efx_nvlog_copy(struct efx_nic *efx, char *src, size_t bytes)
 static char *month[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul",
 			 "Aug", "Sep", "Oct", "Nov", "Dec" };
 
-static int efx_nvlog_print_time(struct efx_nic *efx, struct tm *tm)
+static int efx_nvlog_print_time(struct efx_nvlog_data *nvlog_data,
+				struct tm *tm)
 {
-	struct efx_nvlog_data *nvlog_data = efx->nvlog_data;
 	size_t remaining = nvlog_data->nvlog_max_len - nvlog_data->nvlog_len;
 	char *dest = nvlog_data->nvlog + nvlog_data->nvlog_len;
 	int rc;
@@ -166,9 +160,10 @@ static int efx_nvlog_print_time(struct efx_nic *efx, struct tm *tm)
 	return 0;
 }
 
-static int efx_nvlog_print_header(struct efx_nic *efx, char *type_str)
+static int efx_nvlog_print_header(struct efx_nic *efx,
+				  struct efx_nvlog_data *nvlog_data,
+				  char *type_str)
 {
-	struct efx_nvlog_data *nvlog_data = efx->nvlog_data;
 	size_t remaining = nvlog_data->nvlog_max_len - nvlog_data->nvlog_len;
 	char *dest = nvlog_data->nvlog + nvlog_data->nvlog_len;
 	int rc;
@@ -184,9 +179,10 @@ static int efx_nvlog_print_header(struct efx_nic *efx, char *type_str)
 	return 0;
 }
 
-static int efx_nvlog_expand_timestamps(struct efx_nic *efx)
+static int efx_nvlog_expand_timestamps(struct efx_nic *efx,
+				       struct efx_nvlog_data *nvlog_data,
+				       u32 type)
 {
-	struct efx_nvlog_data *nvlog_data = efx->nvlog_data;
 	size_t len = nvlog_data->nvlog_len;
 	char *old_buffer = nvlog_data->nvlog;
 	char *buffer = nvlog_data->nvlog;
@@ -204,14 +200,18 @@ static int efx_nvlog_expand_timestamps(struct efx_nic *efx)
 		goto out;
 	}
 
-	rc = efx_nvlog_print_header(efx, "MC");
+	if (type == NVRAM_PARTITION_TYPE_RAM_LOG)
+		rc = efx_nvlog_print_header(efx, nvlog_data, "MC RAM");
+	else
+		rc = efx_nvlog_print_header(efx, nvlog_data, "MC");
+
 	if (rc)
 		goto out;
 
 	while (p) {
 		p++;
 		offset = p - buffer;
-		rc = efx_nvlog_copy(efx, buffer, offset);
+		rc = efx_nvlog_copy(nvlog_data, buffer, offset);
 		if (rc)
 			goto out;
 		buffer += offset;
@@ -224,7 +224,7 @@ static int efx_nvlog_expand_timestamps(struct efx_nic *efx)
 			len--;
 		}
 		time64_to_tm(time, 0, &tm);
-		rc = efx_nvlog_print_time(efx, &tm);
+		rc = efx_nvlog_print_time(nvlog_data, &tm);
 		if (rc)
 			goto out;
 
@@ -234,14 +234,15 @@ static int efx_nvlog_expand_timestamps(struct efx_nic *efx)
 		p = memchr(buffer, '{', len);
 	}
 
-	rc = efx_nvlog_copy(efx, buffer, len);
+	rc = efx_nvlog_copy(nvlog_data, buffer, len);
 
 out:
 	kfree(old_buffer);
 	return rc;
 }
 
-int efx_nvlog_do(struct efx_nic *efx, u32 type, bool read, bool clear)
+int efx_nvlog_do(struct efx_nic *efx, struct efx_nvlog_data *nvlog_data,
+		 u32 type, bool read, bool clear)
 {
 	int rc;
 	size_t size, erase_size, write_size;
@@ -255,11 +256,11 @@ int efx_nvlog_do(struct efx_nic *efx, u32 type, bool read, bool clear)
 
 	if (read) {
 		/* Get nvlog */
-		rc = efx_nvlog_read(efx, type, size);
+		rc = efx_nvlog_read(efx, nvlog_data, type, size);
 		if (rc)
 			return rc;
 
-		rc = efx_nvlog_expand_timestamps(efx);
+		rc = efx_nvlog_expand_timestamps(efx, nvlog_data, type);
 		if (rc)
 			return rc;
 	}
@@ -310,10 +311,10 @@ static int buffer_to_fmsg_string(struct devlink_fmsg *fmsg, char *buf, size_t le
 	return 0;
 }
 
-int efx_nvlog_to_devlink(struct efx_nic *efx, struct devlink_fmsg *fmsg)
+int efx_nvlog_to_devlink(struct efx_nvlog_data *nvlog_data,
+			 struct devlink_fmsg *fmsg)
 {
 	int rc;
-	struct efx_nvlog_data *nvlog_data = efx->nvlog_data;
 	char *buffer = nvlog_data->nvlog;
 	size_t len = nvlog_data->nvlog_len;
 	char *p = memchr(buffer, '\n', len);
@@ -337,27 +338,4 @@ int efx_nvlog_to_devlink(struct efx_nic *efx, struct devlink_fmsg *fmsg)
 out:
 	return rc;
 }
-
-int efx_nvlog_init(struct efx_nic *efx)
-{
-	struct efx_nvlog_data *nvlog_data;
-
-	nvlog_data = kzalloc(sizeof(*nvlog_data), GFP_KERNEL);
-	if (!nvlog_data)
-		return -ENOMEM;
-	efx->nvlog_data = nvlog_data;
-
-	return 0;
-}
-
-void efx_nvlog_fini(struct efx_nic *efx)
-{
-	struct efx_nvlog_data *nvlog_data = efx->nvlog_data;
-
-	if (nvlog_data)
-		kfree(nvlog_data->nvlog);
-	kfree(nvlog_data);
-	efx->nvlog_data = NULL;
-}
-
 #endif /* EFX_HAVE_DEVLINK_HEALTH_REPORTER */

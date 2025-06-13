@@ -26,6 +26,7 @@
 #include <linux/device.h>
 #include <linux/delay.h>
 #include <linux/wait.h>
+#include <linux/bitmap.h>
 #include <linux/cpumask.h>
 #include <linux/topology.h>
 #include <linux/ethtool.h>
@@ -329,6 +330,17 @@
 	#define kernel_ethtool_ts_info ethtool_ts_info
 #endif
 
+#ifndef EFX_HAVE_ETHTOOL_EEPROM_BY_PAGE
+struct ethtool_module_eeprom {
+	u32	offset;
+	u32	length;
+	u8	page;
+	u8	bank;
+	u8	i2c_address;
+	u8	*data;
+};
+#endif
+
 #ifndef RXH_XFRM_SYM_XOR
 /* We want to use this struct even if older kernels do not have it, so old
  * APIs can use it.
@@ -503,6 +515,11 @@ static inline bool __netdev_tx_sent_queue(struct netdev_queue *dev_queue,
 #ifdef EFX_NEED_BITMAP_ZALLOC
 #define bitmap_zalloc(count, gfp)	kzalloc(BITS_TO_LONGS(count), gfp)
 #define bitmap_free(ptr)		kfree(ptr)
+#endif
+
+/* Added in kernel v6.10 */
+#ifndef bitmap_size
+#define bitmap_size(nbits)	(ALIGN(nbits, BITS_PER_LONG) / BITS_PER_BYTE)
 #endif
 
 #ifndef EFX_HAVE_IOREMAP_WC
@@ -1858,6 +1875,9 @@ static inline void devlink_flash_update_timeout_notify(struct devlink *devlink,
 #endif
 #ifndef DEVLINK_INFO_VERSION_GENERIC_FW_BUNDLE_ID
 #define DEVLINK_INFO_VERSION_GENERIC_FW_BUNDLE_ID	"fw.bundle_id"
+#endif
+#ifndef DEVLINK_INFO_VERSION_GENERIC_FW_BOOTLOADER
+#define DEVLINK_INFO_VERSION_GENERIC_FW_BOOTLOADER	"fw.bootloader"
 #endif
 
 #ifdef EFX_NEED_REFCOUNT_T

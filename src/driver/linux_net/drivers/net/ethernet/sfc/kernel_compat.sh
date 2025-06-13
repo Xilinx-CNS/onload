@@ -38,6 +38,7 @@ EFX_HAVE_HWMON_READ_STRING		member	struct_hwmon_ops	read_string	include/linux/hw
 EFX_HAVE_HWMON_READ_STRING_CONST	memtype	struct_hwmon_ops	read_string	include/linux/hwmon.h	int(*)(struct device *, enum hwmon_sensor_types, u32, int, const char **)
 EFX_HAVE_ETHTOOL_SET_PHYS_ID		symbol	set_phys_id		include/linux/ethtool.h
 EFX_HAVE_ETHTOOL_GMODULEEEPROM		symbol	get_module_eeprom	include/linux/ethtool.h
+EFX_HAVE_ETHTOOL_EEPROM_BY_PAGE		symbol	get_module_eeprom_by_page	include/linux/ethtool.h
 EFX_NEED_DMA_SET_MASK_AND_COHERENT		nsymbol	dma_set_mask_and_coherent	include/linux/dma-mapping.h
 EFX_NEED_BITMAP_ZALLOC			nsymbol	bitmap_zalloc		include/linux/bitmap.h
 EFX_HAVE_ASM_SYSTEM_H			file				asm/system.h
@@ -104,6 +105,7 @@ EFX_NEED_SKB_VLAN_TAG_GET		nsymbol	skb_vlan_tag_get	include/linux/if_vlan.h
 EFX_NEED_IPV6_NFC			nsymbol	ethtool_tcpip6_spec	include/uapi/linux/ethtool.h
 EFX_HAVE_SKB_HASH			member	struct_sk_buff hash	include/linux/skbuff.h
 EFX_HAVE_INDIRECT_CALL_WRAPPERS		file				include/linux/indirect_call_wrapper.h
+EFX_HAVE_QUEUE_TRANS_TIMEOUT_ATOMIC	memtype	struct_netdev_queue trans_timeout	include/linux/netdevice.h	atomic_long_t
 
 # Stuff needed in code other than the linux net driver
 EFX_NEED_PCI_ENABLE_MSIX_RANGE          nsymbol pci_enable_msix_range include/linux/pci.h
@@ -155,10 +157,12 @@ EFX_HAVE_ETHTOOL_LINKSETTINGS	symbol	ethtool_link_ksettings	include/linux/ethtoo
 EFX_HAVE_ETHTOOL_LEGACY	symbol	__ethtool_get_settings	include/linux/ethtool.h
 EFX_HAVE_LINK_MODE_1000X	symbol	ETHTOOL_LINK_MODE_1000baseX_Full_BIT	include/uapi/linux/ethtool.h
 EFX_HAVE_LINK_MODE_25_50_100	symbol	ETHTOOL_LINK_MODE_25000baseCR_Full_BIT	include/uapi/linux/ethtool.h
+EFX_HAVE_LINK_MODE_400		symbol	ETHTOOL_LINK_MODE_400000baseCR4_Full_BIT include/uapi/linux/ethtool.h
 EFX_HAVE_LINK_MODE_FEC_BITS	symbol	ETHTOOL_LINK_MODE_FEC_BASER_BIT	include/uapi/linux/ethtool.h
 EFX_HAVE_NETDEV_EXT_MTU_LIMITS	member	struct_net_device_extended	max_mtu	include/linux/netdevice.h
 EFX_HAVE_NDO_EXT_CHANGE_MTU	memtype	struct_net_device_ops_extended	ndo_change_mtu	include/linux/netdevice.h	int (*)(struct net_device *, int)
 EFX_HAVE_NDO_TX_TIMEOUT_TXQUEUE	memtype	struct_net_device_ops	ndo_tx_timeout	include/linux/netdevice.h	void (*)(struct net_device *, unsigned int)
+EFX_HAVE_ETHTOOL_LINK_LANES	bitfield struct_ethtool_ops	cap_link_lanes_supported	include/linux/ethtool.h
 EFX_HAVE_ETHTOOL_FECSTATS	member	struct_ethtool_ops	get_fec_stats	include/linux/ethtool.h
 EFX_HAVE_ETHTOOL_FECPARAM	member	struct_ethtool_ops	get_fecparam	include/linux/ethtool.h
 EFX_HAVE_ETHTOOL_RXFH_CONTEXT	member	struct_ethtool_ops	get_rxfh_context	include/linux/ethtool.h

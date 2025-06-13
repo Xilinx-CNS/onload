@@ -395,6 +395,9 @@ const struct ethtool_ops efx_ethtool_ops = {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_RXFH_PARAM)
 	.cap_rss_ctx_supported	= true,
 #endif
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_LINK_LANES)
+	.cap_link_lanes_supported = true,
+#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_COALESCE_PARAMS)
 	.supported_coalesce_params = (ETHTOOL_COALESCE_USECS |
 				      ETHTOOL_COALESCE_USECS_IRQ |
@@ -472,6 +475,9 @@ const struct ethtool_ops efx_ethtool_ops = {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_GMODULEEEPROM)
 	.get_module_info	= efx_ethtool_get_module_info,
 	.get_module_eeprom	= efx_ethtool_get_module_eeprom,
+#endif
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_EEPROM_BY_PAGE)
+	.get_module_eeprom_by_page = efx_ethtool_get_module_eeprom_by_page,
 #endif
 	.get_channels		= efx_ethtool_get_channels,
 	.set_channels		= efx_ethtool_set_channels,

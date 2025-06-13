@@ -148,9 +148,10 @@ endif # !EFX_UPSTREAM
 sfc-y			:= efx.o efx_common.o efx_channels.o nic.o ef10.o \
 			   tx.o tx_common.o rx.o rx_common.o \
 			   selftest.o ethtool_common.o ethtool.o \
-			   mcdi.o mcdi_port.o mcdi_port_common.o mcdi_functions.o \
+			   mcdi.o mcdi_port.o mcdi_port_common.o \
+			   mcdi_port_handle.o mcdi_functions.o \
 			   mcdi_filters.o ef10_sriov.o tx_tso.o \
-			   efx_devlink.o xdp.o efx_reflash.o nvlog.o
+			   efx_devlink.o xdp.o efx_reflash.o nvlog.o nvcfg.o
 
 sfc_driverlink-y	:= driverlink.o
 

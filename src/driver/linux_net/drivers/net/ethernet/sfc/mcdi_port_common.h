@@ -53,6 +53,7 @@ u32 ethtool_linkset_to_mcdi_cap(const unsigned long *linkset);
 u32 ethtool_fec_caps_to_mcdi(u32 supported_cap, u32 ethtool_cap);
 
 u32 efx_get_mcdi_phy_flags(struct efx_nic *efx);
+u8 efx_mcdi_phy_decode_fcntl(u32 fcntl);
 void efx_mcdi_phy_decode_link(struct efx_nic *efx,
 			      struct efx_link_state *link_state,
 			      u32 speed, u32 flags, u32 fcntl,
@@ -85,6 +86,8 @@ int efx_mcdi_phy_set_fecparam(struct efx_nic *efx,
 			      const struct ethtool_fecparam *fec);
 int efx_mcdi_phy_test_alive(struct efx_nic *efx);
 u32 efx_get_mcdi_caps(struct efx_nic *efx);
+
+u32 efx_mcdi_wanted_fcntl(struct efx_nic *efx);
 
 int efx_mcdi_set_mac(struct efx_nic *efx);
 int efx_mcdi_set_mtu(struct efx_nic *efx);

@@ -13,6 +13,7 @@
 #include "nic.h"
 #include "efx_common.h"
 #include "mcdi_port_common.h"
+#include "mcdi_port_handle.h"
 #include "debugfs.h"
 #include "efx_auxbus_internal.h"
 
@@ -634,30 +635,30 @@ u32 efx_get_mcdi_phy_flags(struct efx_nic *efx)
 	return flags;
 }
 
+u8 efx_mcdi_phy_decode_fcntl(u32 fcntl)
+{
+	switch (fcntl) {
+	case MC_CMD_FCNTL_AUTO:
+		WARN_ON(1);	/* This is not a link mode */
+		return EFX_FC_AUTO | EFX_FC_TX | EFX_FC_RX;
+	case MC_CMD_FCNTL_BIDIR:
+		return EFX_FC_TX | EFX_FC_RX;
+	case MC_CMD_FCNTL_RESPOND:
+		return EFX_FC_RX;
+	default:
+		WARN_ON(1);
+		fallthrough;
+	case MC_CMD_FCNTL_OFF:
+		return 0;
+	}
+}
+
 void efx_mcdi_phy_decode_link(struct efx_nic *efx,
 			      struct efx_link_state *link_state,
 			      u32 speed, u32 flags, u32 fcntl,
 			      u32 ld_caps, u32 lp_caps)
 {
-	switch (fcntl) {
-	case MC_CMD_FCNTL_AUTO:
-		WARN_ON(1);	/* This is not a link mode */
-		link_state->fc = EFX_FC_AUTO | EFX_FC_TX | EFX_FC_RX;
-		break;
-	case MC_CMD_FCNTL_BIDIR:
-		link_state->fc = EFX_FC_TX | EFX_FC_RX;
-		break;
-	case MC_CMD_FCNTL_RESPOND:
-		link_state->fc = EFX_FC_RX;
-		break;
-	default:
-		WARN_ON(1);
-		fallthrough;
-	case MC_CMD_FCNTL_OFF:
-		link_state->fc = 0;
-		break;
-	}
-
+	link_state->fc = efx_mcdi_phy_decode_fcntl(fcntl);
 	link_state->up = !!(flags & (1 << MC_CMD_GET_LINK_OUT_LINK_UP_LBN));
 	link_state->fd = !!(flags & (1 << MC_CMD_GET_LINK_OUT_FULL_DUPLEX_LBN));
 	link_state->speed = speed;
@@ -1160,6 +1161,9 @@ const char *efx_mcdi_phy_test_name(struct efx_nic *efx,
 {
 	struct efx_mcdi_phy_data *phy_cfg = efx->phy_data;
 
+	if (efx_nic_port_handle_supported(efx))
+		return NULL;
+
 	if (phy_cfg->flags & (1 << MC_CMD_GET_PHY_CFG_OUT_BIST_LBN)) {
 		if (index == 0)
 			return "bist";
@@ -1204,6 +1208,29 @@ int efx_mcdi_port_reconfigure(struct efx_nic *efx)
 				 SET_LINK_SEQ_IGNORE);
 }
 
+u32 efx_mcdi_wanted_fcntl(struct efx_nic *efx)
+{
+	u32 fcntl;
+
+	switch (efx->wanted_fc) {
+	case EFX_FC_RX | EFX_FC_TX:
+		fcntl = MC_CMD_FCNTL_BIDIR;
+		break;
+	case EFX_FC_RX:
+		fcntl = MC_CMD_FCNTL_RESPOND;
+		break;
+	default:
+		fcntl = MC_CMD_FCNTL_OFF;
+		break;
+	}
+	if (efx->wanted_fc & EFX_FC_AUTO)
+		fcntl = MC_CMD_FCNTL_AUTO;
+	if (efx->fc_disable)
+		fcntl = MC_CMD_FCNTL_OFF;
+
+	return fcntl;
+}
+
 static unsigned int efx_calc_mac_mtu(struct efx_nic *efx)
 {
 	return EFX_MAX_FRAME_LEN(efx->net_dev->mtu);
@@ -1228,22 +1255,7 @@ int efx_mcdi_set_mac(struct efx_nic *efx)
 	MCDI_POPULATE_DWORD_1(cmdbytes, SET_MAC_IN_FLAGS,
 			      SET_MAC_IN_FLAG_INCLUDE_FCS, forward_fcs);
 
-	switch (efx->wanted_fc) {
-	case EFX_FC_RX | EFX_FC_TX:
-		fcntl = MC_CMD_FCNTL_BIDIR;
-		break;
-	case EFX_FC_RX:
-		fcntl = MC_CMD_FCNTL_RESPOND;
-		break;
-	default:
-		fcntl = MC_CMD_FCNTL_OFF;
-		break;
-	}
-	if (efx->wanted_fc & EFX_FC_AUTO)
-		fcntl = MC_CMD_FCNTL_AUTO;
-	if (efx->fc_disable)
-		fcntl = MC_CMD_FCNTL_OFF;
-
+	fcntl = efx_mcdi_wanted_fcntl(efx);
 	MCDI_SET_DWORD(cmdbytes, SET_MAC_IN_FCNTL, fcntl);
 
 	return efx_mcdi_rpc(efx, MC_CMD_SET_MAC, cmdbytes, sizeof(cmdbytes),
@@ -1274,27 +1286,24 @@ enum efx_stats_action {
 	EFX_STATS_PERIOD,
 };
 
-static int efx_mcdi_mac_stats(struct efx_nic *efx,
-			      enum efx_stats_action action, int clear)
+static int efx_ef10_mcdi_stats(struct efx_nic *efx,
+			       enum efx_stats_action action, int clear)
 {
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAC_STATS_IN_LEN);
-	int rc;
-	int dma, change;
 	dma_addr_t dma_addr = efx->stats_buffer.dma_addr;
+	int dma, change;
 	u32 dma_len;
+	int rc;
 
 	if (action == EFX_STATS_ENABLE)
 		efx->stats_enabled = true;
 	else if (action == EFX_STATS_DISABLE)
 		efx->stats_enabled = false;
 
-	if (EFX_WORKAROUND_5316(efx))
-		return -EOPNOTSUPP;
-
 	dma = action == EFX_STATS_PULL || efx->stats_enabled;
 	change = action != EFX_STATS_PULL;
 
-	dma_len = dma ? efx->num_mac_stats * sizeof(u64) : 0;
+	dma_len = dma ? efx->stats_dma_size : 0;
 
 	BUILD_BUG_ON(MC_CMD_MAC_STATS_OUT_DMA_LEN != 0);
 
@@ -1320,6 +1329,62 @@ static int efx_mcdi_mac_stats(struct efx_nic *efx,
 		efx_mcdi_display_error(efx, MC_CMD_MAC_STATS,
 				       sizeof(inbuf), NULL, 0, rc);
 	return rc;
+}
+
+static int efx_x4_mcdi_stats(struct efx_nic *efx,
+			     enum efx_stats_action action, int clear)
+{
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_GET_NETPORT_STATISTICS_IN_LEN);
+	dma_addr_t dma_addr = efx->stats_buffer.dma_addr;
+	int dma, change;
+	u32 dma_len;
+	int rc;
+
+	if (action == EFX_STATS_ENABLE)
+		efx->stats_enabled = true;
+	else if (action == EFX_STATS_DISABLE)
+		efx->stats_enabled = false;
+
+	dma = action == EFX_STATS_PULL || efx->stats_enabled;
+	change = action != EFX_STATS_PULL;
+
+	dma_len = dma ? efx->stats_dma_size : 0;
+
+	BUILD_BUG_ON(MC_CMD_GET_NETPORT_STATISTICS_OUT_LENMIN != 0);
+
+	MCDI_SET_DWORD(inbuf, GET_NETPORT_STATISTICS_IN_PORT_HANDLE,
+		       efx->port_handle);
+
+	MCDI_SET_QWORD(inbuf, GET_NETPORT_STATISTICS_IN_DMA_ADDR, dma_addr);
+	MCDI_POPULATE_DWORD_6(inbuf, GET_NETPORT_STATISTICS_IN_CMD,
+			      GET_NETPORT_STATISTICS_IN_DMA, dma,
+			      GET_NETPORT_STATISTICS_IN_CLEAR, clear,
+			      GET_NETPORT_STATISTICS_IN_PERIODIC_CHANGE, change,
+			      GET_NETPORT_STATISTICS_IN_PERIODIC_ENABLE,
+			      efx->stats_enabled,
+			      GET_NETPORT_STATISTICS_IN_PERIODIC_NOEVENT, 1,
+			      GET_NETPORT_STATISTICS_IN_PERIOD_MS,
+			      efx->stats_period_ms);
+	MCDI_SET_DWORD(inbuf, GET_NETPORT_STATISTICS_IN_DMA_LEN, dma_len);
+
+	/* TODO: need PORT_ID for VADAPTER statistics */
+
+	rc = efx_mcdi_rpc_quiet(efx, MC_CMD_GET_NETPORT_STATISTICS, inbuf,
+				sizeof(inbuf), NULL, 0, NULL);
+	/* Expect ENOENT if DMA queues have not been set up */
+	if (rc && (rc != -ENOENT || atomic_read(&efx->active_queues)))
+		efx_mcdi_display_error(efx, MC_CMD_GET_NETPORT_STATISTICS,
+				       sizeof(inbuf), NULL, 0, rc);
+	return rc;
+}
+
+static int efx_mcdi_mac_stats(struct efx_nic *efx,
+			      enum efx_stats_action action, int clear)
+{
+	if (efx_nic_port_handle_supported(efx))
+		return efx_x4_mcdi_stats(efx, action, clear);
+	else
+		return efx_ef10_mcdi_stats(efx, action, clear);
 }
 
 /*	Periodic MAC statistics monitoring
@@ -1432,15 +1497,14 @@ int efx_mcdi_mac_init_stats(struct efx_nic *efx)
 
 	/* Allocate buffer for stats */
 	rc = efx_nic_alloc_buffer(efx, &efx->stats_buffer,
-				  efx->num_mac_stats * sizeof(u64), GFP_KERNEL);
+				  efx->stats_dma_size, GFP_KERNEL);
 	if (rc) {
 		pci_warn(efx->pci_dev,
 			 "failed to allocate DMA buffer: %d\n", rc);
 		return rc;
 	}
 
-	efx->mc_initial_stats =
-		kcalloc(efx->num_mac_stats, sizeof(u64), GFP_KERNEL);
+	efx->mc_initial_stats = kzalloc(efx->stats_dma_size, GFP_KERNEL);
 	if (!efx->mc_initial_stats) {
 		pci_warn(efx->pci_dev,
 			 "failed to allocate initial MC stats buffer\n");
@@ -1498,6 +1562,13 @@ void efx_mcdi_process_link_change(struct efx_nic *efx, efx_qword_t *ev)
 {
 	u32 flags, fcntl, speed, lpa;
 
+	if (efx_nic_port_handle_supported(efx)) {
+		if (net_ratelimit())
+			netif_warn(efx, link, efx->net_dev,
+				   "Legacy LINKCHANGE event ignored\n");
+		return;
+	}
+
 	speed = EFX_QWORD_FIELD(*ev, MCDI_EVENT_LINKCHANGE_SPEED);
 	if (speed < ARRAY_SIZE(efx_mcdi_event_link_speed)) {
 		speed = efx_mcdi_event_link_speed[speed];
@@ -1530,6 +1601,13 @@ void efx_mcdi_process_link_change_v2(struct efx_nic *efx, efx_qword_t *ev)
 {
 	u32 link_up, flags, fcntl, speed, lpa;
 
+	if (efx_nic_port_handle_supported(efx)) {
+		if (net_ratelimit())
+			netif_warn(efx, link, efx->net_dev,
+				   "Legacy LINKCHANGE_V2 event ignored\n");
+		return;
+	}
+
 	speed = EFX_QWORD_FIELD(*ev, MCDI_EVENT_LINKCHANGE_V2_SPEED);
 	EFX_WARN_ON_PARANOID(speed >= ARRAY_SIZE(efx_mcdi_event_link_speed));
 	speed = efx_mcdi_event_link_speed[speed];
@@ -1553,10 +1631,18 @@ void efx_mcdi_process_link_change_v2(struct efx_nic *efx, efx_qword_t *ev)
 void efx_mcdi_process_module_change(struct efx_nic *efx, efx_qword_t *ev)
 {
 	struct efx_mcdi_phy_data *phy_cfg = efx->phy_data;
-	u32 caps = efx_get_mcdi_caps(efx);
-	u8 flags = efx_mcdi_link_state_flags(&efx->link_state);
-	u32 ld_caps;
-	u8 seq;
+	u32 caps, ld_caps;
+	u8 flags, seq;
+
+	if (efx_nic_port_handle_supported(efx)) {
+		if (net_ratelimit())
+			netif_warn(efx, link, efx->net_dev,
+				   "Legacy MODULECHANGE event ignored\n");
+		return;
+	}
+
+	caps = efx_get_mcdi_caps(efx);
+	flags = efx_mcdi_link_state_flags(&efx->link_state);
 
 	ld_caps = EFX_QWORD_FIELD(*ev, MCDI_EVENT_MODULECHANGE_LD_CAP);
 	seq = EFX_DWORD_FIELD(*ev, MCDI_EVENT_MODULECHANGE_SEQ);
@@ -1638,6 +1724,12 @@ bool efx_mcdi_port_process_event_common(struct efx_channel *channel,
 		return true;
 	case MCDI_EVENT_CODE_MODULECHANGE:
 		efx_mcdi_process_module_change(efx, event);
+		return true;
+	case MCDI_EVENT_CODE_PORT_LINKCHANGE:
+		efx_x4_mcdi_process_link_change(efx, event);
+		return true;
+	case MCDI_EVENT_CODE_PORT_MODULECHANGE:
+		efx_x4_mcdi_process_module_change(efx, event);
 		return true;
 	case MCDI_EVENT_CODE_TX_FLUSH:
 	case MCDI_EVENT_CODE_RX_FLUSH:
@@ -1747,6 +1839,9 @@ int efx_mcdi_phy_run_tests(struct efx_nic *efx, int *results,
 	struct efx_mcdi_phy_data *phy_cfg = efx->phy_data;
 	u32 mode;
 	int rc;
+
+	if (efx_nic_port_handle_supported(efx))
+		return 0;
 
 	if (phy_cfg->flags & (1 << MC_CMD_GET_PHY_CFG_OUT_BIST_LBN)) {
 		rc = efx_mcdi_bist(efx, MC_CMD_PHY_BIST, results);
@@ -1886,6 +1981,9 @@ static int efx_mcdi_phy_sff_8472_level(struct efx_nic *efx)
 static u32 efx_mcdi_phy_module_type(struct efx_nic *efx)
 {
 	struct efx_mcdi_phy_data *phy_data = efx->phy_data;
+
+	if (efx_nic_port_handle_supported(efx) || !phy_data)
+		return 0;
 
 	if (phy_data->media != MC_CMD_MEDIA_QSFP_PLUS)
 		return phy_data->media;

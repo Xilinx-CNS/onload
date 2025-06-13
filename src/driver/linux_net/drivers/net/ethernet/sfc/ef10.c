@@ -14,6 +14,7 @@
 #include "mcdi_pcol.h"
 #include "mcdi_port.h"
 #include "mcdi_port_common.h"
+#include "mcdi_port_handle.h"
 #include "nic.h"
 #include "mcdi_filters.h"
 #include "mcdi_functions.h"
@@ -235,9 +236,71 @@ static bool efx_ef10_is_vf(struct efx_nic *efx)
 	return efx->type->is_vf;
 }
 
+static int efx_ef10_probe_legacy_link_mgmt(struct efx_nic *efx)
+{
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_LINK_OUT_LEN);
+
+	BUILD_BUG_ON(MC_CMD_GET_LINK_IN_LEN != 0);
+	return efx_mcdi_rpc(efx, MC_CMD_GET_LINK, NULL, 0,
+			    outbuf, sizeof(outbuf), NULL);
+}
+
+static int efx_ef10_probe_link_mgmt_support(struct efx_nic *efx)
+{
+	bool rc;
+
+	if (efx_nic_rev(efx) < EFX_REV_X4) {
+		/* Older firmwares only support legacy MCDI link management */
+		efx->use_legacy_link_mgmt = true;
+		return 0;
+	}
+
+#ifdef EFX_NOT_UPSTREAM
+	if (efx->link_mgmt != EFX_LINK_MGMT_AUTO &&
+	    efx->link_mgmt != EFX_LINK_MGMT_NETPORT)
+		goto probe_legacy;
+#endif
+	rc = efx_mcdi_get_port_handle(efx, &efx->port_handle);
+	if (!rc) {
+		netif_dbg(efx, drv, efx->net_dev,
+			  "Using MCDI netport API for link management\n");
+		efx->use_legacy_link_mgmt = false;
+		return 0;
+	}
+
+#ifdef EFX_NOT_UPSTREAM
+probe_legacy:
+	if (efx->link_mgmt != EFX_LINK_MGMT_AUTO &&
+	    efx->link_mgmt != EFX_LINK_MGMT_LEGACY)
+		return -EOPNOTSUPP;
+#endif
+	rc = efx_ef10_probe_legacy_link_mgmt(efx);
+	if (!rc) {
+		netif_dbg(efx, drv, efx->net_dev,
+			  "Using MCDI legacy API for link management\n");
+		efx->use_legacy_link_mgmt = true;
+		return 0;
+	}
+
+	netif_err(efx, drv, efx->net_dev,
+		  "MCDI link management API not supported\n");
+	return -EOPNOTSUPP;
+}
+
+static bool efx_ef10_port_handle_supported(struct efx_nic *efx)
+{
+	if (efx->use_legacy_link_mgmt)
+		return false;
+
+	/* The handle-based network port MCDI commands
+	 * are supported on X4 and later controllers.
+	 */
+	return efx_nic_rev(efx) >= EFX_REV_X4;
+}
+
 static int efx_ef10_init_datapath_caps(struct efx_nic *efx)
 {
-	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_CAPABILITIES_V4_OUT_LEN);
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_CAPABILITIES_V10_OUT_LEN);
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 	size_t outlen;
 	int rc;
@@ -311,17 +374,33 @@ static int efx_ef10_init_datapath_caps(struct efx_nic *efx)
 			efx->vi_stride);
 	}
 
+	/* Get number of statistics counters for MC_CMD_MAC_STATS. This is
+	 * not used for the port handle based API, which gets the number of
+	 * statistics using MC_CMD_MAC_STATISTICS_DESCRIPTOR.
+	 */
 	if (outlen >= MC_CMD_GET_CAPABILITIES_V4_OUT_LEN) {
 		efx->num_mac_stats = MCDI_WORD(outbuf,
 				GET_CAPABILITIES_V4_OUT_MAC_STATS_NUM_STATS);
+		efx->stats_dma_size = efx->num_mac_stats * sizeof(u64);
 		pci_dbg(efx->pci_dev,
 			"firmware reports num_mac_stats = %u\n",
 			efx->num_mac_stats);
 	} else {
 		/* leave num_mac_stats as the default value, MC_CMD_MAC_NSTATS */
+		efx->num_mac_stats = MC_CMD_MAC_NSTATS;
+		efx->stats_dma_size = efx->num_mac_stats * sizeof(u64);
 		pci_dbg(efx->pci_dev,
 			"firmware did not report num_mac_stats, assuming %u\n",
 			efx->num_mac_stats);
+	}
+
+	if (outlen >= MC_CMD_GET_CAPABILITIES_V10_OUT_LEN) {
+		efx->supported_bitmap =
+			MCDI_DWORD(outbuf,
+				   GET_CAPABILITIES_V10_OUT_SUPPORTED_QUEUE_SIZES);
+		efx->guaranteed_bitmap =
+			MCDI_DWORD(outbuf,
+				   GET_CAPABILITIES_V10_OUT_GUARANTEED_QUEUE_SIZES);
 	}
 
 	return 0;
@@ -1417,8 +1496,7 @@ static int efx_ef10_init_nic(struct efx_nic *efx)
 		nic_data->must_realloc_vis = false;
 	}
 
-	nic_data->mc_stats = kmalloc_array(efx->num_mac_stats, sizeof(__le64),
-					   GFP_KERNEL);
+	nic_data->mc_stats = kmalloc(efx->stats_dma_size, GFP_KERNEL);
 	if (!nic_data->mc_stats)
 		return -ENOMEM;
 
@@ -1916,6 +1994,49 @@ static void efx_ef10_ctpio_stat_mask(unsigned long *mask)
 	__set_bit(EF10_STAT_ctpio_erase, mask);
 }
 
+void efx_x4_init_hw_stat_desc(struct efx_nic *efx)
+{
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+	int i;
+
+	/* The port handle based API uses the translation from EF10 driver
+	 * internal IDs to net core and ethtool statistics, but uses DMA
+	 * buffer offsets from MC_CMD_MAC_STATISTICS_DESCRIPTOR.
+	 * Copy the EF10 ID mapping here, and fill in the DMA offsets and
+	 * supported stats masks later when probing stats.
+	 */
+	for (i = 0; i < EF10_STAT_COUNT; i++) {
+		nic_data->x4_stat_desc[i].name =
+			efx_ef10_stat_desc[i].name;
+		nic_data->x4_stat_desc[i].dma_width =
+			efx_ef10_stat_desc[i].dma_width;
+		nic_data->x4_stat_desc[i].offset = 0;
+	}
+}
+
+static void efx_x4_get_stat_mask(struct efx_nic *efx, unsigned long *mask)
+{
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+	DECLARE_BITMAP(ignore, EF10_STAT_COUNT) = {};
+	unsigned int i;
+
+	/* Add generic software stats */
+	__set_bit(GENERIC_STAT_rx_nodesc_trunc, mask);
+	__set_bit(GENERIC_STAT_rx_noskb_drops, mask);
+
+	/* Firmware reports all available stats counters.
+	 * Remove counters for unsupported features.
+	 */
+
+	/* Only show vadaptor stats when EVB capability is present */
+	if (!efx_ef10_has_cap(nic_data->datapath_caps, EVB))
+		for (i = EF10_STAT_port_COUNT; i < EF10_STAT_V1_COUNT; i++)
+			__set_bit(i, ignore);
+
+	/* Remove ignored stats from supported firmware stats */
+	bitmap_andnot(mask, nic_data->x4_stats_mask, ignore, EF10_STAT_COUNT);
+}
+
 static void efx_ef10_get_stat_mask(struct efx_nic *efx, unsigned long *mask)
 {
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
@@ -1965,6 +2086,19 @@ static size_t efx_ef10_describe_stats(struct efx_nic *efx, u8 *names)
 				      mask, names);
 }
 
+static size_t efx_x4_describe_stats(struct efx_nic *efx, u8 *names)
+{
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+	DECLARE_BITMAP(mask, EF10_STAT_COUNT) = {};
+
+	if (!efx_nic_port_handle_supported(efx))
+		return efx_ef10_describe_stats(efx, names);
+
+	efx_x4_get_stat_mask(efx, mask);
+	return efx_nic_describe_stats(nic_data->x4_stat_desc, EF10_STAT_COUNT,
+				      mask, names);
+}
+
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_FECSTATS)
 static void efx_ef10_get_fec_stats(struct efx_nic *efx,
 				   struct ethtool_fec_stats *fec_stats)
@@ -1973,7 +2107,11 @@ static void efx_ef10_get_fec_stats(struct efx_nic *efx,
 	DECLARE_BITMAP(mask, EF10_STAT_COUNT) = {};
 	u64 *stats = nic_data->stats;
 
-	efx_ef10_get_stat_mask(efx, mask);
+	if (efx_nic_port_handle_supported(efx))
+		efx_x4_get_stat_mask(efx, mask);
+	else
+		efx_ef10_get_stat_mask(efx, mask);
+
 	if (test_bit(EF10_STAT_fec_corrected_errors, mask))
 		fec_stats->corrected_blocks.total =
 			stats[EF10_STAT_fec_corrected_errors];
@@ -2005,14 +2143,21 @@ static size_t efx_ef10_update_stats_common(struct efx_nic *efx, u64 *full_stats,
 {
 	DECLARE_BITMAP(mask, EF10_STAT_COUNT) = {};
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+	const struct efx_hw_stat_desc *stat_desc;
 	u64 *stats = nic_data->stats;
 	size_t stats_count = 0, index;
 
-	efx_ef10_get_stat_mask(efx, mask);
-
 	if (full_stats) {
+		if (efx_nic_port_handle_supported(efx)) {
+			efx_x4_get_stat_mask(efx, mask);
+			stat_desc = nic_data->x4_stat_desc;
+		} else {
+			efx_ef10_get_stat_mask(efx, mask);
+			stat_desc = efx_ef10_stat_desc;
+		}
+
 		for_each_set_bit(index, mask, EF10_STAT_COUNT) {
-			if (efx_ef10_stat_desc[index].name) {
+			if (stat_desc[index].name) {
 				*full_stats++ = stats[index];
 				++stats_count;
 			}
@@ -2076,11 +2221,18 @@ static size_t efx_ef10_update_stats_pf(struct efx_nic *efx, u64 *full_stats,
 
 	spin_lock_bh(&efx->stats_lock);
 
-	efx_ef10_get_stat_mask(efx, mask);
-
 	efx_nic_copy_stats(efx, nic_data->mc_stats);
-	efx_nic_update_stats(efx_ef10_stat_desc, EF10_STAT_COUNT,
-			     mask, stats, efx->mc_initial_stats, nic_data->mc_stats);
+	if (efx_nic_port_handle_supported(efx)) {
+		efx_x4_get_stat_mask(efx, mask);
+		efx_nic_update_stats(nic_data->x4_stat_desc, EF10_STAT_COUNT,
+				     mask, stats, efx->mc_initial_stats,
+				     nic_data->mc_stats);
+	} else {
+		efx_ef10_get_stat_mask(efx, mask);
+		efx_nic_update_stats(efx_ef10_stat_desc, EF10_STAT_COUNT,
+				     mask, stats, efx->mc_initial_stats,
+				     nic_data->mc_stats);
+	}
 
 	/* Update derived statistics */
 	efx_nic_fix_nodesc_drop_stat(efx,
@@ -2163,11 +2315,15 @@ static void efx_ef10_pull_stats_vf(struct efx_nic *efx)
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAC_STATS_IN_LEN);
 	DECLARE_BITMAP(mask, EF10_STAT_COUNT) = {};
 	__le64 generation_start, generation_end;
-	u32 dma_len = efx->num_mac_stats * sizeof(u64);
+	u32 dma_len = efx->stats_dma_size;
 	struct efx_buffer stats_buf;
 	__le64 *dma_stats;
 	u64 *stats = nic_data->stats;
 	int rc;
+
+	// TODO: need MC_CMD_MAC_STATISTICS support for vadapter stats
+	if (efx_nic_port_handle_supported(efx))
+		return;
 
 	efx_ef10_get_stat_mask(efx, mask);
 
@@ -2203,8 +2359,7 @@ static void efx_ef10_pull_stats_vf(struct efx_nic *efx)
 	if (!efx->stats_initialised) {
 		efx_ptp_reset_stats(efx);
 		efx_reset_sw_stats(efx);
-		memcpy(efx->mc_initial_stats, dma_stats,
-		       efx->num_mac_stats * sizeof(u64));
+		memcpy(efx->mc_initial_stats, dma_stats, dma_len);
 		efx->stats_initialised = true;
 	}
 
@@ -2621,6 +2776,14 @@ static int efx_ef10_tx_tso_desc(struct efx_tx_queue *tx_queue,
 	return 0;
 }
 
+static bool efx_ef10_ptp_tx_ts_support(struct efx_nic *efx)
+{
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+
+	return nic_data->licensed_features &
+	       BIT(LICENSED_V3_FEATURES_TX_TIMESTAMPS_LBN);
+}
+
 static int efx_ef10_tx_init(struct efx_tx_queue *tx_queue)
 {
 	struct efx_channel *channel = tx_queue->channel;
@@ -2638,8 +2801,7 @@ static int efx_ef10_tx_init(struct efx_tx_queue *tx_queue)
 		!efx_ef10_has_cap(nic_data->datapath_caps, VXLAN_NVGRE));
 
 	/* Only allow TX timestamping if we have the license for it. */
-	if (!(nic_data->licensed_features &
-	      (1 << LICENSED_V3_FEATURES_TX_TIMESTAMPS_LBN))) {
+	if (!efx_ptp_tx_ts_support(efx)) {
 		tx_queue->timestamping = false;
 #ifdef CONFIG_SFC_PTP
 		/* Disable sync events on this channel. */
@@ -3747,11 +3909,13 @@ static int efx_ef10_ev_process(struct efx_channel *channel, int quota)
 	efx_qword_t event, *p_event, *cl_base, *old_cl_base = NULL;
 	bool fresh = false;
 	unsigned int read_ptr, cr_ptr;
+	unsigned int wrap_ptr;
 	int ev_code;
 	int spent = 0;
 	int rc;
 
 	read_ptr = channel->eventq_read_ptr;
+	wrap_ptr = read_ptr & channel->eventq_mask;
 
 	EFX_WARN_ON_ONCE_PARANOID(!IS_ALIGNED((uintptr_t)channel->eventq.addr,
 					      L1_CACHE_BYTES));
@@ -3850,6 +4014,17 @@ static int efx_ef10_ev_process(struct efx_channel *channel, int quota)
 				  " (data " EFX_QWORD_FMT ")\n",
 				  channel->channel, ev_code,
 				  EFX_QWORD_VAL(event));
+		}
+		if ((read_ptr & channel->eventq_mask) == wrap_ptr) {
+			/* We have consumed an entire ring's worth of events,
+			 * probably scrambling to keep up with TX completions,
+			 * without seeing enough RX to spend our budget.
+			 * Finish this NAPI poll here, reporting the budget as
+			 * fully spent, so that the core can reschedule before
+			 * calling us again.
+			 */
+			spent = quota;
+			goto out;
 		}
 	}
 
@@ -4138,6 +4313,27 @@ static int efx_ef10_mac_reconfigure(struct efx_nic *efx, bool mtu_only)
 		return efx_mcdi_set_mtu(efx);
 
 	rc = efx_mcdi_set_mac(efx);
+	if (rc == -EPERM && efx_ef10_is_vf(efx))
+		return 0;
+
+	return rc;
+}
+
+static int efx_x4_mac_reconfigure(struct efx_nic *efx, bool mtu_only)
+{
+	int rc;
+
+	if (!efx_nic_port_handle_supported(efx))
+		return efx_ef10_mac_reconfigure(efx, mtu_only);
+
+	WARN_ON(!mutex_is_locked(&efx->mac_lock));
+
+	efx_mcdi_filter_sync_rx_mode(efx);
+
+	if (mtu_only)
+		return efx_x4_mcdi_set_mtu(efx);
+
+	rc = efx_x4_mcdi_mac_ctrl(efx);
 	if (rc == -EPERM && efx_ef10_is_vf(efx))
 		return 0;
 
@@ -4476,6 +4672,29 @@ int efx_ef10_licensed_app_state(struct efx_nic *efx,
 
 #endif /* EFX_NOT_UPSTREAM */
 
+static bool efx_ef10_ptp_adapter_has_support(struct efx_nic *efx)
+{
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_PTP_IN_READ_NIC_TIME_LEN);
+	MCDI_DECLARE_BUF_ERR(outbuf);
+	int rc;
+
+	MCDI_SET_DWORD(inbuf, PTP_IN_OP, MC_CMD_PTP_OP_READ_NIC_TIME);
+	MCDI_SET_DWORD(inbuf, PTP_IN_PERIPH_ID, 0);
+	rc = efx_mcdi_rpc_quiet(efx, MC_CMD_PTP, inbuf, sizeof(inbuf),
+				outbuf, sizeof(outbuf), NULL);
+	/* ENOSYS => the NIC doesn't support PTP.
+	 * EPERM => the NIC doesn't have a PTP license.
+	 */
+	if (rc == -ENOSYS || rc == -EPERM)
+		pci_info(efx->pci_dev, "no PTP support (rc=%d)\n", rc);
+	else if (rc)
+		efx_mcdi_display_error(efx, MC_CMD_PTP,
+				       MC_CMD_PTP_IN_READ_NIC_TIME_LEN,
+				       outbuf, sizeof(outbuf), rc);
+
+	return rc == 0;
+}
+
 #ifdef CONFIG_SFC_PTP
 static int efx_ef10_rx_enable_timestamping(struct efx_channel *channel,
 					   bool temp)
@@ -4509,6 +4728,54 @@ static int efx_ef10_rx_enable_timestamping(struct efx_channel *channel,
 	}
 
 	if (rc != 0)
+		channel->sync_events_state = temp ? SYNC_EVENTS_QUIESCENT :
+						    SYNC_EVENTS_DISABLED;
+
+	return rc;
+}
+
+static int efx_x4_rx_enable_timestamping(struct efx_channel *channel,
+					     bool temp)
+{
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_PTP_IN_TIME_EVENT_SUBSCRIBE_V2_LEN);
+	int rc;
+
+	BUILD_BUG_ON(MC_CMD_PTP_OUT_LEN != 0);
+
+	if (channel->sync_events_state == SYNC_EVENTS_REQUESTED ||
+	    channel->sync_events_state == SYNC_EVENTS_VALID)
+		return 0;
+
+	if (temp && channel->sync_events_state == SYNC_EVENTS_DISABLED)
+		return 0;
+
+	channel->sync_events_state = SYNC_EVENTS_REQUESTED;
+
+	MCDI_SET_DWORD(inbuf, PTP_IN_OP, MC_CMD_PTP_OP_TIME_EVENT_SUBSCRIBE_V2);
+	MCDI_SET_DWORD(inbuf, PTP_IN_PERIPH_ID, 0);
+	MCDI_SET_DWORD(inbuf, PTP_IN_TIME_EVENT_SUBSCRIBE_V2_QUEUE_ID,
+		       channel->channel);
+	MCDI_POPULATE_DWORD_1(inbuf, PTP_IN_TIME_EVENT_SUBSCRIBE_V2_FLAGS,
+			      PTP_IN_TIME_EVENT_SUBSCRIBE_V2_REPORT_SYNC_STATUS,
+			      1);
+
+	/* As with efx_ef10_rx_enable_timestamping, try enabling timestamping
+	 * with clock sync status reporting and fall back to not requesting it
+	 * in the case where something else has already not requested it.
+	 */
+	rc = efx_mcdi_rpc(channel->efx, MC_CMD_PTP,
+			  inbuf, sizeof(inbuf), NULL, 0, NULL);
+	if (rc) {
+		MCDI_POPULATE_DWORD_1(inbuf,
+				      PTP_IN_TIME_EVENT_SUBSCRIBE_V2_FLAGS,
+				      PTP_IN_TIME_EVENT_SUBSCRIBE_V2_REPORT_SYNC_STATUS,
+				      0);
+
+		rc = efx_mcdi_rpc(channel->efx, MC_CMD_PTP,
+				  inbuf, sizeof(inbuf), NULL, 0, NULL);
+	}
+
+	if (rc)
 		channel->sync_events_state = temp ? SYNC_EVENTS_QUIESCENT :
 						    SYNC_EVENTS_DISABLED;
 
@@ -4552,26 +4819,14 @@ static int efx_ef10_ptp_set_ts_sync_events(struct efx_nic *efx, bool en,
 	int rc;
 
 	set = en ?
-	      efx_ef10_rx_enable_timestamping :
+	      efx_rx_enable_timestamping :
 	      efx_ef10_rx_disable_timestamping;
 
-	if (efx_ptp_uses_separate_channel(efx)) {
-		channel = efx_ptp_channel(efx);
-		if (channel) {
-			rc = set(channel, temp);
-			if (en && rc != 0) {
-				efx_ef10_ptp_set_ts_sync_events(efx, false, temp);
-				return rc;
-			}
-		}
-	}
-	else {
-		efx_for_each_channel(channel, efx) {
-			rc = set(channel, temp);
-			if (en && rc != 0) {
-				efx_ef10_ptp_set_ts_sync_events(efx, false, temp);
-				return rc;
-			}
+	efx_for_each_channel(channel, efx) {
+		rc = set(channel, temp);
+		if (en && rc != 0) {
+			efx_ef10_ptp_set_ts_sync_events(efx, false, temp);
+			return rc;
 		}
 	}
 
@@ -5386,7 +5641,7 @@ static int efx_ef10_probe_post_io(struct efx_nic *efx)
 	/* License checking on the firmware must finish before we can trust the
 	 * capabilities. Before that some will not be set.
 	 */
-	efx_ef10_read_licensed_features(efx);
+	efx_read_licensed_features(efx);
 
 	rc = efx_ef10_init_datapath_caps(efx);
 	if (rc < 0)
@@ -5397,6 +5652,29 @@ static int efx_ef10_probe_post_io(struct efx_nic *efx)
 	    (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_NO_ACTIVE_PORT))
 		return 0;
 #endif
+
+	rc = efx_ef10_probe_link_mgmt_support(efx);
+	if (rc)
+		return rc;
+
+	if (efx_nic_port_handle_supported(efx)) {
+		rc = efx_x4_mcdi_probe_stats(efx, &efx->num_mac_stats,
+					     &efx->stats_dma_size);
+		if (rc)
+			return rc;
+
+		pci_dbg(efx->pci_dev,
+			"firmware reports num_mac_stats = %u\n",
+			efx->num_mac_stats);
+
+		rc = efx_x4_mcdi_enable_netport_events(efx);
+		if (rc) {
+			pci_warn(efx->pci_dev,
+				 "Enable netport events failed rc %d\n", rc);
+			/* FIXME: ignore until all firmwares support this */
+			rc = 0;
+		}
+	}
 
 	efx->tx_queues_per_channel = 1;
 	efx->select_tx_queue = efx_ef10_select_tx_queue;
@@ -5901,6 +6179,7 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 	.fini_dmaq = efx_ef10_fini_dmaq,
 	.prepare_flr = efx_ef10_prepare_flr,
 	.finish_flr = efx_port_dummy_op_void,
+	.read_licensed_features = efx_ef10_read_licensed_features,
 	.describe_stats = efx_ef10_describe_stats,
 	.update_stats = efx_ef10_update_stats_vf,
 	.start_stats = efx_ef10_start_stats_vf,
@@ -5911,6 +6190,7 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 	.reconfigure_mac = efx_ef10_mac_reconfigure,
 	.check_mac_fault = efx_mcdi_mac_check_fault,
 	.reconfigure_port = efx_mcdi_port_reconfigure,
+	.check_link_change = efx_mcdi_phy_poll,
 	.get_wol = efx_ef10_get_wol_vf,
 	.set_wol = efx_ef10_set_wol_vf,
 	.resume_wol = efx_port_dummy_op_void,
@@ -5974,10 +6254,16 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 #ifdef CONFIG_SFC_MTD
 	.mtd_probe = efx_port_dummy_op_int,
 #endif
+	.ptp_adapter_has_support = efx_ef10_ptp_adapter_has_support,
+	.ptp_tx_ts_support = efx_ef10_ptp_tx_ts_support,
 #ifdef CONFIG_SFC_PTP
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
 	.ptp_set_clock_info = efx_ef10_phc_set_clock_info,
 #endif
+	.ptp_rx_enable_ts = efx_ef10_rx_enable_timestamping,
+	.ptp_get_attributes = efx_ef10_ptp_get_attributes,
+	.ptp_synchronize = efx_ef10_ptp_synchronize,
+	.ptp_sync_sample_size = PTP_DEFAULT_SYNC_SAMPLE_SIZE,
 	.ptp_write_host_time = efx_ef10_ptp_write_host_time,
 	.ptp_set_ts_config = efx_ef10_ptp_set_ts_config,
 #endif
@@ -6049,21 +6335,23 @@ const struct efx_nic_type efx_x4_vf_nic_type = {
 	.map_reset_reason = efx_ef10_map_reset_reason,
 	.map_reset_flags = efx_ef10_map_reset_flags,
 	.reset = efx_ef10_reset,
-	.probe_port = efx_mcdi_port_probe,
-	.remove_port = efx_mcdi_port_remove,
+	.probe_port = efx_x4_mcdi_port_probe,
+	.remove_port = efx_x4_mcdi_port_remove,
 	.fini_dmaq = efx_ef10_fini_dmaq,
 	.prepare_flr = efx_ef10_prepare_flr,
 	.finish_flr = efx_port_dummy_op_void,
-	.describe_stats = efx_ef10_describe_stats,
+	.describe_stats = efx_x4_describe_stats,
 	.update_stats = efx_ef10_update_stats_vf,
 	.start_stats = efx_ef10_start_stats_vf,
 	.pull_stats = efx_ef10_pull_stats_vf,
 	.stop_stats = efx_ef10_stop_stats_vf,
 	.update_stats_period = efx_ef10_vf_schedule_stats_work,
 	.push_irq_moderation = efx_ef10_push_irq_moderation,
-	.reconfigure_mac = efx_ef10_mac_reconfigure,
-	.check_mac_fault = efx_mcdi_mac_check_fault,
-	.reconfigure_port = efx_mcdi_port_reconfigure,
+	.reconfigure_mac = efx_x4_mac_reconfigure,
+	.check_mac_fault = efx_x4_mcdi_mac_check_fault,
+	.reconfigure_port = efx_x4_mcdi_port_reconfigure,
+	.check_link_change = efx_x4_mcdi_phy_poll,
+	.check_module_caps = efx_x4_check_module_caps,
 	.get_wol = efx_ef10_get_wol_vf,
 	.set_wol = efx_ef10_set_wol_vf,
 	.resume_wol = efx_port_dummy_op_void,
@@ -6131,6 +6419,10 @@ const struct efx_nic_type efx_x4_vf_nic_type = {
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
 	.ptp_set_clock_info = efx_x4_phc_set_clock_info,
 #endif
+	.ptp_rx_enable_ts = efx_x4_rx_enable_timestamping,
+	.ptp_get_attributes = efx_x4_ptp_get_attributes,
+	.ptp_synchronize = efx_x4_ptp_synchronize,
+	.ptp_sync_sample_size = PTP_X4_SYNC_SAMPLE_SIZE,
 	.ptp_write_host_time = efx_ef10_ptp_write_host_time,
 	.ptp_set_ts_config = efx_ef10_ptp_set_ts_config,
 #endif
@@ -6212,6 +6504,7 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.fini_dmaq = efx_ef10_fini_dmaq,
 	.prepare_flr = efx_ef10_prepare_flr,
 	.finish_flr = efx_port_dummy_op_void,
+	.read_licensed_features = efx_ef10_read_licensed_features,
 	.describe_stats = efx_ef10_describe_stats,
 	.update_stats = efx_ef10_update_stats_pf,
 	.pull_stats = efx_ef10_pull_stats_pf,
@@ -6219,6 +6512,7 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.reconfigure_mac = efx_ef10_mac_reconfigure,
 	.check_mac_fault = efx_mcdi_mac_check_fault,
 	.reconfigure_port = efx_mcdi_port_reconfigure,
+	.check_link_change = efx_mcdi_phy_poll,
 	.get_wol = efx_ef10_get_wol,
 	.set_wol = efx_ef10_set_wol,
 	.resume_wol = efx_port_dummy_op_void,
@@ -6298,10 +6592,16 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.mtd_write = efx_mcdi_mtd_write,
 	.mtd_sync = efx_mcdi_mtd_sync,
 #endif
+	.ptp_adapter_has_support = efx_ef10_ptp_adapter_has_support,
+	.ptp_tx_ts_support = efx_ef10_ptp_tx_ts_support,
 #ifdef CONFIG_SFC_PTP
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
 	.ptp_set_clock_info = efx_ef10_phc_set_clock_info,
 #endif
+	.ptp_rx_enable_ts = efx_ef10_rx_enable_timestamping,
+	.ptp_get_attributes = efx_ef10_ptp_get_attributes,
+	.ptp_synchronize = efx_ef10_ptp_synchronize,
+	.ptp_sync_sample_size = PTP_DEFAULT_SYNC_SAMPLE_SIZE,
 	.ptp_write_host_time = efx_ef10_ptp_write_host_time,
 	.ptp_set_ts_sync_events = efx_ef10_ptp_set_ts_sync_events,
 	.ptp_set_ts_config = efx_ef10_ptp_set_ts_config,
@@ -6402,18 +6702,21 @@ const struct efx_nic_type efx_x4_nic_type = {
 	.map_reset_reason = efx_ef10_map_reset_reason,
 	.map_reset_flags = efx_ef10_map_reset_flags,
 	.reset = efx_ef10_reset,
-	.probe_port = efx_mcdi_port_probe,
-	.remove_port = efx_mcdi_port_remove,
+	.port_handle_supported = efx_ef10_port_handle_supported,
+	.probe_port = efx_x4_mcdi_port_probe,
+	.remove_port = efx_x4_mcdi_port_remove,
 	.fini_dmaq = efx_ef10_fini_dmaq,
 	.prepare_flr = efx_ef10_prepare_flr,
 	.finish_flr = efx_port_dummy_op_void,
-	.describe_stats = efx_ef10_describe_stats,
+	.describe_stats = efx_x4_describe_stats,
 	.update_stats = efx_ef10_update_stats_pf,
 	.pull_stats = efx_ef10_pull_stats_pf,
 	.push_irq_moderation = efx_ef10_push_irq_moderation,
-	.reconfigure_mac = efx_ef10_mac_reconfigure,
-	.check_mac_fault = efx_mcdi_mac_check_fault,
-	.reconfigure_port = efx_mcdi_port_reconfigure,
+	.reconfigure_mac = efx_x4_mac_reconfigure,
+	.check_mac_fault = efx_x4_mcdi_mac_check_fault,
+	.reconfigure_port = efx_x4_mcdi_port_reconfigure,
+	.check_link_change = efx_x4_mcdi_phy_poll,
+	.check_module_caps = efx_x4_check_module_caps,
 	.get_wol = efx_ef10_get_wol,
 	.set_wol = efx_ef10_set_wol,
 	.resume_wol = efx_port_dummy_op_void,
@@ -6497,6 +6800,10 @@ const struct efx_nic_type efx_x4_nic_type = {
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
 	.ptp_set_clock_info = efx_x4_phc_set_clock_info,
 #endif
+	.ptp_rx_enable_ts = efx_x4_rx_enable_timestamping,
+	.ptp_get_attributes = efx_x4_ptp_get_attributes,
+	.ptp_synchronize = efx_x4_ptp_synchronize,
+	.ptp_sync_sample_size = PTP_X4_SYNC_SAMPLE_SIZE,
 	.ptp_write_host_time = efx_ef10_ptp_write_host_time,
 	.ptp_set_ts_sync_events = efx_ef10_ptp_set_ts_sync_events,
 	.ptp_set_ts_config = efx_ef10_ptp_set_ts_config,
@@ -6524,9 +6831,7 @@ const struct efx_nic_type efx_x4_nic_type = {
 	.sriov_set_vf_mac = efx_ef10_sriov_set_vf_mac,
 	.sriov_set_vf_vlan = efx_ef10_sriov_set_vf_vlan,
 	.sriov_set_vf_spoofchk = efx_ef10_sriov_set_vf_spoofchk,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_VF_MAC)
 	.sriov_get_vf_config = efx_ef10_sriov_get_vf_config,
-#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VF_LINK_STATE)
 	.sriov_set_vf_link_state = efx_ef10_sriov_set_vf_link_state,
 #endif

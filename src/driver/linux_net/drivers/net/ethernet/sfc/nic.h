@@ -191,6 +191,8 @@ struct efx_ef10_nic_data {
 	__le64 *mc_stats;
 	u64 stats[EF10_STAT_COUNT];
 	struct delayed_work vf_stats_work;
+	DECLARE_BITMAP(x4_stats_mask, EF10_STAT_COUNT);
+	struct efx_hw_stat_desc x4_stat_desc[EF10_STAT_COUNT];
 	bool workaround_35388;
 	bool workaround_26807;
 	bool workaround_61265;

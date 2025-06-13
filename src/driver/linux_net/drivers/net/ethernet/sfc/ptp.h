@@ -41,8 +41,8 @@ int efx_ptp_get_ts_config(struct efx_nic *efx, struct ifreq *ifr);
 #endif
 void efx_ptp_get_ts_info(struct efx_nic *efx,
 			 struct kernel_ethtool_ts_info *ts_info);
-int efx_ptp_get_attributes(struct efx_nic *efx);
-bool efx_ptp_uses_separate_channel(struct efx_nic *efx);
+int efx_ef10_ptp_get_attributes(struct efx_nic *efx);
+int efx_x4_ptp_get_attributes(struct efx_nic *efx);
 bool efx_ptp_is_ptp_tx(struct efx_nic *efx, struct sk_buff *skb);
 int efx_ptp_get_mode(struct efx_nic *efx);
 int efx_ptp_change_mode(struct efx_nic *efx, bool enable_wanted,
@@ -103,13 +103,13 @@ static inline int efx_ptp_get_ts_info(struct efx_nic *efx,
 {
 	return -EOPNOTSUPP;
 }
-static inline int efx_ptp_get_attributes(struct efx_nic *efx)
+static inline int efx_ef10_ptp_get_attributes(struct efx_nic *efx)
 {
 	return 0;
 }
-static inline bool efx_ptp_uses_separate_channel(struct efx_nic *efx)
+static inline int efx_x4_ptp_get_attributes(struct efx_nic *efx)
 {
-	return false;
+	return 0;
 }
 static inline bool efx_ptp_is_ptp_tx(struct efx_nic *efx, struct sk_buff *skb)
 {
@@ -154,6 +154,15 @@ static inline int efx_ptp_pps_reset(struct efx_nic *efx)
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
 void efx_ef10_phc_set_clock_info(struct efx_nic *efx);
 void efx_x4_phc_set_clock_info(struct efx_nic *efx);
+#endif
+
+#ifdef CONFIG_SFC_PTP
+int efx_ef10_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings);
+int efx_x4_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings);
+
+
+#define PTP_DEFAULT_SYNC_SAMPLE_SIZE	4
+#define PTP_X4_SYNC_SAMPLE_SIZE		10
 #endif
 
 #endif /* EFX_PTP_H */
