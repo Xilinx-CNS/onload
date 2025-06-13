@@ -76,7 +76,7 @@ done
 exec 5<&-
 
 rmdir $i_include &> /dev/null || \
-    log "Leaving $i_include directoy as it's not empty."
+    log "Leaving $i_include directory as it's not empty."
 
 uninstall_ldconfig $m
 
