@@ -19,7 +19,7 @@ ON-16486: update eflatency to show impact of reading data
 onload-9.0.2.134
 ----------------
 
-Update sfc net driver to v6.0.2.1008
+Update sfc net driver to v6.1.0.1009
 
 Add support for:
  - Red Hat Enterprise Linux 10.0
