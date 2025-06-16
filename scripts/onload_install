@@ -27,7 +27,7 @@ usage() {
   err "  --strict                          - Compiler warnings are errors"
   err "  --debug                           - Compile with debug enabled"
   err "  --require-optional-targets        - Compile with optional targets required"
-  err "  --no-sfc                          - Compile without sfc module"
+  err "  --no-sfc                          - Compile without sfc module (implies --no-initramfs)"
   err "  --affinity     / --noaffinity     - Compile with sfc_affinity and add config"
   is_ppc &&
   err "  --ppc-at <path>                   - Specify path to IBM Advanced Toolchain"
@@ -690,7 +690,7 @@ while [ $# -gt 0 ]; do
   --lib64dir=*) lib64dir=${1#--lib64dir=};;
   --kernelmodulesdir=*) kernelmodulesdir=${1#--kernelmodulesdir=};;
   --moddir=*) install_mod_dir="${1#--moddir=}";;
-  --no-sfc) nosfc=true;;
+  --no-sfc) nosfc=true; noinitramfs=true;;
   -*)           usage;;
   *)            break;;
   esac
