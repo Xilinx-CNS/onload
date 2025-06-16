@@ -1,0 +1,6 @@
+#!/bin/sh
+# SPDX-License-Identifier: BSD-2-Clause
+# SPDX-FileCopyrightText: (c) Copyright 2025 Advanced Micro Devices, Inc.
+#
+# The Onload hook script, while providing a no-op, causes dh_installmodules(1)
+# to trigger update-initramfs(8) when the user installs Onload kernel modules.
