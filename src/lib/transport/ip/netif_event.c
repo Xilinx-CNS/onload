@@ -1920,6 +1920,7 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
   ci_ip_pkt_fmt* pkt;
   const uint8_t* dma;
   int (*future_poll)(ef_vi* vi, ef_event* evs, int evs_len) = evq->ops.eventq_poll;
+  ci_netif_state_nic_t* nsn = &ni->state->nic[intf_i];
 
   /* Number of data bytes in the first cache line of efct packets */
   static const size_t efct_begin_len = CI_CACHE_LINE_SIZE -
@@ -1932,8 +1933,7 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
 #endif
 
   // TODO EF10CT
-  if( evq->nic_type.arch == EF_VI_ARCH_EFCT ||
-      evq->nic_type.arch == EF_VI_ARCH_EF10CT ) {
+  if( nsn->oo_vi_flags & OO_VI_FLAGS_RX_REF ) {
     /* Peek to ensure we really have a packet and get dma addr */
     dma = efct_vi_rx_future_peek(evq);
     if( dma == NULL )
@@ -2044,7 +2044,7 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
   else {
     CITP_STATS_NETIF_INC(ni, rx_future_rollback_event);
     rollback_rx_future(ni, pkt, status, &future);
-    if( evq->nic_type.arch == EF_VI_ARCH_EFCT )
+    if( nsn->oo_vi_flags & OO_VI_FLAGS_RX_REF )
       ci_netif_pkt_release_rx_1ref(ni, pkt);
     rc = ci_netif_poll_evq(ni, &ps, intf_i, rc);
   }
@@ -2059,7 +2059,7 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
   return rc;
 
 free_out:
-  if( evq->nic_type.arch == EF_VI_ARCH_EFCT )
+  if( nsn->oo_vi_flags & OO_VI_FLAGS_RX_REF )
     ci_netif_pkt_release_rx_1ref(ni, pkt);
   return 0;
 }
