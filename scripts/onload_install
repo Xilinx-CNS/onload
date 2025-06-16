@@ -415,6 +415,10 @@ install_modprobe_conf() {
 
   try $do sed -i -e "s|extra|$install_mod_dir|" "$i_etc/modprobe.d/onload.conf"
   try $do sed -i -e "s|extra|$install_mod_dir|" "$i_etc/depmod.d/onload.conf"
+
+  if which update-initramfs >/dev/null 2>&1 && ! ${noinitramfs}; then
+    install_f onload_misc/onload_initramfs.conf "$i_usr/share/initramfs-tools/modules.d/onload.conf"
+  fi
 }
 
 install_modules_load_d() {
