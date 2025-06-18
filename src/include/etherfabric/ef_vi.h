@@ -934,7 +934,7 @@ typedef struct {
   uint16_t rx_stride;
 
   /** efct kernel/userspace shared queue area. Exposed for debugging.
-   ** TODO provide generic access to stats and hide this */
+   ** TODO ON-15253 provide generic access to stats and hide this */
   const struct efab_efct_rxq_uk_shm_base* shm;
 } ef_vi_efct_rxqs;
 

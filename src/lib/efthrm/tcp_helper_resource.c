@@ -1059,7 +1059,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
     int rc;
     int hugepages = 0;
 
-    /* FIXME we need some way to determine which queues need shrub connections.
+    /* FIXME ON-16391 we need some way to determine which queues need shrub connections.
      * For testing purposes, use the EF_LLCT_TEST_SHRUB option. */
     bool shrub = vi->nic_type.arch == EF_VI_ARCH_EF10CT &&
                  NI_OPTS_TRS(trs).llct_test_shrub;

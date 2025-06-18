@@ -12,7 +12,7 @@
 #include <linux/mman.h>
 #include <net/af_unix.h>
 
-#include <linux/nsproxy.h> /* TODO see shrub_socket_open */
+#include <linux/nsproxy.h> /* TODO ON-16394 see shrub_socket_open */
 #include <driver/linux_onload/onload_kernel_compat.h>
 #include <etherfabric/internal/efct_uk_api.h>
 
@@ -26,7 +26,7 @@ int ef_shrub_socket_open(uintptr_t* socket_out)
   int rc;
   struct socket* sock;
 
-  /* TODO I don't think Onload will always do this in a user context.
+  /* TODO ON-16394 I don't think Onload will always do this in a user context.
    * We probably need to pass the net namespace in somehow. */
   rc = sock_create_kern(current->nsproxy->net_ns, AF_UNIX, SOCK_STREAM, 0, &sock);
   if( rc < 0 )

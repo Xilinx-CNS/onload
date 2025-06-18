@@ -1932,7 +1932,6 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
   ci_assert_equal(NI_OPTS(ni).poll_in_kernel, 0);
 #endif
 
-  // TODO EF10CT
   if( nsn->oo_vi_flags & OO_VI_FLAGS_RX_REF ) {
     /* Peek to ensure we really have a packet and get dma addr */
     dma = efct_vi_rx_future_peek(evq);

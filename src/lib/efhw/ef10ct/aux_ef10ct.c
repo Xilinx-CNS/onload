@@ -104,7 +104,8 @@ static int ef10ct_devtype_init(struct efx_auxdev *edev,
    case 0xffff:
     /* This is the test device provided via the efct_test driver. We use a
      * specific variant for this to avoid trying to do things that the test
-     * driver doesn't support, like interrupts. */
+     * driver doesn't support, like interrupts.
+     * TODO ON-16668 purge test driver */
     dev_type->variant = 'L';
     dev_type->function = EFHW_FUNCTION_PF;
     break;
@@ -243,7 +244,7 @@ static irqreturn_t ef10ct_irq_handler(int irq, void *dev)
 
 static int ef10ct_init_shared_irq(struct ef10ct_shared_kernel_evq *evq)
 {
-  /* FIXME EF10CT: Better interrupt naming */
+  /* FIXME ON-16187: Better interrupt naming */
   snprintf(evq->name, sizeof(evq->name), "ef10ct-%d",
            ef10ct_get_queue_num(evq->evq_id));
 
@@ -522,6 +523,7 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
   efct_filter_state_free(&ef10ct->filter_state);
 
   /* iounmap the superbuf post registers if we are not using the test driver. */
+  /* TODO ON-16668 purge test driver */
   if ( nic->devtype.variant != 'L')
     for (i = 0; i < ef10ct->rxq_n; i++)
       if (ef10ct->rxq[i].post_buffer_addr != NULL)

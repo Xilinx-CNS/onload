@@ -2740,7 +2740,7 @@ ci_netif_intf_rx_future(ci_netif* ni, int intf_i, const uint32_t* poison)
     return poison;
 
   vi = ci_netif_vi(ni, intf_i);
-  /* TODO less clumsy check for EFCT datapath */
+  /* TODO ON-16495 less clumsy check for EFCT datapath */
   if( vi->nic_type.arch == EF_VI_ARCH_EFCT ||
       vi->nic_type.arch == EF_VI_ARCH_EF10CT) {
     volatile const uint32_t* p = efct_vi_rx_future_peek(vi);

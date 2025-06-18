@@ -636,6 +636,7 @@ ef10ct_nic_event_queue_enable(struct efhw_nic *nic,
                       MC_CMD_INIT_EVQ_V2_IN_COUNT_MODE_DIS);
   EFHW_MCDI_SET_DWORD(in, INIT_EVQ_V2_IN_COUNT_THRSHLD, 0);
 
+  /* TODO ON-16668 purge test driver */
   if( (nic->devtype.variant != 'L') )
     EFHW_MCDI_SET_DWORD(in, INIT_EVQ_V2_IN_IRQ_NUM,
                         efhw_params->wakeup_channel);
@@ -1049,7 +1050,7 @@ static int ef10ct_rx_iomap_buffer_post_register(struct efhw_nic *nic,
   if( rc < 0 )
     return rc;
 
-  /* TODO EF10CT The 'L' variant is reported by fake test hardware, which
+  /* TODO ON-16668 The 'L' variant is reported by fake test hardware, which
    * doesn't provide iomem.
   */
   if( (nic->devtype.arch == EFHW_ARCH_EF10CT) &&
@@ -1155,7 +1156,7 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
 
   /* Choose which evq to bind this rxq to. */
   if( !real_evq ) {
-    /* FIXME EF10CT the evq used here is not mapped to userspace, so isn't part
+    /* FIXME ON-16187 the evq used here is not mapped to userspace, so isn't part
      * of the higher level resource management. We need to decide which shared
      * evq to attach to - one with rx event suppression, or not.
      * Currently we only support using a single shared queue. In order to
@@ -1305,6 +1306,7 @@ ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
     return;
   }
 
+  /* TODO ON-16668 purge test driver */
   if ( ! ((nic->devtype.arch == EFHW_ARCH_EF10CT) &&
           (nic->devtype.variant == 'L')) )
   {
@@ -1431,7 +1433,7 @@ static enum efhw_page_map_type
 ef10ct_queue_map_type(struct efhw_nic *nic)
 {
   /* The test driver doesn't support DMA mapping, so fallback to phys addrs
-   * in that case. */
+   * in that case. TODO ON-16668 purge test driver */
   if( nic->devtype.variant == 'L' )
     return EFHW_PAGE_MAP_PHYS;
   else
@@ -1454,7 +1456,7 @@ static enum efhw_page_map_type
 ef10ct_buffer_map_type(struct efhw_nic *nic)
 {
   /* The test driver doesn't support DMA mapping, so fallback to phys addrs
-   * in that case. */
+   * in that case. TODO ON-16668 purge test driver */
   if( nic->devtype.variant == 'L' )
     return EFHW_PAGE_MAP_PHYS;
   else
@@ -1930,6 +1932,7 @@ static int ef10ct_rxq_post_superbuf(struct efhw_nic *nic, int rxq_num,
                       EFCT_RX_BUFFER_POST_SENTINEL, sentinel,
                       EFCT_RX_BUFFER_POST_ROLLOVER, rollover);
 
+  /* TODO ON-16668 purge test driver */
   if ((nic->devtype.arch == EFHW_ARCH_EF10CT) &&
       (nic->devtype.variant == 'L'))
   {

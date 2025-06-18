@@ -1248,7 +1248,7 @@ efct_design_parameters(struct ef_vi* vi, struct efab_nic_design_parameters* dp)
   }
   vi->vi_txq.efct_aperture_mask = (GET(tx_aperture_bytes) - 1) >> 3;
 
-  /* FIXME EF10CT: We need proper handling of configurable size ctpio windows */
+  /* FIXME ON-15570: We need proper handling of configurable size ctpio windows */
   /* On EF10CT nics the size of the memory backing the CTPIO window is
    * configurable. This means that it is no longer sufficient to use the size
    * reported by the design parameters as the size for the actual queue. On

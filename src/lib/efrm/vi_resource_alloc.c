@@ -385,7 +385,7 @@ static int efrm_vi_request_irq(struct efhw_nic *nic, struct efrm_vi *virs)
 {
 	int rc;
 
-	/* EF10CT test driver does not support interrupts */
+	/* TODO ON-16668 test driver does not support interrupts */
 	if( (nic->devtype.arch == EFHW_ARCH_EF10CT) &&
 	    (nic->devtype.variant == 'L') )
 		return 0;
@@ -918,7 +918,7 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 		evq_params.flags = flags;
 
 		evq_params.wakeup_channel = efrm_vi_get_channel(virs);
-		/* TODO EF10CT test driver doesn't support interrupts */
+		/* TODO ON-16668 test driver doesn't support interrupts */
 		if( (nic->devtype.arch != EFHW_ARCH_EF10CT) ||
 		    (nic->devtype.variant != 'L') ) {
 			EFRM_ASSERT(!!(nic->flags & NIC_FLAG_EVQ_IRQ) == !!(virs->vec != NULL));
