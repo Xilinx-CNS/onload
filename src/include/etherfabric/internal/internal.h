@@ -278,13 +278,6 @@ struct efab_nic_design_parameters {
 #define EFAB_NIC_DP_GET(DP, PARAM) \
   (EFAB_NIC_DP_KNOWN(DP, PARAM) ? (DP).PARAM : EFAB_NIC_DP_DEFAULT(PARAM))
 
-
-/* Post a superbuf to the vi's rxq */
-/* TODO EF10CT What should this look like with multiple rxqs? */
-int ef10ct_vi_post_superbuf(struct ef_vi *vi, ef_addr addr, int sentinel,
-                            int rollover);
-
-
 /* Check whether the provided `vi` is running with a compatibility layer, and
  * is specifically trying to pretend to be `compat_arch`. */
 ef_vi_inline bool ef_vi_is_compat_vi(ef_vi* vi, enum ef_vi_arch compat_arch)

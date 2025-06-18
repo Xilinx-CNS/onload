@@ -722,13 +722,11 @@ static int efct_ef_vi_transmit_alt_discard(ef_vi* vi, unsigned alt_id)
 static int efct_ef_vi_receive_init(ef_vi* vi, ef_addr addr,
                                    ef_request_id dma_id)
 {
-  /* TODO X3 */
   return -ENOSYS;
 }
 
 static void efct_ef_vi_receive_push(ef_vi* vi)
 {
-  /* TODO X3 */
 }
 
 static int rx_rollover(ef_vi* vi, int qid)
@@ -1302,7 +1300,7 @@ static int efct_post_filter_add(struct ef_vi* vi,
                                 bool shared_mode)
 {
 #ifdef __KERNEL__
-  return 0; /* EFCT TODO */
+  return -EOPNOTSUPP;
 #else
   int rc;
   unsigned n_superbufs;

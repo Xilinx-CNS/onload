@@ -292,14 +292,10 @@ void efct_ubufs_set_rxq_io_window(ef_vi* vi, int ix, volatile uint64_t* p)
   get_ubufs(vi)->q[ix].rx_post_buffer_reg = p;
 }
 
+#ifndef __KERNEL__
 static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
                                    unsigned n_superbufs)
 {
-#ifdef __KERNEL__
-  // TODO
-  BUG();
-  return -EOPNOTSUPP;
-#else
   int ix, rc, sb;
   void* map;
   size_t map_bytes;
@@ -370,8 +366,8 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
 
   efct_ubufs_local_attach_internal(vi, ix, qid, n_superbufs);
   return ix;
-#endif
 }
+#endif
 
 void efct_ubufs_local_attach_internal(ef_vi* vi, int ix, int qid, unsigned n_superbufs)
 {
@@ -388,14 +384,10 @@ void efct_ubufs_local_attach_internal(ef_vi* vi, int ix, int qid, unsigned n_sup
   post_buffers(vi, ix);
 }
 
+#ifndef __KERNEL__
 static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd,
                                     unsigned n_superbufs)
 {
-#ifdef __KERNEL__
-  // TODO
-  BUG();
-  return -EOPNOTSUPP;
-#else
   int ix;
   int rc;
 
@@ -414,8 +406,8 @@ static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd,
 
   return efct_ubufs_shared_attach_internal(vi, ix, qid,
                                            (void*)vi->efct_rxqs.q[ix].superbuf);
-#endif
 }
+#endif
 
 int efct_ubufs_shared_attach_internal(ef_vi* vi, int ix, int qid, void* superbuf)
 {
@@ -508,11 +500,16 @@ static int efct_ubufs_attach(ef_vi* vi,
                              unsigned n_superbufs,
                              bool shared_mode)
 {
+#ifdef __KERNEL__
+  BUG();
+  return -EOPNOTSUPP;
+#else
   if ( shared_mode ) {
     return efct_ubufs_shared_attach(vi, qid, fd, n_superbufs);
   } else {
     return efct_ubufs_local_attach(vi, qid, fd, n_superbufs);
   }
+#endif
 }
 
 

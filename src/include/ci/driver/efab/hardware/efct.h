@@ -211,7 +211,8 @@
 /* size of each receive buffer posted to RX_BUFFER_POST (DP_RX_BUFFER_SIZE) */
 #define EFCT_RX_SUPERBUF_BYTES  1048576
 
-/* FIXME EFCT: make this variable */
+/* size of each packet's space within a buffer (including metadata)
+ * In principle, this could be set to other values; but we don't support that */
 #define EFCT_PKT_STRIDE 2048
 
 /* Interrupt priming */

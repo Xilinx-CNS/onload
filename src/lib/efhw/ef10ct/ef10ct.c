@@ -567,10 +567,6 @@ out:
   return rc;
 }
 
-
-/* FIXME EF10CT
- * X3 net driver does dma mapping
- */
 static int
 ef10ct_nic_event_queue_enable(struct efhw_nic *nic,
                               struct efhw_evq_params *efhw_params)

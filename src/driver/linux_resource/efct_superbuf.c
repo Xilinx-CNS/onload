@@ -278,10 +278,12 @@ int efct_poll(void *driver_data, int qid, int budget)
 }
 
 /* net driver finished processing packets from the buffer,
- * check whether we can free the buffer */
+ * check whether we can free the buffer.
+ * 
+ * The force flag is not used by the net driver, and we don't take any
+ * special action if it is set. */
 int efct_buffer_end(void *driver_data, int qid, int sbid, bool force)
 {
-  /* TODO support force flag */
   struct efhw_nic_efct *efct = (struct efhw_nic_efct *) driver_data;
 
   struct efhw_nic_efct_rxq *q;

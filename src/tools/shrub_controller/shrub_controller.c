@@ -12,7 +12,6 @@
 #include <ctype.h>
 #include <errno.h>
 #include <etherfabric/efct_vi.h>
-#include <etherfabric/memreg.h>
 #include <etherfabric/pd.h>
 #include <etherfabric/shrub_server.h>
 #include <etherfabric/shrub_shared.h>
@@ -54,7 +53,6 @@ struct shrub_controller_vi
   int n_ev;
   int i;
   ef_pd pd;
-  ef_memreg memreg; /* TODO will we want this? */
   ef_driver_handle dh;
 };
 
