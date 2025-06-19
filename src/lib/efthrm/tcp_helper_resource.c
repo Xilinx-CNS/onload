@@ -1284,16 +1284,14 @@ check_timestamping_support(const char* stack_name, const char* dir,
   *out_try_ts = (user_val != 0);
   *out_retry_without = 0;
   if( ! device_supports_ts && (user_val == 3) ) {
-    ci_log(
-        "[%s]: %s timestamping not supported on given interface (%s)",
-        stack_name, dir, if_name);
+    ci_log("[%s]: %s timestamping not supported on given interface (%s)",
+           stack_name, dir, if_name);
     return -ENOENT;
   }
   if( ! device_supports_ts && (user_val == 2) ) {
-    ci_log(
-      "[%s]: %s timestamping not supported on given interface (%s), "
-      "continuing with timestamping disabled on this particular interface",
-      stack_name, dir, if_name);
+    ci_log("[%s]: %s timestamping not supported on given interface (%s), "
+           "continuing with timestamping disabled on this particular interface",
+           stack_name, dir, if_name);
     *out_try_ts = 0;
   }
   if( user_val == 1 ) {
@@ -2676,10 +2674,10 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
 
   /* The shared netif-state buffer and EP buffers are part of the mem mmap */
   trs->mem_mmap_bytes += ns->netif_mmap_bytes;
-  OO_DEBUG_MEMSIZE(ci_log(
-        "added %d (0x%x) bytes for shared netif state and ep buffers, "
-        "reached %d (0x%x)", ns->netif_mmap_bytes, ns->netif_mmap_bytes,
-        trs->mem_mmap_bytes, trs->mem_mmap_bytes));
+  OO_DEBUG_MEMSIZE(
+    ci_log("added %d (0x%x) bytes for shared netif state and ep buffers, "
+           "reached %d (0x%x)", ns->netif_mmap_bytes, ns->netif_mmap_bytes,
+           trs->mem_mmap_bytes, trs->mem_mmap_bytes));
 
   if( trs->name[0] == '\0' )
     snprintf(ns->pretty_name, sizeof(ns->pretty_name), "%d", ns->stack_id);

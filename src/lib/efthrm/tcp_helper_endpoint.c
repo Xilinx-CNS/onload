@@ -376,14 +376,14 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
       os_sock_ref = NULL;
     }
     else {
-      OO_DEBUG_ERR(ci_log(
-        "ERROR: %s is changing the socket [%d:%d] filter to "
-        "%s " IPX_PORT_FMT " -> " IPX_PORT_FMT ", "
-        "the filter already exists and there is no backing socket.  "
-        "Something went awry.",
-        __func__, ep->thr->id, OO_SP_FMT(ep->id),
-        protocol == IPPROTO_UDP ? "UDP" : "TCP",
-        IPX_ARG(AF_IP(laddr)), lport, IPX_ARG(AF_IP(raddr)), rport));
+      OO_DEBUG_ERR(
+        ci_log("ERROR: %s is changing the socket [%d:%d] filter to "
+               "%s " IPX_PORT_FMT " -> " IPX_PORT_FMT ", "
+               "the filter already exists and there is no backing socket.  "
+               "Something went awry.",
+               __func__, ep->thr->id, OO_SP_FMT(ep->id),
+               protocol == IPPROTO_UDP ? "UDP" : "TCP",
+               IPX_ARG(AF_IP(laddr)), lport, IPX_ARG(AF_IP(raddr)), rport));
       ci_assert(0);
     }
     if( protocol == IPPROTO_UDP && !CI_IPX_ADDR_IS_ANY(raddr) &&
@@ -394,13 +394,13 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
     if( protocol != IPPROTO_UDP ) {
       /* UDP re-connect is OK, but we do not expect anything else.
        * We've already crashed in DEBUG, but let's complain in NDEBUG. */
-      OO_DEBUG_ERR(ci_log(
-        "ERROR: %s is changing the socket [%d:%d] filter to "
-        "%s " IPX_PORT_FMT" -> " IPX_PORT_FMT ", "
-        "but some filter is already installed.  Something went awry.",
-        __func__, ep->thr->id, OO_SP_FMT(ep->id),
-        protocol == IPPROTO_UDP ? "UDP" : "TCP",
-        IPX_ARG(AF_IP(laddr)), lport, IPX_ARG(AF_IP(raddr)), rport));
+      OO_DEBUG_ERR(
+        ci_log("ERROR: %s is changing the socket [%d:%d] filter to "
+               "%s " IPX_PORT_FMT" -> " IPX_PORT_FMT ", "
+               "but some filter is already installed.  Something went awry.",
+               __func__, ep->thr->id, OO_SP_FMT(ep->id),
+               protocol == IPPROTO_UDP ? "UDP" : "TCP",
+               IPX_ARG(AF_IP(laddr)), lport, IPX_ARG(AF_IP(raddr)), rport));
       /* Filter is cleared so that endpoint comes back to consistent state:
        * tcp sockets after failed set filter operations have no filter.
        * However, as we are afraid that endpoint is compromised we
