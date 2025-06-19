@@ -35,7 +35,7 @@
 #include <unistd.h>
 
 int (*ci_sys_ioctl)(int, long unsigned int, ...) =
-    ioctl; // taken from cplane/private.h (example code from cplane/client.c)
+    ioctl; /* taken from cplane/private.h (example code from cplane/client.c) */
 
 struct shrub_controller_vi;
 static volatile sig_atomic_t is_running = 1;
@@ -92,7 +92,8 @@ typedef struct
 static void usage(void)
 {
   fprintf(stderr, "Usage:\n");
-  fprintf(stderr, "  shrub_controller <flags> [<interface>[/<buffer_count>]]...\n");
+  fprintf(stderr, "  shrub_controller <flags> "
+                  "[<interface>[/<buffer_count>]]...\n");
   fprintf(stderr, "Options:\n");
   fprintf(stderr, "  -d       Enable debug mode\n");
   fprintf(stderr, "  -c       Set controller_id\n");
@@ -143,7 +144,7 @@ static int add_server_config(shrub_controller_config *config,
 {
 
   shrub_if_config_t *new_shrub_config;
-  
+
   if ( buffer_count == 0 ) {
     ci_log("Error: shrub_controller was unable to add interface "
            "with buffer size of 0");
@@ -290,7 +291,8 @@ static int shrub_dump(shrub_controller_config *config, const char *file_name)
   rc = snprintf(file_path, sizeof(file_path), "%s/%s", config->log_dir,
                 file_name);
   if ( rc < 0 || rc >= sizeof(file_path) ) {
-    ci_log("Error: shrub_controller was unable to set an appropriate log path!");
+    ci_log("Error: shrub_controller was unable "
+           "to set an appropriate log path!");
     return -EINVAL;
   }
 
@@ -300,7 +302,8 @@ static int shrub_dump(shrub_controller_config *config, const char *file_name)
   file = fopen(file_path, "w");
   if ( file == NULL ) {
     rc = -errno;
-    ci_log("Error: shrub_controller was unable to open a file for shrub dump!");
+    ci_log("Error: shrub_controller was unable "
+           "to open a file for shrub dump!");
     return rc;
   }
 
@@ -346,7 +349,9 @@ static int create_onload_config_socket(const char *socket_path, int epoll_fd)
   strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
   addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
 
-  if ( (bind(config_socket_fd, (struct sockaddr *)&addr, sizeof(addr)) == -1) ) {
+  if ( (bind(config_socket_fd,
+             (struct sockaddr *)&addr,
+             sizeof(addr)) == -1) ) {
     rc = -errno;
     ci_log("Error: shrub_controller onload socket bind failed");
     goto cleanup_socket;
@@ -358,7 +363,7 @@ static int create_onload_config_socket(const char *socket_path, int epoll_fd)
     goto cleanup_socket;
   }
 
-  // Add config_socket_fd to the epoll instance
+  /* Add config_socket_fd to the epoll instance */
   event.data.fd = config_socket_fd;
   event.events = EPOLLIN;
   if ( epoll_ctl(epoll_fd, EPOLL_CTL_ADD, config_socket_fd, &event) == -1 ) {
@@ -380,8 +385,8 @@ static int process_create_command(shrub_controller_config *config,
 {
   int rc = search_for_existing_server(config, hw_port);
 
-  // Either rc is -1 and the cplane can't recognise the intf or we have a
-  // pre-existing shrub_token/server
+  /* Either rc is -1 and the cplane can't recognise the intf or we have a
+     pre-existing shrub_token/server */
   if ( rc != 0 )
     return rc;
 
@@ -452,8 +457,9 @@ static int poll_socket(shrub_controller_config *config)
         response_status = -ENOMEM;
       } else if ( request.controller_version != EF_SHRUB_VERSION ) {
           if ( config->debug_mode ) {
-            ci_log("Error: shrub_controller being called from an incompatible client! "
-                   "request version %d, expected version %d ",
+            ci_log("Error: shrub_controller being called from an "
+                   "incompatible client! request version %d, "
+                   "expected version %d ",
                    request.controller_version, EF_SHRUB_VERSION);
           }
         response_status = SHRUB_ERR_INCOMPATIBLE_VERSION;
@@ -461,7 +467,7 @@ static int poll_socket(shrub_controller_config *config)
         buffer_count = DEFAULT_BUFFER_COUNT;
         hwport_mask = 0xffffffff;
         ifindex = -1;
-  
+
         switch (request.command)
         {
         case EF_SHRUB_CONTROLLER_DESTROY:
@@ -502,8 +508,9 @@ static int poll_socket(shrub_controller_config *config)
       if ( rc == -1 ) {
         rc = -errno;
         if ( config->debug_mode ) {
-          ci_log("Error: shrub_controller: Failed to send response_status (%d) "
-                 "to the client", response_status);
+          ci_log("Error: shrub_controller: Failed to send "
+                 "response_status (%d) to the client",
+                 response_status);
         }
         close(client_fd);
         return rc;
@@ -586,15 +593,15 @@ int parse_interface(const char *arg, shrub_controller_config *config) {
 
     buffer_str = buffer_pos + 1;
     if ( !isdigit(*buffer_str) ) {
-      ci_log("Error: shrub_controller invalid buffer count passed as input '%s'. ", arg);
+      ci_log("Error: shrub_controller invalid buffer count "
+             "passed as input '%s'. ", arg);
       return -EINVAL;
     }
 
     buffer_count = atoi(buffer_str);
     if ( buffer_count < EF_SHRUB_TEMP_BC ) {
-      ci_log("Error: shrub_controller invalid buffer size must be at least %d.",
-        EF_SHRUB_TEMP_BC
-      );
+      ci_log("Error: shrub_controller invalid buffer size "
+        "must be at least %d.", EF_SHRUB_TEMP_BC);
       return -EINVAL;
     }
   } else {
@@ -714,7 +721,8 @@ static int controller_init_paths(shrub_controller_config *config)
   return 0;
 }
 
-static int controller_config_socket_lock_create(shrub_controller_config *config)
+static int
+controller_config_socket_lock_create(shrub_controller_config *config)
 {
   int rc;
   int fd;
@@ -746,8 +754,9 @@ static int controller_config_socket_lock_create(shrub_controller_config *config)
              "Is another shrub controller running?",
              config->config_socket_lock);
     } else {
-      ci_log("Error: shrub_controller failed to acquire config socket lock %s: %s",
-             config->config_socket_lock, strerror(errno));
+      ci_log("Error: shrub_controller failed to acquire config "
+             "socket lock %s: %s", config->config_socket_lock,
+             strerror(errno));
     }
     close(fd);
     return -errno;
@@ -761,7 +770,8 @@ static int controller_config_socket_lock_create(shrub_controller_config *config)
        -1 == lseek(fd, 0, SEEK_SET) ||
        -1 == sprintf(pid, "%ld\n", (long)getpid()) ||
        -1 == write(fd, pid, strlen(pid)+1) ) {
-    ci_log("Error: shrub_controller failed to write to lock file: %s", strerror(errno));
+    ci_log("Error: shrub_controller failed to write to lock file: %s",
+           strerror(errno));
     close(fd);
     return -errno;
   }
