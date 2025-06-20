@@ -6632,13 +6632,22 @@ static int tcp_helper_wakeup(tcp_helper_resource_t* trs, int intf_i, int budget)
 {
   ci_netif* ni = &trs->netif;
   int n = 0, prime_async;
+  struct efhw_nic *nic;
+  bool primed;
 
   TCP_HELPER_RESOURCE_ASSERT_VALID(trs, -1);
   OO_DEBUG_RES(ci_log(FN_FMT, FN_PRI_ARGS(ni)));
   CITP_STATS_NETIF_INC(ni, interrupts);
 
   /* Must clear this before the poll rather than waiting till later */
-  ci_bit_clear(&ni->state->evq_primed, intf_i);
+  primed = ci_bit_test_and_clear(&ni->state->evq_primed, intf_i);
+
+  /* Do not handle events if we were not primed when using AF_XDP. With AF_XDP
+   * we get spurious wakeups everytime the socket is ready as we add a waiter to
+   * socket waitqueue in af_xdp_init and only remove it in xdp_release_vi. */
+  nic = efrm_client_get_nic(trs->nic[intf_i].thn_oo_nic->efrm_client);
+  if (nic && nic->devtype.arch == EFHW_ARCH_AF_XDP && !primed)
+    return 0;
 
   if( budget <= 0 ) {
     defer_poll_and_prime(trs);
