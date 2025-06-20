@@ -12,6 +12,8 @@
 
 extern uint64_t mcdi_parser_info_to_filter_flags(ci_dword_t *out,
                                                  int num_matches);
+extern uint64_t mcdi_capability_info_to_nic_flags(ci_dword_t *out,
+                                                  size_t out_size);
 
 #ifndef BUILD_BUG_ON_ZERO
         #define BUILD_BUG_ON_ZERO(e) (sizeof(char[1 - 2 * !!(e)]) - 1)

@@ -378,20 +378,16 @@ static int ef10_nic_mac_spoofing_privilege(struct efhw_nic *nic)
 
 
 static int _ef10_nic_check_capabilities(struct efhw_nic *nic,
-                                        uint64_t* capability_flags,
+                                        uint64_t* nic_capability_flags,
                                         const char* caller)
 {
   size_t out_size = 0;
-  size_t ver_out_size;
+  uint64_t capability_flags;
   unsigned flags;
-  char ver_buf[32];
-  const __le16 *ver_words;
   int rc;
 
-  EFHW_MCDI_DECLARE_BUF(ver_out, MC_CMD_GET_VERSION_OUT_LEN);
   EFHW_MCDI_DECLARE_BUF(in, MC_CMD_GET_CAPABILITIES_V2_IN_LEN);
   EFHW_MCDI_DECLARE_BUF(out, MC_CMD_GET_CAPABILITIES_V10_OUT_LEN);
-  EFHW_MCDI_INITIALISE_BUF(ver_out);
   EFHW_MCDI_INITIALISE_BUF(in);
   EFHW_MCDI_INITIALISE_BUF(out);
 
@@ -406,84 +402,27 @@ static int _ef10_nic_check_capabilities(struct efhw_nic *nic,
   MCDI_CHECK(MC_CMD_GET_CAPABILITIES, rc, out_size, 0);
   if (rc != 0)
     return rc;
-  flags = EFHW_MCDI_DWORD(out, GET_CAPABILITIES_V3_OUT_FLAGS1);
-  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_PREFIX_LEN_14_LBN))
-    *capability_flags |= NIC_FLAG_14BYTE_PREFIX;
-  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_TX_MCAST_UDP_LOOPBACK_LBN))
-    *capability_flags |= NIC_FLAG_MCAST_LOOP_HW;
-  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_PACKED_STREAM_LBN)) {
-    rc = ef10_mcdi_rpc(nic, MC_CMD_GET_VERSION, 0, sizeof(ver_out),
-                       &ver_out_size, NULL, ver_out);
-    if (rc == 0 && ver_out_size == MC_CMD_GET_VERSION_OUT_LEN) {
-      ver_words = (__le16*)EFHW_MCDI_PTR(ver_out, GET_VERSION_OUT_VERSION);
-      snprintf(ver_buf, 32, "%u.%u.%u.%u",
-      le16_to_cpu(ver_words[0]),
-      le16_to_cpu(ver_words[1]),
-      le16_to_cpu(ver_words[2]),
-      le16_to_cpu(ver_words[3]));
-      if (!strcmp(ver_buf, "4.1.1.1022"))
-        EFHW_ERR("%s: Error: Due to a known firmware bug, packed stream mode "
-                 "is disabled on version %s.  Please upgrade firmware to use "
-                 "packed stream.", __FUNCTION__, ver_buf);
-      else
-        *capability_flags |= NIC_FLAG_PACKED_STREAM;
-    }
-    else {
-      *capability_flags |= NIC_FLAG_PACKED_STREAM;
-    }
-  }
-  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_RSS_LIMITED_LBN))
-    *capability_flags |= NIC_FLAG_RX_RSS_LIMITED;
-  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_PACKED_STREAM_VAR_BUFFERS_LBN))
-    *capability_flags |= NIC_FLAG_VAR_PACKED_STREAM;
-  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_ADDITIONAL_RSS_MODES_LBN))
-    *capability_flags |= NIC_FLAG_ADDITIONAL_RSS_MODES;
-  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_TIMESTAMP_LBN))
-    *capability_flags |= NIC_FLAG_HW_RX_TIMESTAMPING;
-  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_TX_TIMESTAMP_LBN))
-    *capability_flags |= NIC_FLAG_HW_TX_TIMESTAMPING;
-  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_MCAST_FILTER_CHAINING_LBN))
-    *capability_flags |= NIC_FLAG_MULTICAST_FILTER_CHAINING;
-  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_PREFIX_LEN_0_LBN))
-    *capability_flags |= NIC_FLAG_ZERO_RX_PREFIX;
-  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_BATCHING_LBN))
-    *capability_flags |= NIC_FLAG_RX_MERGE;
-  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_FORCE_EVENT_MERGING_LBN))
-    *capability_flags |= NIC_FLAG_RX_FORCE_EVENT_MERGING;
+
+  /* Get the set of flags where there's a simple one to one mapping with nic
+   * flags. */
+  capability_flags = mcdi_capability_info_to_nic_flags(out, out_size);
 
   /* If MAC filters are policed then check we've got the right privileges
    * before saying we can do MAC spoofing.
    */
+  flags = EFHW_MCDI_DWORD(out, GET_CAPABILITIES_V3_OUT_FLAGS1);
   if (flags & (1u <<
                MC_CMD_GET_CAPABILITIES_V3_OUT_TX_MAC_SECURITY_FILTERING_LBN)) {
     if( ef10_nic_mac_spoofing_privilege(nic) == 1 )
-      *capability_flags |= NIC_FLAG_MAC_SPOOFING;
+      capability_flags |= NIC_FLAG_MAC_SPOOFING;
   }
   else {
-    *capability_flags |= NIC_FLAG_MAC_SPOOFING;
+    capability_flags |= NIC_FLAG_MAC_SPOOFING;
   }
 
-
-  if (out_size >= MC_CMD_GET_CAPABILITIES_V2_OUT_LEN) {
+  if( capability_flags & NIC_FLAG_PIO ) {
     nic->pio_num = EFHW_MCDI_WORD(out, GET_CAPABILITIES_V3_OUT_NUM_PIO_BUFFS);
     nic->pio_size = EFHW_MCDI_WORD(out, GET_CAPABILITIES_V3_OUT_SIZE_PIO_BUFF);
-    if( nic->pio_num > 0 )
-      *capability_flags |= NIC_FLAG_PIO;
-    flags = EFHW_MCDI_DWORD(out, GET_CAPABILITIES_V3_OUT_FLAGS2);
-    if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_TX_VFIFO_ULL_MODE_LBN))
-      *capability_flags |= NIC_FLAG_TX_ALTERNATIVES;
-    if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_INIT_EVQ_V2_LBN))
-      *capability_flags |= NIC_FLAG_EVQ_V2;
-    if (flags & (1u << MC_CMD_GET_CAPABILITIES_V2_OUT_CTPIO_LBN))
-      *capability_flags |= NIC_FLAG_TX_CTPIO;
-    if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_EVENT_CUT_THROUGH_LBN))
-      *capability_flags |= NIC_FLAG_EVENT_CUT_THROUGH;
-    if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_CUT_THROUGH_LBN))
-      *capability_flags |= NIC_FLAG_RX_CUT_THROUGH;
-  }
-  else {
-    EFHW_ERR("%s: ERROR: Unexpectedly failed to read NIC capabilities",
-             __FUNCTION__);
   }
 
   if (out_size >= MC_CMD_GET_CAPABILITIES_V3_OUT_LEN) {
@@ -519,6 +458,8 @@ static int _ef10_nic_check_capabilities(struct efhw_nic *nic,
     nic->q_sizes[EFHW_TXQ] = q_sizes;
     nic->q_sizes[EFHW_RXQ] = q_sizes;
   }
+
+  *nic_capability_flags |= capability_flags;
 
   return rc;
 }

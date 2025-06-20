@@ -81,3 +81,61 @@ mcdi_parser_info_to_filter_flags(ci_dword_t *out, int num_matches)
 
   return flags;
 }
+
+
+uint64_t
+mcdi_capability_info_to_nic_flags(ci_dword_t *out, size_t out_size)
+{
+  uint64_t capability_flags = 0;
+  unsigned flags;
+  int pio_num;
+
+  flags = EFHW_MCDI_DWORD(out, GET_CAPABILITIES_V3_OUT_FLAGS1);
+  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_PREFIX_LEN_14_LBN))
+    capability_flags |= NIC_FLAG_14BYTE_PREFIX;
+  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_TX_MCAST_UDP_LOOPBACK_LBN))
+    capability_flags |= NIC_FLAG_MCAST_LOOP_HW;
+  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_PACKED_STREAM_LBN))
+    capability_flags |= NIC_FLAG_PACKED_STREAM;
+  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_RSS_LIMITED_LBN))
+    capability_flags |= NIC_FLAG_RX_RSS_LIMITED;
+  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_PACKED_STREAM_VAR_BUFFERS_LBN))
+    capability_flags |= NIC_FLAG_VAR_PACKED_STREAM;
+  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_ADDITIONAL_RSS_MODES_LBN))
+    capability_flags |= NIC_FLAG_ADDITIONAL_RSS_MODES;
+  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_TIMESTAMP_LBN))
+    capability_flags |= NIC_FLAG_HW_RX_TIMESTAMPING;
+  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_TX_TIMESTAMP_LBN))
+    capability_flags |= NIC_FLAG_HW_TX_TIMESTAMPING;
+  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_MCAST_FILTER_CHAINING_LBN))
+    capability_flags |= NIC_FLAG_MULTICAST_FILTER_CHAINING;
+  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_PREFIX_LEN_0_LBN))
+    capability_flags |= NIC_FLAG_ZERO_RX_PREFIX;
+  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_BATCHING_LBN))
+    capability_flags |= NIC_FLAG_RX_MERGE;
+  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_FORCE_EVENT_MERGING_LBN))
+    capability_flags |= NIC_FLAG_RX_FORCE_EVENT_MERGING;
+
+  if (out_size >= MC_CMD_GET_CAPABILITIES_V2_OUT_LEN) {
+    pio_num = EFHW_MCDI_WORD(out, GET_CAPABILITIES_V3_OUT_NUM_PIO_BUFFS);
+    if( pio_num > 0 )
+      capability_flags |= NIC_FLAG_PIO;
+    flags = EFHW_MCDI_DWORD(out, GET_CAPABILITIES_V3_OUT_FLAGS2);
+    if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_TX_VFIFO_ULL_MODE_LBN))
+      capability_flags |= NIC_FLAG_TX_ALTERNATIVES;
+    if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_INIT_EVQ_V2_LBN))
+      capability_flags |= NIC_FLAG_EVQ_V2;
+    if (flags & (1u << MC_CMD_GET_CAPABILITIES_V2_OUT_CTPIO_LBN))
+      capability_flags |= NIC_FLAG_TX_CTPIO;
+    if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_EVENT_CUT_THROUGH_LBN))
+      capability_flags |= NIC_FLAG_EVENT_CUT_THROUGH;
+    if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_CUT_THROUGH_LBN))
+      capability_flags |= NIC_FLAG_RX_CUT_THROUGH;
+  }
+  else {
+    EFHW_ERR("%s: ERROR: Unexpectedly failed to read NIC capabilities",
+             __FUNCTION__);
+  }
+
+  return capability_flags;
+}
