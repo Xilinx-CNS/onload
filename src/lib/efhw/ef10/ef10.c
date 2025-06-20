@@ -386,8 +386,8 @@ static int _ef10_nic_check_capabilities(struct efhw_nic *nic,
   unsigned flags;
   int rc;
 
-  EFHW_MCDI_DECLARE_BUF(in, MC_CMD_GET_CAPABILITIES_V2_IN_LEN);
-  EFHW_MCDI_DECLARE_BUF(out, MC_CMD_GET_CAPABILITIES_V10_OUT_LEN);
+  EFHW_MCDI_DECLARE_BUF(in, MC_CMD_GET_CAPABILITIES_V13_IN_LEN);
+  EFHW_MCDI_DECLARE_BUF(out, MC_CMD_GET_CAPABILITIES_V13_OUT_LEN);
   EFHW_MCDI_INITIALISE_BUF(in);
   EFHW_MCDI_INITIALISE_BUF(out);
 
@@ -397,6 +397,10 @@ static int _ef10_nic_check_capabilities(struct efhw_nic *nic,
   nic->q_sizes[EFHW_TXQ] = 512 | 1024 | 2048;
   nic->q_sizes[EFHW_RXQ] = 512 | 1024 | 2048 | 4096;
 
+  /* Older FW ignores the extra in parameter, but such FW only supports a
+   * single datapath anyway, so we still get what we want. */
+  EFHW_MCDI_SET_DWORD(in, GET_CAPABILITIES_V13_IN_DATAPATH_TYPE,
+                      MC_CMD_GET_CAPABILITIES_V13_IN_FF_PATH);
   rc = ef10_mcdi_rpc(nic, MC_CMD_GET_CAPABILITIES, sizeof(in), sizeof(out),
                      &out_size, in, out);
   MCDI_CHECK(MC_CMD_GET_CAPABILITIES, rc, out_size, 0);
