@@ -55,7 +55,7 @@ int ef10ct_fw_rpc(struct efhw_nic *nic, struct efx_auxdev_rpc *cmd)
   struct efx_auxdev* edev;
   struct efx_auxdev_client* cli;
 
-  /* FIXME need to handle reset stuff here */
+  /* TODO ON-16697 need to handle reset stuff here */
   AUX_PRE(dev, edev, cli, nic, rc);
   rc = edev->llct_ops->base_ops->fw_rpc(cli, cmd);
   AUX_POST(dev, edev, cli, nic, rc);
@@ -369,7 +369,7 @@ static void ef10ct_irq_free(struct efhw_nic *nic, uint32_t channel,
   edev->llct_ops->irq_free(cli, auxdev_irq);
   AUX_POST(dev, edev, cli, nic, rc);
   /* This can fail in the case that the NIC is currently under reset.
-   * FIXME EF10CT net driver behaviour needs checking here - we don't want
+   * TODO ON-16697 net driver behaviour needs checking here - we don't want
    * it to reset any state post reset. */
   EFHW_ASSERT(nic->resetting || !rc); /* rc may be updated in AUX_PRE */
 
@@ -832,7 +832,7 @@ static int ef10ct_vi_alloc_hw(struct efhw_nic *nic,
   if( n_vis != 1 )
     return -EOPNOTSUPP;
 
-  /* FIXME EF10CT re-allocation post reset needs consideration */
+  /* TODO ON-16697 re-allocation post reset needs consideration */
 
   evq_rc = ef10ct_alloc_evq(nic);
   if (evq_rc < 0) {
@@ -1377,7 +1377,7 @@ ef10ct_dmaq_rx_q_init(struct efhw_nic *nic,
 static size_t
 ef10ct_max_shared_rxqs(struct efhw_nic *nic)
 {
-  /* FIXME EF10CT this needs to mean exactly one of "needs packet shm"
+  /* TODO ON-16696 this needs to mean exactly one of "needs packet shm"
    * (efct_only) or "attaches to shared rxq resource" (efct and ef10ct). I
    * think at the moment the latter is what we want, but this should be
    * revisited once we've built up more of the RX stuff. */
@@ -1484,7 +1484,7 @@ static int get_rxq_num_from_mask(struct efhw_nic *nic,
 
   rc = ef10ct_alloc_rxq(nic);
 
-  /* FIXME EF10CT full lifetime management of this RXQ. We do the queue init
+  /* FIXME ON-16711 full lifetime management of this RXQ. We do the queue init
    * on demand on first attach, where we have information about the VI user
    * that we need to make decisions such as whether to enable RX event
    * generation and the target EVQ. The flush and release happen on queue

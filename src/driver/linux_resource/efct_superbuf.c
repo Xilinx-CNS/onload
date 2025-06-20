@@ -363,7 +363,7 @@ __efct_nic_rxq_bind(struct xlnx_efct_device* edev,
 
     /* Poison the start of each packet buffer with the appropriate value for
      * tcpdirect's packet header detection.
-     * EFCT TODO: rationalise other uses of poison (onload, and tcpdirect's
+     * TODO ON-16692 rationalise other uses of poison (onload, and tcpdirect's
      * partial-packet detection) so they all take the same value.
      */
     union xlnx_efct_param_value poison = {

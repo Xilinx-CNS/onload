@@ -11,7 +11,8 @@
 #define CI_EFCT_SWRXQ_ABI_VERSION  0
 
 /* The following definitions aren't hardware-specific, but they do describe
- * low-level contraints and properties of the efhw interface */
+ * low-level contraints and properties of the efhw interface.
+ * TODO ON-16707 find a more appropriate home for them. */
 
 /* Max superbufs permitted to be assigned to a single rxq, across the whole
  * system. */

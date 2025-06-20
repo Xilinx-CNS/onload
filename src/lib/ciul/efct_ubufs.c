@@ -320,7 +320,7 @@ static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
     return rc;
   }
   resource_id = rc;
-  /* FIXME SCJ cleanup on failure */
+  /* TODO ON-16693 cleanup on failure */
 
   map_bytes = CI_ROUND_UP((size_t)n_superbufs * EFCT_RX_SUPERBUF_BYTES,
                           CI_HUGEPAGE_SIZE);
@@ -402,7 +402,7 @@ static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd,
     LOGVV(ef_log("%s: efct_ubufs_init_rxq_resource rxq %d", __FUNCTION__, rc));
     return rc;
   }
-  /* FIXME SCJ cleanup on failure */
+  /* TODO ON-16693 cleanup on failure */
 
   return efct_ubufs_shared_attach_internal(vi, ix, qid,
                                            (void*)vi->efct_rxqs.q[ix].superbuf);
@@ -625,7 +625,7 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
      * metadata. See efct_vi_rxpkt_get_precise_timestamp. */
   }
 
-  /* TODO get this limit from the design parameter DP_RX_BUFFER_FIFO_SIZE,
+  /* TODO ON-16686 get this limit from the design parameter DP_RX_BUFFER_FIFO_SIZE,
    * perhaps allow configuration to a smaller value to reduce working set */
   ubufs->nic_fifo_limit = 128;
   ubufs->pd = pd;

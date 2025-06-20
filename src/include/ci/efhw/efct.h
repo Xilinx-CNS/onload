@@ -61,7 +61,7 @@ struct efhw_efct_rxq {
   };
 };
 
-/* TODO EFCT find somewhere better to put this */
+/* TODO ON-16705 find somewhere better to put this */
 #define CI_EFCT_EVQ_DUMMY_MAX 1024
 
 struct efhw_nic_efct_rxq {

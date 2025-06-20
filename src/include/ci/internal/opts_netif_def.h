@@ -781,7 +781,7 @@ CI_CFG_OPT("EF_SHARE_WITH", share_with, ci_int32,
 "the stack.",
            , , 0, -1, SMAX, count)
 
-/* TODO EFCT allow 0 ring size for now for development purposes */
+/* TODO ON-16706 allow 0 ring size for now for development purposes */
 CI_CFG_OPT("EF_RXQ_SIZE", rxq_size, ci_uint16,
 "Set the size of the receive descriptor ring.  Must be a power of two.  "
 "Valid values are architecture dependent.  For EF10: 512, 1024, 2048 "
@@ -1039,7 +1039,7 @@ CI_CFG_OPT("EF_MAX_TX_PACKETS", max_tx_packets, ci_int32,
 "receive path.",
            , , 24576, 0, 1000000000, count)
 
-/* TODO EFCT allow 0 ring size for now for development purposes */
+/* TODO ON-16706 allow 0 ring size for now for development purposes */
 CI_CFG_OPT("EF_RXQ_MIN", rxq_min, ci_uint16,
 "Minimum initial fill level for each RX ring.  If Onload is not able to "
 "allocate sufficient packet buffers to fill each RX ring to this level, then "

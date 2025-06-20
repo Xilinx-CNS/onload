@@ -185,7 +185,7 @@ static int ef10ct_resource_init(struct efx_auxdev *edev,
   res_dim->irq_prime_reg = val.iomem_addr;
 
   /* Shared evqs for rx vis. Need at least one for suppressed events */
-  /* TODO: determine how many more to add for interrupt affinity */
+  /* TODO ON-16670 determine how many more to add for interrupt affinity */
   ef10ct->shared_n = 1;
   ef10ct->shared = vzalloc(sizeof(*ef10ct->shared) * ef10ct->shared_n);
   if( ! ef10ct->shared ) {
@@ -516,7 +516,7 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
 
   ef10ct_vi_allocator_dtor(ef10ct);
   /* mind we might still expect callbacks from close() context
-   * TODO: rethink where to call close and how to synchronise with
+   * TODO ON-16689 rethink where to call close and how to synchronise with
    * the rest. */
   edev->llct_ops->base_ops->close(client);
 

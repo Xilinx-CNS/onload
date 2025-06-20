@@ -386,7 +386,7 @@ efct_get_used_hugepages(struct efhw_nic *nic, int qid)
 static size_t
 efct_max_shared_rxqs(struct efhw_nic *nic)
 {
-  /* FIXME: this should perhaps return the per-nic limit:
+  /* TODO ON-16696 this should perhaps return the per-nic limit:
    *
    *  struct efhw_nic_efct* efct = nic->arch_extra;
    *  return efct->rxq_n;

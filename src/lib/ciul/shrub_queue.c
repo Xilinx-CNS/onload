@@ -240,7 +240,7 @@ fail_shared:
 
 void ef_shrub_queue_close(struct ef_shrub_queue* queue)
 {
-  /* TODO close connections */
+  /* TODO ON-16708 close connections */
   munmap(queue->fifo, fifo_bytes(queue));
   close(queue->shared_fds[EF_SHRUB_FD_BUFFERS]);
   close(queue->shared_fds[EF_SHRUB_FD_SERVER_FIFO]);

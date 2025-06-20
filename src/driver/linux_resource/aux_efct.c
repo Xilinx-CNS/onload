@@ -25,7 +25,7 @@
 
 #if CI_HAVE_EFCT_AUX
 
-/* EFCT TODO: enhance aux API to provide an extra cookie for this stuff so we
+/* TODO ON-16687 enhance aux API to provide an extra cookie for this stuff so we
  * can get rid of this global variable filth */
 static DEFINE_MUTEX(efct_hugetlb_provision_mtx);
 static struct oo_hugetlb_allocator *efct_hugetlb_alloc = NULL;
@@ -75,7 +75,7 @@ static void efct_reset_up(struct efhw_nic_efct *efct, bool success)
 
   EFRM_NOTICE("%s: %s success=%d", __func__, dev_name(nic->dev), success);
 
-  /* TODO EFCT Add support for ef_vi reset injection */
+  /* TODO ON-16688 Add support for ef_vi reset injection */
   efrm_nic_flush_all_queues(nic, EFRM_FLUSH_QUEUES_F_NOHW);
 
   if( success )

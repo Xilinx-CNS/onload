@@ -1972,7 +1972,7 @@ static void oo_efct_superbuf_post_ioctl(ef_vi* vi, int qid, int sbid,
   op.sbid = sbid;
   op.sentinel = sentinel;
   oo_resource_op(vi->dh, OO_IOC_EFCT_SUPERBUF_POST, &op);
-  // FIXME should we detect errors?
+  // TODO ON-16698 should we detect errors?
 }
 
 static int map_efct_ubuf_rxq_io_windows(ef_vi* vi, int intf_i)

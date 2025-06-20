@@ -83,7 +83,7 @@
 
 #define EFAB_THR_MAX_NUM_INSTANCES  0x00010000
 
-static const unsigned EFCT_HUGEPAGES_PER_RXQ = 2;  /* EFCT TODO: un-hardcode */
+static const unsigned EFCT_HUGEPAGES_PER_RXQ = 2;  /* TODO ON-16709 un-hardcode */
 
 /* Provides upper limit to EF_MAX_PACKETS. default is 512K packets,
  * which equates to roughly 1GB of memory 
@@ -1739,7 +1739,7 @@ static void tcp_helper_post_superbuf(ef_vi* vi, int ix, int sbid, bool sentinel)
   int owner_id = vi->efct_rxqs.ops->user_data;
 
   efhw_nic_post_superbuf(vi->dh, qid, dma_addr, sentinel, false, owner_id);
-  // FIXME should we check/handle errors?
+  // TODO ON-16698 should we check/handle errors?
 }
 
 static int initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,

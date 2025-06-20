@@ -2681,7 +2681,7 @@ ci_inline int ci_netif_has_many_events(ci_netif* ni, int lookahead) {
  * can do about that. It would not cause a functional problem in any case.
  *
  * For EFCT, this must match the value provided to the driver in
- * efct_nic_rxq_bind. TODO EFCT centralise the definition of this value.
+ * efct_nic_rxq_bind. TODO ON-16692 centralise the definition of this value.
  */
 #define CI_PKT_RX_POISON 0xFFA0C09Bu
 ci_inline volatile uint32_t* ci_netif_poison_location(ci_ip_pkt_fmt* pkt)
