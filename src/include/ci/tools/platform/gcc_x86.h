@@ -49,7 +49,14 @@
  * to use Linux equivalents and deal with kernel compat breakages 
  */
 
+/* Be careful before changing this define.  In most cases, although rdtscp will give
+ * higher accuracy due to preventing code reordering it is also higher overhead and
+ * changing this across the board is unlikely to be the right solution, other than
+ * for debugging.
+ * Consider using ci_frc64_get_accurate() or ci_frc_flush() instead in the places
+ * where it really matters.  */
 #define CI_FRC_USES_RDTSCP 0
+
 #if CI_FRC_USES_RDTSCP
 
 ci_inline void ci_frc32(ci_uint32* pval) {
