@@ -43,6 +43,14 @@ ci_inline ci_uint64 ci_frc64_get(void) {
   ci_frc64(&now);
   return now;
 }
+ci_inline ci_uint64 ci_frc64_get_accurate(void) {
+  ci_uint64 now;
+  /* This is needed to avoid code reordering when you care about exactly 
+   * what you're measuring */
+  ci_frc_flush();
+  ci_frc64(&now);
+  return now;
+}
 #endif
 #ifdef CI_HAVE_FRC32
 ci_inline ci_uint32 ci_frc32_get(void) {
