@@ -49,11 +49,34 @@
  * to use Linux equivalents and deal with kernel compat breakages 
  */
 
+#define CI_FRC_USES_RDTSCP 0
+#if CI_FRC_USES_RDTSCP
+
+ci_inline void ci_frc32(ci_uint32* pval) {
+  ci_uint32 low, high, aux;
+  asm volatile ( "rdtscp" : "=a" (low), "=d" (high), "=c" (aux) : : );
+  *pval = low;
+}
+
+ci_inline void ci_frc64(ci_uint64* pval) {
+  ci_uint32 low, high, aux;
+  asm volatile ( "rdtscp" : "=a" (low), "=d" (high), "=c" (aux) : : );
+  *pval = ((ci_uint64)high << 32) | low;
+}
+
+/* Without a call to ci_frc_flush() before/after ci_frc32/64 code can be 
+ * reordered meaning you don't profile the thing you intended to.
+ *
+ * Nop when rdtscp is in use as it doesn't need additional serialisation
+ */
+#define ci_frc_flush()
+
+#else /* CI_FRC_USES_RDTSCP */
+
 #define ci_frc32(pval)  __asm__ __volatile__("rdtsc" : "=a" (*pval) : : "edx")
 
 #if defined(__x86_64__)
 ci_inline void ci_frc64(ci_uint64* pval) {
-  /* temp fix until we figure how to get this out in one bite */	   
   ci_uint64 low, high;
   __asm__ __volatile__("rdtsc" : "=a" (low) , "=d" (high));	 	
   *pval = (high << 32) | low;
@@ -70,6 +93,7 @@ ci_inline void ci_frc64(ci_uint64* pval) {
  */
 #define ci_frc_flush()  ci_x86_lfence()
 
+#endif /* CI_FRC_USES_RDTSCP */
 
 /**********************************************************************
  * Atomic integer.
