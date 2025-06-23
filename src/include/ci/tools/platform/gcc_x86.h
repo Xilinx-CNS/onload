@@ -38,15 +38,18 @@
 #define CI_HAVE_FRC64
 #define CI_HAVE_FRC32
 
-#define ci_frc32(pval)  __asm__ __volatile__("rdtsc" : "=a" (*pval) : : "edx")
-
-
 #if defined(__x86_64__)
 
 #define CI_HAVE_X86INTRIN
 
 #endif
 
+/* Would be nice to use the compiler intrinsics here if CI_HAVE_X86INTRIN
+ * but we would either still need our own asm versions for the kernel, or have
+ * to use Linux equivalents and deal with kernel compat breakages 
+ */
+
+#define ci_frc32(pval)  __asm__ __volatile__("rdtsc" : "=a" (*pval) : : "edx")
 
 #if defined(__x86_64__)
 ci_inline void ci_frc64(ci_uint64* pval) {
@@ -60,6 +63,9 @@ ci_inline void ci_frc64(ci_uint64* pval) {
 #define ci_frc64(pval)  __asm__ __volatile__("rdtsc" : "=A" (*pval))
 #endif
 
+/* Without a call to ci_frc_flush() before/after ci_frc32/64 code can be 
+ * reordered meaning you don't profile the thing you intended to.
+ */
 #define ci_frc_flush()  /* ?? Need a pipeline barrier. */
 
 
