@@ -65,8 +65,10 @@ ci_inline void ci_frc64(ci_uint64* pval) {
 
 /* Without a call to ci_frc_flush() before/after ci_frc32/64 code can be 
  * reordered meaning you don't profile the thing you intended to.
+ *
+ * Choice of lfence is to match rdtscp behaviour
  */
-#define ci_frc_flush()  /* ?? Need a pipeline barrier. */
+#define ci_frc_flush()  ci_x86_lfence()
 
 
 /**********************************************************************
