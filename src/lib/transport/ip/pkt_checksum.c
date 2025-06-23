@@ -97,6 +97,6 @@ void oo_pkt_calc_checksums(ci_netif* netif, ci_ip_pkt_fmt* pkt,
   }
   else {
     /* Nothing to do here - checksum already calculated by ci_icmp_send */
-    ci_assert_equal(protocol, IPPROTO_ICMP);
+    ci_assert((protocol == IPPROTO_ICMP) || (protocol == IPPROTO_ICMPV6));
   }
 }
