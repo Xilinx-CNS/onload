@@ -28,10 +28,10 @@
 
 #if defined(__x86_64__)
 static inline uint64_t frc64_get(void) {
-  uint64_t val, low, high;
-  __asm__ __volatile__("rdtsc" : "=a" (low) , "=d" (high));
-  val = (high << 32) | low;
-  return val;
+  uint64_t low, high;
+  uint32_t aux;
+  asm volatile ( "rdtscp" : "=a" (low), "=d" (high), "=c" (aux) : : );
+  return (high << 32) | low;
 }
 #else
 #error "X86_64 required"
