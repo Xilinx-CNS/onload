@@ -317,13 +317,6 @@ int efrm_ctpio_map_kernel(struct efrm_vi *vi, void **io)
 	size_t ctpio_page_off;
 	int rc;
 
-	/* TODO ON-16668 The 'L' variant is reported by fake test hardware, which
-	   doesn't provide iomem.
-	 */
-	if( (nic->devtype.arch == EFHW_ARCH_EF10CT) &&
-	    (nic->devtype.variant == 'L') )
-		return 0;
-
 	rc = efhw_nic_ctpio_addr(nic, efrm_vi_qid(vi, EFHW_TXQ), &ctpio_addr);
 	if( rc < 0 )
 		return rc;

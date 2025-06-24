@@ -385,11 +385,6 @@ static int efrm_vi_request_irq(struct efhw_nic *nic, struct efrm_vi *virs)
 {
 	int rc;
 
-	/* TODO ON-16668 test driver does not support interrupts */
-	if( (nic->devtype.arch == EFHW_ARCH_EF10CT) &&
-	    (nic->devtype.variant == 'L') )
-		return 0;
-
 	rc = efrm_interrupt_vector_choose(efrm_nic(nic), virs);
 	if (rc != 0) {
 		EFRM_ERR("%s: Failed to assign IRQ: %d\n", __FUNCTION__, rc);
@@ -918,11 +913,8 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 		evq_params.flags = flags;
 
 		evq_params.wakeup_channel = efrm_vi_get_channel(virs);
-		/* TODO ON-16668 test driver doesn't support interrupts */
-		if( (nic->devtype.arch != EFHW_ARCH_EF10CT) ||
-		    (nic->devtype.variant != 'L') ) {
-			EFRM_ASSERT(!!(nic->flags & NIC_FLAG_EVQ_IRQ) == !!(virs->vec != NULL));
-		}
+		EFRM_ASSERT(!!(nic->flags & NIC_FLAG_EVQ_IRQ) ==
+			    !!(virs->vec != NULL));
 
 		rc = efhw_nic_event_queue_enable(nic, &evq_params);
 		if( rc == 0 )
@@ -997,12 +989,7 @@ efrm_vi_io_map(struct efrm_vi* virs, struct efhw_nic *nic, int instance)
 
 	int rc = efhw_nic_vi_io_region(nic, instance, &io_size, &addr);
 	if (rc == 0 && io_size > 0)  {
-		/* TODO EF10CT test driver doesn't have actual iomem */
-		if( (nic->devtype.arch == EFHW_ARCH_EF10CT) &&
-		    (nic->devtype.variant == 'L') )
-			virs->io_page = (volatile char*)addr;
-		else
-			virs->io_page = ci_ioremap(addr, io_size);
+		virs->io_page = ci_ioremap(addr, io_size);
 		if (virs->io_page == NULL)
 			return -ENOMEM;
 	}

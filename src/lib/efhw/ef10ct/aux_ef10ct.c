@@ -101,14 +101,6 @@ static int ef10ct_devtype_init(struct efx_auxdev *edev,
     dev_type->variant = 'A';
     dev_type->function = EFHW_FUNCTION_VF;
     break;
-   case 0xffff:
-    /* This is the test device provided via the efct_test driver. We use a
-     * specific variant for this to avoid trying to do things that the test
-     * driver doesn't support, like interrupts.
-     * TODO ON-16668 purge test driver */
-    dev_type->variant = 'L';
-    dev_type->function = EFHW_FUNCTION_PF;
-    break;
    default:
     EFRM_ERR("%s: Not binding to llct device %s with unknown device id %x",
              __func__, dev_name(&edev->auxdev.dev), val.value);
@@ -522,12 +514,10 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
 
   efct_filter_state_free(&ef10ct->filter_state);
 
-  /* iounmap the superbuf post registers if we are not using the test driver. */
-  /* TODO ON-16668 purge test driver */
-  if ( nic->devtype.variant != 'L')
-    for (i = 0; i < ef10ct->rxq_n; i++)
-      if (ef10ct->rxq[i].post_buffer_addr != NULL)
-          iounmap(ef10ct->rxq[i].post_buffer_addr);
+  /* iounmap the superbuf post registers */
+  for (i = 0; i < ef10ct->rxq_n; i++)
+    if (ef10ct->rxq[i].post_buffer_addr != NULL)
+      iounmap(ef10ct->rxq[i].post_buffer_addr);
 
   vfree(ef10ct->evq);
   vfree(ef10ct->rxq);

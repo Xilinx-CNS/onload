@@ -57,14 +57,6 @@ static inline int tx_ctpio(ci_netif* ni, int intf_i, ef_vi* vi,
       ef_vi_transmit_space_bytes(vi) < total_length)
     return -ENOSPC;
 
-#ifdef __KERNEL__
-  /* TODO EFCT The 'T' variant is reported by fake test hardware, which
-     doesn't provide iomem.
-   */
-  if((vi->nic_type.arch == EF_VI_ARCH_EFCT) && (vi->nic_type.variant == 'T'))
-    return -ENOSPC;
-#endif
-
   oo_pkt_calc_checksums(ni, pkt, host_iov);
   ef_vi_transmitv_ctpio(vi, total_length, host_iov,
                         iov_len, nsn->ctpio_ct_threshold);

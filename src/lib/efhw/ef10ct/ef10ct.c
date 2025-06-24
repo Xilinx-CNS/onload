@@ -635,11 +635,7 @@ ef10ct_nic_event_queue_enable(struct efhw_nic *nic,
   EFHW_MCDI_SET_DWORD(in, INIT_EVQ_V2_IN_COUNT_MODE,
                       MC_CMD_INIT_EVQ_V2_IN_COUNT_MODE_DIS);
   EFHW_MCDI_SET_DWORD(in, INIT_EVQ_V2_IN_COUNT_THRSHLD, 0);
-
-  /* TODO ON-16668 purge test driver */
-  if( (nic->devtype.variant != 'L') )
-    EFHW_MCDI_SET_DWORD(in, INIT_EVQ_V2_IN_IRQ_NUM,
-                        efhw_params->wakeup_channel);
+  EFHW_MCDI_SET_DWORD(in, INIT_EVQ_V2_IN_IRQ_NUM, efhw_params->wakeup_channel);
 
   rpc.cmd = MC_CMD_INIT_EVQ;
   rpc.inlen = sizeof(in);
@@ -1050,19 +1046,6 @@ static int ef10ct_rx_iomap_buffer_post_register(struct efhw_nic *nic,
   if( rc < 0 )
     return rc;
 
-  /* TODO ON-16668 The 'L' variant is reported by fake test hardware, which
-   * doesn't provide iomem.
-  */
-  if( (nic->devtype.arch == EFHW_ARCH_EF10CT) &&
-      (nic->devtype.variant == 'L') )
-  {
-    /* The address provided by the test driver is a physical address that has
-     * been converted from a virtual address, we can simply convert it back in
-     * order to use it. */
-    *addr_out = phys_to_virt(val.queue_io_wnd.base);
-    return 0;
-  }
-
   map_size = CI_ROUND_UP(val.queue_io_wnd.size, CI_PAGE_SIZE);
 
   EFHW_ASSERT((val.queue_io_wnd.base & PAGE_MASK) == val.queue_io_wnd.base);
@@ -1306,12 +1289,7 @@ ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
     return;
   }
 
-  /* TODO ON-16668 purge test driver */
-  if ( ! ((nic->devtype.arch == EFHW_ARCH_EF10CT) &&
-          (nic->devtype.variant == 'L')) )
-  {
-    iounmap(ef10ct->rxq[rxq_num].post_buffer_addr);
-  }
+  iounmap(ef10ct->rxq[rxq_num].post_buffer_addr);
   ef10ct->rxq[rxq_num].evq = -1;
   ef10ct->rxq[rxq_num].post_buffer_addr = NULL;
 
@@ -1432,12 +1410,7 @@ ef10ct_flush_rx_dma_channel(struct efhw_nic *nic, uint dmaq)
 static enum efhw_page_map_type
 ef10ct_queue_map_type(struct efhw_nic *nic)
 {
-  /* The test driver doesn't support DMA mapping, so fallback to phys addrs
-   * in that case. TODO ON-16668 purge test driver */
-  if( nic->devtype.variant == 'L' )
-    return EFHW_PAGE_MAP_PHYS;
-  else
-    return EFHW_PAGE_MAP_DMA;
+  return EFHW_PAGE_MAP_DMA;
 }
 
 /*--------------------------------------------------------------------
@@ -1455,12 +1428,7 @@ static const int ef10ct_nic_buffer_table_orders[] = {9};
 static enum efhw_page_map_type
 ef10ct_buffer_map_type(struct efhw_nic *nic)
 {
-  /* The test driver doesn't support DMA mapping, so fallback to phys addrs
-   * in that case. TODO ON-16668 purge test driver */
-  if( nic->devtype.variant == 'L' )
-    return EFHW_PAGE_MAP_PHYS;
-  else
-    return EFHW_PAGE_MAP_DMA;
+  return EFHW_PAGE_MAP_DMA;
 }
 
 /*--------------------------------------------------------------------
@@ -1932,23 +1900,6 @@ static int ef10ct_rxq_post_superbuf(struct efhw_nic *nic, int rxq_num,
                       EFCT_RX_BUFFER_POST_SENTINEL, sentinel,
                       EFCT_RX_BUFFER_POST_ROLLOVER, rollover);
 
-  /* TODO ON-16668 purge test driver */
-  if ((nic->devtype.arch == EFHW_ARCH_EF10CT) &&
-      (nic->devtype.variant == 'L'))
-  {
-    EFHW_NOTICE("%s Using the test driver code!", __func__);
-    /* Due to limitations with the efct_test driver it is possible to write
-     * multiple values to RX_BUFFER_POST register before the first one is
-     * read. As a crude workaround for the issue the test driver resets the
-     * register 0 once it has processed the buffer. We poll the value of the
-     * register here in case the test driver hasn't finished yet. */
-    while(*reg != 0) {
-      msleep(20); /* Ran into softlockups even with reg being declared
-                   * as volatile. Maybe this is because the test
-                   * driver is scheduled on the core as the one that
-                   * is spinning, so can never actually run? */
-    }
-  }
   *reg = qword.u64[0];
 
   return 0;
