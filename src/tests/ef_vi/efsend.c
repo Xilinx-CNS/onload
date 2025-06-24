@@ -147,6 +147,12 @@ int main(int argc, char* argv[])
   int tx_frame_len;
   int (*send_more_packets)(int, ef_vi*, const void*, ef_addr, int);
 
+  struct timespec start_ts;
+  struct timespec end_ts;
+  long   delta_ms;
+  double pkt_rate_mpps;
+  double bw_mbps;
+
   TRY(parse_opts(argc, argv));
 
 
@@ -202,12 +208,15 @@ int main(int argc, char* argv[])
 
   /* Prepare packet contents */
   tx_frame_len = init_udp_pkt(p, cfg_payload_len, &vi, dh, cfg_vlan, 1);
+  printf("tx_frame_len=%d\n", tx_frame_len);
 
   /* Select TX method */
   if( cfg_ctpio )
     send_more_packets = send_more_packets_ctpio;
   else
     send_more_packets = send_more_packets_dma;
+
+  clock_gettime(CLOCK_MONOTONIC, &start_ts);
 
   /* Continue until all sends are complete */
   while( n_sent < cfg_iter ) {
@@ -221,7 +230,24 @@ int main(int argc, char* argv[])
   }
   TEST(n_pushed == cfg_iter);
 
+  clock_gettime(CLOCK_MONOTONIC, &end_ts);
+
+  delta_ms = (end_ts.tv_sec - start_ts.tv_sec) * 1000;
+  delta_ms += (end_ts.tv_nsec - start_ts.tv_nsec) / 1e6;
+
   printf("Sent %d packets\n", cfg_iter);
+
+  if( delta_ms == 0 ) {
+    printf("Time: 0.000 seconds\n");
+  } else {
+    pkt_rate_mpps = cfg_iter / (delta_ms * 1.0e3);
+    bw_mbps = pkt_rate_mpps * tx_frame_len * 8;
+
+    printf("Time: %ld.%03ld seconds\n", delta_ms / 1000, delta_ms % 1000);
+    printf("Rate: %.3f Mpps\n", pkt_rate_mpps);
+    printf("Bw: %.2f Mbps\n", bw_mbps);
+  }
+
   return 0;
 }
 
