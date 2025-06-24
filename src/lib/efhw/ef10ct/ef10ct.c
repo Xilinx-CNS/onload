@@ -1543,8 +1543,9 @@ static int select_rxq(struct filter_insert_params *params, uint64_t rxq_in,
 }
 
 
-static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in_data,
-                                  struct efct_filter_insert_out *out_data)
+static int ef10ct_filter_op(const struct efct_filter_insert_in *in_data,
+                            struct efct_filter_insert_out *out_data,
+                            int op)
 {
   struct filter_insert_params *params = (struct filter_insert_params*)
                                         in_data->drv_opaque;
@@ -1604,7 +1605,7 @@ static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in_data,
 
   EFHW_MCDI_INITIALISE_BUF(in);
   EFHW_MCDI_INITIALISE_BUF(out);
-  ethtool_flow_to_mcdi_op(in, rxq, in_data->filter);
+  ethtool_flow_to_mcdi_op(in, rxq, op, in_data->filter);
 
   rc = ef10ct_fw_rpc(params->nic, &rpc);
 
@@ -1629,6 +1630,13 @@ static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in_data,
   }
 
   return rc;
+}
+
+
+static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in,
+                                   struct efct_filter_insert_out *out)
+{
+  return ef10ct_filter_op(in, out, MC_CMD_FILTER_OP_IN_OP_INSERT);
 }
 
 

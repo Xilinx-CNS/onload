@@ -18,6 +18,6 @@ int efx_spec_to_ethtool_flow(const struct efx_filter_spec *src,
 
 /** Converts an ethtool filter spec into an mcdi request. Does no additional
  * checking or validation that the filter would be supported by the nic. */
-void ethtool_flow_to_mcdi_op(ci_dword_t *buf, int rxq,
+void ethtool_flow_to_mcdi_op(ci_dword_t *buf, int rxq, int op,
                              const struct ethtool_rx_flow_spec *filter);
 #endif

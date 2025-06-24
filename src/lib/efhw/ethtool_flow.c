@@ -239,7 +239,7 @@ static void set_masked_ipv6_addr(void *dst, const __be32 addr[static 4],
   memcpy(dst, masked_addr, sizeof(masked_addr));
 }
 
-void ethtool_flow_to_mcdi_op(ci_dword_t *buf, int rxq,
+void ethtool_flow_to_mcdi_op(ci_dword_t *buf, int rxq, int op,
                              const struct ethtool_rx_flow_spec *filter)
 {
   bool multicast = false;
@@ -456,7 +456,9 @@ void ethtool_flow_to_mcdi_op(ci_dword_t *buf, int rxq,
     EFHW_ASSERT(filter->m_ext.data[1] == 0);
   }
 
-  EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_OP, MC_CMD_FILTER_OP_IN_OP_INSERT);
+  EFHW_ASSERT((op == MC_CMD_FILTER_OP_IN_OP_INSERT) ||
+              (op == MC_CMD_FILTER_OP_IN_OP_REPLACE));
+  EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_OP, op);
   EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_PORT_ID, EVB_PORT_ID_ASSIGNED);
   EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_MATCH_FIELDS, match_fields);
   EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_RX_DEST,
