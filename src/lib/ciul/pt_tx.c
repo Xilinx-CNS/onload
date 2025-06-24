@@ -57,6 +57,9 @@ int ef_vi_transmit_unbundle(ef_vi* vi, const ef_event* ev,
       q->ids[i] = EF_REQUEST_ID_MASK;
     }
 
+  /* Remove subsequent TX with timestamp events */
+  qs->removed += ev->tx.deferred_evs;
+
   /* This is a count of packets, not descriptors. Again, see comment 7 on
    * bug 44002. */
   EF_VI_BUG_ON(ids - ids_in > EF_VI_TRANSMIT_BATCH);

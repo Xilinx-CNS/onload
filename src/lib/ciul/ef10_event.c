@@ -467,6 +467,7 @@ static inline void ef10_tx_event_completion(ef_vi* evq, const ef_vi_event* ev,
     ev_out->tx.flags = EF_EVENT_FLAG_CTPIO;
   else
     ev_out->tx.flags = 0;
+  ev_out->tx.deferred_evs = 0;
 }
 
 

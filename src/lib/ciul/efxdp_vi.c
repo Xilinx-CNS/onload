@@ -374,6 +374,7 @@ static int efxdp_ef_eventq_poll(ef_vi* vi, ef_event* evs, int evs_len)
         evs[n].tx.desc_id = cons;
         evs[n].tx.flags = 0;
         evs[n].tx.q_id = 0;
+        evs[n].tx.deferred_evs = 0;
         ++n;
       } while( cons != prod && n != evs_len );
 

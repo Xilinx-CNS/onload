@@ -417,7 +417,7 @@ static void efct_grant_unsol_credit(ef_vi* vi, bool clear_overflow, uint32_t cre
 
 /* handle a tx completion event */
 static void efct_tx_handle_event(ef_vi* vi, ci_qword_t event, ef_event* ev_out,
-                                bool* again)
+                                 bool* again, ef_event** last_tx_event)
 {
   ef_vi_txq* q = &vi->vi_txq;
   ef_vi_txq_state* qs = &vi->ep_state->txq;
@@ -464,15 +464,36 @@ static void efct_tx_handle_event(ef_vi* vi, ci_qword_t event, ef_event* ev_out,
     ev_out->tx_timestamp.rq_id = q->ids[(qs->previous - 1) & q->mask];
     ev_out->tx_timestamp.flags = EF_EVENT_FLAG_CTPIO;
     ev_out->tx_timestamp.q_id = CI_QWORD_FIELD(event, EFCT_TX_EVENT_LABEL);
-    /* Delivering the tx event with timestamp counts as removing it, as we
-     * must only be delivering a single event, so _unbundle isn't used. */
-    qs->removed++;
 
+    /* Instead of removing these events now, we defer removal to the point in
+     * time where we unbundle the preceding normal TX event. As an example,
+     * consider the following flow of events where TX = normal transmit and
+     * TS = transmit with timestamp:
+     *
+     * 0  1  2  3  4  5   6      7  8   9
+     * TS TS TX TS TS TS  TX     TX TS  TX
+     * <--->    <------->    <->    <->    <->
+     *   2          3         0      1      0
+     *
+     * We can immediately (before returning from this poll) consume the first
+     * two TS events as no TX event exists before them in this poll. Subsequent
+     * TX events can then update the TXQ state to remove any TS events that are
+     * reported before the next TX event. In this example:
+     * - unbundling event (2) results in qs->removed += 3
+     * - unbundling event (6) results in qs->removed += 0
+     * - unbundling event (7) results in qs->removed += 1
+     * - unbundling event (9) results in qs->removed += 0
+     *
+     * These values are in addition to the number of unbundled packets.
+     */
+    (*last_tx_event)->tx.deferred_evs++;
   } else {
     ev_out->tx.type = EF_EVENT_TYPE_TX;
     ev_out->tx.desc_id = qs->previous;
     ev_out->tx.flags = EF_EVENT_FLAG_CTPIO;
     ev_out->tx.q_id = CI_QWORD_FIELD(event, EFCT_TX_EVENT_LABEL);
+    ev_out->tx.deferred_evs = 0;
+    *last_tx_event = ev_out;
   }
 }
 
@@ -965,6 +986,7 @@ static void efct_tx_handle_error_event(ef_vi* vi, ci_qword_t event,
   ev_out->tx_error.q_id = CI_QWORD_FIELD(event, EFCT_ERROR_LABEL);
   ev_out->tx_error.flags = 0;
   ev_out->tx_error.desc_id = ++qs->previous;
+  ev_out->tx_error.deferred_evs = 0;
   ev_out->tx_error.subtype = CI_QWORD_FIELD(event, EFCT_ERROR_REASON);
 }
 
@@ -1015,9 +1037,16 @@ static int efct_tx_handle_control_event(ef_vi* vi, ci_qword_t event,
 int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
 {
   ef_eventq_state* evq = &vi->ep_state->evq;
+  ef_event* last_tx_event;
+  ef_event dummy_event;
   ci_qword_t* event;
   bool again = false;
   int n_evs = 0;
+
+  /* We need to track `deferred_evs`, but can't directly take a pointer to it
+   * as it's a bit field. */
+  dummy_event.tx.deferred_evs = 0;
+  last_tx_event = &dummy_event;
 
   /* Check for overflow. If the previous entry has been overwritten already,
    * then it will have the wrong phase value and will appear invalid */
@@ -1031,19 +1060,15 @@ int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
 
     switch( CI_QWORD_FIELD(*event, EFCT_EVENT_TYPE) ) {
       case EFCT_EVENT_TYPE_TX:
-        efct_tx_handle_event(vi, *event, &evs[n_evs], &again);
+        efct_tx_handle_event(vi, *event, &evs[n_evs], &again, &last_tx_event);
         n_evs++;
         /* More than EF_VI_TRANSMIT_BATCH descriptors returned from HW event
          * we will complete rest on the next poll. Therefore, we move back
          * the evq_ptr.*/
         if(unlikely(again))
             evq->evq_ptr -= sizeof(*event);
-        /* Don't report more than one tx event per poll. This is to avoid a
-         * horrendous sequencing problem if a simple TX event is followed by a
-         * TX_WITH_TIMESTAMP; we'd need to update the queue state for the
-         * second event *after* the later call to ef_vi_transmit_unbundle()
-         * for the first event. */
-        return n_evs;
+
+        break;
       case EFCT_EVENT_TYPE_CONTROL:
         n_evs += efct_tx_handle_control_event(vi, *event, &evs[n_evs]);
         break;
@@ -1057,6 +1082,9 @@ int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
         break;
     }
   }
+
+  /* If we had any leading TX with timestamp events, consume them now! */
+  vi->ep_state->txq.removed += dummy_event.tx.deferred_evs;
 
   return n_evs;
 }

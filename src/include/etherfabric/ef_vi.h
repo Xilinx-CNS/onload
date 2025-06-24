@@ -172,6 +172,7 @@ typedef union {
     unsigned       flags        :(8 - EF_VI_TX_TS_FRAC_NS_BITS);
     unsigned       __reserved   :EF_VI_TX_TS_FRAC_NS_BITS;
     unsigned       desc_id      :16;
+    unsigned       deferred_evs :16;
   } tx;
   /** An event of type EF_EVENT_TYPE_TX_ERROR */
   struct {  /* This *must* have same layout as [tx]. */
@@ -180,6 +181,7 @@ typedef union {
     unsigned       flags        :(8 - EF_VI_TX_TS_FRAC_NS_BITS);
     unsigned       __reserved   :EF_VI_TX_TS_FRAC_NS_BITS;
     unsigned       desc_id      :16;
+    unsigned       deferred_evs :16;
     unsigned       subtype      :16;
   } tx_error;
   /** An event of type EF_EVENT_TYPE_TX_WITH_TIMESTAMP */
