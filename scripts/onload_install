@@ -27,7 +27,7 @@ usage() {
   err "  --strict                          - Compiler warnings are errors"
   err "  --debug                           - Compile with debug enabled"
   err "  --require-optional-targets        - Compile with optional targets required"
-  err "  --no-sfc                          - Compile without sfc module"
+  err "  --no-sfc                          - Compile without sfc module (implies --no-initramfs)"
   err "  --have-sdci                       - Compile onload with SDCI support"
   err "  --affinity     / --noaffinity     - Compile with sfc_affinity and add config"
   is_ppc &&
@@ -420,6 +420,10 @@ install_modprobe_conf() {
 
   try $do sed -i -e "s|extra|$install_mod_dir|" "$i_etc/modprobe.d/onload.conf"
   try $do sed -i -e "s|extra|$install_mod_dir|" "$i_etc/depmod.d/onload.conf"
+
+  if which update-initramfs >/dev/null 2>&1 && ! ${noinitramfs}; then
+    install_f onload_misc/onload_initramfs.conf "$i_usr/share/initramfs-tools/modules.d/onload.conf"
+  fi
 }
 
 install_modules_load_d() {
@@ -746,7 +750,7 @@ while [ $# -gt 0 ]; do
   --lib64dir=*) lib64dir=${1#--lib64dir=};;
   --kernelmodulesdir=*) kernelmodulesdir=${1#--kernelmodulesdir=};;
   --moddir=*) install_mod_dir="${1#--moddir=}";;
-  --no-sfc) nosfc=true;;
+  --no-sfc) nosfc=true; noinitramfs=true;;
   --have-sdci) buildargs="$buildargs $1";;
   --headers) all=false; headers=true;;
   --baseheaders) all=false; base_headers=true;;

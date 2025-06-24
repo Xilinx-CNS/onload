@@ -128,7 +128,11 @@ endif
 binary-modules:
 	dh_testroot
 	dh_prep
-	dh_installdirs lib/modules/$(KVERS)/misc
+	dh_installdirs lib/modules/$(KVERS)/misc usr/share/initramfs-tools/hooks
+
+	# Make dh_installmodules(1) trigger update-initramfs
+	cp scripts/onload_misc/onload_initramfs_hook \
+		$(CURDIR)/debian/$(PKGNAME)/usr/share/initramfs-tools/hooks/onload
 
 	# Build the module
 	scripts/onload_build $(BUILD_FLAGS) --kernel
