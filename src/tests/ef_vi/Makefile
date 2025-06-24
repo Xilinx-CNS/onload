@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # SPDX-FileCopyrightText: (c) 2025 Advanced Micro Devices, Inc.
 
-HAVE_EFCP := $(shell echo "#include <cplane/api.h>" | \
+HAVE_EFCP := $(shell echo "\#include <cplane/api.h>" | \
 $(CC) -E - >/dev/null 2>&1 && echo "Y")
 
 EFSEND_APPS := efsend efsend_timestamping efsend_warming
@@ -22,7 +22,7 @@ CFLAGS_COMMON := -DNDEBUG -Werror -Wall -Wundef -Wpointer-arith \
                  -Wno-format-truncation -Wimplicit-fallthrough=5 \
                  -Wno-array-bounds -Wno-stringop-overflow \
                  -Wno-deprecated-declarations -fomit-frame-pointer -O2 -g
-LDFLAGS_COMMON := -O2 -g -Wl,-E -Wl,-rpath
+LDFLAGS_COMMON := -O2 -g -Wl,-E -Wl,-rpath -pthread
 
 .PHONY: all clean
 all: $(TEST_APPS)
