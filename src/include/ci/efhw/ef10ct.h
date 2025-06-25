@@ -103,9 +103,13 @@ struct efhw_nic_ef10ct {
 static inline u32 ef10ct_get_queue_num(u32 queue_handle)
 {
   ci_dword_t data;
+  u32 queue_num;
 
   EFHW_MCDI_SET_DWORD(&data, QUEUE_HANDLE_QUEUE_HANDLE, queue_handle);
-  return EFHW_MCDI_DWORD_FIELD(&data, QUEUE_HANDLE_QUEUE_NUM);
+  queue_num = EFHW_MCDI_DWORD_FIELD(&data, QUEUE_HANDLE_QUEUE_NUM);
+  /* Assert to check we haven't accidently passed in a queue_num */
+  EFHW_ASSERT(queue_handle != queue_num);
+  return queue_num;
 }
 
 static inline enum ef10ct_queue_handle_type
@@ -122,11 +126,15 @@ ef10ct_reconstruct_queue_handle(u32 queue_num,
                                 enum ef10ct_queue_handle_type type)
 {
   ci_dword_t data;
+  u32 queue_handle;
 
   EFHW_MCDI_POPULATE_DWORD_2(&data, QUEUE_HANDLE_QUEUE_HANDLE,
                              QUEUE_HANDLE_QUEUE_NUM, queue_num,
                              QUEUE_HANDLE_QUEUE_TYPE, type);
-  return EFHW_MCDI_DWORD(&data, QUEUE_HANDLE_QUEUE_HANDLE);
+  queue_handle = EFHW_MCDI_DWORD(&data, QUEUE_HANDLE_QUEUE_HANDLE);
+  /* Assert to check we haven't accidently passed in a queue_handle */
+  EFHW_ASSERT(queue_handle != queue_num);
+  return queue_handle;
 }
 
 int ef10ct_alloc_evq(struct efhw_nic *nic);

@@ -1911,7 +1911,7 @@ translate_dma_address(struct efhw_nic *nic, resource_size_t dma_addr,
   return efhw_sw_bt_get_dma_addr(sw_bt, dma_addr >> PAGE_SHIFT);
 }
 
-static int ef10ct_rxq_post_superbuf(struct efhw_nic *nic, int instance,
+static int ef10ct_rxq_post_superbuf(struct efhw_nic *nic, int rxq_num,
                                     resource_size_t dma_addr,
                                     bool sentinel, bool rollover, int owner_id)
 {
@@ -1919,7 +1919,6 @@ static int ef10ct_rxq_post_superbuf(struct efhw_nic *nic, int instance,
   resource_size_t addr_to_post = dma_addr;
   ci_qword_t qword;
   volatile uint64_t *reg;
-  int rxq_num = ef10ct_get_queue_num(instance);
 
   if( rxq_num < 0 || rxq_num >= ef10ct->rxq_n )
     return -EINVAL;

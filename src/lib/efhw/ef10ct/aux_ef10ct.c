@@ -327,7 +327,8 @@ static void ef10ct_nic_free_shared_evq(struct efhw_nic *nic, int qid)
   shared_evq = &ef10ct->shared[qid];
 
   /* Neither client_id nor time_sync_events_enabled are used for ef10ct */
-  efhw_nic_event_queue_disable(nic, shared_evq->evq_id, 0);
+  efhw_nic_event_queue_disable(nic, ef10ct_get_queue_num(shared_evq->evq_id),
+                               0);
 
   ef10ct_free_evq(nic, shared_evq->evq_id);
   efhw_iopages_free(nic, &shared_evq->iopages);
