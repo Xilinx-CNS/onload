@@ -765,7 +765,9 @@ static int rx_rollover(ef_vi* vi, int qid)
   }
   else {
     /* meta_pkt refers to the first packet of the new buffer,
-     * data_pkt remains in the previous buffer. */
+     * data_pkt remains in the previous buffer.
+     * store the final metadata packet id, to access the final timestamp */
+    efct_rx_desc(vi, rxq_ptr->data_pkt)->final_meta_pkt = meta_pkt;
   }
 
   rxq_ptr->meta_pkt =
@@ -873,7 +875,6 @@ static inline int efct_poll_rx(ef_vi* vi, int ix, ef_event* evs, int evs_len)
   qid = qs->efct_state[ix].qid;
   for( i = 0; i < evs_len; ++i ) {
     const ci_oword_t* header;
-    struct efct_rx_descriptor* desc;
     uint32_t pkt_id;
     uint16_t discard_flags = 0;
 
@@ -882,13 +883,13 @@ static inline int efct_poll_rx(ef_vi* vi, int ix, ef_event* evs, int evs_len)
       break;
 
     pkt_id = rxq_ptr->data_pkt;
-    desc = efct_rx_desc(vi, pkt_id);
 
     /* Do a coarse grained check first, then get rid of the false positives. */
     if(unlikely( header->u64[0] & CHECK_FIELDS ) &&
        (header->u64[0] & M(ROLLOVER) ||
         (discard_flags = header_status_flags(header) & vi->rx_discard_mask)) ) {
       if( CI_OWORD_FIELD(*header, EFCT_RX_HEADER_ROLLOVER) ) {
+        struct efct_rx_descriptor* desc = efct_rx_desc(vi, pkt_id);
         int prev_sb = pkt_id_to_local_superbuf_ix(pkt_id);
         int next_sb = pkt_id_to_local_superbuf_ix(rxq_ptr_to_pkt_id(rxq_ptr->meta_pkt));
         int nskipped;
@@ -940,13 +941,6 @@ static inline int efct_poll_rx(ef_vi* vi, int ix, ef_event* evs, int evs_len)
       evs[i].rx_ref.q_id = qid;
       evs[i].rx_ref.filter_id = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_FILTER);
     }
-
-    /* This is only necessary for the final packet of each superbuf, storing
-     * metadata from the next superbuf, but it may be faster to do it
-     * unconditionally. */
-    desc->final_timestamp = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_TIMESTAMP);
-    desc->final_ts_status = CI_OWORD_FIELD(*header,
-                                           EFCT_RX_HEADER_TIMESTAMP_STATUS);
 
     /* The following arithmetic assumes that the next data packet will be in
      * the same buffer as the next metadata. That won't be the case for the
@@ -1462,21 +1456,19 @@ int efct_vi_rxpkt_get_precise_timestamp(ef_vi* vi, uint32_t pkt_id,
                                         ef_precisetime* ts_out)
 {
   const struct efct_rx_descriptor* desc = efct_rx_desc(vi, pkt_id);
+  const ci_oword_t* header;
   uint64_t ts;
   unsigned status;
   int clock_set;
   int clock_in_sync;
 
-  if( pkt_id_to_index_in_superbuf(pkt_id) == desc->superbuf_pkts - 1 ) {
-    ts = desc->final_timestamp;
-    status = desc->final_ts_status;
-  }
-  else {
-    const ci_oword_t* header =
-      efct_rx_header(vi, pkt_id + vi->efct_rxqs.meta_offset);
-    ts = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_TIMESTAMP);
-    status = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_TIMESTAMP_STATUS);
-  }
+  pkt_id += vi->efct_rxqs.meta_offset;
+  if( pkt_id_to_index_in_superbuf(pkt_id) >= desc->superbuf_pkts )
+    pkt_id = desc->final_meta_pkt;
+
+  header = efct_rx_header(vi, pkt_id);
+  ts = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_TIMESTAMP);
+  status = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_TIMESTAMP_STATUS);
 
   if( status == 0 )
     return -ENODATA;

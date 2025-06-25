@@ -149,10 +149,21 @@ struct efct_rx_descriptor
   uint16_t superbuf_pkts;
   int16_t  sbid_next; /* id of next buffer in a linked list, or -1 */
   uint8_t  sentinel;
-  uint8_t  final_ts_status;
-  uint64_t final_timestamp;
-  ef_addr  dma_addr;
-  char     padding[8]; /* size needs to be a power of two */
+  uint8_t  padding[1];
+
+  /* This union assumes that mis-located metadata and user-space buffer
+   * management are mutually exclusive. If that's ever not the case, we'll
+   * need to squeeze another sbid into the unused bits of the fields above,
+   * or accept an increase of the structure size.
+   *
+   * (It should be possible to do that by combining superbuf_pkts (10 bits)
+   * with sentinel (1 bit) leaving 16 bits. We don't need to store the
+   * whole packet id, though it's convenient to do so if we can.)
+   */
+  union {
+    uint32_t final_meta_pkt; /* metadata for final packet, if meta_offset == 1 */
+    ef_addr  dma_addr;       /* dma address of buffer, if meta_offset == 0 */
+  };
 };
 
 #define EFCT_TX_DESCRIPTOR_BYTES sizeof(struct efct_tx_descriptor)
