@@ -183,6 +183,9 @@ EFRM_HAVE_GET_FILE_RCU_FUNC symtype get_file_rcu include/linux/fs.h struct file*
 EFRM_HAVE_SKB_RECV_NOBLOCK_PARAM	symtype	skb_recv_datagram	include/linux/skbuff.h	struct sk_buff *(struct sock *, unsigned, int, int *)
 EFRM_HAVE_TIMER_DELETE_SYNC	export	timer_delete_sync	include/linux/timer.h	kernel/time/timer.c
 
+EFX_NEED_NETDEV_HOLD		nsymbol	netdev_hold		include/linux/netdevice.h
+EFX_HAVE_DEV_HOLD_TRACK		symbol	dev_hold_track		include/linux/netdevice.h
+
 # TODO move onload-related stuff from net kernel_compat
 " | grep -E -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
