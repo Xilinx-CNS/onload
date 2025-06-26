@@ -22,7 +22,8 @@
 #include <etherfabric/memreg.h>
 #include <etherfabric/capabilities.h>
 
-static int parse_opts(int argc, char* argv[]);
+static int parse_opts(int argc, char* argv[], enum ef_pd_flags *pd_flags_out,
+                      ef_driver_handle driver_handle);
 
 
 #define N_BUFS          1
@@ -46,7 +47,6 @@ static int                cfg_payload_len = DEFAULT_PAYLOAD_SIZE;
 static int                cfg_iter = 10;
 static int                cfg_usleep = 0;
 static int                cfg_loopback = 0;
-static int                cfg_phys_mode;
 static int                cfg_disable_tx_push;
 static int                cfg_use_vf;
 static int                cfg_max_batch = 8192;
@@ -140,34 +140,34 @@ int main(int argc, char* argv[])
   ef_memreg mr;
   void* p;
   ef_addr dma_buf_addr;
-  enum ef_pd_flags pd_flags = EF_PD_DEFAULT;
+  /* Use Express datapath as default for X4 interfaces. For NICs which
+   * don't have multiple datapaths, parse_interface_with_flags() (called
+   * by parse_opts() ) will clear this from pd_flags */
+  enum ef_pd_flags pd_flags = EF_PD_EXPRESS;
   enum ef_vi_flags vi_flags = EF_VI_FLAGS_DEFAULT;
   unsigned long min_page_size, ctpio_only;
   size_t alloc_size;
   int tx_frame_len;
   int (*send_more_packets)(int, ef_vi*, const void*, ef_addr, int);
-
   struct timespec start_ts;
   struct timespec end_ts;
   long   delta_ms;
   double pkt_rate_mpps;
   double bw_mbps;
 
-  TRY(parse_opts(argc, argv));
-
+  /* open EF_VI driver handle */
+  TRY(ef_driver_open(&dh));
+  TRY(parse_opts(argc, argv, &pd_flags, dh));
 
   /* Set flags for options requested on command line */
   if( cfg_use_vf )
     pd_flags |= EF_PD_VF;
-  if( cfg_phys_mode )
-    pd_flags |= EF_PD_PHYS_MODE;
   if( cfg_loopback )
     pd_flags |= EF_PD_MCAST_LOOP;
   if( cfg_disable_tx_push )
     vi_flags |= EF_VI_TX_PUSH_DISABLE;
 
   /* Initialize and configure hardware resources */
-  TRY(ef_driver_open(&dh));
   TRY(ef_pd_alloc(&pd, dh, ifindex, pd_flags));
 
   if ( !ef_pd_capabilities_get(dh, &pd, dh, EF_VI_CAP_CTPIO_ONLY, &ctpio_only)
@@ -186,7 +186,7 @@ int main(int argc, char* argv[])
          (vi.vi_out_flags & EF_VI_OUT_CLOCK_SYNC_STATUS) != 0);
 
   /* Allocate memory for packet buffers, note alignment */
-  if (cfg_phys_mode)
+  if (pd_flags & EF_PD_PHYS_MODE)
     min_page_size = PAGE_SIZE;
   else
     TRY(ef_vi_capabilities_get(dh, ifindex, EF_VI_CAP_MIN_BUFFER_MODE_SIZE,
@@ -258,7 +258,6 @@ void usage(void)
   common_usage();
 
   fprintf(stderr, "  -b                  - enable loopback on the VI\n");
-  fprintf(stderr, "  -p                  - enable physical address mode\n");
   fprintf(stderr, "  -t                  - disable tx push (on by default)\n");
   fprintf(stderr, "  -B                  - maximum send batch size\n");
   fprintf(stderr, "  -s                  - microseconds to sleep between batches\n");
@@ -273,11 +272,12 @@ void usage(void)
 }
 
 
-static int parse_opts(int argc, char *argv[])
+static int parse_opts(int argc, char *argv[], enum ef_pd_flags *pd_flags_out,
+                      ef_driver_handle driver_handle)
 {
   int c;
 
-  while((c = getopt(argc, argv, "n:m:s:B:l:V:bptvxc")) != -1)
+  while((c = getopt(argc, argv, "n:m:s:B:l:V:btvxc")) != -1)
     switch( c ) {
     case 'n':
       cfg_iter = atoi(optarg);
@@ -299,9 +299,6 @@ static int parse_opts(int argc, char *argv[])
       break;
     case 'b':
       cfg_loopback = 1;
-      break;
-    case 'p':
-      cfg_phys_mode = 1;
       break;
     case 't':
       cfg_disable_tx_push = 1;
@@ -331,6 +328,7 @@ static int parse_opts(int argc, char *argv[])
   }
 
   /* Parse arguments after options */
-  parse_args(argv, &ifindex, cfg_local_port, cfg_vlan);
+  parse_args(argv, &ifindex, cfg_local_port, cfg_vlan,
+             pd_flags_out, driver_handle);
   return 0;
 }

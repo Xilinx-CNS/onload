@@ -23,7 +23,8 @@
 #include <etherfabric/pd.h>
 #include <etherfabric/memreg.h>
 
-static int parse_opts(int argc, char* argv[]);
+static int parse_opts(int argc, char* argv[], enum ef_pd_flags *pd_flags_out,
+                      ef_driver_handle driver_handle);
 
 #define N_BUFS          1
 #define BUF_SIZE        2048
@@ -93,14 +94,18 @@ int main(int argc, char* argv[])
   int i;
   void* p;
   ef_addr dma_buf_addr;
+  /* Use Express datapath as default for X4 interfaces. For NICs which
+   * don't have multiple datapaths, parse_interface_with_flags() (called
+   * by parse_opts() ) will clear this from pd_flags */
+  enum ef_pd_flags pd_flags = EF_PD_EXPRESS;
   /* Set flag to allow tx timestamping */
   int vi_flags = EF_VI_FLAGS_DEFAULT | EF_VI_TX_TIMESTAMPS;
 
-  TRY(parse_opts(argc, argv));
+  TRY(ef_driver_open(&dh));
+  TRY(parse_opts(argc, argv, &pd_flags, dh));
 
   /* Initialize and configure hardware resources */
-  TRY(ef_driver_open(&dh));
-  TRY(ef_pd_alloc(&pd, dh, ifindex, EF_PD_DEFAULT));
+  TRY(ef_pd_alloc(&pd, dh, ifindex, pd_flags));
   TRY(ef_vi_alloc_from_pd(&vi, dh, &pd, dh, -1, 0, -1, NULL, -1, vi_flags));
 
   printf("txq_size=%d\n", ef_vi_transmit_capacity(&vi));
@@ -146,7 +151,8 @@ void usage(void)
 }
 
 
-static int parse_opts(int argc, char*argv[])
+static int parse_opts(int argc, char*argv[], enum ef_pd_flags *pd_flags_out,
+                      ef_driver_handle driver_handle)
 {
   int c;
 
@@ -185,6 +191,6 @@ static int parse_opts(int argc, char*argv[])
   }
 
   /* Parse arguments after options */
-  parse_args(argv, &ifindex, cfg_local_port, -1);
+  parse_args(argv, &ifindex, cfg_local_port, -1, pd_flags_out, driver_handle);
   return 0;
 }

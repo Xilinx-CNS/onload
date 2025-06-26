@@ -36,8 +36,10 @@
 #include <etherfabric/pio.h>
 #include <etherfabric/efct_vi.h>
 
-static int parse_opts(int argc, char* argv[]);
-static void assert_capability(ef_driver_handle dh, int ifindex, int cap);
+static int parse_opts(int argc, char* argv[], enum ef_pd_flags *pd_flags_out,
+                      ef_driver_handle driver_handle);
+static void assert_capability(ef_driver_handle dh, int ifindex,
+                              enum ef_pd_flags pd_flags, int cap);
 static useconds_t usecs_since(const struct timespec* last_ts);
 
 #define BUF_SIZE        2048
@@ -226,6 +228,10 @@ int main(int argc, char* argv[])
 {
   ef_pd pd;
   ef_pio pio;
+  /* Use Express datapath as default for X4 interfaces. For NICs which
+   * don't have multiple datapaths, parse_interface_with_flags() (called
+   * by parse_opts() ) will clear this from pd_flags */
+  enum ef_pd_flags pd_flags = EF_PD_EXPRESS;
   int vi_flags = EF_VI_FLAGS_DEFAULT;
   pthread_t trigger_thread_id;
   cpu_set_t cpuset;
@@ -234,16 +240,16 @@ int main(int argc, char* argv[])
   /* set initial affinities to 0,1 */
   cfg_affinity[0] = 0;
   cfg_affinity[1] = 1;
-  TRY(parse_opts(argc, argv));
-
   TRY(ef_driver_open(&dh));
+  TRY(parse_opts(argc, argv, &pd_flags, dh));
+
   if( cfg_mode == MODE_PIO )
-    assert_capability(dh, ifindex, EF_VI_CAP_PIO);
+    assert_capability(dh, ifindex, pd_flags, EF_VI_CAP_PIO);
   else
-    assert_capability(dh, ifindex, EF_VI_CAP_CTPIO);
+    assert_capability(dh, ifindex, pd_flags, EF_VI_CAP_CTPIO);
 
   if( cfg_tx_delta ) {
-    assert_capability(dh, ifindex, EF_VI_CAP_HW_TX_TIMESTAMPING);
+    assert_capability(dh, ifindex, pd_flags, EF_VI_CAP_HW_TX_TIMESTAMPING);
     vi_flags |= EF_VI_TX_TIMESTAMPS;
   }
 
@@ -251,7 +257,7 @@ int main(int argc, char* argv[])
     vi_flags |= EF_VI_TX_CTPIO;
 
   /* Initialize and configure hardware resources */
-  TRY(ef_pd_alloc(&pd, dh, ifindex, EF_PD_DEFAULT));
+  TRY(ef_pd_alloc(&pd, dh, ifindex, pd_flags));
   TRY(ef_vi_alloc_from_pd(&vi, dh, &pd, dh, -1, 0, -1, NULL, -1, vi_flags));
   if( cfg_mode == MODE_PIO ) {
     TRY(ef_pio_alloc(&pio, dh, &pd, -1, dh));
@@ -340,7 +346,8 @@ int main(int argc, char* argv[])
 
 
 /* Utilities */
-static int parse_opts(int argc, char*argv[])
+static int parse_opts(int argc, char*argv[], enum ef_pd_flags *pd_flags_out,
+                      ef_driver_handle driver_handle)
 {
   int c;
   char *affinity_token;
@@ -415,15 +422,17 @@ static int parse_opts(int argc, char*argv[])
   }
 
   /* Parse arguments after options */
-  parse_args(argv, &ifindex, cfg_local_port, -1);
+  parse_args(argv, &ifindex, cfg_local_port, -1,
+             pd_flags_out, driver_handle);
   return 0;
 }
 
 
-static void assert_capability(ef_driver_handle dh, int ifindex, int cap)
+static void assert_capability(ef_driver_handle dh, int ifindex,
+                              enum ef_pd_flags pd_flags, int cap)
 {
   unsigned long cap_val;
-  int rc = ef_vi_capabilities_get(dh, ifindex, cap, &cap_val);
+  int rc = ef_vi_capabilities_get_from_pd_flags(dh, ifindex, pd_flags, cap, &cap_val);
   if( rc != 0 ) {
     if( rc == -EOPNOTSUPP ) {
       fprintf(stderr,

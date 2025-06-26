@@ -58,6 +58,13 @@ void common_usage()
   fprintf(stderr, " <mcast-ip>      multicast ip address to send packets to\n");
   fprintf(stderr, " <mcast-port>    multicast port to send packets to\n");
   fprintf(stderr, "\n");
+  fprintf(stderr, "interface:\n");
+  fprintf(stderr, "  <interface-name>[/<flag>[,<flag>...]]\n");
+  fprintf(stderr, "  where flag is one of:\n");
+  fprintf(stderr, "     * express - request Express datapath\n");
+  fprintf(stderr, "     * enterprise - request Enterprise datapath\n");
+  fprintf(stderr, "     * phys - request physical addressing mode\n");
+  fprintf(stderr, "\n");
   fprintf(stderr, "options:\n");
   fprintf(stderr, "  -n <iterations>     - number of packets to send\n");
   fprintf(stderr, "  -m <message-size>   - set udp payload size\n");
@@ -73,20 +80,23 @@ void print_and_exit(char* format, ...) {
   exit(1);
 }
 
-void parse_args(char *argv[], int *ifindex, int local_port, int vlan)
+void parse_args(char *argv[], int *ifindex, int local_port, int vlan,
+                enum ef_pd_flags *pd_flags_out, ef_driver_handle driver_handle)
 {
-  const char *interface, *mcast_ip;
-  char* local_ip;
+  const char *mcast_ip;
+  char *interface, *local_ip;
   int mcast_port;
 
-  interface = (argv++)[0];
+  if( ! parse_interface_with_flags(argv[0], &interface, ifindex,
+                                   pd_flags_out, driver_handle) )
+    print_and_exit("ERROR: Failed to parse interface '%s': %s\n",
+                   argv[0], strerror(errno));
+  argv++;
+  printf("interface is %s\n", interface);
+  get_ipaddr_of_vlan_intf(interface, vlan, &local_ip);
+  free(interface);
   mcast_ip = (argv++)[0];
   mcast_port = atoi(argv[0]);
-
-  get_ipaddr_of_vlan_intf(interface, vlan, &local_ip);
-
-  if( ! parse_interface(interface, ifindex) )
-    print_and_exit("ERROR: Failed to parse interface %s\n", interface);
 
   if( ! parse_host(local_ip, &sa_local.sin_addr) )
     print_and_exit("ERROR: Failed to parse local address %s\n", local_ip);
