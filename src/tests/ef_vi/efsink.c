@@ -500,6 +500,13 @@ static __attribute__ ((__noreturn__)) void usage(void)
   fprintf(stderr, "usage:\n");
   fprintf(stderr, "  efsink [options] <interface> [<filter-spec>...]\n");
   fprintf(stderr, "\n");
+  fprintf(stderr, "interface:\n");
+  fprintf(stderr, "  <interface-name>[/<flag>[,<flag>...]]\n");
+  fprintf(stderr, "  where flag is one of:\n");
+  fprintf(stderr, "     * express - request Express datapath\n");
+  fprintf(stderr, "     * enterprise - request Enterprise datapath\n");
+  fprintf(stderr, "     * phys - request physical addressing mode\n");
+  fprintf(stderr, "\n");
   fprintf(stderr, "filter-spec:\n");
   fprintf(stderr, "  {udp|tcp}:[mcastloop-rx,][vid=<vlan>,]<local-host>:"
           "<local-port>[,<remote-host>:<remote-port>]\n");
@@ -518,6 +525,7 @@ static __attribute__ ((__noreturn__)) void usage(void)
   fprintf(stderr, "  -d       hexdump received packet\n");
   fprintf(stderr, "  -t       enable hardware timestamps\n");
   fprintf(stderr, "  -V       allocate a virtual port\n");
+  fprintf(stderr, "           (interface flags not supported)\n");
   fprintf(stderr, "  -L <vid> assign vlan id to virtual port\n");
   fprintf(stderr, "  -v       enable verbose logging\n");
   fprintf(stderr, "  -m       monitor vi error statistics\n");
@@ -538,12 +546,12 @@ static __attribute__ ((__noreturn__)) void usage(void)
 
 int main(int argc, char* argv[])
 {
-  const char* interface;
+  char* interface;
   pthread_t thread_id;
   struct resources* res;
   unsigned pd_flags, vi_flags;
   struct in_addr sa_mcast;
-  int c, sock;
+  int c, sock, ifindex;
 
   while( (c = getopt (argc, argv, "dtVL:vmbefF:n:jD:xsq:")) != -1 )
     switch( c ) {
@@ -611,8 +619,6 @@ int main(int argc, char* argv[])
   argv += optind;
   if( argc < 1 )
     usage();
-  interface = argv[0];
-  ++argv; --argc;
 
   TEST((res = calloc(1, sizeof(*res))) != NULL);
 
@@ -622,15 +628,26 @@ int main(int argc, char* argv[])
   if( cfg_rx_merge )
     vi_flags |= EF_VI_RX_EVENT_MERGE;
 
-  pd_flags = EF_PD_DEFAULT;
+  /* Use Express datapath as default for X4 interfaces. For NICs which
+   * don't have multiple datapaths, parse_interface_with_flags() will 
+   * clear this from pd_flags */
+  pd_flags = EF_PD_EXPRESS;
 
   /* Open driver and allocate a VI. */
   TRY(ef_driver_open(&res->dh));
+  if( ! parse_interface_with_flags(argv[0], &interface, &ifindex,
+                                   &pd_flags, res->dh) ) {
+    fprintf(stderr, "Unable to parse interface '%s': %s",
+            argv[0], strerror(errno));
+    usage();
+  }
+  ++argv; --argc;
+
   if( cfg_vport )
     TRY(ef_pd_alloc_with_vport(&res->pd, res->dh, interface,
                                pd_flags, cfg_vlan_id));
   else
-    TRY(ef_pd_alloc_by_name(&res->pd, res->dh, interface, pd_flags));
+    TRY(ef_pd_alloc(&res->pd, res->dh, ifindex, pd_flags));
 
   TRY(ef_vi_alloc_from_pd(&res->vi, res->dh, &res->pd, res->dh,
                           -1, cfg_max_fill, 0, NULL, -1, vi_flags));
@@ -737,7 +754,8 @@ int main(int argc, char* argv[])
     LOGE("ERROR: multicast join failed");
     exit(1);
   }
-
+  free(interface);
+  
   pthread_mutex_init(&printf_mutex, NULL);
 
   TEST(pthread_create(&thread_id, NULL, monitor_fn, res) == 0);
