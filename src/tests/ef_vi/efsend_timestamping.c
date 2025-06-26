@@ -22,6 +22,7 @@
 
 #include <etherfabric/pd.h>
 #include <etherfabric/memreg.h>
+#include <etherfabric/capabilities.h>
 
 static int parse_opts(int argc, char* argv[], enum ef_pd_flags *pd_flags_out,
                       ef_driver_handle driver_handle);
@@ -100,14 +101,18 @@ int main(int argc, char* argv[])
   enum ef_pd_flags pd_flags = EF_PD_EXPRESS;
   /* Set flag to allow tx timestamping */
   int vi_flags = EF_VI_FLAGS_DEFAULT | EF_VI_TX_TIMESTAMPS;
+  unsigned long val;
+  bool ctpio_only;
 
   TRY(ef_driver_open(&dh));
   TRY(parse_opts(argc, argv, &pd_flags, dh));
-
   /* Initialize and configure hardware resources */
   TRY(ef_pd_alloc(&pd, dh, ifindex, pd_flags));
   TRY(ef_vi_alloc_from_pd(&vi, dh, &pd, dh, -1, 0, -1, NULL, -1, vi_flags));
+  ctpio_only = ( ef_pd_capabilities_get(dh, &pd, dh, EF_VI_CAP_CTPIO_ONLY, &val)
+                 == 0 && val);
 
+  printf("send_method=%s\n", ctpio_only ? "CTPIO" : "DMA");
   printf("txq_size=%d\n", ef_vi_transmit_capacity(&vi));
   printf("rxq_size=%d\n", ef_vi_receive_capacity(&vi));
   printf("evq_size=%d\n", ef_eventq_capacity(&vi));
@@ -122,12 +127,20 @@ int main(int argc, char* argv[])
   dma_buf_addr = ef_memreg_dma_addr(&mr, 0);
 
   /* Prepare packet content */
-  tx_frame_len = init_udp_pkt(p, cfg_payload_len, &vi, dh, -1, (vi.nic_type.arch == EF_VI_ARCH_EFCT ? 1 : 0));
+  tx_frame_len = init_udp_pkt(p, cfg_payload_len, &vi, dh, -1, ctpio_only);
 
   /* Start sending */
   for( i = 0; i < cfg_iter; ++i ) {
-    /* Transmit packet pointed by dma buffer address */
-    TRY(ef_vi_transmit(&vi, dma_buf_addr, tx_frame_len, n_sent));
+    if( ! ctpio_only ) {
+      /* Transmit packet pointed by dma buffer address */
+      TRY(ef_vi_transmit(&vi, dma_buf_addr, tx_frame_len, n_sent));
+    } else {
+      /* Transmit packet via CTPIO */
+      ef_vi_transmit_ctpio(&vi, p, tx_frame_len, EF_VI_CTPIO_CT_THRESHOLD_SNF);
+      /* Also post a fallback */
+      TRY(ef_vi_transmit_ctpio_fallback(&vi, dma_buf_addr, tx_frame_len,
+                                        n_sent));
+    }
     wait_for_some_completions();
     if( cfg_usleep )
       usleep(cfg_usleep);
