@@ -636,7 +636,8 @@ static bool flag_token_eq(const char* token, const char* value, int value_len)
 }
 
 
-int parse_interface_with_flags(const char* s, int* ifindex_out,
+int parse_interface_with_flags(const char* s, char** interface_out,
+                               int* ifindex_out,
                                enum ef_pd_flags *pd_flags_out,
                                ef_driver_handle driver_handle)
 {
@@ -659,6 +660,14 @@ int parse_interface_with_flags(const char* s, int* ifindex_out,
     }
   }
 
+  if( interface_out != NULL ) {
+    /* provide a copy of the base interface name
+     * the caller is respobsible for free()ing this afterwards */
+    *interface_out = strdup(ifname);
+    if( ! *interface_out ) {
+      return 0;
+    }
+  }
   if( ! parse_interface(ifname, ifindex_out) )
     return 0;
 

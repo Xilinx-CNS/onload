@@ -992,12 +992,12 @@ int main(int argc, char* argv[])
 
   if( argc != 2 && argc != 3 )
     usage(NULL);
-  if( ! parse_interface_with_flags(argv[1], &rx_ifindex, &cfg_rx_pd_flags,
+  if( ! parse_interface_with_flags(argv[1], NULL, &rx_ifindex, &cfg_rx_pd_flags,
                                    driver_handle) )
     usage("Unable to parse RX interface '%s': %s", argv[1], strerror(errno));
 
   if( argc == 3 &&
-      ! parse_interface_with_flags(argv[2], &tx_ifindex, &cfg_tx_pd_flags,
+      ! parse_interface_with_flags(argv[2], NULL, &tx_ifindex, &cfg_tx_pd_flags,
                                    driver_handle) )
     usage("Unable to parse TX interface '%s': %s", argv[2], strerror(errno));
 
