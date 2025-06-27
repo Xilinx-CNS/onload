@@ -25,7 +25,7 @@ int shrub_spawn_server(char* controller_id)
     controller_id,
     NULL
   };
-  char* envp_flags = "EF_VI_PD_FLAGS=llct";
+  char* envp_flags = "";
   char* envp[] = {
     envp_flags,
     NULL
