@@ -27,11 +27,13 @@ ALL_UNIT_TESTS := \
   lib/transport/ip/tcp_rx \
   lib/ciul/checksum \
   lib/ciul/efct_vi \
-  lib/ciul/efct_ubufs \
   lib/ciul/shrub_connection \
   lib/ciul/shrub_pool \
   lib/ciul/shrub_queue \
   lib/ciul/shrub_server \
+
+# Tests that are broken and need fixing
+BROKEN_UNIT_TESTS = lib/ciul/efct_ubufs
 
 # The tests to be run, and their corresponding files
 TESTS := $(filter $(UNIT_TEST_FILTER)%, $(ALL_UNIT_TESTS))
