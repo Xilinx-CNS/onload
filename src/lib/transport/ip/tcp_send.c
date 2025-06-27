@@ -171,7 +171,6 @@ int ci_tcp_sendmsg_fill_pkt(ci_netif* ni, ci_tcp_state* ts,
   /* Initialise and fill a packet buffer from an iovec. */
   int n;
   ci_ip_pkt_fmt* pkt = oo_pkt_filler_next_pkt(ni, &sinf->pf, sinf->stack_locked);
-  int p_netif_locked = ci_netif_is_locked(ni);
 
   ci_assert(pkt);
   ci_assert(! ci_iovec_ptr_is_empty_proper(piov));
@@ -193,7 +192,7 @@ int ci_tcp_sendmsg_fill_pkt(ci_netif* ni, ci_tcp_state* ts,
 
   n = sinf->total_unsent - sinf->fill_list_bytes;
   n = CI_MIN(maxlen, n);
-  sinf->rc = oo_pkt_fill(ni, &ts->s, &p_netif_locked/*p_netif_locked*/, 
+  sinf->rc = oo_pkt_fill(ni, &ts->s, &sinf->stack_locked/*p_netif_locked*/, 
                          CI_FALSE/*can_block*/, &sinf->pf, piov,
                          n CI_KERNEL_ARG(addr_spc));
   /* oo_pkt_fill does not allocate packets.  So, it can fail with
