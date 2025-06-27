@@ -2389,6 +2389,7 @@ static int efx_x4_phc_enable(struct ptp_clock_info *ptp,
 						     phc_clock_info);
 
 	switch (request->type) {
+	case PTP_CLK_REQ_EXTTS:
 	case PTP_CLK_REQ_PPS:
 		if (enable)
 			ptp_data->usr_evt_enabled |= BIT(request->type);
@@ -2736,6 +2737,7 @@ static const struct ptp_clock_info efx_x4_phc_clock_info = {
 	.name		= "sfc",
 	.max_adj	= MAX_PPB, /* unused, ptp_data->max_adjfreq used instead */
 	.n_alarm	= 0,
+	.n_ext_ts	= 1,
 	.pps		= 1,
 	.adjfine	= efx_x4_phc_adjfine,
 	.adjtime	= efx_x4_phc_adjtime,
@@ -2962,10 +2964,30 @@ static int efx_ptp_probe_post_io(struct efx_nic *efx)
 	rc = device_create_file(&efx->pci_dev->dev, &dev_attr_max_adjfreq);
 	if (rc < 0)
 		goto fail8;
+
+	/* SWNETLINUX-5683
+	 * Currently, X4 FW uses MC_CMD_PTP_OP_PPS_ENABLE to enable/disable
+	 * both HW PPS (PPS_IN) and synthetic PPS events delivery to the
+	 * driver. X2 FW uses MC_CMD_PTP_OP_PPS_ENABLE to enable/disable only
+	 * HW PPS - synthetic PPS events are always delivered. In the Linux
+	 * PPS implementation there isn't an "enable" function; the assumption
+	 * is that PPS events are delivered from when the PPS source is
+	 * registered via pps_register_source(). If PPS isn't enabled here,
+	 * tools that use /dev/ppsN directly will fail to fetch timestamps.
+	 */
+	if (efx_nic_rev(efx) == EFX_REV_X4 && efx_phc_exposed(efx)) {
+		rc = efx_ptp_hw_pps_enable(efx, true);
+		if (rc)
+			goto fail9;
+
+		ptp->usr_evt_enabled |= BIT(PTP_CLK_REQ_PPS);
+	}
 #endif /* EFX_NOT_UPSTREAM */
 
 	return 0;
 #ifdef EFX_NOT_UPSTREAM
+fail9:
+	device_remove_file(&efx->pci_dev->dev, &dev_attr_max_adjfreq);
 fail8:
 #ifdef CONFIG_DEBUG_FS
 	device_remove_file(&efx->pci_dev->dev, &dev_attr_ptp_stats);

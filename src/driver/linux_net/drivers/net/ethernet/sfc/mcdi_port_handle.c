@@ -710,6 +710,9 @@ static int efx_x4_mcdi_link_ctrl(struct efx_nic *efx, u32 loopback_mode,
 
 	BUILD_BUG_ON(MC_CMD_LINK_CTRL_OUT_LEN != 0);
 
+	if (efx->phy_mode & PHY_MODE_LOW_POWER)
+		flags |= BIT(MC_CMD_LINK_FLAGS_LINK_DISABLE);
+
 	MCDI_SET_DWORD(inbuf, LINK_CTRL_IN_PORT_HANDLE, efx->port_handle);
 	MCDI_SET_DWORD(inbuf, LINK_CTRL_IN_CONTROL_FLAGS, flags);
 
@@ -784,9 +787,6 @@ int efx_x4_mcdi_port_reconfigure(struct efx_nic *efx)
 				   &pause, &autoneg);
 	if (autoneg)
 		flags |= BIT(MC_CMD_LINK_FLAGS_AUTONEG_EN);
-
-	if (efx->phy_mode & PHY_MODE_LOW_POWER)
-		flags |= BIT(MC_CMD_LINK_FLAGS_LINK_DISABLE);
 
 	tech = efx_x4_link_tech(port_data, tech_mask, autoneg);
 	fec = ethtool_fec_to_x4_mcdi(port_data->supported.fec,
@@ -1225,8 +1225,11 @@ int efx_x4_mcdi_phy_set_settings(struct efx_nic *efx, struct ethtool_cmd *ecmd,
 	else
 		advertising &= ~ADVERTISED_Autoneg;
 
-	flags = BIT(MC_CMD_LINK_FLAGS_IGNORE_MODULE_SEQ);
 	ethtool_to_x4_mcdi(advertising, tech_mask, &pause, &autoneg);
+	bitmap_and(tech_mask, tech_mask, port_data->supported.tech_mask,
+		   MC_CMD_ETH_TECH_TECH_WIDTH);
+
+	flags = BIT(MC_CMD_LINK_FLAGS_IGNORE_MODULE_SEQ);
 	if (autoneg) {
 		flags |= BIT(MC_CMD_LINK_FLAGS_AUTONEG_EN);
 		if (bitmap_empty(tech_mask, MC_CMD_ETH_TECH_TECH_WIDTH))
@@ -1359,8 +1362,11 @@ int efx_x4_mcdi_phy_set_ksettings(struct efx_nic *efx,
 	else
 		linkmode_clear_bit(ETHTOOL_LINK_MODE_Autoneg_BIT, advertising);
 
-	flags = BIT(MC_CMD_LINK_FLAGS_IGNORE_MODULE_SEQ);
 	ethtool_linkset_to_x4_mcdi(advertising, tech_mask, &pause, &autoneg);
+	bitmap_and(tech_mask, tech_mask, port_data->supported.tech_mask,
+		   MC_CMD_ETH_TECH_TECH_WIDTH);
+
+	flags = BIT(MC_CMD_LINK_FLAGS_IGNORE_MODULE_SEQ);
 	if (autoneg) {
 		flags |= BIT(MC_CMD_LINK_FLAGS_AUTONEG_EN);
 		if (bitmap_empty(tech_mask, MC_CMD_ETH_TECH_TECH_WIDTH))

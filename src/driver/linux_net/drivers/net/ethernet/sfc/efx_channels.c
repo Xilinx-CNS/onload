@@ -1760,14 +1760,12 @@ int efx_channel_start_xsk_queue(struct efx_channel *channel)
 		rc = efx_init_tx_queue(tx_queue);
 		if (rc)
 			goto fail;
-		atomic_inc(&channel->efx->active_queues);
 	}
 
 	efx_for_each_channel_rx_queue(rx_queue, channel) {
 		rc = efx_init_rx_queue(rx_queue);
 		if (rc)
 			goto fail;
-		atomic_inc(&channel->efx->active_queues);
 		efx_stop_eventq(channel);
 		rx_queue->refill_enabled = true;
 		efx_fast_push_rx_descriptors(rx_queue, false);
@@ -1852,15 +1850,12 @@ int efx_start_channels(struct efx_nic *efx)
 				else
 					no_tso++;
 			}
-
-			atomic_inc(&efx->active_queues);
 		}
 
 		efx_for_each_channel_rx_queue(rx_queue, channel) {
 			rc = efx_init_rx_queue(rx_queue);
 			if (rc)
 				return rc;
-			atomic_inc(&efx->active_queues);
 			efx_stop_eventq(channel);
 			rx_queue->refill_enabled = true;
 			efx_fast_push_rx_descriptors(rx_queue, false);

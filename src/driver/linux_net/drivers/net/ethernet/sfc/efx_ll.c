@@ -154,7 +154,7 @@ static int efx_llct_process_design_param(struct efx_nic *efx,
 		/* Host interface says "Drivers should ignore design parameters
 		 * that they do not recognise."
 		 */
-		netif_info(efx, probe, efx->net_dev,
+		netif_vdbg(efx, probe, efx->net_dev,
 			   "Ignoring unrecognised design parameter %u\n",
 			   reader->type);
 		return 0;

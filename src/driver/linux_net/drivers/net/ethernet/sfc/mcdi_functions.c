@@ -265,6 +265,8 @@ int efx_mcdi_tx_init(struct efx_tx_queue *tx_queue, bool *tso_v2)
 		}
 	} while (rc);
 
+	atomic_inc(&efx->active_queues);
+
 	return 0;
 }
 
@@ -354,6 +356,10 @@ int efx_mcdi_rx_init(struct efx_rx_queue *rx_queue, bool want_outer_classes)
 	if (rc && rc != -ENETDOWN && rc != -EAGAIN)
 		netdev_WARN(efx->net_dev, "failed to initialise RXQ %d\n",
 				efx_rx_queue_index(rx_queue));
+
+	if (!rc)
+		atomic_inc(&efx->active_queues);
+
 	return rc;
 }
 

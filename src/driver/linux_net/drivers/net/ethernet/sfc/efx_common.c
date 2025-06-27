@@ -589,7 +589,7 @@ static void efx_link_change_work(struct work_struct *data)
 	struct efx_nic *efx = container_of(data, struct efx_nic,
 					   link_change_work);
 
-	netif_dbg(efx, link, efx->net_dev, "linkchange work\n");
+	netif_vdbg(efx, link, efx->net_dev, "linkchange work\n");
 
 	/* Refresh link state and report to clients and net core */
 	mutex_lock(&efx->mac_lock);

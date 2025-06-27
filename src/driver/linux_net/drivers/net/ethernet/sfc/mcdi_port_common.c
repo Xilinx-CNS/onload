@@ -1564,7 +1564,7 @@ void efx_mcdi_process_link_change(struct efx_nic *efx, efx_qword_t *ev)
 
 	if (efx_nic_port_handle_supported(efx)) {
 		if (net_ratelimit())
-			netif_warn(efx, link, efx->net_dev,
+			netif_vdbg(efx, link, efx->net_dev,
 				   "Legacy LINKCHANGE event ignored\n");
 		return;
 	}
@@ -1603,7 +1603,7 @@ void efx_mcdi_process_link_change_v2(struct efx_nic *efx, efx_qword_t *ev)
 
 	if (efx_nic_port_handle_supported(efx)) {
 		if (net_ratelimit())
-			netif_warn(efx, link, efx->net_dev,
+			netif_vdbg(efx, link, efx->net_dev,
 				   "Legacy LINKCHANGE_V2 event ignored\n");
 		return;
 	}
@@ -1636,7 +1636,7 @@ void efx_mcdi_process_module_change(struct efx_nic *efx, efx_qword_t *ev)
 
 	if (efx_nic_port_handle_supported(efx)) {
 		if (net_ratelimit())
-			netif_warn(efx, link, efx->net_dev,
+			netif_vdbg(efx, link, efx->net_dev,
 				   "Legacy MODULECHANGE event ignored\n");
 		return;
 	}

@@ -31,6 +31,7 @@
 #define EFX_DEVLINK_INFO_VERSION_SOC_RECOVERY	"coproc.recovery"
 #define EFX_DEVLINK_INFO_VERSION_FW_EXPROM	"fw.exprom"
 #define EFX_DEVLINK_INFO_VERSION_FW_UEFI	"fw.uefi"
+#define EFX_DEVLINK_INFO_VERSION_FW_MGMT_BUILD	"fw.mgmt.buildid"
 
 #define EFX_MAX_VERSION_INFO_LEN	64
 
@@ -114,16 +115,26 @@ static void efx_devlink_info_running_versions(struct efx_nic *efx,
 	if (rc || outlength < MC_CMD_GET_VERSION_OUT_LEN)
 		return;
 
-	/* Handle previous output */
-	if (outlength < MC_CMD_GET_VERSION_V2_OUT_LEN) {
-		ver.words = (__le16 *)MCDI_PTR(outbuf,
-					       GET_VERSION_EXT_OUT_VERSION);
-		offset = snprintf(buf, EFX_MAX_VERSION_INFO_LEN, "%u.%u.%u.%u",
-				  le16_to_cpu(ver.words[0]),
-				  le16_to_cpu(ver.words[1]),
-				  le16_to_cpu(ver.words[2]),
-				  le16_to_cpu(ver.words[3]));
+	/* Handle V1 output */
+	ver.words = (__le16 *)MCDI_PTR(outbuf,
+				       GET_VERSION_OUT_VERSION);
+	offset = snprintf(buf, EFX_MAX_VERSION_INFO_LEN, "%u.%u.%u.%u",
+			  le16_to_cpu(ver.words[0]),
+			  le16_to_cpu(ver.words[1]),
+			  le16_to_cpu(ver.words[2]),
+			  le16_to_cpu(ver.words[3]));
 
+	/* Handle EXT additions */
+	if (outlength >= MC_CMD_GET_VERSION_EXT_OUT_LEN) {
+		ver.str = MCDI_PTR(outbuf, GET_VERSION_EXT_OUT_EXTRA);
+		offset += snprintf(&buf[offset],
+				   EFX_MAX_VERSION_INFO_LEN - offset,
+				   " (%.*s)",
+				   MC_CMD_GET_VERSION_EXT_OUT_EXTRA_LEN,
+				   ver.str);
+	}
+
+	if (outlength < MC_CMD_GET_VERSION_V2_OUT_LEN) {
 		devlink_info_version_running_put(req,
 						 DEVLINK_INFO_VERSION_GENERIC_FW_MGMT,
 						 buf);
@@ -132,6 +143,19 @@ static void efx_devlink_info_running_versions(struct efx_nic *efx,
 
 	/* Handle V2 additions */
 	flags = MCDI_DWORD(outbuf, GET_VERSION_V2_OUT_FLAGS);
+
+	if (flags & BIT(EFX_VER_FLAG(MCFW_EXT_INFO))) {
+		ver.str = MCDI_PTR(outbuf, GET_VERSION_V2_OUT_MCFW_BUILD_NAME);
+		offset += snprintf(&buf[offset],
+				   EFX_MAX_VERSION_INFO_LEN - offset,
+				   " %.*s",
+				   MC_CMD_GET_VERSION_V2_OUT_MCFW_BUILD_NAME_LEN,
+				   ver.str);
+	}
+	devlink_info_version_running_put(req,
+					 DEVLINK_INFO_VERSION_GENERIC_FW_MGMT,
+					 buf);
+
 	if (flags & BIT(EFX_VER_FLAG(BOARD_EXT_INFO))) {
 		snprintf(buf, EFX_MAX_VERSION_INFO_LEN, "%s",
 			 MCDI_PTR(outbuf, GET_VERSION_V2_OUT_BOARD_NAME));
@@ -194,19 +218,14 @@ static void efx_devlink_info_running_versions(struct efx_nic *efx,
 						 buf);
 	}
 
-	ver.words = (__le16 *)MCDI_PTR(outbuf, GET_VERSION_V2_OUT_VERSION);
-	offset = snprintf(buf, EFX_MAX_VERSION_INFO_LEN, "%u.%u.%u.%u",
-			  le16_to_cpu(ver.words[0]), le16_to_cpu(ver.words[1]),
-			  le16_to_cpu(ver.words[2]), le16_to_cpu(ver.words[3]));
 	if (flags & BIT(EFX_VER_FLAG(MCFW_EXT_INFO))) {
-		build_id = MCDI_DWORD(outbuf, GET_VERSION_V2_OUT_MCFW_BUILD_ID);
-		snprintf(&buf[offset], EFX_MAX_VERSION_INFO_LEN - offset,
-			 " (%x) %s", build_id,
-			 MCDI_PTR(outbuf, GET_VERSION_V2_OUT_MCFW_BUILD_NAME));
+		ver.str = MCDI_PTR(outbuf, GET_VERSION_V2_OUT_MCFW_BUILD_ID);
+		snprintf(buf, EFX_MAX_VERSION_INFO_LEN, "%*phN",
+			 MC_CMD_GET_VERSION_V2_OUT_MCFW_BUILD_ID_LEN, ver.str);
+		devlink_info_version_running_put(req,
+						 EFX_DEVLINK_INFO_VERSION_FW_MGMT_BUILD,
+						 buf);
 	}
-	devlink_info_version_running_put(req,
-					 DEVLINK_INFO_VERSION_GENERIC_FW_MGMT,
-					 buf);
 
 	if (flags & BIT(EFX_VER_FLAG(SUCFW_EXT_INFO))) {
 		ver.dwords = (__le32 *)MCDI_PTR(outbuf,
