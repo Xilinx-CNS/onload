@@ -650,7 +650,7 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
           shrub_adapter_send_request,
           shrub_controller_id,
           pd->pd_intf_name,
-          EF_SHRUB_TEMP_BC);
+          EF_SHRUB_DEFAULT_BC);
         if ( rc < 0 ) {
           LOGVV(ef_log("%s: failed to populate shrub request %d", __FUNCTION__, rc));
           goto fail5;

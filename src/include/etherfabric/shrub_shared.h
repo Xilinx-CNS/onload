@@ -74,7 +74,7 @@ enum shrub_controller_command {
   EF_SHRUB_CONTROLLER_DUMP,
 };
 
-#define EF_SHRUB_TEMP_BC 2048 /* TODO ON-16495 remove EF_SHRUB_TEMP_DEFAULT_BUFFER_COUNT 2048 */
+#define EF_SHRUB_DEFAULT_BC 4
 
 /* This enum specifies the type of request being made to the shrub server. */
 enum ef_shrub_request_type {

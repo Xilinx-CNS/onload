@@ -2106,7 +2106,7 @@ static int oo_init_shrub(ci_netif* ni, ef_vi* vi, ci_hwport_id_t hw_port, int ni
         oo_send_shrub_request,
         NI_OPTS(ni).shrub_controller_id,
         hw_port,
-        EF_SHRUB_TEMP_BC
+        EF_SHRUB_DEFAULT_BC
       );
       if ( shrub_socket_id < 0 ) {
         rc = shrub_socket_id;
