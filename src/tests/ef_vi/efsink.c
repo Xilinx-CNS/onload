@@ -13,6 +13,7 @@
 #include <etherfabric/pd.h>
 #include <etherfabric/memreg.h>
 #include <etherfabric/efct_vi.h>
+#include <etherfabric/capabilities.h>
 
 #include <poll.h>
 
@@ -550,6 +551,7 @@ int main(int argc, char* argv[])
   pthread_t thread_id;
   struct resources* res;
   unsigned pd_flags, vi_flags;
+  unsigned long use_rx_ref;
   struct in_addr sa_mcast;
   int c, sock, ifindex;
 
@@ -629,7 +631,7 @@ int main(int argc, char* argv[])
     vi_flags |= EF_VI_RX_EVENT_MERGE;
 
   /* Use Express datapath as default for X4 interfaces. For NICs which
-   * don't have multiple datapaths, parse_interface_with_flags() will 
+   * don't have multiple datapaths, parse_interface_with_flags() will
    * clear this from pd_flags */
   pd_flags = EF_PD_EXPRESS;
 
@@ -651,6 +653,9 @@ int main(int argc, char* argv[])
 
   TRY(ef_vi_alloc_from_pd(&res->vi, res->dh, &res->pd, res->dh,
                           -1, cfg_max_fill, 0, NULL, -1, vi_flags));
+  if( ef_pd_capabilities_get(res->dh, &res->pd, res->dh,
+                             EF_VI_CAP_RX_REF, &use_rx_ref) )
+    use_rx_ref = 0;
 
   if ( cfg_discard > -1 )
     TRY(ef_vi_receive_set_discards(&res->vi, cfg_discard));
@@ -676,6 +681,9 @@ int main(int argc, char* argv[])
     exit(1);
   }
 
+  LOGI("rx_event_type: %s\n",
+       use_rx_ref ? "EF_EVENT_TYPE_RX_REF" :
+       ( cfg_rx_merge ? "EF_EVENT_TYPE_RX_MULTI" : "EF_EVENT_TYPE_RX" ));
   LOGI("rxq_size=%d\n", ef_vi_receive_capacity(&res->vi));
   LOGI("max_fill=%d\n", cfg_max_fill);
   LOGI("evq_size=%d\n", ef_eventq_capacity(&res->vi));
