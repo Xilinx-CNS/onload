@@ -192,7 +192,7 @@ int ci_tcp_sendmsg_fill_pkt(ci_netif* ni, ci_tcp_state* ts,
 
   n = sinf->total_unsent - sinf->fill_list_bytes;
   n = CI_MIN(maxlen, n);
-  sinf->rc = oo_pkt_fill(ni, &ts->s, NULL/*p_netif_locked*/, 
+  sinf->rc = oo_pkt_fill(ni, &ts->s, &sinf->stack_locked/*p_netif_locked*/, 
                          CI_FALSE/*can_block*/, &sinf->pf, piov,
                          n CI_KERNEL_ARG(addr_spc));
   /* oo_pkt_fill does not allocate packets.  So, it can fail with
