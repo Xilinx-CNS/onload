@@ -3,17 +3,10 @@
 
 /* EFCT buffer management using user-allocated buffers */
 
-#include <etherfabric/memreg.h>
 #include "ef_vi_internal.h"
 #include "shrub_client.h"
 #include "shrub_socket.h"
 #include "logging.h"
-
-#ifndef __KERNEL__
-#include <sys/mman.h>
-#include <linux/mman.h>
-#include "driver_access.h"
-#endif
 
 /* TODO move CI_EFCT_MAX_SUPERBUFS somewhere more sensible, or remove
  * dependencies on it */
@@ -226,7 +219,6 @@ static bool efct_ubufs_available(const ef_vi* vi, int ix)
     return efct_ubufs_shared_available(vi, ix);
 }
 
-#ifndef __KERNEL__
 static void efct_ubufs_post_direct(ef_vi* vi, int ix, int sbid, bool sentinel)
 {
   ef_addr addr = efct_rx_desc_for_sb(vi, ix, sbid)->dma_addr;
@@ -240,48 +232,6 @@ static void efct_ubufs_post_direct(ef_vi* vi, int ix, int sbid, bool sentinel)
   *get_ubufs(vi)->q[ix].rx_post_buffer_reg = qword.u64[0];
 }
 
-static void efct_ubufs_post_kernel(ef_vi* vi, int ix, int sbid, bool sentinel)
-{
-  ef_addr addr = efct_rx_desc_for_sb(vi, ix, sbid)->dma_addr;
-
-  ci_resource_op_t op = {};
-
-  op.op = CI_RSOP_RX_BUFFER_POST;
-  op.id = efch_make_resource_id(vi->vi_resource_id);
-  op.u.buffer_post.qid = efct_get_rxq_state(vi, ix)->qid;
-  op.u.buffer_post.user_addr = (uint64_t)addr;
-  op.u.buffer_post.sentinel = sentinel;
-  op.u.buffer_post.rollover = 0; // TBD support for rollover?
-
-  /* TBD should we handle/report errors? */
-  ci_resource_op(vi->dh, &op);
-}
-
-static int efct_ubufs_init_rxq_resource(ef_vi *vi, int qid,
-                                        unsigned n_superbufs)
-{
-  int rc;
-  ci_resource_alloc_t ra;
-  unsigned n_hugepages = (n_superbufs + CI_EFCT_SUPERBUFS_PER_PAGE - 1) /
-                          CI_EFCT_SUPERBUFS_PER_PAGE;
-
-  ef_vi_init_resource_alloc(&ra, EFRM_RESOURCE_EFCT_RXQ);
-  ra.u.rxq.in_abi_version = CI_EFCT_SWRXQ_ABI_VERSION;
-  ra.u.rxq.in_flags = EFCH_EFCT_RXQ_FLAG_UBUF;
-  ra.u.rxq.in_qid = qid;
-  ra.u.rxq.in_shm_ix = -1;
-  ra.u.rxq.in_vi_rs_id = efch_make_resource_id(vi->vi_resource_id);
-  ra.u.rxq.in_n_hugepages = n_hugepages;
-  ra.u.rxq.in_timestamp_req = true;
-  rc = ci_resource_alloc(vi->dh, &ra);
-  if( rc < 0 ) {
-    LOGVV(ef_log("%s: ci_resource_alloc rxq %d", __FUNCTION__, rc));
-    return rc;
-  }
-  return ra.out_id.index;
-}
-#endif
-
 volatile uint64_t* efct_ubufs_get_rxq_io_window(ef_vi* vi, int ix)
 {
   return get_ubufs(vi)->q[ix].rx_post_buffer_reg;
@@ -291,83 +241,6 @@ void efct_ubufs_set_rxq_io_window(ef_vi* vi, int ix, volatile uint64_t* p)
 {
   get_ubufs(vi)->q[ix].rx_post_buffer_reg = p;
 }
-
-#ifndef __KERNEL__
-static int efct_ubufs_local_attach(ef_vi* vi, int qid, int fd,
-                                   unsigned n_superbufs)
-{
-  int ix, rc, sb;
-  void* map;
-  size_t map_bytes;
-  struct efct_ubufs* ubufs = get_ubufs(vi);
-  struct efct_ubufs_rxq* rxq;
-  ef_memreg memreg;
-  unsigned resource_id;
-
-  int flags = (fd < 0 ? MAP_PRIVATE | MAP_ANONYMOUS : MAP_SHARED);
-
-  if( n_superbufs > CI_EFCT_MAX_SUPERBUFS )
-    return -EINVAL;
-
-  ix = efct_vi_find_free_rxq(vi, qid);
-  if( ix < 0 )
-    return ix;
-  rxq = &ubufs->q[ix];
-
-  rc = efct_ubufs_init_rxq_resource(vi, qid, n_superbufs);
-  if( rc < 0 ) {
-    LOGVV(ef_log("%s: efct_ubufs_init_rxq_resource rxq %d", __FUNCTION__, rc));
-    return rc;
-  }
-  resource_id = rc;
-  /* TODO ON-16693 cleanup on failure */
-
-  map_bytes = CI_ROUND_UP((size_t)n_superbufs * EFCT_RX_SUPERBUF_BYTES,
-                          CI_HUGEPAGE_SIZE);
-  map = mmap((void*)vi->efct_rxqs.q[ix].superbuf, map_bytes,
-             PROT_READ | PROT_WRITE,
-             flags  | MAP_NORESERVE | MAP_HUGETLB | MAP_HUGE_2MB |
-             MAP_FIXED | MAP_POPULATE,
-             fd, 0);
-  if( map == MAP_FAILED )
-    return -errno;
-  if( map != vi->efct_rxqs.q[ix].superbuf ) {
-    munmap(map, map_bytes);
-    return -ENOMEM;
-  }
-
-  rc = ef_memreg_alloc_flags(&memreg, vi->dh, ubufs->pd, ubufs->pd_dh,
-                             map, map_bytes, 0);
-  if( rc < 0 ) {
-    munmap(map, map_bytes);
-    LOG(ef_log("%s: Unable to alloc buffers (%d). Are sufficient hugepages available?",
-               __FUNCTION__, rc));
-    return rc;
-  }
-
-  for( sb = 0; sb < n_superbufs; ++sb )
-    efct_rx_desc_for_sb(vi, ix, sb)->dma_addr =
-      ef_memreg_dma_addr(&memreg, sb * EFCT_RX_SUPERBUF_BYTES);
-
-  ef_memreg_free(&memreg, vi->dh);
-
-  if( vi->vi_flags & EF_VI_RX_PHYS_ADDR ) {
-    void *p;
-
-    rc = ci_resource_mmap(vi->dh, resource_id, EFCH_VI_MMAP_RX_BUFFER_POST,
-                          CI_ROUND_UP(sizeof(uint64_t), CI_PAGE_SIZE),
-                          &p);
-    if( rc < 0 ) {
-      munmap(map, map_bytes);
-      return rc;
-    }
-    rxq->rx_post_buffer_reg = (volatile uint64_t *)p;
-  }
-
-  efct_ubufs_local_attach_internal(vi, ix, qid, n_superbufs);
-  return ix;
-}
-#endif
 
 void efct_ubufs_local_attach_internal(ef_vi* vi, int ix, int qid, unsigned n_superbufs)
 {
@@ -383,31 +256,6 @@ void efct_ubufs_local_attach_internal(ef_vi* vi, int ix, int qid, unsigned n_sup
   efct_vi_start_rxq(vi, ix, qid);
   post_buffers(vi, ix);
 }
-
-#ifndef __KERNEL__
-static int efct_ubufs_shared_attach(ef_vi* vi, int qid, int buf_fd,
-                                    unsigned n_superbufs)
-{
-  int ix;
-  int rc;
-
-  EF_VI_ASSERT(qid < vi->efct_rxqs.max_qs);
-
-  ix = efct_vi_find_free_rxq(vi, qid);
-  if( ix < 0 )
-    return ix;
-
-  rc = efct_ubufs_init_rxq_resource(vi, qid, n_superbufs);
-  if( rc < 0 ) {
-    LOGVV(ef_log("%s: efct_ubufs_init_rxq_resource rxq %d", __FUNCTION__, rc));
-    return rc;
-  }
-  /* TODO ON-16693 cleanup on failure */
-
-  return efct_ubufs_shared_attach_internal(vi, ix, qid,
-                                           (void*)vi->efct_rxqs.q[ix].superbuf);
-}
-#endif
 
 int efct_ubufs_shared_attach_internal(ef_vi* vi, int ix, int qid, void* superbuf)
 {
@@ -454,10 +302,6 @@ int efct_ubufs_shared_attach_internal(ef_vi* vi, int ix, int qid, void* superbuf
 
 static int efct_ubufs_pre_attach(ef_vi* vi, bool shared_mode)
 {
-#ifdef __KERNEL__
-  BUG();
-  return -EOPNOTSUPP;
-#else
   struct ef_shrub_token_response response;
   struct efct_ubufs *ubufs;
   char attach_path[EF_SHRUB_SERVER_SOCKET_LEN];
@@ -481,17 +325,12 @@ static int efct_ubufs_pre_attach(ef_vi* vi, bool shared_mode)
     if( rc )
       return rc;
 
-    ci_resource_op_t op = {};
-    op.op = CI_RSOP_SHARED_RXQ_TOKEN_SET;
-    op.id = efch_make_resource_id(vi->vi_resource_id);
-    op.u.shared_rxq_tok_set.token = response.shared_rxq_token;
-    rc = ci_resource_op(vi->dh, &op);
-    if( !rc )
+    rc = efct_ubufs_set_shared_rxq_token(vi, response.shared_rxq_token);
+    if( rc == 0 )
       ubufs->is_shrub_token_set = true;
   }
 
   return rc;
-#endif /* __KERNEL__ */
 }
 
 static int efct_ubufs_attach(ef_vi* vi,
@@ -500,16 +339,40 @@ static int efct_ubufs_attach(ef_vi* vi,
                              unsigned n_superbufs,
                              bool shared_mode)
 {
-#ifdef __KERNEL__
-  BUG();
-  return -EOPNOTSUPP;
-#else
-  if ( shared_mode ) {
-    return efct_ubufs_shared_attach(vi, qid, fd, n_superbufs);
-  } else {
-    return efct_ubufs_local_attach(vi, qid, fd, n_superbufs);
+  int ix, rc;
+
+  if( n_superbufs > CI_EFCT_MAX_SUPERBUFS )
+    return -EINVAL;
+
+  ix = efct_vi_find_free_rxq(vi, qid);
+  if( ix < 0 )
+    return ix;
+
+  rc = efct_ubufs_init_rxq_resource(vi, qid, n_superbufs);
+  if( rc < 0 ) {
+    LOGVV(ef_log("%s: efct_ubufs_init_rxq_resource rxq %d", __FUNCTION__, rc));
+    return rc;
   }
-#endif
+  /* TODO ON-16693 cleanup resource on failure */
+
+  if( shared_mode ) {
+    void* superbufs = (void*)efct_superbuf_access(vi, ix, 0);
+    return efct_ubufs_shared_attach_internal(vi, ix, qid, superbufs);
+  }
+  else {
+    unsigned resource_id = rc;
+    struct efct_ubufs* ubufs = get_ubufs(vi);
+    rc = efct_ubufs_init_rxq_buffers(vi, qid, ix, fd, n_superbufs,
+                                     resource_id, ubufs->pd, ubufs->pd_dh,
+                                     &ubufs->q[ix].rx_post_buffer_reg);
+    if( rc < 0 ) {
+      LOGVV(ef_log("%s: efct_ubufs_init_rxq_resource rxq %d", __FUNCTION__, rc));
+      return rc;
+    }
+
+    efct_ubufs_local_attach_internal(vi, ix, qid, n_superbufs);
+    return ix;
+  }
 }
 
 
@@ -541,19 +404,13 @@ static void efct_ubufs_cleanup(ef_vi* vi)
   efct_superbufs_cleanup(vi);
   for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
     struct efct_ubufs_rxq* rxq = &ubufs->q[i];
-    if( ! rxq_is_local(vi, i) )
+    if( rxq_is_local(vi, i) )
+      efct_ubufs_cleanup_rxq(vi, rxq->rx_post_buffer_reg);
+    else
       ef_shrub_client_close(&rxq->shrub_client);
-#ifndef __KERNEL__
-    ci_resource_munmap(vi->dh, (void *)rxq->rx_post_buffer_reg,
-                       CI_ROUND_UP(sizeof(uint64_t), CI_PAGE_SIZE));
-#endif
   }
 
-#ifdef __KERNEL__
-  kfree(ubufs);
-#else
-  free(ubufs);
-#endif
+  efct_ubufs_free_mem(ubufs);
 }
 
 static void efct_ubufs_dump_stats(ef_vi* vi, ef_vi_dump_log_fn_t logger,
@@ -599,12 +456,7 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
   if( rc < 0 )
     return rc;
 
-#ifdef __KERNEL__
-  ubufs = kzalloc(sizeof(*ubufs), GFP_KERNEL);
-#else
-  ubufs = calloc(1, sizeof(*ubufs));
-#endif
-
+  ubufs = efct_ubufs_alloc_mem(sizeof(*ubufs));
   if( ubufs == NULL ) {
     efct_superbufs_cleanup(vi);
     return -ENOMEM;
@@ -644,11 +496,10 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
   ubufs->ops.prime = efct_ubufs_prime;
   ubufs->ops.cleanup = efct_ubufs_cleanup;
   ubufs->ops.dump_stats = efct_ubufs_dump_stats;
+  ubufs->ops.post = efct_ubufs_post_direct;
 
 #ifndef __KERNEL__
-  if( vi->vi_flags & EF_VI_RX_PHYS_ADDR )
-    ubufs->ops.post = efct_ubufs_post_direct;
-  else
+  if( ! (vi->vi_flags & EF_VI_RX_PHYS_ADDR) )
     ubufs->ops.post = efct_ubufs_post_kernel;
 #endif
 

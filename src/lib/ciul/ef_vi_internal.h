@@ -235,8 +235,17 @@ extern void efxdp_vi_init(ef_vi*) EF_VI_HF;
 extern long efxdp_vi_mmap_bytes(ef_vi*);
 
 extern void efct_vi_init(ef_vi*) EF_VI_HF;
-extern int efct_kbufs_init(ef_vi* vi) EF_VI_HF;
-extern int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh) EF_VI_HF;
+extern int efct_kbufs_init(ef_vi*) EF_VI_HF;
+extern int efct_ubufs_init(ef_vi*, ef_pd*, ef_driver_handle) EF_VI_HF;
+extern void* efct_ubufs_alloc_mem(size_t) EF_VI_HF;
+extern void efct_ubufs_free_mem(void*) EF_VI_HF;
+extern void efct_ubufs_post_kernel(ef_vi*, int, int, bool) EF_VI_HF;
+extern int efct_ubufs_init_rxq_resource(ef_vi*, int, unsigned) EF_VI_HF;
+extern int efct_ubufs_init_rxq_buffers(ef_vi*, int, int, int, unsigned,
+                                       unsigned, ef_pd*, ef_driver_handle,
+                                       volatile uint64_t**) EF_VI_HF;
+extern void efct_ubufs_cleanup_rxq(ef_vi*, volatile uint64_t*) EF_VI_HF;
+extern int efct_ubufs_set_shared_rxq_token(ef_vi*, uint64_t) EF_VI_HF;
 
 extern int efct_superbufs_reserve(ef_vi* vi, void* space);
 extern void efct_superbufs_cleanup(ef_vi* vi);

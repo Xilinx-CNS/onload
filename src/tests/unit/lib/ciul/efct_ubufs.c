@@ -18,19 +18,59 @@
 int efct_vi_find_free_rxq(ef_vi* vi, int qid) { return qid; }
 void efct_vi_start_rxq(ef_vi* vi, int ix, int qid) {}
 
-#include <dlfcn.h>
-#include <sys/mman.h>
-void* mmap(void* p, size_t l, int pr, int fl, int fd, off_t off)
+void* efct_ubufs_alloc_mem(size_t size)
 {
-  void* (*real_mmap)(void*, size_t, int, int, int, int) =
-    dlsym(RTLD_NEXT, "mmap");
-  fl &= ~MAP_HUGETLB;
-  return real_mmap(p, l, pr, fl, fd, off);
+  return calloc(size, 1);
 }
 
-/* Used for ci_resource_alloc */
-int ioctl (int __fd, unsigned long int __request, ...)
+void efct_ubufs_free_mem(void* p)
 {
+  return free(p);
+}
+
+void efct_ubufs_post_kernel(ef_vi* vi, int ix, int sbid, bool sentinel)
+{
+  // TODO test this is called correctly
+}
+
+int efct_ubufs_init_rxq_resource(ef_vi *vi, int qid, unsigned n_superbufs)
+{
+  // TODO check this is called correctly
+  return 42;
+}
+
+int efct_ubufs_init_rxq_buffers(ef_vi* vi, int qid, int ix, int fd,
+                                unsigned n_superbufs, unsigned resource_id,
+                                ef_pd* pd, ef_driver_handle pd_dh,
+                                volatile uint64_t** post_buffer_reg_out)
+{
+  void* map;
+
+  // TODO check this is called correctly
+  CHECK(resource_id, ==, 42);
+
+  /* Don't need hugepages for testing */
+  map = mmap((void*)vi->efct_rxqs.q[ix].superbuf,
+             n_superbufs * EFCT_RX_SUPERBUF_BYTES,
+             PROT_READ | PROT_WRITE,
+             MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED | MAP_POPULATE, -1, 0);
+  if( map == MAP_FAILED )
+    return -errno;
+
+  // TODO set up dma addresses and buffer posting register if needed
+  *post_buffer_reg_out = NULL;
+
+  return 0;
+}
+
+void efct_ubufs_cleanup_rxq(ef_vi* vi, volatile uint64_t* post_buffer_reg)
+{
+  // TODO check this is called correctly
+}
+
+int efct_ubufs_set_shared_rxq_token(ef_vi* vi, uint64_t token)
+{
+  // TODO check this is called correctly
   return 0;
 }
 
@@ -55,22 +95,6 @@ void efct_superbufs_cleanup(ef_vi* vi)
 {
   munmap((void*)vi->efct_rxqs.q[0].superbuf,
          sbuf_bytes_per_rxq * vi->efct_rxqs.max_qs);
-}
-
-int ef_memreg_alloc_flags(ef_memreg* mr, ef_driver_handle mr_dh,
-                          struct ef_pd* pd, ef_driver_handle pd_dh,
-                          void* p_mem, size_t len_bytes, unsigned flags)
-{
-  mr->mr_dma_addrs_base = mr->mr_dma_addrs =
-    calloc(len_bytes >> EFHW_NIC_PAGE_SHIFT, sizeof(ef_addr));
-  /* TODO populate and check usage */
-  return 0;
-}
-
-int ef_memreg_free(ef_memreg* mr, ef_driver_handle mr_dh)
-{
-  free(mr->mr_dma_addrs_base);
-  return 0;
 }
 
 #define SUPERBUF_COUNT 16

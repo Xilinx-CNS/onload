@@ -47,6 +47,7 @@ LIB_SRCS	+=		\
 		vi_prime.c	\
 		capabilities.c	\
 		ctpio.c         \
+		efct_ubufs_resource.c         \
 		shrub_pool.c    \
 		shrub_server.c  \
 		shrub_socket.c  \
@@ -59,6 +60,7 @@ LIB_SRCS	+=		\
 MMAKE_DIR_LINKFLAGS	:= $(MMAKE_DIR_LINKFLAGS) -lrt
 else
 LIB_SRCS	+=		\
+		efct_ubufs_kernel.c		\
 		shrub_socket_kernel.c		\
 
 endif
