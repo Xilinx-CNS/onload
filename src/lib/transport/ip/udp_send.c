@@ -68,7 +68,7 @@
 
 #define oo_tx_udp_hdr(pkt)  ((ci_udp_hdr*) oo_tx_ip_data(pkt))
 #define oo_tx_ipx_udp_hdr(af, pkt) ((ci_udp_hdr*) oo_tx_ipx_data(af, pkt))
-
+#define UINT32_MAX          0xFFFFFFFF
 
 struct udp_send_info {
   int                   rc;
@@ -891,7 +891,7 @@ static void ci_udp_sendmsg_send(ci_netif* ni, ci_udp_state* us,
    */
   if( may_poll && ipcache->status == retrrc_success ) {
     ci_netif_state_nic_t* nsn = &ni->state->nic[ipcache->intf_i];
-    if( nsn->tx_dmaq_insert_seq - nsn->tx_dmaq_insert_seq_last_poll >
+    if( UINT32_MAX - nsn->tx_dmaq_insert_seq_last_poll + nsn->tx_dmaq_insert_seq + 1 >
         NI_OPTS(ni).send_poll_thresh ) {
       nsn->tx_dmaq_insert_seq_last_poll = nsn->tx_dmaq_insert_seq;
       ci_netif_poll_n(ni, NI_OPTS(ni).send_poll_max_events);
