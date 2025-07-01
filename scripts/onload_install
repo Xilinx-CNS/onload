@@ -255,10 +255,10 @@ install_userland() {
     install_x "$u64/tools/ip/onload_tcpdump.bin" "$i_usrbin/onload_tcpdump.bin"
     install_x "$u64/tools/ip/onload_fuser" "$i_usrbin/onload_fuser"
     install_x "$u64/tools/cplane/onload_cp_server" "$i_sbin/onload_cp_server"
+    install_x "$u64/tools/shrub_controller/shrub_controller" \
+              "$i_sbin/shrub_controller"
     install_x "$u64/tools/onload_mibdump/onload_mibdump" \
               "$i_usrbin/onload_mibdump"
-    install_x "$u64/tools/shrub_controller/shrub_controller" \
-              "$i_usrbin/shrub_controller"
     install_x "$u64/tools/onload_remote_monitor/orm_json" "$i_usrbin/orm_json"
     install_x "$TOP/src/tools/onload_remote_monitor/orm_webserver" \
               "$i_usrbin/orm_webserver"

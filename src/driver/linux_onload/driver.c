@@ -18,6 +18,7 @@
 #include <onload/nic.h>
 #include <ci/internal/ip.h>
 #include <onload/linux_onload_internal.h>
+#include <onload/shrub_fns.h>
 #include <ci/internal/ip_log.h>
 #include <onload/ioctl.h>
 #include <onload/tcp_helper_fns.h>
@@ -564,6 +565,12 @@ static int __init onload_module_init(void)
     goto failed_cp_ctor;
   }
 
+  rc = oo_shrub_driver_ctor();
+  if( rc < 0 ) {
+    ci_log("%s: oo_shrub_driver_ctor failed (%d)", __func__, rc);
+    goto failed_shrub_ctor;
+  }
+
   /* Now cplane is ready to handle hwport announcements.
    * Let's register hooks. */
   rc = oo_hooks_register();
@@ -575,6 +582,8 @@ static int __init onload_module_init(void)
 
   oo_hooks_unregister();
  failed_hooks:
+  oo_shrub_driver_dtor();
+ failed_shrub_ctor:
   oo_cp_driver_dtor();
  failed_cp_ctor:
   oo_epoll_chrdev_dtor();
@@ -623,6 +632,9 @@ static void onload_module_exit(void)
    * to have flushed the global workqueue in efab_tcp_driver_stop() before
    * calling oo_cp_driver_ctor(). */
   oo_cp_driver_dtor();
+
+  /* Cleanup shrub controller resources */
+  oo_shrub_driver_dtor();
 
   /* Remove the rest of external interfaces to efab_tcp_driver. */
   ci_uninstall_proc_entries();
