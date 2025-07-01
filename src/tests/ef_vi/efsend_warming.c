@@ -34,7 +34,6 @@
 #include <etherfabric/memreg.h>
 #include <etherfabric/capabilities.h>
 #include <etherfabric/pio.h>
-#include <etherfabric/efct_vi.h>
 
 static int parse_opts(int argc, char* argv[]);
 static void assert_capability(ef_driver_handle dh, int ifindex, int cap);
@@ -84,7 +83,6 @@ enum mode {
   MODE_CTPIO = 2,
 };
 static unsigned cfg_mode = MODE_PIO;
-static bool efct = false;
 static void *ctpio_region;
 char pbuf[BUF_SIZE];
 ef_vi_tx_warm_state state;
@@ -129,6 +127,9 @@ static void wait_for_completion(void)
           continue;
 
         for( int j = 0; j < n_unbundled; ++j ) {
+          /* On VIs that generate TX events whilst warming the returned dma_id
+           * will be EF_REQUEST_ID_MASK. This check is to see if returned ID is
+           * an actual send. */
           if( ids[j] != EF_REQUEST_ID_MASK ) {
             n_sent++;
             return;
@@ -200,9 +201,9 @@ static void warming_loop(void)
       ef_vi_start_transmit_warm(&vi, &state, ctpio_region);
       send_function();
       ef_vi_stop_transmit_warm(&vi, &state);
-      /* EFCT arch generate events that need to be handled otherwise TXQ could
-       * overflow causing send failures*/
-      if( n_warm % EV_POLL_BATCH_SIZE == 0 && efct )
+      /* Some VIs generate events whilst warming that need to be handled
+       * otherwise EVQ could overflow*/
+      if( n_warm % EV_POLL_BATCH_SIZE == 0 )
         drain_queue();
     }
     else if( cfg_pollute && !polluted )
@@ -285,9 +286,6 @@ int main(int argc, char* argv[])
   CPU_ZERO(&cpuset);
   CPU_SET(cfg_affinity[1], &cpuset);
   TRY(pthread_setaffinity_np(trigger_thread_id, sizeof(cpuset), &cpuset));
-
-  if( vi.nic_type.arch == EF_VI_ARCH_EFCT )
-    efct = true;
 
   if( cfg_mode == MODE_CTPIO ) {
     TEST(posix_memalign(&ctpio_region, 4096, BUF_SIZE) == 0);
