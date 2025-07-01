@@ -661,9 +661,14 @@ static inline int efct_ef_vi_ctpio_fallback(ef_vi* vi, ef_request_id dma_id)
   unsigned di = (qs->added - 1) & q->mask;
 
   EF_VI_BUG_ON(qs->added == qs->removed);
-  EF_VI_BUG_ON(q->ids[di] != EFCT_TX_POSTED_ID);
-  q->ids[di] = dma_id;
-
+  /* If warming is enabled then do not modify the dma_id. */
+  if ( ! tx_warm_active(vi) ){
+    EF_VI_BUG_ON(q->ids[di] != EFCT_TX_POSTED_ID);
+    q->ids[di] = dma_id;
+  }
+  else {
+    EF_VI_BUG_ON(q->ids[di] != EF_REQUEST_ID_MASK);
+  }
   return 0;
 }
 
