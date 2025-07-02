@@ -22,6 +22,11 @@ static uint64_t rx_len = 42;
 static uint64_t rx_flt = 7;
 static uint16_t PKTS_PER_SB = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
 
+/* Arbitrary TX values */
+#define TX_LEN 64
+static char tx_buf[TX_LEN];
+static struct iovec tx_iov = { tx_buf, TX_LEN };
+static const int tx_qid = 0;
 
 /* Dependencies */
 static int test_filter_is_block_only;
@@ -94,6 +99,8 @@ struct efct_test {
   /* Don't explicitly check changes to internal state */
   ef_vi_state ep_state;
   struct efct_mock_rxqs mock_rxqs;
+  uint32_t evq_write_ptr;
+  unsigned tx_completions;
 };
 
 static int meta_offset;
@@ -134,8 +141,10 @@ static int peek_sentinel(struct efct_mock_rxq* q, int sbid) {
 static void init_shared_state(struct efct_mock_rxq* q, int sbid_size) {
   q->shared_size = sbid_size;
   q->shared_sbids = calloc(sbid_size, sizeof(int));
+  assert(q->shared_sbids != NULL);
   q->shared_index = 0;
   q->shared_sentinels = calloc(sbid_size, sizeof(bool));
+  assert(q->shared_sentinels != NULL);
   int i;
   for (i = 0; i < sbid_size; i++)
     q->shared_sentinels[i] = (i % 2 != 0);
@@ -260,11 +269,13 @@ static void efct_mock_cleanup(ef_vi* vi)
 
 
 /* Helper functions */
-static struct efct_test* efct_test_init_rx_default(int q_max, int arch, int nic_flags)
+static struct efct_test* efct_test_init_test(int q_max, int arch, int nic_flags)
 {
   int i;
 
   struct efct_test* t = calloc(1, sizeof(*t));
+  assert(t != NULL);
+
   STATE_ALLOC(ef_vi, vi);
   STATE_ALLOC(struct efct_mock_ops, mock_ops);
 
@@ -284,7 +295,9 @@ static struct efct_test* efct_test_init_rx_default(int q_max, int arch, int nic_
 
   t->mock_rxqs.q_max = q_max;
   t->mock_rxqs.q = calloc(q_max, sizeof(struct efct_mock_rxq));
+  assert(t->mock_rxqs.q != NULL);
   t->mock_rxqs.superbuf = calloc(q_max, (size_t)CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES);
+  assert(t->mock_rxqs.superbuf != NULL);
 
   vi->efct_rxqs.ops = &mock_ops->ops;
   vi->efct_rxqs.active_qs = &t->mock_rxqs.active_qs;
@@ -300,23 +313,67 @@ static struct efct_test* efct_test_init_rx_default(int q_max, int arch, int nic_
       (size_t)i * CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES;
   }
 
-
   vi->vi_rxq.mask =
     (size_t)CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE - 1;
   vi->vi_rxq.descriptors =
     calloc(q_max, CI_EFCT_MAX_SUPERBUFS * EFCT_RX_DESCRIPTOR_BYTES);
+  assert(vi->vi_rxq.descriptors != NULL);
   vi->efct_rxqs.meta_offset = meta_offset;
-
-  STATE_STASH(vi);
-  STATE_STASH(mock_ops);
 
   t->vi = vi;
   t->mock_ops = mock_ops;
+
+  return t;
+}
+
+static struct efct_test* efct_test_init_rx_default(int q_max, int arch, int nic_flags)
+{
+  struct efct_test* t = efct_test_init_test(q_max, arch, nic_flags);
+
+  STATE_STASH(t->vi);
+  STATE_STASH(t->mock_ops);
+
+  return t;
+}
+
+static struct efct_test*
+efct_test_init_tx_default(int q_max, int evq_size, int txq_size, int arch,
+                          int nic_flags)
+{
+  struct efct_test* t = efct_test_init_test(q_max, arch, nic_flags);
+
+  t->vi->evq_mask = evq_size * 8 - 1;
+  t->vi->evq_base = calloc(evq_size * 8, sizeof(char));
+  assert(t->vi->evq_base);
+
+  /* evq phase should be 1 to begin with, so cheat and just set everything to 1 */
+  memset(t->vi->evq_base, 0xff, evq_size * 8);
+
+  t->vi->vi_txq.mask = txq_size - 1;
+  t->vi->vi_txq.ct_fifo_bytes = EFCT_TX_ALIGNMENT * txq_size;
+  t->vi->vi_txq.descriptors = calloc(txq_size, sizeof(struct efct_tx_descriptor));
+  assert(t->vi->vi_txq.descriptors);
+  t->vi->vi_txq.ids = calloc(txq_size, sizeof(uint32_t));
+  assert(t->vi->vi_txq.ids);
+  t->vi->tx_push_thresh = 0;
+
+  t->vi->vi_txq.efct_aperture_mask = (4096 - 1) >> 3;
+  t->vi->vi_ctpio_mmap_ptr = calloc(4096, sizeof(uint8_t));
+  assert(t->vi->vi_ctpio_mmap_ptr != NULL);
+
+  STATE_STASH(t->vi);
+  STATE_STASH(t->mock_ops);
+
   return t;
 }
 
 static struct efct_test* efct_test_init_rx_x3(int q_max) {
   return efct_test_init_rx_default(q_max, EF_VI_ARCH_EFCT, EFHW_VI_NIC_CTPIO_ONLY);
+}
+
+static struct efct_test* efct_test_init_tx_x3(int q_max, int evq_size, int txq_size) {
+  return efct_test_init_tx_default(q_max, evq_size, txq_size, EF_VI_ARCH_EFCT,
+                                   EFHW_VI_NIC_CTPIO_ONLY);
 }
 
 static struct efct_test* efct_test_init_rx_x4(int q_max, bool shared_mode) {
@@ -334,6 +391,11 @@ static void efct_test_cleanup(struct efct_test* t)
     free(t->mock_rxqs.q->shared_sbids);
     free(t->mock_rxqs.q->shared_sentinels);
   }
+
+  free(t->vi->evq_base);
+  free(t->vi->vi_txq.descriptors);
+  free(t->vi->vi_txq.ids);
+  free(t->vi->vi_ctpio_mmap_ptr);
 
   free(t->mock_rxqs.q);
   free(t->mock_rxqs.superbuf);
@@ -438,6 +500,111 @@ static void efct_test_rx_meta_extra(struct efct_test* t, int qid,
 static void efct_test_rx_meta(struct efct_test* t, int qid)
 {
   efct_test_rx_meta_extra(t, qid, 0, 0);
+}
+
+static ci_qword_t efct_test_tx_event(struct efct_test* t, int seq)
+{
+  ci_qword_t event = {0};
+
+  CI_POPULATE_QWORD_3(event,
+                      EFCT_EVENT_TYPE, EFCT_EVENT_TYPE_TX,
+                      EFCT_TX_EVENT_SEQUENCE, seq,
+                      EFCT_TX_EVENT_LABEL, tx_qid);
+
+  return event;
+}
+
+static ci_qword_t efct_test_tx_ts_event(struct efct_test* t, int seq,
+                                        int ts_status, uint64_t partial_ts)
+{
+  ci_qword_t event;
+
+  CI_POPULATE_QWORD_2(event,
+                      EFCT_TX_EVENT_TIMESTAMP_STATUS, ts_status,
+                      EFCT_TX_EVENT_PARTIAL_TSTAMP, partial_ts);
+
+  event.u64[0] |= efct_test_tx_event(t, seq).u64[0];
+
+  return event;
+}
+
+static void efct_test_push_event(struct efct_test* t, ci_qword_t event)
+{
+  ci_qword_t* evq_next_event =
+    (ci_qword_t*)(t->vi->evq_base + (t->evq_write_ptr & t->vi->evq_mask));
+  int phase = (t->evq_write_ptr & (t->vi->evq_mask + 1)) != 0;
+  ci_qword_t temp;
+
+  CI_POPULATE_QWORD_1(temp, EFCT_EVENT_PHASE, phase);
+  event.u64[0] |= temp.u64[0];
+
+  *evq_next_event = event;
+  t->evq_write_ptr += sizeof(event);
+}
+
+static bool is_tx_warming(struct efct_test* t)
+{
+  ci_qword_t qword;
+  qword.u64[0] = t->vi->vi_txq.efct_fixed_header;
+  return CI_QWORD_FIELD(qword, EFCT_TX_HEADER_WARM_FLAG);
+}
+
+static bool is_tx_ts_enabled(struct efct_test* t)
+{
+  ci_qword_t qword;
+  qword.u64[0] = t->vi->vi_txq.efct_fixed_header;
+  return CI_QWORD_FIELD(qword, EFCT_TX_HEADER_TIMESTAMP_FLAG);
+}
+
+static void efct_test_transmit(struct efct_test* t, int n_packets)
+{
+  int i;
+
+  for( i = 0; i < n_packets; i++)
+    ef_vi_transmitv_ctpio(t->vi, TX_LEN, &tx_iov, 1, 0);
+}
+
+static void efct_test_tx_complete(struct efct_test* t, int n_completions)
+{
+  ef_vi_txq_state* qs = &t->vi->ep_state->txq;
+  ef_vi_txq* txq = &t->vi->vi_txq;
+  int seq = (t->tx_completions + n_completions - 1) & txq->mask;
+  ci_qword_t event;
+
+  /* don't complete more than we've sent */
+  assert(((seq + 1 - qs->previous) & txq->mask) <
+         ((qs->added + 1 - qs->previous) & txq->mask));
+
+  if( is_tx_ts_enabled(t) && ! is_tx_warming(t) ) {
+    int ts_status = 3;
+    uint64_t partial_ts = 0;
+
+    assert(n_completions == 1);
+
+    event = efct_test_tx_ts_event(t, seq, ts_status, partial_ts);
+  } else {
+    event = efct_test_tx_event(t, seq);
+  }
+
+  efct_test_push_event(t, event);
+  t->tx_completions += n_completions;
+}
+
+static void efct_test_handle_tx_event(struct efct_test* t, ef_event* ev,
+                                      int expected_pkts)
+{
+  ef_request_id ids[EF_VI_TRANSMIT_BATCH];
+  int i;
+
+  assert(expected_pkts <= EF_VI_TRANSMIT_BATCH);
+
+  CHECK((int)ev->tx.type, ==, EF_EVENT_TYPE_TX);
+  CHECK((int)ev->tx.q_id, ==, tx_qid);
+  CHECK((int)ev->tx.flags, ==, EF_EVENT_FLAG_CTPIO);
+
+  CHECK(ef_vi_transmit_unbundle(t->vi, ev, ids), ==, expected_pkts);
+  for( i = 0; i < expected_pkts; i++ )
+    CHECK(ids[i], ==, 0xefc7efc7);
 }
 
 /* Test cases */
@@ -1114,6 +1281,51 @@ static void test_efct_future(void)
   }
 }
 
+static void test_efct_tx(void)
+{
+  struct efct_test* t = efct_test_init_tx_x3(1, 512, 512);
+  ef_event evs[8];
+  int i;
+
+  /* Single packet */
+  CHECK(ef_eventq_poll(t->vi, evs, 1), ==, 0);
+  efct_test_transmit(t, 1);
+  efct_test_tx_complete(t, 1);
+  CHECK(ef_eventq_poll(t->vi, evs, 1), ==, 1);
+  efct_test_handle_tx_event(t, &evs[0], 1);
+
+  /* Multiple packets, single poll */
+  CHECK(ef_eventq_poll(t->vi, evs, 1), ==, 0);
+  efct_test_transmit(t, 8);
+  efct_test_tx_complete(t, 6);
+  efct_test_tx_complete(t, 2);
+  CHECK(ef_eventq_poll(t->vi, evs, 8), ==, 2);
+  efct_test_handle_tx_event(t, &evs[0], 6);
+  efct_test_handle_tx_event(t, &evs[1], 2);
+
+  /* Multiple packets, multiple polls */
+  CHECK(ef_eventq_poll(t->vi, evs, 1), ==, 0);
+  efct_test_transmit(t, 16);
+  for( i = 0; i < 16; i++ )
+    efct_test_tx_complete(t, 1);
+  CHECK(ef_eventq_poll(t->vi, evs, 8), ==, 8);
+  for( i = 0; i < 8; i++ )
+    efct_test_handle_tx_event(t, &evs[i], 1);
+  CHECK(ef_eventq_poll(t->vi, evs, 8), ==, 8);
+  for( i = 0; i < 8; i++ )
+    efct_test_handle_tx_event(t, &evs[i], 1);
+  CHECK(ef_eventq_poll(t->vi, evs, 1), ==, 0);
+
+  /* Check large merges get split into multiple events */
+  efct_test_transmit(t, 256);
+  efct_test_tx_complete(t, 2 * EF_VI_TRANSMIT_BATCH);
+  CHECK(ef_eventq_poll(t->vi, evs, 8), ==, 2);
+  for( i = 0; i < 2; i++ )
+    efct_test_handle_tx_event(t, &evs[i], EF_VI_TRANSMIT_BATCH);
+
+  efct_test_cleanup(t);
+}
+
 int main(void)
 {
   for( meta_offset = 0; meta_offset < 2; ++meta_offset ) {
@@ -1128,6 +1340,7 @@ int main(void)
     TEST_RUN(test_efct_forced_rollover_some);
     TEST_RUN(test_efct_forced_rollover_all);
     TEST_RUN(test_efct_future);
+    TEST_RUN(test_efct_tx);
   }
   TEST_END();
 }

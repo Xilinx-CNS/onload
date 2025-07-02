@@ -96,6 +96,10 @@ $(filter lib/%, $(TARGETS)): $$(call lib_object,$$@)
 $(TARGETS): %: %.o stubs.o
 	(libs=$(MMAKE_LIBS); $(MMakeLinkCApp))
 
+# We want to use ef_vi_transmit_unbundle in this test, but it's hidden away
+# elsewhere, so lets also link against that object.
+lib/ciul/efct_vi: ../../lib/ciul/pt_tx.o
+
 # The build system relies on a convoluted web of makefiles in subdirectories
 # of both source and build trees to generate the dependencies. Lets do it the
 # easy way instead. TODO remove this once the build system is more sensible.
