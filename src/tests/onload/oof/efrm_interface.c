@@ -68,8 +68,8 @@ void efrm_filter_remove(struct efrm_client* client, int filter_id)
 }
 
 
-int efrm_filter_redirect(struct efrm_client * client, int filter_id,
-                         int rxq_i, int stack_id)
+int efrm_filter_redirect(struct efrm_client *,
+                         int filter_id, struct efx_filter_spec *spec)
 {
   return 1;
 }

@@ -310,7 +310,7 @@ extern int cplane_ioctl(int, long unsigned int, ...)
     __attribute__ ((alias ("cp_unit_cplane_ioctl")));
 
 
-int oo_fd_open(int fd, long unsigned int op, ...)
+int oo_fd_open(int* fd)
 {
   ci_assert(! "No calls to oo_fd_open ops expected");
   ci_unreachable();
