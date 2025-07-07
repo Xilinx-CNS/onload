@@ -96,6 +96,7 @@ int efch_lookup_rs(int fd, efch_resource_id_t rs_id, int rs_type,
       }
       else
         rc = -EINVAL;
+      efch_resource_put(rs);
     }
   }
   else
@@ -106,102 +107,14 @@ int efch_lookup_rs(int fd, efch_resource_id_t rs_id, int rs_type,
 EXPORT_SYMBOL(efch_lookup_rs);
 
 
-static int
-grow_priv_table(ci_resource_table_t *rt)
+static void free_resource(efch_resource_t *rs)
 {
-  efch_resource_t** table;
-
-  /* We are only permitted to grow the table once. */
-  if( rt->resource_table_size == EFRM_RESOURCE_MAX_PER_FD )  {
-    EFCH_ERR("%s: reached maxium number of resources %d", 
-             __FUNCTION__, rt->resource_table_size);
-    return -ENOSPC;
-  }
-
-  table = kmalloc(sizeof(struct efrm_resource *) * EFRM_RESOURCE_MAX_PER_FD,
-                  GFP_KERNEL);
-  if( ! table )  return -ENOMEM;
-
-  /* Copy the existing table and zero-out the rest. */
-  memcpy(table, rt->resource_table_static,
-         sizeof(struct efrm_resource *) * CI_DEFAULT_RESOURCE_TABLE_SIZE);
-  memset(table + CI_DEFAULT_RESOURCE_TABLE_SIZE, 0,
-         (EFRM_RESOURCE_MAX_PER_FD - CI_DEFAULT_RESOURCE_TABLE_SIZE)
-         * sizeof(table[0]));
-
-  /* Yuk - the cast below to void* is horrid, but necessary to avoid a
-   * type-punned ptr break strict aliasing" warning.  We know this cast is safe,
-   * because it's to a CAS operation that is an "asm volatile"
-   */
-  if( ci_cas_uintptr_succeed((void*) &rt->resource_table,
-                             (ci_uintptr_t) rt->resource_table_static,
-                             (ci_uintptr_t) table) ) {
-    /* Tricky: Someone could have concurrently written an entry into
-    ** [resource_table_static], so we need to copy those entries out again
-    ** just in case.  The "badness" is that an entry can temporarily
-    ** disappear from the table.  However, it is safe wrt ref counting the
-    ** resources, and only happens if people are inserting stuff
-    ** concurrently.  (We have no code that does that, but we still need to
-    ** protect against it for security).
-    */
-    memcpy(table, rt->resource_table_static,
-           sizeof(struct efrm_resource *) * CI_DEFAULT_RESOURCE_TABLE_SIZE);
-    rt->resource_table_size = EFRM_RESOURCE_MAX_PER_FD;
-    return 0;
-  }
-
-  /* failed to swap; someone else must have got there first */
-  ci_free(table);
-  return 0;
-}
-
-
-static int
-efch_resource_manager_allocate_id(ci_resource_table_t* rt,
-                                  efch_resource_t* rs,
-                                  efch_resource_id_t* id_out)
-{
-  /* Please talk to djr if you feel tempted to change this function at all.
-  ** The use of the temporary [table] is particularly subtle, and is
-  ** carefully placed to avoid the need for additional memory barriers..
-  */
-
-  efch_resource_t** table;
-  uint32_t index;
-  int rc;
-
-  ci_assert(rt);
-  ci_assert(id_out);
-
-  /* Attempt to grab a valid index. */
-  do {
-  loop_again:
-    index = rt->resource_table_highwater;
-    table = rt->resource_table;
-    /* We must not allow [resource_table_highwater] to exceed the size of
-    ** the table, even temporarily. */
-    if( index >= rt->resource_table_size ) {
-      if( (rc = grow_priv_table(rt)) < 0 )  return rc;
-      goto loop_again;
-    }
-  }
-  while( ci_cas32u_fail(&rt->resource_table_highwater, index, index + 1) );
-
-  ci_assert_lt(index,rt->resource_table_size);
-  ci_assert_equal(table[index],NULL);
-
-  table[index] = rs;
-  id_out->index = index;
-
-  if( table != rt->resource_table ) {
-    /* Oh dear: The table got resized under our feet.  Better put this
-    ** entry into the new table too.  See grow_priv_table() for other racey
-    ** cases. */
-    ci_assert_equal(rt->resource_table[index],NULL);
-    rt->resource_table[index] = rs;
-  }
-
-  return 0;
+  if (rs->rs_ops->rm_free != NULL)
+    rs->rs_ops->rm_free(rs);
+  if (rs->rs_base != NULL)
+    efrm_resource_release(rs->rs_base);
+  CI_DEBUG_ZERO(rs);
+  ci_free(rs);
 }
 
 
@@ -224,6 +137,7 @@ efch_resource_alloc(ci_resource_table_t* rt, ci_resource_alloc_t* alloc)
   char intf_ver[EFCH_INTF_VER_LEN + 1];
   int rc, intf_ver_id;
 
+  const struct xa_limit id_limit = {.max = EFRM_RESOURCE_MAX_PER_FD, .min = 0};
   ci_assert(alloc);
   ci_assert(rt);
 
@@ -260,8 +174,11 @@ efch_resource_alloc(ci_resource_table_t* rt, ci_resource_alloc_t* alloc)
   }
   rs->rs_ops = ops;
 
+  /* The table holds one reference, released in efch_resource_free */
+  refcount_set(&rs->ref_count, 1);
+
   /* Insert it into the ci_resource_table_t resource table */
-  rc = efch_resource_manager_allocate_id(rt, rs, &alloc->out_id);
+  rc = xa_alloc(&rt->table, &alloc->out_id.index, rs, id_limit, GFP_KERNEL);
   if (rc == 0) {
     EFCH_TRACE("%s: allocated type=%s "EFCH_RESOURCE_ID_FMT, __FUNCTION__,
                EFRM_RESOURCE_NAME(alloc->ra_type),
@@ -269,21 +186,46 @@ efch_resource_alloc(ci_resource_table_t* rt, ci_resource_alloc_t* alloc)
     return 0;
   }
 
-  efch_resource_free(rs);
+  free_resource(rs);
   return rc;
 }
 
 
-void efch_resource_free(efch_resource_t *rs)
+void efch_resource_free(efch_resource_id_t id, ci_resource_table_t* rt)
 {
-  if (rs->rs_ops->rm_free != NULL)
-    rs->rs_ops->rm_free(rs);
-  if (rs->rs_base != NULL)
-    efrm_resource_release(rs->rs_base);
-  CI_DEBUG_ZERO(rs);
-  ci_free(rs);
+  efch_resource_t* rs = xa_erase(&rt->table, id.index);
+
+  if( rs != NULL ) {
+    /* Ensure efch_resource_id_lookup hasn't accessed the resource without
+     * taking a reference */
+    synchronize_rcu();
+    efch_resource_put(rs);
+  }
 }
 
+void efch_resource_free_all(ci_resource_table_t* rt)
+{
+  unsigned long i;
+  efch_resource_t* rs;
+
+  xa_for_each(&rt->table, i, rs) {
+    int refs = refcount_read(&rs->ref_count) - 1;
+    if( refs != 0 )
+      EFCH_WARN("%s: resource id=" EFCH_RESOURCE_ID_FMT
+                " may be leaked with %d refs",
+                __func__, (unsigned)i, refs);
+
+    efch_resource_put(rs);
+  }
+
+  xa_destroy(&rt->table);
+}
+
+void efch_resource_put(efch_resource_t* rs)
+{
+  if( refcount_dec_and_test(&rs->ref_count) )
+    free_resource(rs);
+}
 
 int
 efch_resource_op(ci_resource_table_t* rt,
@@ -294,9 +236,8 @@ efch_resource_op(ci_resource_table_t* rt,
 
   rc = efch_resource_id_lookup(op->id, rt, &rs);
   if( rc < 0 ) {
-    EFCH_ERR("%s: ERROR: hwm=%d id="EFCH_RESOURCE_ID_FMT" op=0x%x rc=%d",
-             __FUNCTION__, rt->resource_table_highwater, 
-             EFCH_RESOURCE_ID_PRI_ARG(op->id), op->op, rc);
+    EFCH_ERR("%s: ERROR: id="EFCH_RESOURCE_ID_FMT" op=0x%x rc=%d",
+             __FUNCTION__, EFCH_RESOURCE_ID_PRI_ARG(op->id), op->op, rc);
     goto done;
   }
 
@@ -311,6 +252,8 @@ efch_resource_op(ci_resource_table_t* rt,
   } else {
     rc = rs->rs_ops->rm_rsops(rs, rt, op, copy_out);
   }
+  efch_resource_put(rs);
+
   /* We isolate the buffer post resource OP because its very common for ef10ct
    * and logging to dmesg for every call slows things down significantly. */
   if (rc != 0 || op->op != CI_RSOP_RX_BUFFER_POST)
@@ -328,9 +271,8 @@ int efch_filter_add(ci_resource_table_t* rt, ci_filter_add_t* filter_add,
 
   rc = efch_resource_id_lookup(filter_add->in.res_id, rt, &rs);
   if( rc < 0 ) {
-    EFCH_ERR("%s: ERROR: hwm=%d id="EFCH_RESOURCE_ID_FMT" rc=%d",
-             __FUNCTION__, rt->resource_table_highwater,
-             EFCH_RESOURCE_ID_PRI_ARG(filter_add->in.res_id), rc);
+    EFCH_ERR("%s: ERROR: id="EFCH_RESOURCE_ID_FMT" rc=%d",
+             __FUNCTION__, EFCH_RESOURCE_ID_PRI_ARG(filter_add->in.res_id), rc);
     return rc;
   }
 
@@ -338,6 +280,7 @@ int efch_filter_add(ci_resource_table_t* rt, ci_filter_add_t* filter_add,
              EFCH_RESOURCE_ID_PRI_ARG(filter_add->in.res_id));
 
   rc = efch_vi_filter_add(rs, filter_add, copy_out);
+  efch_resource_put(rs);
   EFCH_TRACE("%s: id="EFCH_RESOURCE_ID_FMT" rc=%d", __FUNCTION__,
              EFCH_RESOURCE_ID_PRI_ARG(filter_add->in.res_id), rc);
   return rc;

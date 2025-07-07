@@ -21,12 +21,6 @@
 /* As far as I know, it is not used currently. */
 #define CI_CFG_PRIVATE_T_DEBUG_LIST     0
 
-/* How big the inline resource table should be.  This should reflect the
-** number of resources an FD is typically using. 
-*/
-#define CI_DEFAULT_RESOURCE_TABLE_SIZE	5
-
-
 
 /*--------------------------------------------------------------------
  *
@@ -110,6 +104,7 @@ struct efch_memreg;
 /* TX sniff enable bit */
 #define EFCH_TX_SNIFF_ENABLE 0x01
 typedef struct efch_resource_s {
+  refcount_t ref_count;
   struct efrm_resource  *rs_base;
   efch_resource_ops     *rs_ops;
   union {
@@ -145,24 +140,25 @@ struct ci_resource_table_s {
 # define		CI_CAP_PHYS	0x02    /* can use physical addresses*/
 # define		CI_CAP_DRV	0x04    /* can use ci_driver safely */
 
-  efch_resource_t*   resource_table_static[CI_DEFAULT_RESOURCE_TABLE_SIZE];
-
-  /* highwater is next index to allocate; table is only ever added to */
-  volatile uint32_t resource_table_highwater;
-  volatile uint32_t resource_table_size;
-  efch_resource_t**volatile resource_table;
+  struct xarray table;
 } /* ci_resource_table_t */ ;
 
 void ci_resource_table_ctor( ci_resource_table_t *p, unsigned access);
 void ci_resource_table_dtor( ci_resource_table_t *p);
 
 
-
-/*! Comment? */
+/*! Allocates a resource and inserts it into the table.
+ *  Updates alloc->out_id on success. */
 extern int efch_resource_alloc(ci_resource_table_t* rt,
-                               struct ci_resource_alloc_s*);
+                               struct ci_resource_alloc_s* alloc);
 
-extern void efch_resource_free(efch_resource_t *);
+/*! Removes an entry from the table and attempts to free the resource.
+ *  If there are references to it, it will be freed when the last reference
+ *  is released. */
+extern void efch_resource_free(efch_resource_id_t, ci_resource_table_t*);
+
+/*! Removes and attempts to free all resources in the table */
+extern void efch_resource_free_all(ci_resource_table_t*);
 
 /*! Comment? */
 extern int efch_resource_op(ci_resource_table_t* rt,
@@ -181,12 +177,17 @@ extern int efch_vi_prime_qs(struct ci_private_char_s* priv,
 extern unsigned efch_vi_poll(struct ci_private_char_s* priv,
                              struct file* filp, poll_table* wait);
 
-/*! retrieve the resource referred to by the given resource ID in the (per-FD)
- *  private state provided
+/*! Retrieve the resource referred to by the given resource ID in the (per-FD)
+ *  private state provided. Acquires a reference to the resource, which must
+ *  be released with a call to efch_resource_id_put.
  */
 extern int efch_resource_id_lookup(efch_resource_id_t id, 
 				   ci_resource_table_t *rt,
 				   efch_resource_t **out);
+
+/* Release a reference to the resource. May free the resource if it has
+ * been removed from its table. */
+extern void efch_resource_put(efch_resource_t* rs);
 
 extern int efch_vi_filter_add(efch_resource_t* rs,
                               union ci_filter_add_u* filter_add,

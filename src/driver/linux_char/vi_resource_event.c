@@ -237,6 +237,7 @@ static int efab_vi_rm_prime_lookup_vi(ci_private_char_t* priv,
       else {
         rc = -EOPNOTSUPP;
       }
+      efch_resource_put(rs);
     }
   }
   mutex_unlock(&efch_mutex);
@@ -279,12 +280,13 @@ int efch_vi_prime_qs(ci_private_char_t* priv,
   if( efab_vi_prepare_request_wakeup(priv->cpcp_vi, priv) ) {
     unsigned i;
     for( i = 0; i < args->n_rxqs; ++i ) {
+      efch_resource_id_t rs_id = args->rxq_current[i].rxq_id;
       efch_resource_t* rs;
-      rc = efch_resource_id_lookup(args->rxq_current[i].rxq_id, &priv->rt,
-                                   &rs);
+      rc = efch_resource_id_lookup(rs_id, &priv->rt, &rs);
       if( rc < 0 )
         break;
       if( rs->rs_base->rs_type != EFRM_RESOURCE_EFCT_RXQ ) {
+        efch_resource_put(rs);
         rc = -EINVAL;
         /* It doesn't really matter if we abort half way after priming some
          * queues and not others: it only means that some spurious wakes will
@@ -294,6 +296,7 @@ int efch_vi_prime_qs(ci_private_char_t* priv,
       efrm_rxq_request_wakeup(efrm_rxq_from_resource(rs->rs_base),
                               args->rxq_current[i].sbseq,
                               args->rxq_current[i].pktix, true);
+      efch_resource_put(rs);
     }
   }
   return rc;

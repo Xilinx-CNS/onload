@@ -54,7 +54,8 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
     EFCH_ERR("%s: ERROR: id="EFCH_RESOURCE_ID_FMT" is not a VI",
              __FUNCTION__,
              EFCH_RESOURCE_ID_PRI_ARG(alloc->in_vi_rs_id));
-    return -EINVAL;
+    rc = -EINVAL;
+    goto out;
   }
 
   vi = efrm_vi_from_resource(vi_rs->rs_base);
@@ -64,7 +65,8 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
       EFCH_ERR("%s: ERROR: id="EFCH_RESOURCE_ID_FMT" provides bad shm ix %d",
                __FUNCTION__,
                EFCH_RESOURCE_ID_PRI_ARG(alloc->in_vi_rs_id), alloc->in_shm_ix);
-      return -EINVAL;
+      rc = -EINVAL;
+      goto out;
     }
     shm_ix = alloc->in_shm_ix;
 
@@ -72,7 +74,8 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
     if (IS_ERR(hugetlb_alloc)) {
       EFCH_ERR("%s: ERROR: Unable to create hugetlb allocator (%ld)",
                __FUNCTION__, PTR_ERR(hugetlb_alloc));
-      return PTR_ERR(hugetlb_alloc);
+      rc = PTR_ERR(hugetlb_alloc);
+      goto out;
     }
   }
   else {
@@ -87,11 +90,13 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
 
   if (rc < 0) {
     EFCH_ERR("%s: ERROR: rxq_alloc failed (%d)", __FUNCTION__, rc);
-    return rc;
+    goto out;
   }
 
   rs->rs_base = efrm_rxq_to_resource(rxq);
-  return 0;
+out:
+  efch_resource_put(vi_rs);
+  return rc;
 }
 
 

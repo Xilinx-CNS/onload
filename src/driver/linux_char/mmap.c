@@ -159,6 +159,7 @@ ci_char_fop_mmap(struct file* file, struct vm_area_struct* vma)
            EFCH_RESOURCE_ID_PRI_ARG(rsid));
 #endif
 
+  efch_resource_put(rs);
   return rc;
 }
 
