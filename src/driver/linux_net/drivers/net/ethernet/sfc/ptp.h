@@ -142,6 +142,11 @@ static inline ktime_t efx_ptp_nic_to_kernel_time(struct efx_tx_queue *tx_queue)
 }
 #endif
 
+static inline bool efx_channel_has_tx_timestamps(struct efx_channel *channel)
+{
+	return channel == efx_ptp_channel(channel->efx);
+}
+
 #if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_PTP)
 int efx_ptp_pps_reset(struct efx_nic *efx);
 #else

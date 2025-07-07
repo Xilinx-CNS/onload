@@ -513,6 +513,8 @@ static u32 x4_mcdi_to_ethtool_cap(struct efx_nic *efx, bool autoneg,
 			cap |= BIT(tech_map[tech].cap2);
 	}
 #ifdef EFX_NOT_UPSTREAM
+	__clear_bit(MC_CMD_ETH_TECH_NONE, tech_tmp);
+	__clear_bit(MC_CMD_ETH_TECH_AUTO, tech_tmp);
 	if (!bitmap_empty(tech_tmp, MC_CMD_ETH_TECH_TECH_WIDTH)) {
 		static bool warned;
 
@@ -565,6 +567,8 @@ static void x4_mcdi_to_ethtool_linkset(struct efx_nic *efx, bool autoneg,
 			linkmode_set_bit(tech_map[tech].cap2, linkset);
 	}
 #ifdef EFX_NOT_UPSTREAM
+	__clear_bit(MC_CMD_ETH_TECH_NONE, tech_tmp);
+	__clear_bit(MC_CMD_ETH_TECH_AUTO, tech_tmp);
 	if (!bitmap_empty(tech_tmp, MC_CMD_ETH_TECH_TECH_WIDTH)) {
 		static bool warned;
 

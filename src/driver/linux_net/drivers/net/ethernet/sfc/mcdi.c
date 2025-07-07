@@ -2162,15 +2162,22 @@ fail:
 	return rc;
 }
 
+#define EFX_MAX_VERSION_INFO_LEN 64
 /* Returns 1 if an assertion was read, 0 if no assertion had fired,
  * negative on error.
  */
 static int efx_mcdi_read_assertion(struct efx_nic *efx)
 {
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_GET_ASSERTS_IN_LEN);
-	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_ASSERTS_OUT_LEN);
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_ASSERTS_OUT_V3_LEN);
 	unsigned int flags, index;
-	const char *reason;
+	char buf[EFX_MAX_VERSION_INFO_LEN];
+	union {
+		const __le32 *dwords;
+		const __le16 *words;
+		const char *str;
+	} ver;
+	const char *reason, *str;
 	size_t outlen;
 	int retry;
 	int rc;
@@ -2224,6 +2231,29 @@ static int efx_mcdi_read_assertion(struct efx_nic *efx)
 			  1 + index,
 			  MCDI_ARRAY_DWORD(outbuf, GET_ASSERTS_OUT_GP_REGS_OFFS,
 					   index));
+	/* Print out FW version and build identifiers */
+	if (outlen >= MC_CMD_GET_ASSERTS_OUT_V3_LEN) {
+		ver.words = (__le16 *)MCDI_PTR(outbuf,
+					       GET_ASSERTS_OUT_V3_MC_FW_VERSION);
+		str = MCDI_PTR(outbuf, GET_ASSERTS_OUT_V3_MC_FW_EXTRA_INFO);
+		netif_err(efx, hw, efx->net_dev, "MCFW %u.%u.%u.%u (%s)\n",
+			  le16_to_cpu(ver.words[0]),
+			  le16_to_cpu(ver.words[1]),
+			  le16_to_cpu(ver.words[2]),
+			  le16_to_cpu(ver.words[3]),
+			  str);
+
+		str = MCDI_PTR(outbuf,
+			       GET_ASSERTS_OUT_V3_MC_FW_BUILD_ID);
+		snprintf(buf, EFX_MAX_VERSION_INFO_LEN, "%*phN",
+			 MC_CMD_GET_VERSION_V2_OUT_MCFW_BUILD_ID_LEN, str);
+
+		netif_err(efx, hw, efx->net_dev, "BUILD %s (%d %s 0x%llx)\n",
+			  MCDI_PTR(outbuf, GET_ASSERTS_OUT_V3_MC_FW_BUILD_NAME),
+			  MCDI_DWORD(outbuf, GET_ASSERTS_OUT_V3_MC_FW_SECURITY_LEVEL),
+			  buf,
+			  MCDI_QWORD(outbuf, GET_ASSERTS_OUT_V3_MC_FW_BUILD_TIMESTAMP));
+	}
 
 	return 1;
 }

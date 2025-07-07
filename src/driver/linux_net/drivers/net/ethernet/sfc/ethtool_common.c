@@ -49,6 +49,12 @@ struct efx_sw_stat_desc {
 /* MAC address mask including only I/G bit */
 static const u8 mac_addr_ig_mask[ETH_ALEN] __aligned(2) = {0x01, 0, 0, 0, 0, 0};
 
+static u64 efx_get_u64_stat(void *field)
+{
+	/* On 32bit kernels this could result in load tearing */
+	return *(u64 *)field;
+}
+
 static u64 efx_get_uint_stat(void *field)
 {
 	return *(unsigned int *)field;
@@ -63,53 +69,53 @@ static u64 efx_get_atomic_stat(void *field)
 	EFX_ETHTOOL_STAT(field, nic, errors.field,		\
 			 atomic_t, efx_get_atomic_stat)
 
-#define EFX_ETHTOOL_UINT_CHANNEL_STAT(field)			\
+#define EFX_ETHTOOL_U64_CHANNEL_STAT(field)			\
 	EFX_ETHTOOL_STAT(field, channel, n_##field,		\
-			 unsigned int, efx_get_uint_stat)
+			 u64, efx_get_u64_stat)
 #define EFX_ETHTOOL_UINT_CHANNEL_STAT_NO_N(field)		\
 	EFX_ETHTOOL_STAT(field, channel, field,			\
 			 unsigned int, efx_get_uint_stat)
 
-#define EFX_ETHTOOL_UINT_RXQ_STAT(field)			\
+#define EFX_ETHTOOL_U64_RXQ_STAT(field)				\
 	EFX_ETHTOOL_STAT(field, rx_queue, n_##field,		\
-			 unsigned int, efx_get_uint_stat)
-#define EFX_ETHTOOL_UINT_TXQ_STAT(field)			\
+			 u64, efx_get_u64_stat)
+#define EFX_ETHTOOL_U64_TXQ_STAT(field)				\
 	EFX_ETHTOOL_STAT(tx_##field, tx_queue, field,		\
-			 unsigned int, efx_get_uint_stat)
+			 u64, efx_get_u64_stat)
 
 static const struct efx_sw_stat_desc efx_sw_stat_desc[] = {
-	EFX_ETHTOOL_UINT_TXQ_STAT(merge_events),
-	EFX_ETHTOOL_UINT_TXQ_STAT(tso_bursts),
-	EFX_ETHTOOL_UINT_TXQ_STAT(tso_long_headers),
-	EFX_ETHTOOL_UINT_TXQ_STAT(tso_packets),
-	EFX_ETHTOOL_UINT_TXQ_STAT(tso_fallbacks),
-	EFX_ETHTOOL_UINT_TXQ_STAT(pushes),
-	EFX_ETHTOOL_UINT_TXQ_STAT(pio_packets),
-	EFX_ETHTOOL_UINT_TXQ_STAT(cb_packets),
+	EFX_ETHTOOL_U64_TXQ_STAT(merge_events),
+	EFX_ETHTOOL_U64_TXQ_STAT(tso_bursts),
+	EFX_ETHTOOL_U64_TXQ_STAT(tso_long_headers),
+	EFX_ETHTOOL_U64_TXQ_STAT(tso_packets),
+	EFX_ETHTOOL_U64_TXQ_STAT(tso_fallbacks),
+	EFX_ETHTOOL_U64_TXQ_STAT(pushes),
+	EFX_ETHTOOL_U64_TXQ_STAT(pio_packets),
+	EFX_ETHTOOL_U64_TXQ_STAT(cb_packets),
 	EFX_ETHTOOL_ATOMIC_NIC_ERROR_STAT(rx_reset),
-	EFX_ETHTOOL_UINT_RXQ_STAT(rx_tobe_disc),
-	EFX_ETHTOOL_UINT_RXQ_STAT(rx_ip_hdr_chksum_err),
-	EFX_ETHTOOL_UINT_RXQ_STAT(rx_tcp_udp_chksum_err),
-	EFX_ETHTOOL_UINT_RXQ_STAT(rx_inner_ip_hdr_chksum_err),
-	EFX_ETHTOOL_UINT_RXQ_STAT(rx_inner_tcp_udp_chksum_err),
-	EFX_ETHTOOL_UINT_RXQ_STAT(rx_outer_ip_hdr_chksum_err),
-	EFX_ETHTOOL_UINT_RXQ_STAT(rx_outer_tcp_udp_chksum_err),
-	EFX_ETHTOOL_UINT_RXQ_STAT(rx_eth_crc_err),
-	EFX_ETHTOOL_UINT_RXQ_STAT(rx_mcast_mismatch),
-	EFX_ETHTOOL_UINT_RXQ_STAT(rx_frm_trunc),
-	EFX_ETHTOOL_UINT_RXQ_STAT(rx_merge_events),
-	EFX_ETHTOOL_UINT_RXQ_STAT(rx_merge_packets),
+	EFX_ETHTOOL_U64_RXQ_STAT(rx_tobe_disc),
+	EFX_ETHTOOL_U64_RXQ_STAT(rx_ip_hdr_chksum_err),
+	EFX_ETHTOOL_U64_RXQ_STAT(rx_tcp_udp_chksum_err),
+	EFX_ETHTOOL_U64_RXQ_STAT(rx_inner_ip_hdr_chksum_err),
+	EFX_ETHTOOL_U64_RXQ_STAT(rx_inner_tcp_udp_chksum_err),
+	EFX_ETHTOOL_U64_RXQ_STAT(rx_outer_ip_hdr_chksum_err),
+	EFX_ETHTOOL_U64_RXQ_STAT(rx_outer_tcp_udp_chksum_err),
+	EFX_ETHTOOL_U64_RXQ_STAT(rx_eth_crc_err),
+	EFX_ETHTOOL_U64_RXQ_STAT(rx_mcast_mismatch),
+	EFX_ETHTOOL_U64_RXQ_STAT(rx_frm_trunc),
+	EFX_ETHTOOL_U64_RXQ_STAT(rx_merge_events),
+	EFX_ETHTOOL_U64_RXQ_STAT(rx_merge_packets),
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP)
-	EFX_ETHTOOL_UINT_RXQ_STAT(rx_xdp_drops),
-	EFX_ETHTOOL_UINT_RXQ_STAT(rx_xdp_bad_drops),
-	EFX_ETHTOOL_UINT_RXQ_STAT(rx_xdp_tx),
-	EFX_ETHTOOL_UINT_RXQ_STAT(rx_xdp_redirect),
+	EFX_ETHTOOL_U64_RXQ_STAT(rx_xdp_drops),
+	EFX_ETHTOOL_U64_RXQ_STAT(rx_xdp_bad_drops),
+	EFX_ETHTOOL_U64_RXQ_STAT(rx_xdp_tx),
+	EFX_ETHTOOL_U64_RXQ_STAT(rx_xdp_redirect),
 #endif
-	EFX_ETHTOOL_UINT_RXQ_STAT(rx_mport_bad),
+	EFX_ETHTOOL_U64_RXQ_STAT(rx_mport_bad),
 #ifdef CONFIG_RFS_ACCEL
 	EFX_ETHTOOL_UINT_CHANNEL_STAT_NO_N(rfs_filter_count),
-	EFX_ETHTOOL_UINT_CHANNEL_STAT(rfs_succeeded),
-	EFX_ETHTOOL_UINT_CHANNEL_STAT(rfs_failed),
+	EFX_ETHTOOL_U64_CHANNEL_STAT(rfs_succeeded),
+	EFX_ETHTOOL_U64_CHANNEL_STAT(rfs_failed),
 #endif
 };
 

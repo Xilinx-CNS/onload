@@ -488,6 +488,7 @@ int efx_init_rx_queue(struct efx_rx_queue *rx_queue)
 
 	/* Initialise limit fields */
 	max_fill = rx_queue->ptr_mask + 1 - EFX_RXD_HEAD_ROOM;
+	max_fill = min(max_fill, rx_queue->max_fill_limit);
 	max_trigger =
 		max_fill - efx->rx_pages_per_batch * efx->rx_bufs_per_page;
 	if (rx_refill_threshold != 0) {

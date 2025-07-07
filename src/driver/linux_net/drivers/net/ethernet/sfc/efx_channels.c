@@ -1033,7 +1033,7 @@ static int efx_probe_eventq(struct efx_channel *channel)
 		entries = 0;
 
 	efx_for_each_channel_tx_queue(txq, channel) {
-		entries += txq->timestamping ?
+		entries += efx_channel_has_tx_timestamps(channel) ?
 			   efx->txq_entries * 3 :
 			   efx->txq_entries;
 	}
@@ -1049,6 +1049,29 @@ static int efx_probe_eventq(struct efx_channel *channel)
 		entries += EFX_EVQ_DL_EXTRA_ENTRIES;
 #endif
 #endif
+
+	if (efx_channel_has_rx_queue(channel)) {
+		channel->rx_queue.max_fill_limit = efx->rxq_entries;
+		if (entries > efx_max_evtq_size(efx)) {
+			/* Try shrinking RXQ max_fill by up to half to provide
+			 * intermediate RXQ sizes.
+			 * If a greater reduction is needed, should configure
+			 * smaller RXQ and/or TXQ sizes.
+			 * (Oversize RXQ with less than half max_fill has
+			 * worse cache efficiency than using the smaller RXQ.)
+			 */
+			unsigned int reduce_fill = min_t(unsigned int,
+							 entries -
+							 efx_max_evtq_size(efx),
+							 efx->rxq_entries / 2);
+			channel->rx_queue.max_fill_limit -= reduce_fill;
+			entries -= reduce_fill;
+			netif_dbg(efx, probe, efx->net_dev,
+				  "chan %d rx queue size %u, but max_fill reduced to %u\n",
+				  channel->channel, efx->rxq_entries,
+				  channel->rx_queue.max_fill_limit);
+		}
+	}
 
 	if (entries > efx_max_evtq_size(efx)) {
 		netif_warn(efx, probe, efx->net_dev,
@@ -2303,7 +2326,7 @@ int efx_busy_poll(struct napi_struct *napi)
 {
 	struct efx_channel *channel =
 		container_of(napi, struct efx_channel, napi_str);
-	unsigned long old_rx_packets = 0, rx_packets = 0;
+	u64 old_rx_packets = 0, rx_packets = 0;
 	struct efx_nic *efx = channel->efx;
 	struct efx_rx_queue *rx_queue;
 	int budget = 4;

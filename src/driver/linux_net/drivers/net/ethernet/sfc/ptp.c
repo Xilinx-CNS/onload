@@ -890,6 +890,15 @@ ktime_t efx_ptp_nic_to_kernel_time(struct efx_tx_queue *tx_queue)
 					ptp->ts_corrections.general_tx);
 }
 
+/* Convert ppb value, clamped to +/- 10^9, to FP16 ppm. */
+static s64 ppb_to_ppm_fp16(s64 ppb)
+{
+	ppb = clamp_val(ppb, -ONE_BILLION, ONE_BILLION);
+
+	/* Multiply by floor(2^41 / 1000) and shift right by 41 - 16). */
+	return (ppb * 2199023255LL) >> (41 - 16);
+}
+
 /* Get PTP attributes and set up time conversions */
 int efx_ef10_ptp_get_attributes(struct efx_nic *efx)
 {
@@ -985,6 +994,9 @@ int efx_ef10_ptp_get_attributes(struct efx_nic *efx)
 			ptp->adjfreq_prec = 44;
 		else
 			ptp->adjfreq_prec = 40;
+
+		ptp->max_adjfreq = MAX_PPB;
+		ptp->max_adjfine = ppb_to_ppm_fp16(ptp->max_adjfreq);
 	}
 
 	return 0;
@@ -995,6 +1007,7 @@ int efx_x4_ptp_get_attributes(struct efx_nic *efx)
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_LEN);
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_PTP_IN_GET_ATTRIBUTES_LEN);
 	struct efx_ptp_data *ptp = efx->ptp_data;
+	s64 freq_adj_min, freq_adj_max;
 	size_t out_len;
 	u32 fmt;
 	int rc;
@@ -1041,20 +1054,33 @@ int efx_x4_ptp_get_attributes(struct efx_nic *efx)
 	else
 		ptp->adjfreq_prec = 40;
 
-	/* TODO SWNETLINUX-5612: Net driver use
-	 * MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_(MIN|MAX)
-	 *
-	 * The net driver currently does not use FREQ_ADJ_(MIN|MAX) fields of
-	 * MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2. If they are available it is better
-	 * to use FREQ_ADJ_(MIN|MAX) rather than assuming min/max frequency
-	 * adjustment values.
-	 *
-	 * e.g.
-	 * freq_adj_min =
-	 *	MCDI_QWORD(outbuf, PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_MIN);
-	 * freq_adj_max =
-	 *	MCDI_QWORD(outbuf, PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_MAX);
-	 */
+	if (out_len < MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_LEN) {
+		ptp->max_adjfreq = MAX_PPB;
+	} else {
+		freq_adj_min = MCDI_QWORD(outbuf, PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_MIN);
+		freq_adj_max = MCDI_QWORD(outbuf, PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_MAX);
+
+		/* The Linux PTP Hardware Clock interface expects frequency
+		 * adjustments(adj_ppb) in parts per billion(e.g. +10000000
+		 * means go 1% faster; -50000000 means go 5% slower). The MCDI
+		 * interface between the driver and MCFW uses a nanosecond
+		 * based adjustment (e.g. +0.01 means go 1% faster,
+		 * -0.05 means go 5% slower).
+		 *	adj_ns = adj_ppb / 10 ^ 9
+		 * adj_ns is represented in the MCDI messages as a signed
+		 * fixed-point 64-bit value with either 40 or 44 bits for the
+		 * fractional part. For the 44 bit format:
+		 * adj_ns_fp44 = adj_ns * 2^44
+		 * adj_ppb = adj_ns_fp44 * 10^9 / 2^44
+		 * The highest common factor of those is 2^9 so that is equivalent to:
+		 * adj_ppb = adj_ns_fp44 * 1953125 / 2^35
+		 */
+		freq_adj_min = (freq_adj_min * 1953125LL) >> 35;
+		freq_adj_max = (freq_adj_max * 1953125LL) >> 35;
+		ptp->max_adjfreq = min_t(s64, abs(freq_adj_min), abs(freq_adj_max));
+	}
+
+	ptp->max_adjfine = ppb_to_ppm_fp16(ptp->max_adjfreq);
 
 	return 0;
 }
@@ -2536,21 +2562,16 @@ static int efx_x4_phc_gettimex64(struct ptp_clock_info *ptp, struct timespec64 *
 						     struct efx_ptp_data,
 						     phc_clock_info);
 	struct efx_nic *efx = ptp_data->efx;
-	struct system_time_snapshot snap;
 	u32 secs, ns, qns;
 	efx_qword_t time;
 
 	if (sts)
-		ktime_get_snapshot(&snap);
+		ptp_read_system_prets(sts);
 
 	time.u64[0] = _efx_readq(efx, ER_IZ_THE_TIME);
 
-	if (sts) {
-		ktime_get_snapshot(&snap);
-
-		sts->pre_ts = ktime_to_timespec64(snap.real);
-		sts->post_ts = ktime_to_timespec64(snap.real);
-	}
+	if (sts)
+		ptp_read_system_postts(sts);
 
 	secs = EFX_QWORD_FIELD(time, ERF_IZ_THE_TIME_SECS);
 	ns = EFX_QWORD_FIELD(time, ERF_IZ_THE_TIME_NANOS);
@@ -2694,15 +2715,6 @@ static int efx_x4_phc_adjfine(struct ptp_clock_info *ptp, long ppm_fp16)
 }
 #endif /* CONFIG_PTP_1588_CLOCK */
 
-/* Convert ppb value, clamped to +/- 10^9, to FP16 ppm. */
-static s64 ppb_to_ppm_fp16(s64 ppb)
-{
-	ppb = clamp_val(ppb, -ONE_BILLION, ONE_BILLION);
-
-	/* Multiply by floor(2^41 / 1000) and shift right by 41 - 16). */
-	return (ppb * 2199023255LL) >> (41 - 16);
-}
-
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
 static const struct ptp_clock_info efx_ef10_phc_clock_info = {
 	.owner		= THIS_MODULE,
@@ -2738,6 +2750,7 @@ static const struct ptp_clock_info efx_x4_phc_clock_info = {
 	.max_adj	= MAX_PPB, /* unused, ptp_data->max_adjfreq used instead */
 	.n_alarm	= 0,
 	.n_ext_ts	= 1,
+	.n_pins		= 1,
 	.pps		= 1,
 	.adjfine	= efx_x4_phc_adjfine,
 	.adjtime	= efx_x4_phc_adjtime,
@@ -2748,6 +2761,7 @@ static const struct ptp_clock_info efx_x4_phc_clock_info = {
 #endif
 	.getcrosststamp = efx_phc_getcrosststamp,
 	.enable		= efx_x4_phc_enable,
+	.verify		= efx_phc_verify,
 };
 
 void efx_x4_phc_set_clock_info(struct efx_nic *efx)
@@ -2901,11 +2915,6 @@ static int efx_ptp_probe_post_io(struct efx_nic *efx)
 	rc = efx_ptp_get_timestamp_corrections(efx);
 	if (rc < 0)
 		goto fail4;
-
-	/* Set the NIC clock maximum frequency adjustment */
-	/* TODO: add MCDI call to get this value from the NIC */
-	ptp->max_adjfreq = MAX_PPB;
-	ptp->max_adjfine = ppb_to_ppm_fp16(ptp->max_adjfreq);
 
 #ifdef EFX_NOT_UPSTREAM
 	pps_ok = efx_is_pps_possible(efx);

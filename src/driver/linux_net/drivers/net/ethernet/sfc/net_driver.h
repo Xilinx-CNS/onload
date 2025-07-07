@@ -92,7 +92,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.1.1.1001"
+#define EFX_DRIVER_VERSION	"6.1.1.1003"
 #endif
 
 #ifdef DEBUG
@@ -400,7 +400,7 @@ struct efx_tx_queue {
 	unsigned int read_count ____cacheline_aligned_in_smp;
 	unsigned long read_jiffies;
 	unsigned int old_write_count;
-	unsigned int merge_events;
+	u64 merge_events;
 	unsigned int doorbell_notify_comp;
 	unsigned int bytes_compl;
 	unsigned int pkts_compl;
@@ -413,19 +413,19 @@ struct efx_tx_queue {
 	unsigned int write_count;
 	unsigned int packet_write_count;
 	unsigned int old_read_count;
-	unsigned int tso_bursts;
-	unsigned int tso_long_headers;
-	unsigned int tso_packets;
-	unsigned int tso_fallbacks;
-	unsigned int pushes;
-	unsigned int pio_packets;
-	unsigned int cb_packets;
+	u64 tso_bursts;
+	u64 tso_long_headers;
+	u64 tso_packets;
+	u64 tso_fallbacks;
+	u64 pushes;
+	u64 pio_packets;
+	u64 cb_packets;
 	unsigned int doorbell_notify_tx;
 	unsigned int notify_count;
 	unsigned long notify_jiffies;
 	/* Statistics to supplement MAC stats */
 	u64 tx_bytes;
-	unsigned long tx_packets;
+	u64 tx_packets;
 
 	bool xmit_pending;
 
@@ -627,6 +627,7 @@ struct efx_ssr_state {
  *      recycle ring was full.
  * @page_repost_count: The number of pages that were reposted to the RX queue.
  * @page_ptr_mask: The number of pages in the RX recycle ring minus 1.
+ * @max_fill_limit: Restrict @max_fill level to reduce risk of EVQ overflow.
  * @max_fill: RX descriptor maximum fill level (<= ring size)
  * @fast_fill_trigger: RX descriptor fill level that will trigger a fast fill
  *	(<= @max_fill)
@@ -698,6 +699,7 @@ struct efx_rx_queue {
 	unsigned int page_repost_count;
 	unsigned int page_ptr_mask;
 #endif
+	unsigned int max_fill_limit;
 	unsigned int max_fill;
 	unsigned int fast_fill_trigger;
 	unsigned int min_fill;
@@ -706,28 +708,28 @@ struct efx_rx_queue {
 	struct delayed_work slow_fill_work;
 	struct work_struct grant_work;
 	/* Statistics to supplement MAC stats */
-	unsigned long rx_packets;
-	unsigned int n_rx_tobe_disc;
-	unsigned int n_rx_ip_hdr_chksum_err;
-	unsigned int n_rx_tcp_udp_chksum_err;
-	unsigned int n_rx_outer_ip_hdr_chksum_err;
-	unsigned int n_rx_outer_tcp_udp_chksum_err;
-	unsigned int n_rx_inner_ip_hdr_chksum_err;
-	unsigned int n_rx_inner_tcp_udp_chksum_err;
-	unsigned int n_rx_eth_crc_err;
-	unsigned int n_rx_mcast_mismatch;
-	unsigned int n_rx_frm_trunc;
-	unsigned int n_rx_overlength;
-	unsigned int n_rx_nodesc_trunc;
-	unsigned int n_rx_merge_events;
-	unsigned int n_rx_merge_packets;
+	u64 rx_packets;
+	u64 n_rx_tobe_disc;
+	u64 n_rx_ip_hdr_chksum_err;
+	u64 n_rx_tcp_udp_chksum_err;
+	u64 n_rx_outer_ip_hdr_chksum_err;
+	u64 n_rx_outer_tcp_udp_chksum_err;
+	u64 n_rx_inner_ip_hdr_chksum_err;
+	u64 n_rx_inner_tcp_udp_chksum_err;
+	u64 n_rx_eth_crc_err;
+	u64 n_rx_mcast_mismatch;
+	u64 n_rx_frm_trunc;
+	u64 n_rx_overlength;
+	u64 n_rx_nodesc_trunc;
+	u64 n_rx_merge_events;
+	u64 n_rx_merge_packets;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP)
-	unsigned int n_rx_xdp_drops;
-	unsigned int n_rx_xdp_bad_drops;
-	unsigned int n_rx_xdp_tx;
-	unsigned int n_rx_xdp_redirect;
+	u64 n_rx_xdp_drops;
+	u64 n_rx_xdp_bad_drops;
+	u64 n_rx_xdp_tx;
+	u64 n_rx_xdp_redirect;
 #endif
-	unsigned int n_rx_mport_bad;
+	u64 n_rx_mport_bad;
 	unsigned int failed_flush_count;
 
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
@@ -906,8 +908,8 @@ struct efx_channel {
 	unsigned int rfs_filter_count;
 	unsigned int rfs_last_expiry;
 	unsigned int rfs_expire_index;
-	unsigned int n_rfs_succeeded;
-	unsigned int n_rfs_failed;
+	u64 n_rfs_succeeded;
+	u64 n_rfs_failed;
 	struct delayed_work filter_work;
 #define RPS_FLOW_ID_INVALID 0xFFFFFFFF
 	u32 *rps_flow_id;

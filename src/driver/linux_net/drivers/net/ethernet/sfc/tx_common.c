@@ -177,7 +177,8 @@ int efx_init_tx_queue(struct efx_tx_queue *tx_queue)
 	tx_queue->old_read_count = 0;
 	tx_queue->empty_read_count = 0 | EFX_EMPTY_COUNT_VALID;
 	tx_queue->xmit_pending = false;
-	tx_queue->timestamping = tx_queue->channel == efx_ptp_channel(efx);
+	tx_queue->timestamping =
+		efx_channel_has_tx_timestamps(tx_queue->channel);
 	tx_queue->completed_timestamp_major = 0;
 	tx_queue->completed_timestamp_minor = 0;
 

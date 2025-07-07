@@ -35,7 +35,7 @@ int ef100_tx_probe(struct efx_tx_queue *tx_queue)
 int ef100_tx_init(struct efx_tx_queue *tx_queue)
 {
 	tx_queue->tso_version = 3;	/* Not used but shown in debugfs */
-	return efx_mcdi_tx_init(tx_queue, false);
+	return efx_mcdi_tx_init(tx_queue, NULL);
 }
 
 unsigned int ef100_tx_max_skb_descs(struct efx_nic *efx)
