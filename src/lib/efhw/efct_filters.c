@@ -525,9 +525,12 @@ efct_filter_insert(struct efct_filter_state *state, struct efx_filter_spec *spec
     rc = insert_op(&op_in, &op_out);
 
     if( rc == -ENOSPC && sw_filter_node->refcount == 1 ) {
-      /* We discovered we had fewer hardware filters than we thought - undo a bit
-       * and use rxq0 / sw filtering only */
-      rc = flags & EFHW_FILTER_F_EXCL_RXQ ? -EPERM : 0;
+      /* We discovered we had fewer hardware filters than we thought - undo a
+       * bit and use rxq0 / sw filtering only if permitted */
+      if( flags & EFHW_FILTER_F_EXCL_RXQ )
+        rc = -EPERM;
+      else if( flags & EFHW_FILTER_F_USE_SW )
+        rc = 0;
       --state->hw_filters[node.hw_filter].refcount;
       sw_filter_node->hw_filter = -1;
       node.hw_filter = -1;
