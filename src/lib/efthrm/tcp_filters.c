@@ -115,6 +115,111 @@ void oo_hw_filter_clear_hwports(struct oo_hw_filter* oofilter,
 
 
 static int
+oo_hw_filter_populate_spec(const struct oo_hw_filter_spec *oo_filter_spec,
+                           struct efx_filter_spec *spec, int flags, int vi_id,
+                           int rss_context, bool *replace)
+{
+  const u8* mac_ptr = NULL;
+  int rc = 0;
+
+  efx_filter_init_rx(spec, EFX_FILTER_PRI_REQUIRED, flags, vi_id);
+
+  if( flags & EFX_FILTER_FLAG_RX_RSS )
+    spec->rss_context = rss_context;
+
+  switch( oo_filter_spec->type ) {
+  case OO_HW_FILTER_TYPE_MAC:
+    mac_ptr = oo_filter_spec->addr.mac.mac;
+    *replace = true;
+    break;
+
+  case OO_HW_FILTER_TYPE_ETHERTYPE:
+    /* Ethertype filter is not MAC-qualified. There are no primitives in the
+     * net driver, so we need to set filter flags manually. */
+    spec->ether_type = oo_filter_spec->addr.ethertype.t;
+    mac_ptr = oo_filter_spec->addr.ethertype.mac;
+    spec->match_flags |= EFX_FILTER_MATCH_ETHER_TYPE;
+    *replace = true;
+    break;
+
+  case OO_HW_FILTER_TYPE_IP_PROTO_MAC:
+    mac_ptr = oo_filter_spec->addr.ipproto.mac;
+    ci_fallthrough;
+  case OO_HW_FILTER_TYPE_IP_PROTO:
+    /* As in the case of the ethertype filter above, we have to populate
+     * [spec] ourselves. */
+    spec->ip_proto = oo_filter_spec->addr.ipproto.p;
+    spec->ether_type = oo_filter_spec->addr.ipproto.ethertype;
+    spec->match_flags |= EFX_FILTER_MATCH_ETHER_TYPE |
+                        EFX_FILTER_MATCH_IP_PROTO;
+    *replace = true;
+    break;
+
+  case OO_HW_FILTER_TYPE_IP:
+#if CI_CFG_IPV6
+    if( IS_AF_INET6(oo_filter_spec->addr.ip.af) ) {
+      struct in6_addr saddr;
+      struct in6_addr daddr;
+
+      memcpy(&saddr, oo_filter_spec->addr.ip.saddr, sizeof(saddr));
+      memcpy(&daddr, oo_filter_spec->addr.ip.daddr, sizeof(daddr));
+
+      if( oo_filter_spec->addr.ip.sport != 0 )
+        rc = efx_filter_set_ipv6_full(spec,
+                                      oo_filter_spec->addr.ip.protocol,
+                                      daddr,
+                                      oo_filter_spec->addr.ip.dport,
+                                      saddr,
+                                      oo_filter_spec->addr.ip.sport);
+      else
+        rc = efx_filter_set_ipv6_local(spec,
+                                       oo_filter_spec->addr.ip.protocol,
+                                       &daddr,
+                                       oo_filter_spec->addr.ip.dport);
+    }
+    else
+#endif
+    {
+      if( oo_filter_spec->addr.ip.sport != 0 )
+        rc = efx_filter_set_ipv4_full(spec,
+                                      oo_filter_spec->addr.ip.protocol,
+                                      oo_filter_spec->addr.ip.daddr[0],
+                                      oo_filter_spec->addr.ip.dport,
+                                      oo_filter_spec->addr.ip.saddr[0],
+                                      oo_filter_spec->addr.ip.sport);
+      else
+        rc = efx_filter_set_ipv4_local(spec,
+                                       oo_filter_spec->addr.ip.protocol,
+                                       oo_filter_spec->addr.ip.daddr[0],
+                                       oo_filter_spec->addr.ip.dport);
+    }
+    /* Even though they return an error, the filter setup functions cannot fail
+     * and we work on the assumption that this interface behaviour does not
+     * change. */
+    ci_assert_equal(rc, 0);
+    break;
+
+  default:
+    /* Invalid filter type. */
+    ci_assert(0);
+    return -EINVAL;
+  }
+
+  if( oo_filter_spec->vlan_id != OO_HW_VLAN_UNSPEC || mac_ptr != NULL ) {
+    u16 efx_vlan_id = (oo_filter_spec->vlan_id == OO_HW_VLAN_UNSPEC) ?
+                      EFX_FILTER_VID_UNSPEC : (u16) oo_filter_spec->vlan_id;
+    rc = efx_filter_set_eth_local(spec, efx_vlan_id, mac_ptr);
+    /* Even though they return an error, the filter setup functions cannot fail
+     * and we work on the assumption that this interface behaviour does not
+     * change. */
+    ci_assert_equal(rc, 0);
+  }
+
+  return rc;
+}
+
+
+static int
 oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
                         const struct oo_hw_filter_spec* oo_filter_spec,
                         unsigned src_flags)
@@ -123,8 +228,7 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
   int rc = 0;
   int rxq = -1;
   int vi_id = -1;
-  const u8* mac_ptr = NULL;
-  int replace = false;
+  bool replace = false;
   int kernel_redirect = src_flags & OO_HW_SRC_FLAG_KERNEL_REDIRECT;
   int redirect = src_flags & OO_HW_SRC_FLAG_REDIRECT;
   int cluster = (oofilter->thc != NULL) && ! kernel_redirect;
@@ -132,6 +236,7 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
              ! cluster; /* drop not supported for RSS - use proper filter */
   unsigned insert_flags = 0;
   unsigned exclusive_rxq_token = EFHW_PD_NON_EXC_TOKEN;
+  int rss_context = -1;
 
   if( ! kernel_redirect )
     ci_assert_nequal(oofilter->trs == NULL, oofilter->thc == NULL);
@@ -159,13 +264,8 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
       flags |= EFX_FILTER_FLAG_TX;
     }
 
-    if( cluster && ! drop && oofilter->thc->thc_cluster_size > 1 )
+    if( cluster && ! drop && oofilter->thc->thc_cluster_size > 1 ) {
       flags |= EFX_FILTER_FLAG_RX_RSS;
-
-    efx_filter_init_rx(&spec, EFX_FILTER_PRI_REQUIRED, flags, vi_id);
-
-    if( flags & EFX_FILTER_FLAG_RX_RSS ) {
-      int rss_context = -1;
       if( src_flags & OO_HW_SRC_FLAG_RSS_DST )
         rss_context = efrm_vi_set_get_rss_context
             (oofilter->thc->thc_vi_set[hwport], EFRM_RSS_MODE_ID_DST);
@@ -175,8 +275,10 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
             (oofilter->thc->thc_vi_set[hwport], EFRM_RSS_MODE_ID_DEFAULT);
       if( rss_context == -1 )
         rss_context = EFX_FILTER_RSS_CONTEXT_DEFAULT;
-      spec.rss_context = rss_context;
     }
+
+    oo_hw_filter_populate_spec(oo_filter_spec, &spec, flags, vi_id,
+                               rss_context, &replace);
 
     if( ! kernel_redirect ) {
       unsigned stack_id = cluster ?
@@ -186,88 +288,6 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
       efx_filter_set_stack_id(&spec, stack_id);
     }
 
-    switch( oo_filter_spec->type ) {
-    case OO_HW_FILTER_TYPE_MAC:
-      mac_ptr = oo_filter_spec->addr.mac.mac;
-      replace = true;
-      break;
-
-    case OO_HW_FILTER_TYPE_ETHERTYPE:
-      /* Ethertype filter is not MAC-qualified. There are no primitives in the
-       * net driver, so we need to set filter flags manually. */
-      spec.ether_type = oo_filter_spec->addr.ethertype.t;
-      mac_ptr = oo_filter_spec->addr.ethertype.mac;
-      spec.match_flags |= EFX_FILTER_MATCH_ETHER_TYPE;
-      replace = true;
-      break;
-
-    case OO_HW_FILTER_TYPE_IP_PROTO_MAC:
-      mac_ptr = oo_filter_spec->addr.ipproto.mac;
-      ci_fallthrough;
-    case OO_HW_FILTER_TYPE_IP_PROTO:
-      /* As in the case of the ethertype filter above, we have to populate
-       * [spec] ourselves. */
-      spec.ip_proto = oo_filter_spec->addr.ipproto.p;
-      spec.ether_type = oo_filter_spec->addr.ipproto.ethertype;
-      spec.match_flags |= EFX_FILTER_MATCH_ETHER_TYPE |
-                          EFX_FILTER_MATCH_IP_PROTO;
-      replace = true;
-      break;
-
-    case OO_HW_FILTER_TYPE_IP:
-#if CI_CFG_IPV6
-      if( IS_AF_INET6(oo_filter_spec->addr.ip.af) ) {
-        struct in6_addr saddr;
-        struct in6_addr daddr;
-
-        memcpy(&saddr, oo_filter_spec->addr.ip.saddr, sizeof(saddr));
-        memcpy(&daddr, oo_filter_spec->addr.ip.daddr, sizeof(daddr));
-
-        if( oo_filter_spec->addr.ip.sport != 0 )
-          rc = efx_filter_set_ipv6_full(&spec,
-                                        oo_filter_spec->addr.ip.protocol,
-                                        daddr,
-                                        oo_filter_spec->addr.ip.dport,
-                                        saddr,
-                                        oo_filter_spec->addr.ip.sport);
-        else
-          rc = efx_filter_set_ipv6_local(&spec,
-                                         oo_filter_spec->addr.ip.protocol,
-                                         &daddr,
-                                         oo_filter_spec->addr.ip.dport);
-      }
-      else
-#endif
-      {
-        if( oo_filter_spec->addr.ip.sport != 0 )
-          rc = efx_filter_set_ipv4_full(&spec,
-                                        oo_filter_spec->addr.ip.protocol,
-                                        oo_filter_spec->addr.ip.daddr[0],
-                                        oo_filter_spec->addr.ip.dport,
-                                        oo_filter_spec->addr.ip.saddr[0],
-                                        oo_filter_spec->addr.ip.sport);
-        else
-          rc = efx_filter_set_ipv4_local(&spec,
-                                         oo_filter_spec->addr.ip.protocol,
-                                         oo_filter_spec->addr.ip.daddr[0],
-                                         oo_filter_spec->addr.ip.dport);
-      }
-      ci_assert_equal(rc, 0);
-      break;
-
-    default:
-      /* Invalid filter type. */
-      ci_assert(0);
-      return -EINVAL;
-    }
-
-    /* note: bug 42561 affecting loopback on VLAN 0 with fw <= v4_0_6_6688 */
-    if( oo_filter_spec->vlan_id != OO_HW_VLAN_UNSPEC || mac_ptr != NULL ) {
-      u16 efx_vlan_id = (oo_filter_spec->vlan_id == OO_HW_VLAN_UNSPEC) ?
-                        EFX_FILTER_VID_UNSPEC : (u16) oo_filter_spec->vlan_id;
-      rc = efx_filter_set_eth_local(&spec, efx_vlan_id, mac_ptr);
-      ci_assert_equal(rc, 0);
-    }
     if( redirect ) {
       ci_assert_ge(oofilter->filter_id[hwport], 0);
       rc = efrm_filter_redirect(get_client(hwport), oofilter->filter_id[hwport], &spec);
