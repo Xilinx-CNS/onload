@@ -220,7 +220,39 @@ oo_hw_filter_populate_spec(const struct oo_hw_filter_spec *oo_filter_spec,
 
 
 static int
-oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
+oo_hw_filter_set_hwport_kernel_redirect(struct oo_hw_filter* oofilter,
+                    int hwport, const struct oo_hw_filter_spec* oo_filter_spec)
+{
+  struct efx_filter_spec spec;
+  int rc = 0;
+  int rxq = -1;
+  int rss_context = -1;
+  bool replace = false;
+
+  ci_assert_lt(oofilter->filter_id[hwport], 0);
+
+  oo_hw_filter_populate_spec(oo_filter_spec, &spec, EFX_FILTER_FLAG_RX_SCATTER,
+                             KERNEL_REDIRECT_VI_ID, rss_context, &replace);
+
+  rc = efrm_filter_insert(get_client(hwport), &spec, &rxq,
+                          EFHW_PD_NON_EXC_TOKEN, NULL, 0);
+
+  /* ENETDOWN indicates that the hardware has gone away. This is not a
+   * failure condition at this layer as we can attempt to restore filters
+   * when the hardware comes back. A negative filter ID signifies that there
+   * is no filter from the net driver's point of view, so we are justified in
+   * storing [rc] in the [filter_id] array. */
+  if( rc >= 0 || rc == -ENETDOWN ) {
+    oofilter->filter_id[hwport] = rc;
+    rc = 0;
+  }
+
+  return rc;
+}
+
+
+static int
+oo_hw_filter_set_hwport_common(struct oo_hw_filter* oofilter, int hwport,
                         const struct oo_hw_filter_spec* oo_filter_spec,
                         unsigned src_flags)
 {
@@ -229,22 +261,19 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
   int rxq = -1;
   int vi_id = -1;
   bool replace = false;
-  int kernel_redirect = src_flags & OO_HW_SRC_FLAG_KERNEL_REDIRECT;
   int redirect = src_flags & OO_HW_SRC_FLAG_REDIRECT;
-  int cluster = (oofilter->thc != NULL) && ! kernel_redirect;
+  int cluster = (oofilter->thc != NULL);
   int drop = (src_flags & OO_HW_SRC_FLAG_DROP) &&
              ! cluster; /* drop not supported for RSS - use proper filter */
   unsigned insert_flags = 0;
   unsigned exclusive_rxq_token = EFHW_PD_NON_EXC_TOKEN;
   int rss_context = -1;
+  unsigned stack_id;
 
-  if( ! kernel_redirect )
-    ci_assert_nequal(oofilter->trs == NULL, oofilter->thc == NULL);
+  ci_assert_nequal(oofilter->trs == NULL, oofilter->thc == NULL);
   ci_assert_equal(!!redirect, oofilter->filter_id[hwport] >= 0);
 
-  if( kernel_redirect )
-    vi_id = KERNEL_REDIRECT_VI_ID;
-  else if( cluster )
+  if( cluster )
     vi_id = tcp_helper_cluster_vi_base(oofilter->thc, hwport);
   else
     tcp_helper_get_filter_params(oofilter->trs, hwport, &vi_id, &rxq,
@@ -253,7 +282,7 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
   if( vi_id  >= 0 ) {
     int flags = EFX_FILTER_FLAG_RX_SCATTER;
     /* FIXME: enable loopback when installing drop filter */
-    int hw_rx_loopback_supported = (cluster || kernel_redirect || drop) ?
+    int hw_rx_loopback_supported = (cluster || drop) ?
       0 : tcp_helper_vi_hw_rx_loopback_supported(oofilter->trs, hwport);
 
     if( drop && tcp_helper_vi_hw_drop_filter_supported(oofilter->trs, hwport) )
@@ -280,13 +309,11 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
     oo_hw_filter_populate_spec(oo_filter_spec, &spec, flags, vi_id,
                                rss_context, &replace);
 
-    if( ! kernel_redirect ) {
-      unsigned stack_id = cluster ?
-        tcp_helper_cluster_vi_hw_stack_id(oofilter->thc, hwport) :
-        tcp_helper_vi_hw_stack_id(oofilter->trs, hwport);
-      ci_assert( stack_id >= 0 );
-      efx_filter_set_stack_id(&spec, stack_id);
-    }
+    stack_id = cluster ?
+      tcp_helper_cluster_vi_hw_stack_id(oofilter->thc, hwport) :
+      tcp_helper_vi_hw_stack_id(oofilter->trs, hwport);
+    ci_assert( stack_id >= 0 );
+    efx_filter_set_stack_id(&spec, stack_id);
 
     if( redirect ) {
       ci_assert_ge(oofilter->filter_id[hwport], 0);
@@ -311,8 +338,7 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
       insert_flags |= EFHW_FILTER_F_REPLACE;
     rc = efrm_filter_insert(get_client(hwport), &spec, &rxq,
                             exclusive_rxq_token,
-                            cluster || kernel_redirect ? NULL :
-                                              &oofilter->trs->filter_irqmask,
+                            cluster ? NULL : &oofilter->trs->filter_irqmask,
                             insert_flags);
     /* ENETDOWN indicates that the hardware has gone away. This is not a
      * failure condition at this layer as we can attempt to restore filters
@@ -328,27 +354,25 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
        * stacks, therefore is fundamentally at odds with RSS. This could (like
        * everything) change in the future, but it's difficult to predict in
        * what way. */
-      if( ! kernel_redirect ) {
 #if ! CI_CFG_ENDPOINT_MOVE
-        ci_assert_equal(cluster, 0);
+      ci_assert_equal(cluster, 0);
 #else
-        if( cluster )
-          rc = tcp_helper_cluster_post_filter_add(oofilter->thc, hwport, &spec,
-                                                  rxq, replace);
-        else
+      if( cluster )
+        rc = tcp_helper_cluster_post_filter_add(oofilter->thc, hwport, &spec,
+                                                rxq, replace);
+      else
 #endif
-          rc = tcp_helper_post_filter_add(oofilter->trs, hwport, &spec, rxq,
-                                          replace);
-        if( rc < 0 ) {
-          if( ! replace )
-            efrm_filter_remove(get_client(hwport), oofilter->filter_id[hwport]);
-          /* We ideally want to restore replaced filters too, but we're not
-           * keeping enough info to know how. In any case, we currently have no
-           * hardware on which this matters (no hardware uses both a non-trivial
-           * tcp_helper_post_filter_add() and the replace option), so it'd be
-           * untested code. If/when that hardware comes, there are many possible
-           * locations for the solution. */
-        }
+        rc = tcp_helper_post_filter_add(oofilter->trs, hwport, &spec, rxq,
+                                        replace);
+      if( rc < 0 ) {
+        if( ! replace )
+          efrm_filter_remove(get_client(hwport), oofilter->filter_id[hwport]);
+        /* We ideally want to restore replaced filters too, but we're not
+         * keeping enough info to know how. In any case, we currently have no
+         * hardware on which this matters (no hardware uses both a non-trivial
+         * tcp_helper_post_filter_add() and the replace option), so it'd be
+         * untested code. If/when that hardware comes, there are many possible
+         * locations for the solution. */
       }
     }
   }
@@ -358,6 +382,23 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
     return -ELNRNG;
   }
   return rc;
+}
+
+
+static int
+oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
+                        const struct oo_hw_filter_spec* oo_filter_spec,
+                        unsigned src_flags)
+{
+  if( src_flags & OO_HW_SRC_FLAG_KERNEL_REDIRECT ) {
+    ci_assert_equal(src_flags, OO_HW_SRC_FLAG_KERNEL_REDIRECT );
+    return oo_hw_filter_set_hwport_kernel_redirect(oofilter, hwport,
+                                                   oo_filter_spec);
+  }
+  else {
+    return oo_hw_filter_set_hwport_common(oofilter, hwport, oo_filter_spec,
+                                          src_flags);
+  }
 }
 
 
