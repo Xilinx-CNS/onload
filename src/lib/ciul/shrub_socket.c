@@ -14,10 +14,10 @@
 
 int ef_shrub_socket_open(uintptr_t* socket_out)
 {
-  int rc = socket(AF_UNIX, SOCK_STREAM, 0);
+  int rc = socket(AF_UNIX, SOCK_SEQPACKET, 0);
   if( rc < 0 )
     return -errno;
-
+  
   *socket_out = rc;
   return 0;
 }
@@ -35,6 +35,42 @@ int ef_shrub_socket_close_file(uintptr_t file)
   int rc = close(file);
   if( rc < 0 )
     return -errno;
+  return 0;
+}
+
+int ef_shrub_socket_bind(uintptr_t socket, const char* server_addr)
+{
+  struct sockaddr_un addr;
+  int path_len = strlen(server_addr);
+  int rc;
+
+  if( path_len >= sizeof(addr.sun_path) )
+    return -EINVAL;
+
+  addr.sun_family = AF_UNIX;
+  strcpy(addr.sun_path, server_addr);
+
+  rc = bind(socket, (struct sockaddr*)&addr, sizeof(addr));
+  if( rc < 0 )
+    return -errno;
+
+  return 0;
+}
+
+int ef_shrub_socket_listen(uintptr_t socket, int backlog)
+{
+  int rc = listen(socket, backlog);
+  if( rc < 0 )
+    return -errno;
+  return rc;
+}
+
+int ef_shrub_socket_accept(uintptr_t listen_socket, uintptr_t* socket_out)
+{
+  int rc = accept((int) listen_socket, NULL, NULL);
+  if( rc < 0 )
+    return -errno;
+  *socket_out = (uintptr_t) rc;
   return 0;
 }
 
