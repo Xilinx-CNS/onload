@@ -209,6 +209,12 @@ struct oof_manager {
    */
   unsigned     fm_hwports_no5tuple;
 
+  /* This mask tracks which hwports use shared RX queues. It's not strictly
+   * necessary, but allows assertions on how hwports are used on different
+   * code paths.
+   */
+  unsigned     fm_hwports_rx_shared;
+
   /* This mask tracks which hwports have been handled by
    * __oof_mcast_update_filters().
    */
@@ -226,6 +232,7 @@ struct oof_manager {
   unsigned     fm_hwports_mcast_replicate_capable_new;
   unsigned     fm_hwports_vlan_filters_new;
   unsigned     fm_hwports_no5tuple_new;
+  unsigned     fm_hwports_rx_shared_new;
 
   /* Queue of oof_cplane_update objects representing changes to control
    * plane.  They are queued temporarily to be applied in a workitem in
