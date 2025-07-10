@@ -1771,3 +1771,9 @@ CI_CFG_OPT("EF_SHRUB_CONTROLLER", shrub_controller_id ,ci_int32,
 "Spawn or join onto a shrub controller with the given shrub controller id. ",
            , ,-1, -1, EF_SHRUB_MAX_CONTROLLER, count)
 
+#define EF_SHRUB_DEFAULT_BUFFER_COUNT 4
+CI_CFG_OPT("EF_SHRUB_BUFFER_COUNT", shrub_buffer_count, ci_uint32,
+"Default value of superbufs that an onload client requests from "
+"a shrub controller. ",
+           , , EF_SHRUB_DEFAULT_BUFFER_COUNT, EF_SHRUB_DEFAULT_BUFFER_COUNT,
+           100000, count)

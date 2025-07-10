@@ -425,7 +425,7 @@ static int poll_socket(shrub_controller_config *config)
   int rc = 0;
   ssize_t recevied_bytes = 0;
   const int max_events = 1;
-  uint32_t buffer_count = EF_SHRUB_DEFAULT_BC;
+  uint32_t buffer_count = EF_SHRUB_DEFAULT_BUFFER_COUNT;
   cicp_hwport_mask_t hwport_mask = 0xffffffff;
   shrub_controller_request_t request;
   int ifindex = -1;
@@ -461,7 +461,7 @@ static int poll_socket(shrub_controller_config *config)
           }
         response_status = SHRUB_ERR_INCOMPATIBLE_VERSION;
       } else {
-        buffer_count = EF_SHRUB_DEFAULT_BC;
+        buffer_count = EF_SHRUB_DEFAULT_BUFFER_COUNT;
         hwport_mask = 0xffffffff;
         ifindex = -1;
 
@@ -596,9 +596,9 @@ int parse_interface(const char *arg, shrub_controller_config *config) {
     }
 
     buffer_count = atoi(buffer_str);
-    if ( buffer_count < EF_SHRUB_DEFAULT_BC ) {
+    if ( buffer_count < EF_SHRUB_DEFAULT_BUFFER_COUNT ) {
       ci_log("Error: shrub_controller invalid buffer count "
-        "must be at least %d.", EF_SHRUB_DEFAULT_BC);
+        "must be at least %d.", EF_SHRUB_DEFAULT_BUFFER_COUNT);
       return -EINVAL;
     }
   } else {
@@ -609,7 +609,7 @@ int parse_interface(const char *arg, shrub_controller_config *config) {
     }
 
     strcpy(iface, arg);
-    buffer_count = EF_SHRUB_DEFAULT_BC;
+    buffer_count = EF_SHRUB_DEFAULT_BUFFER_COUNT;
   }
 
   ifindex = if_nametoindex(iface);

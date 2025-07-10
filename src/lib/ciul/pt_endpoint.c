@@ -468,6 +468,7 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   int q_label;
   int state_bytes;
   int shrub_controller_id;
+  int shrub_buffer_count;
 
   vi_flags |= get_vi_flags_from_env();
 
@@ -490,6 +491,12 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
     shrub_controller_id = atoi(s);
   } else {
     shrub_controller_id = -1;
+  }
+
+  if( (s = getenv("EF_SHRUB_BUFFER_COUNT")) ) {
+    shrub_buffer_count = atoi(s);
+  } else {
+    shrub_buffer_count = EF_SHRUB_DEFAULT_BUFFER_COUNT;
   }
 
   EF_VI_BUG_ON((evq == NULL) != (evq_capacity != 0));
@@ -650,7 +657,7 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
           shrub_adapter_send_request,
           shrub_controller_id,
           pd->pd_intf_name,
-          EF_SHRUB_DEFAULT_BC);
+          shrub_buffer_count);
         if ( rc < 0 ) {
           LOGVV(ef_log("%s: failed to populate shrub request %d", __FUNCTION__, rc));
           goto fail5;

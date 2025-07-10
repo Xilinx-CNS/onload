@@ -1339,6 +1339,10 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
 
   if( (s = getenv("EF_SHRUB_CONTROLLER")) )
     opts->shrub_controller_id = atoi(s);
+
+  if( (s = getenv("EF_SHRUB_BUFFER_COUNT")) )
+    opts->shrub_buffer_count = atoi(s);
+
 }
 
 
@@ -2106,7 +2110,7 @@ static int oo_init_shrub(ci_netif* ni, ef_vi* vi, ci_hwport_id_t hw_port, int ni
         oo_send_shrub_request,
         NI_OPTS(ni).shrub_controller_id,
         hw_port,
-        EF_SHRUB_DEFAULT_BC
+        NI_OPTS(ni).shrub_buffer_count
       );
       if ( shrub_socket_id < 0 ) {
         rc = shrub_socket_id;
