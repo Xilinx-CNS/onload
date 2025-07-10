@@ -3,6 +3,8 @@
 
 #include "cp_intf_ver.h"
 
+#include <stdint.h>
+#include <stddef.h>
 #include <assert.h>
 #include <ci/compat.h>
 #include <ci/tools/log.h>
@@ -13,6 +15,7 @@
 #include <errno.h>
 #include <etherfabric/efct_vi.h>
 #include <etherfabric/pd.h>
+#include <etherfabric/internal/shrub_socket.h>
 #include <etherfabric/shrub_server.h>
 #include <etherfabric/shrub_shared.h>
 #include <etherfabric/vi.h>
@@ -42,6 +45,7 @@ static volatile sig_atomic_t call_shrub_dump = 0;
 
 #define DEFAULT_BUFFER_SIZE 1024 * 1024
 
+#define INVALID_SOCKET_FD ((uintptr_t)-1)
 #define EF_SHRUB_CONFIG_SOCKET_LOCK EF_SHRUB_NEGOTIATION_SOCKET "_lock"
 #define EF_SHRUB_CONFIG_SOCKET_LOCK_LEN (EF_SHRUB_SOCKET_DIR_LEN + \
                                          sizeof(EF_SHRUB_CONFIG_SOCKET_LOCK))
@@ -72,7 +76,7 @@ typedef struct shrub_if_config_s
 typedef struct
 {
   int interface_token;
-  int config_socket_fd;
+  uintptr_t config_socket_fd;
   int epoll_fd;
   int controller_id;
   int config_socket_lock_fd;
@@ -325,60 +329,50 @@ static int shrub_dump(shrub_controller_config *config, const char *file_name)
   return rc;
 }
 
-static int create_onload_config_socket(const char *socket_path, int epoll_fd)
+static int create_onload_config_socket(const char *socket_path, uintptr_t* config_socket_fd, int epoll_fd)
 {
   int rc = 0;
-  int config_socket_fd = 0;
-  struct sockaddr_un addr = {0};
   struct epoll_event event;
 
   unlink(socket_path);
 
-  config_socket_fd = socket(AF_UNIX, SOCK_SEQPACKET, 0);
-  if ( config_socket_fd == -1 ) {
-    rc = -errno;
+  rc = ef_shrub_socket_open(config_socket_fd);
+  if ( rc < 0 ) {
     ci_log("Error: shrub_controller onload handshake socket config failed");
     return rc;
   }
 
-  memset(&addr, 0, sizeof(addr));
-  addr.sun_family = AF_UNIX;
-  strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
-  addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
-
-  if ( (bind(config_socket_fd,
-             (struct sockaddr *)&addr,
-             sizeof(addr)) == -1) ) {
-    rc = -errno;
+  rc = ef_shrub_socket_bind(*config_socket_fd, socket_path);
+  if ( rc < 0 ) {
     ci_log("Error: shrub_controller onload socket bind failed");
     goto cleanup_socket;
   }
 
-  if ( listen(config_socket_fd, 5) == -1 ) {
-    rc = -errno;
-    ci_log("Error: shrub_controller onload failed to listen on onload socket");
+  rc = ef_shrub_socket_listen(*config_socket_fd, 5);
+  if ( rc < 0 ) {
+    ci_log("Error: shrub_controller onload socket listen failed");
     goto cleanup_socket;
-  }
+  } 
 
   /* Add config_socket_fd to the epoll instance */
-  event.data.fd = config_socket_fd;
+  event.data.fd = *config_socket_fd;
   event.events = EPOLLIN;
-  if ( epoll_ctl(epoll_fd, EPOLL_CTL_ADD, config_socket_fd, &event) == -1 ) {
+  if ( epoll_ctl(epoll_fd, EPOLL_CTL_ADD, *config_socket_fd, &event) == -1 ) {
     rc = -errno;
     ci_log("Error: shrub_controller epoll_ctl failed to add config_socket_fd");
     goto cleanup_socket;
   }
 
-  return config_socket_fd;
+  return rc;
 
 cleanup_socket:
-  close(config_socket_fd);
+  ef_shrub_socket_close_socket(*config_socket_fd);
   return rc;
 }
 
 static int process_create_command(shrub_controller_config *config,
                                   cicp_hwport_mask_t hw_port, int ifindex,
-                                  uint32_t buffer_count, int client_fd)
+                                  uint32_t buffer_count, uintptr_t client_fd)
 {
   int rc = search_for_existing_server(config, hw_port);
 
@@ -423,7 +417,6 @@ static int process_create_command(shrub_controller_config *config,
 static int poll_socket(shrub_controller_config *config)
 {
   int rc = 0;
-  ssize_t recevied_bytes = 0;
   const int max_events = 1;
   uint32_t buffer_count = EF_SHRUB_DEFAULT_BUFFER_COUNT;
   cicp_hwport_mask_t hwport_mask = 0xffffffff;
@@ -431,88 +424,84 @@ static int poll_socket(shrub_controller_config *config)
   int ifindex = -1;
   struct epoll_event events[max_events];
   int response_status = 0;
-  int client_fd = -1;
+  uintptr_t client_fd = 0;
   int i;
   int num_events = epoll_wait(config->epoll_fd, events, max_events, 0);
 
   for (i = 0; i < num_events; ++i) {
     if ( events[i].data.fd == config->config_socket_fd ) {
-      client_fd = accept(config->config_socket_fd, NULL, NULL);
-      if ( client_fd == -1 ) {
-        rc = -errno;
+      rc = ef_shrub_socket_accept(config->config_socket_fd, &client_fd);
+      if ( rc < 0 ) {
         if ( config->debug_mode )
           ci_log("Error: shrub_controller calling accept on "
                  "the config socket failed");
         return rc;
       }
 
-      response_status = 0;
-      recevied_bytes = recv(client_fd, &request, sizeof(request), 0);
-      if ( recevied_bytes == -1 ) {
-        response_status = -errno;
-      } else if ( recevied_bytes != sizeof(request) ) {
-        response_status = -ENOMEM;
-      } else if ( request.controller_version != EF_SHRUB_VERSION ) {
+      response_status = ef_shrub_socket_recv(client_fd, &request, sizeof(request));
+      
+      if ( response_status == 0 ) {
+        if ( request.controller_version != EF_SHRUB_VERSION ) {
           if ( config->debug_mode ) {
             ci_log("Error: shrub_controller being called from an "
                    "incompatible client! request version %d, "
                    "expected version %d ",
                    request.controller_version, EF_SHRUB_VERSION);
           }
-        response_status = SHRUB_ERR_INCOMPATIBLE_VERSION;
-      } else {
-        buffer_count = EF_SHRUB_DEFAULT_BUFFER_COUNT;
-        hwport_mask = 0xffffffff;
-        ifindex = -1;
+          response_status = SHRUB_ERR_INCOMPATIBLE_VERSION;
+        } else {
+          buffer_count = EF_SHRUB_DEFAULT_BUFFER_COUNT;
+          hwport_mask = 0xffffffff;
+          ifindex = -1;
 
-        switch (request.command)
-        {
-        case EF_SHRUB_CONTROLLER_DESTROY:
-          remove_and_stop_interface(config, request.destroy.shrub_token_id);
-          response_status = 0;
-          break;
-        case EF_SHRUB_CONTROLLER_CREATE_IFINDEX:
-          ifindex = request.create_ifindex.ifindex;
-          hwport_mask = convert_ifindex_to_hwport(config, ifindex);
-          buffer_count = request.create_ifindex.buffer_count;
-          response_status = process_create_command(
-            config, hwport_mask, ifindex, buffer_count, client_fd
-          );
-          break;
-        case EF_SHRUB_CONTROLLER_CREATE_HWPORT:
-          hwport_mask = request.create_hwport.hw_port;
-          ifindex = convert_hwport_to_ifindex(config, hwport_mask);
-          buffer_count = request.create_hwport.buffer_count;
-          response_status = process_create_command(
-            config, hwport_mask, ifindex, buffer_count, client_fd
-          );
-          break;
-        case EF_SHRUB_CONTROLLER_DUMP:
-          shrub_dump(config, request.dump.file_name);
-          response_status = 0;
-          break;
-        default:
-          if ( config->debug_mode ) {
-            ci_log("Info: shrub_controller: An unknown command was passed via "
-                   "the config socket, command %d", request.command);
+          switch (request.command)
+          {
+          case EF_SHRUB_CONTROLLER_DESTROY:
+            remove_and_stop_interface(config, request.destroy.shrub_token_id);
+            response_status = 0;
+            break;
+          case EF_SHRUB_CONTROLLER_CREATE_IFINDEX:
+            ifindex = request.create_ifindex.ifindex;
+            hwport_mask = convert_ifindex_to_hwport(config, ifindex);
+            buffer_count = request.create_ifindex.buffer_count;
+            response_status = process_create_command(
+              config, hwport_mask, ifindex, buffer_count, client_fd
+            );
+            break;
+          case EF_SHRUB_CONTROLLER_CREATE_HWPORT:
+            hwport_mask = request.create_hwport.hw_port;
+            ifindex = convert_hwport_to_ifindex(config, hwport_mask);
+            buffer_count = request.create_hwport.buffer_count;
+            response_status = process_create_command(
+              config, hwport_mask, ifindex, buffer_count, client_fd
+            );
+            break;
+          case EF_SHRUB_CONTROLLER_DUMP:
+            shrub_dump(config, request.dump.file_name);
+            response_status = 0;
+            break;
+          default:
+            if ( config->debug_mode ) {
+              ci_log("Info: shrub_controller: An unknown command was passed via "
+                    "the config socket, command %d", request.command);
+            }
+            response_status = -1;
+            break;
           }
-          response_status = -1;
-          break;
         }
       }
 
-      rc = send(client_fd, &response_status, sizeof(int), 0);
-      if ( rc == -1 ) {
-        rc = -errno;
+      rc = ef_shrub_socket_send(client_fd, &response_status, sizeof(int));
+      if ( rc < 0 ) {
         if ( config->debug_mode ) {
           ci_log("Error: shrub_controller: Failed to send "
                  "response_status (%d) to the client",
                  response_status);
         }
-        close(client_fd);
+        ef_shrub_socket_close_socket(client_fd);
         return rc;
       }
-      close(client_fd);
+      ef_shrub_socket_close_socket(client_fd);
     }
   }
   return rc;
@@ -521,8 +510,8 @@ static int poll_socket(shrub_controller_config *config)
 static void cleanup_config_socket(shrub_controller_config *config)
 {
   close(config->epoll_fd);
-  if ( config->config_socket_fd != -1 ) {
-    close(config->config_socket_fd);
+  if ( config->config_socket_fd != INVALID_SOCKET_FD ) {
+    ef_shrub_socket_close_socket(config->config_socket_fd);
     unlink(config->config_socket);
     if ( config->debug_mode )
       ci_log("Info: shrub_controller socket closed and cleaning up! ");
@@ -540,11 +529,14 @@ static int create_config_socket(shrub_controller_config *config)
     return rc;
   }
 
-  config->config_socket_fd =
-      create_onload_config_socket(config->config_socket, config->epoll_fd);
-  if ( config->config_socket_fd < 0 ) {
+  rc = create_onload_config_socket(
+        config->config_socket,
+        &config->config_socket_fd,
+        config->epoll_fd);
+  if ( rc < 0 ) {
     close(config->epoll_fd);
-    return config->config_socket_fd;
+    ci_log("Error: shrub_controller failed to create config socket");
+    return rc;
   }
 
   chmod(config->config_socket, 0666);
@@ -596,11 +588,6 @@ int parse_interface(const char *arg, shrub_controller_config *config) {
     }
 
     buffer_count = atoi(buffer_str);
-    if ( buffer_count < EF_SHRUB_DEFAULT_BUFFER_COUNT ) {
-      ci_log("Error: shrub_controller invalid buffer count "
-        "must be at least %d.", EF_SHRUB_DEFAULT_BUFFER_COUNT);
-      return -EINVAL;
-    }
   } else {
     if (strnlen(arg, IFNAMSIZ) >= IFNAMSIZ) {
       ci_log("Error: shrub_controller invalid interface name passed as input. "
@@ -628,7 +615,7 @@ static void tear_down_servers(shrub_controller_config *config)
     next_interface = current_interface->next;
 
     if ( current_interface->client_fd >= 0 )
-      close(current_interface->client_fd);
+      ef_shrub_socket_close_socket(current_interface->client_fd);
 
     if ( current_interface->server_started )
       shrub_server_fini(current_interface);
@@ -841,6 +828,7 @@ int main(int argc, char *argv[])
   int rc = 0;
   int option;
   shrub_controller_config config = {0};
+  config.config_socket_fd = INVALID_SOCKET_FD;
   config.interface_token = 1;
   config.controller_id = 0;
 
