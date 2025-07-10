@@ -125,12 +125,12 @@ int shrub_spawn_server(char* controller_id)
 int oo_shrub_spawn_server(ci_private_t *priv, void *arg) {
   int rc;
   shrub_ioctl_data_t *shrub_data;
+  char controller_id[EF_SHRUB_MAX_DIGITS];
   
   if ( !priv || !arg ) 
     return -EINVAL;
   
   shrub_data = (shrub_ioctl_data_t *) arg;
-  char controller_id[EF_SHRUB_MAX_DIGITS];
 
   if ( shrub_data->controller_id > EF_SHRUB_MAX_CONTROLLER ) {
     LOG_E(ci_log("%s: ERROR: controller_id out of range: %d\n",
