@@ -50,6 +50,14 @@ static volatile sig_atomic_t call_shrub_dump = 0;
 #define EF_SHRUB_CONFIG_SOCKET_LOCK_LEN (EF_SHRUB_SOCKET_DIR_LEN + \
                                          sizeof(EF_SHRUB_CONFIG_SOCKET_LOCK))
 
+struct shrub_controller_stats
+{
+  uint64_t controller_accept_failures;
+  uint64_t controller_response_failures;
+  uint64_t controller_incompatible_clients;
+  uint64_t controller_failed_to_neg_client;
+};
+
 struct shrub_controller_vi
 {
   ef_vi vi;
@@ -88,6 +96,7 @@ typedef struct
   char log_dir[EF_SHRUB_LOG_LEN];
   char config_socket[EF_SHRUB_NEGOTIATION_SOCKET_LEN];
   char config_socket_lock[EF_SHRUB_CONFIG_SOCKET_LOCK_LEN];
+  struct shrub_controller_stats controller_stats;
 } shrub_controller_config;
 
 static void usage(void)
@@ -314,6 +323,17 @@ static int shrub_dump(shrub_controller_config *config, const char *file_name)
   fprintf(file, "  - Controller Dir: %s\n", config->controller_dir);
   fprintf(file, "  - Config Socket: %s\n", config->config_socket);
 
+  fprintf(file, "\nController Statistics:\n");
+  fprintf(file, "  - Client Negotiation Failures: %lu\n",
+          config->controller_stats.controller_failed_to_neg_client);
+  fprintf(file, "  - Accept Failures: %lu\n",
+          config->controller_stats.controller_accept_failures);
+  fprintf(file, "  - Response Send Failures: %lu\n",
+          config->controller_stats.controller_response_failures);
+  fprintf(file, "  - Incompatible clients detected: %lu\n",
+          config->controller_stats.controller_incompatible_clients);
+
+
   server_config = config->server_config_head;
   while ( server_config != NULL ) {
     fprintf(file, "\nShrub If Config Details:\n");
@@ -432,10 +452,11 @@ static int poll_socket(shrub_controller_config *config)
     if ( events[i].data.fd == config->config_socket_fd ) {
       rc = ef_shrub_socket_accept(config->config_socket_fd, &client_fd);
       if ( rc < 0 ) {
+        config->controller_stats.controller_accept_failures++;
         if ( config->debug_mode )
           ci_log("Error: shrub_controller calling accept on "
                  "the config socket failed");
-        return rc;
+        continue;
       }
 
       response_status = ef_shrub_socket_recv(client_fd, &request, sizeof(request));
@@ -449,6 +470,7 @@ static int poll_socket(shrub_controller_config *config)
                    request.controller_version, EF_SHRUB_VERSION);
           }
           response_status = SHRUB_ERR_INCOMPATIBLE_VERSION;
+          config->controller_stats.controller_incompatible_clients++;
         } else {
           buffer_count = EF_SHRUB_DEFAULT_BUFFER_COUNT;
           hwport_mask = 0xffffffff;
@@ -458,7 +480,6 @@ static int poll_socket(shrub_controller_config *config)
           {
           case EF_SHRUB_CONTROLLER_DESTROY:
             remove_and_stop_interface(config, request.destroy.shrub_token_id);
-            response_status = 0;
             break;
           case EF_SHRUB_CONTROLLER_CREATE_IFINDEX:
             ifindex = request.create_ifindex.ifindex;
@@ -478,7 +499,6 @@ static int poll_socket(shrub_controller_config *config)
             break;
           case EF_SHRUB_CONTROLLER_DUMP:
             shrub_dump(config, request.dump.file_name);
-            response_status = 0;
             break;
           default:
             if ( config->debug_mode ) {
@@ -489,17 +509,24 @@ static int poll_socket(shrub_controller_config *config)
             break;
           }
         }
+      } 
+
+      if ( response_status < 0 ) {
+        config->controller_stats.controller_failed_to_neg_client++;
+        if ( config->debug_mode ) {
+          ci_log("Error: shrub_controller failed to process an event"
+                 " from the client, response_status %d", response_status);
+        }
       }
 
       rc = ef_shrub_socket_send(client_fd, &response_status, sizeof(int));
       if ( rc < 0 ) {
+        config->controller_stats.controller_response_failures++;
         if ( config->debug_mode ) {
           ci_log("Error: shrub_controller: Failed to send "
                  "response_status (%d) to the client",
                  response_status);
         }
-        ef_shrub_socket_close_socket(client_fd);
-        return rc;
       }
       ef_shrub_socket_close_socket(client_fd);
     }
