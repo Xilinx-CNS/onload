@@ -5,12 +5,12 @@
 
 #include "ef_vi_internal.h"
 #include "shrub_client.h"
-#include "shrub_socket.h"
 #include "logging.h"
 
 /* TODO move CI_EFCT_MAX_SUPERBUFS somewhere more sensible, or remove
  * dependencies on it */
 #include <etherfabric/internal/efct_uk_api.h>
+#include <etherfabric/internal/shrub_socket.h>
 
 struct efct_ubufs_rxq
 {

@@ -2,10 +2,10 @@
 /* X-SPDX-Copyright-Text: (c) Copyright 2025 Advanced Micro Devices, Inc. */
 
 #include "ef_vi_internal.h"
-#include "shrub_socket.h"
 #include "shrub_client.h"
 
 #include <stddef.h>
+#include <etherfabric/internal/shrub_socket.h>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <sys/un.h>

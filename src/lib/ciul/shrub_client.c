@@ -3,7 +3,7 @@
 
 #include "ef_vi_internal.h"
 #include "shrub_client.h"
-#include "shrub_socket.h"
+#include <etherfabric/internal/shrub_socket.h>
 
 /* Accessors for mapped memory */
 static const ef_shrub_buffer_id*
