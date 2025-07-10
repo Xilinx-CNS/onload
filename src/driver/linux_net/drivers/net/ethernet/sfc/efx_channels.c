@@ -944,68 +944,6 @@ void efx_clear_interrupt_affinity(struct efx_nic *efx)
 #endif /* EFX_NOT_UPSTREAM */
 #endif /* CONFIG_SMP */
 
-#ifdef EFX_USE_IRQ_NOTIFIERS
-static void efx_irq_release(struct kref *ref)
-{
-	struct efx_channel *channel = container_of(ref, struct efx_channel,
-						   irq_affinity.notifier.kref);
-
-	complete(&channel->irq_affinity.complete);
-}
-
-static void efx_irq_notify(struct irq_affinity_notify *this,
-			   const cpumask_t *mask)
-{
-	struct efx_channel *channel = container_of(this, struct efx_channel,
-						   irq_affinity.notifier);
-
-	efx_set_xps_queue(channel, mask);
-
-	efx_set_tph_hint(channel, cpumask_first(mask));
-}
-
-static void efx_set_affinity_notifier(struct efx_channel *channel)
-{
-	int rc;
-
-	init_completion(&channel->irq_affinity.complete);
-	channel->irq_affinity.notifier.notify = efx_irq_notify;
-	channel->irq_affinity.notifier.release = efx_irq_release;
-	rc = irq_set_affinity_notifier(channel->irq,
-				       &channel->irq_affinity.notifier);
-	if (rc)
-		netif_warn(channel->efx, probe, channel->efx->net_dev,
-			   "Failed to set irq notifier for IRQ %d\n",
-			   channel->irq);
-}
-
-static void efx_clear_affinity_notifier(struct efx_channel *channel)
-{
-	/* Don't clear if it hasn't been set */
-	if (!channel->irq_affinity.notifier.notify)
-		return;
-	irq_set_affinity_notifier(channel->irq, NULL);
-	wait_for_completion(&channel->irq_affinity.complete);
-	channel->irq_affinity.notifier.notify = NULL;
-}
-
-void efx_register_irq_notifiers(struct efx_nic *efx)
-{
-	struct efx_channel *channel;
-
-	efx_for_each_channel(channel, efx)
-		efx_set_affinity_notifier(channel);
-}
-
-void efx_unregister_irq_notifiers(struct efx_nic *efx)
-{
-	struct efx_channel *channel;
-
-	efx_for_each_channel(channel, efx)
-		efx_clear_affinity_notifier(channel);
-}
-#endif
-
 /***************
  * EVENT QUEUES
  ***************/

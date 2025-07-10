@@ -92,7 +92,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.1.1.1003"
+#define EFX_DRIVER_VERSION	"6.1.1.1004"
 #endif
 
 #ifdef DEBUG
@@ -113,10 +113,6 @@
 #endif
 #define EFX_USE_FAKE_VLAN_TX_ACCEL 1
 #endif
-#endif
-
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SMP) && defined(CONFIG_XPS) && defined(EFX_HAVE_IRQ_NOTIFIERS)
-#define EFX_USE_IRQ_NOTIFIERS
 #endif
 
 /**************************************************************************
@@ -849,9 +845,6 @@ struct efx_rss_context {
  * @sync_timestamp_major: Major part of the last ptp sync event
  * @sync_timestamp_minor: Minor part of the last ptp sync event
  * @irq_mem_node: Memory NUMA node of interrupt
- * @irq_affinity: IRQ affinity notifier context
- * @irq_affinity.notifier: IRQ notifier for changes to irq affinity
- * @irq_affinity.complete: IRQ notifier completion structure
  *
  * A channel comprises an event queue, at least one TX queue, at least
  * one RX queue, and an associated tasklet for processing the event
@@ -941,13 +934,6 @@ struct efx_channel {
 #endif
 
 	int irq_mem_node;
-
-#ifdef EFX_USE_IRQ_NOTIFIERS
-	struct {
-		struct irq_affinity_notify notifier;
-		struct completion complete;
-	} irq_affinity;
-#endif
 };
 
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
@@ -2295,6 +2281,7 @@ struct mae_mport_desc;
  *	features implemented in hardware
  * @mcdi_max_ver: Maximum MCDI version supported
  * @hwtstamp_filters: Mask of hardware timestamp filter types supported
+ * @has_fw_variants: NIC supports multiple datapath firmware variants
  */
 struct efx_nic_type {
 	bool is_vf;
@@ -2574,6 +2561,7 @@ struct efx_nic_type {
 	netdev_features_t offload_features;
 	int mcdi_max_ver;
 	u32 hwtstamp_filters;
+	bool has_fw_variants;
 };
 
 /**************************************************************************

@@ -1690,10 +1690,10 @@ void efx_mcdi_print_fwver(struct efx_nic *efx, char *buf, size_t len)
 			   le16_to_cpu(ver_words[2]),
 			   le16_to_cpu(ver_words[3]));
 
-	/* EF10 may have multiple datapath firmware variants within a
+	/* EF10 and X4 may have multiple datapath firmware variants within a
 	 * single version.  Report which variants are running.
 	 */
-	if (efx_nic_rev(efx) == EFX_REV_HUNT_A0) {
+	if (efx->type->has_fw_variants) {
 		MCDI_DECLARE_BUF(capbuf, MC_CMD_GET_CAPABILITIES_OUT_LEN);
 		unsigned int rx_id, tx_id;
 		size_t caplen;

@@ -2526,27 +2526,22 @@ static int efx_phc_gettimex64(struct ptp_clock_info *ptp, struct timespec64 *ts,
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_PTP_OUT_READ_NIC_TIME_LEN);
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_PTP_IN_READ_NIC_TIME_LEN);
 	struct efx_nic *efx = ptp_data->efx;
-	struct system_time_snapshot snap;
 	ktime_t kt;
 	int rc;
 
 	MCDI_SET_DWORD(inbuf, PTP_IN_OP, MC_CMD_PTP_OP_READ_NIC_TIME);
 	MCDI_SET_DWORD(inbuf, PTP_IN_PERIPH_ID, 0);
 
-	if (sts) {
-		ktime_get_snapshot(&snap);
-		sts->pre_ts = ktime_to_timespec64(snap.real);
-	}
+	if (sts)
+		ptp_read_system_prets(sts);
 
 	rc = efx_mcdi_rpc(efx, MC_CMD_PTP, inbuf, sizeof(inbuf),
 			  outbuf, sizeof(outbuf), NULL);
 	if (rc)
 		return rc;
 
-	if (sts) {
-		ktime_get_snapshot(&snap);
-		sts->post_ts = ktime_to_timespec64(snap.real);
-	}
+	if (sts)
+		ptp_read_system_postts(sts);
 
 	kt = ptp_data->nic_to_kernel_time(
 		MCDI_DWORD(outbuf, PTP_OUT_READ_NIC_TIME_MAJOR),

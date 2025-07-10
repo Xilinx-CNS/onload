@@ -6319,6 +6319,7 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 			    1 << HWTSTAMP_FILTER_ALL,
 	.check_caps = ef10_check_caps,
 	.rx_recycle_ring_size = efx_ef10_recycle_ring_size,
+	.has_fw_variants = true,
 };
 
 const struct efx_nic_type efx_x4_vf_nic_type = {
@@ -6482,6 +6483,7 @@ const struct efx_nic_type efx_x4_vf_nic_type = {
 	.check_caps = ef10_check_caps,
 	.rx_recycle_ring_size = efx_ef10_recycle_ring_size,
 	.has_dynamic_sensors = ef10_has_dynamic_sensors,
+	.has_fw_variants = true,
 };
 #endif
 
@@ -6687,6 +6689,7 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 			    1 << HWTSTAMP_FILTER_ALL,
 	.check_caps = ef10_check_caps,
 	.rx_recycle_ring_size = efx_ef10_recycle_ring_size,
+	.has_fw_variants = true,
 };
 
 const struct efx_nic_type efx_x4_nic_type = {
@@ -6892,5 +6895,6 @@ const struct efx_nic_type efx_x4_nic_type = {
 	.check_caps = ef10_check_caps,
 	.rx_recycle_ring_size = efx_ef10_recycle_ring_size,
 	.has_dynamic_sensors = ef10_has_dynamic_sensors,
+	.has_fw_variants = true,
 };
 
