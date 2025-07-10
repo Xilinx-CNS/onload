@@ -2477,6 +2477,7 @@ static int cplane_server_path_get(char* buffer,
   path = cp_get_server_path();
   /* The magic 4096 is documented in linux/moduleparam.h. */
   strncpy(buffer, path, 4096);
+  buffer[4095] = '\0';
   len = strnlen(buffer, 4096);
   spin_unlock(&cp_lock);
 
