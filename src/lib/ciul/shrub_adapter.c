@@ -3,10 +3,12 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <stdint.h>
+#include <stddef.h>
 #include <etherfabric/shrub_adapter.h>
 #include <etherfabric/shrub_shared.h>
+#include <etherfabric/internal/shrub_socket.h>
 #include <net/if.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -56,49 +58,37 @@ static int attempt_to_wait_for_controller(int controller_id) {
 int shrub_adapter_send_request(int controller_id,
                                shrub_controller_request_t *request) {
   int rc;
-  ssize_t received_bytes;
-  int client_fd;
-  struct sockaddr_un addr;
-
+  int received_bytes = 0;
+  uintptr_t client_fd = 0;
   char socket_path[EF_SHRUB_NEGOTIATION_SOCKET_LEN];
+
   rc = snprintf(socket_path, sizeof(socket_path), EF_SHRUB_CONTROLLER_PATH_FORMAT
                 "%s", EF_SHRUB_SOCK_DIR_PATH, controller_id,
                 EF_SHRUB_NEGOTIATION_SOCKET);
   if ( rc < 0 || rc >= sizeof(socket_path) )
     return -EINVAL;
 
-  client_fd = socket(AF_UNIX, SOCK_SEQPACKET, 0);
-  if ( client_fd == -1 )
-    return -errno;
-
-  memset(&addr, 0, sizeof(addr));
-  addr.sun_family = AF_UNIX;
-  strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
-  addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
-
-  rc = connect(client_fd, (struct sockaddr *)&addr, sizeof(addr));
-  if ( rc < 0 ) {
-    rc = -errno;
+  rc = ef_shrub_socket_open(&client_fd);
+  if ( rc < 0 )
     goto clean_exit;
-  }
 
-  rc = send(client_fd, request, sizeof(*request), 0);
-  if ( rc == -1 ) {
-    rc = -errno;
+  rc = ef_shrub_socket_connect(client_fd, socket_path);
+  if ( rc < 0 )
     goto clean_exit;
-  }
 
-  received_bytes = recv(client_fd, &rc, sizeof(int), 0);
-  if ( received_bytes == -1 ) {
-    rc = -errno;
+  rc = ef_shrub_socket_send(client_fd, request, sizeof(*request));
+  if ( rc < 0 )
     goto clean_exit;
-  } else if ( received_bytes != sizeof(int) ) {
-    rc = -ENOMEM;
+
+  rc = ef_shrub_socket_recv(client_fd, &received_bytes, sizeof(int));
+  if ( rc < 0 )
     goto clean_exit;
-  }
+
+  rc = received_bytes;
 
 clean_exit:
-  close(client_fd);
+  if ( client_fd != 0 )
+    ef_shrub_socket_close_socket(client_fd);
   return rc;
 }
 
