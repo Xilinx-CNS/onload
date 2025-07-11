@@ -759,8 +759,12 @@ typedef struct {
   uint32_t sbseq;
   uint32_t superbuf_pkts;
   unsigned config_generation;
+
   /** Hardware queue ID */
   int qid;
+
+  /** Whether this RXQ generates RX events or if these are suppressed. */
+  bool generates_events;
 } ef_vi_efct_rxq_state;
 
 /*! \brief State of RX descriptor ring
@@ -786,6 +790,11 @@ typedef struct {
   uint64_t efct_active_qs;                         /* efct only */
   ef_vi_efct_rxq_ptr rxq_ptr[EF_VI_MAX_EFCT_RXQS]; /* efct only */
   ef_vi_efct_rxq_state efct_state[EF_VI_MAX_EFCT_RXQS]; /* efct only */
+
+  /** Number of RX packet slots available in an EVQ. Used to limit reposting of
+   * superbufs which may otherwise cause an EVQ overflow. We only care about
+   * the value here when efct_state[i].generates_events. */
+  int32_t n_evq_rx_pkts; /* efct only */
 } ef_vi_rxq_state;
 
 /*! \brief State of event queue

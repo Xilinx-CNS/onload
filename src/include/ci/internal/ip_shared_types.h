@@ -904,9 +904,12 @@ typedef struct {
 #define CI_EPLOCK_NETIF_NEED_SOCK_BUFS     0x0002000000000000ULL
   /* if CI_EPLOCK_NETIF_NEED_POLL did nothing then prime */
 #define CI_EPLOCK_NETIF_PRIME_IF_IDLE      0x0000800000000000ULL
+  /* we have just allocated a new EFCT RXQ and need to perform some accounting
+   * to update the number of packets to enable rx buffer posting */
+#define CI_EPLOCK_NETIF_RX_ACCOUNTING      0x0000400000000000ULL
 
   /* mask for the above flags that must be handled before dropping lock */
-# define CI_EPLOCK_NETIF_UNLOCK_FLAGS      0xff3b800000000000ULL
+# define CI_EPLOCK_NETIF_UNLOCK_FLAGS      0xff3bc00000000000ULL
 
   /* these flags can be handled in UL */
 #define CI_EPLOCK_NETIF_UL_COMMON_MASK \
@@ -1095,6 +1098,10 @@ struct ci_netif_state_s {
    * interfaces have deferred their priming due to lock contention.
    */
   ci_uint32             evq_prime_deferred;
+
+  /* This tracks which interfaces have had an EFCT RXQ allocated, but need
+   * the stack lock to update n_evq_rx_pkts in a VI's RXQ state. */
+  ci_atomic_t           efct_rxq_deferred_superbufs[CI_CFG_MAX_INTERFACES];
 
   /* hwports accelerated by the stack */
   cicp_hwport_mask_t    tx_hwport_mask;

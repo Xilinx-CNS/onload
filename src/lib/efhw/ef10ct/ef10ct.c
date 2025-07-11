@@ -1246,6 +1246,9 @@ out_good:
   ef10ct->rxq[rxq_num].ref_count++;
   params->rxq->qid = rxq_num;
   params->rxq->shared_evq = !real_evq;
+  /* We rely upon this assumption to determine if an efct RXQ generates events
+   * and thus know whether RX accounting is required to avoid EVQ overflow. */
+  EFHW_ASSERT(params->rxq->shared_evq == suppress_events);
 out_locked:
   mutex_unlock(&ef10ct->rxq[rxq_num].bind_lock);
   return rc;

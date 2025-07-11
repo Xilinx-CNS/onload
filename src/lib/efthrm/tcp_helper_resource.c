@@ -1058,6 +1058,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
     int qix;
     int rc;
     int hugepages = 0;
+    int superbufs;
 
     /* FIXME ON-16391 we need some way to determine which queues need shrub connections.
      * For testing purposes, use the EF_LLCT_TEST_SHRUB option. */
@@ -1090,6 +1091,27 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
       return rc;
     }
 
+    /* TODO: ON-16824: get this working with the ulhelper build */
+#if ! CI_CFG_UL_INTERRUPT_HELPER
+    efct_get_rxq_state(vi, qix)->generates_events =
+      ! efrm_rxq_get_hw(trs->nic[intf_i].thn_efct_rxq[qix])->shared_evq;
+
+    /* Because we're not guaranteed to have the netif lock at this point, we
+     * defer updating n_evq_rx_pkts until the next time the netif lock is
+     * unlocked. */
+    superbufs = hugepages * CI_EFCT_SUPERBUFS_PER_PAGE;
+    ci_atomic_add(&trs->netif.state->efct_rxq_deferred_superbufs[intf_i],
+                  superbufs * efct_get_rxq_state(vi, qix)->generates_events);
+    if( efab_tcp_helper_netif_lock_or_set_flags(trs,
+                                                OO_TRUSTED_LOCK_RX_ACCOUNTING,
+                                                CI_EPLOCK_NETIF_RX_ACCOUNTING,
+                                                0) ) {
+      ef_eplock_holder_set_single_flag(&trs->netif.state->lock,
+                                       CI_EPLOCK_NETIF_RX_ACCOUNTING);
+      efab_tcp_helper_netif_unlock(trs, 0);
+    }
+#endif
+
     if( shrub ) {
       ci_log("%s: using shrub for queue %d", __func__, rxq);
       rc = efct_ubufs_shared_attach_internal(vi, qix, rxq, vi->efct_rxqs.q[qix].superbufs);
@@ -1101,7 +1123,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
       }
     }
     else if( vi->nic_type.arch == EF_VI_ARCH_EF10CT ) {
-      int pg, sb, superbufs = hugepages * CI_EFCT_SUPERBUFS_PER_PAGE;
+      int pg, sb;
       const int pg_per_sb = EFCT_RX_SUPERBUF_BYTES / EFHW_NIC_PAGE_SIZE;
       ef_addr* dma_addrs;
 
@@ -7608,6 +7630,23 @@ tcp_helper_unlock_prime(tcp_helper_resource_t* thr)
   }
 }
 
+static inline void
+tcp_helper_handle_deferred_superbuf_init(tcp_helper_resource_t* thr)
+{
+  const uint64_t pkts_per_superbuf = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
+  ci_netif* ni = &thr->netif;
+  int intf_i;
+
+  OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
+    ci_atomic_t *atomic = &ni->state->efct_rxq_deferred_superbufs[intf_i];
+    ef_vi* vi = ci_netif_vi(ni, intf_i);
+    int deferred_superbufs;
+
+    deferred_superbufs = ci_atomic_xchg(atomic, 0);
+    vi->ep_state->rxq.n_evq_rx_pkts += deferred_superbufs * pkts_per_superbuf;
+  }
+}
+
 #if ! CI_CFG_UL_INTERRUPT_HELPER
 /*--------------------------------------------------------------------
  *!
@@ -7806,6 +7845,10 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
     }
 #endif
 
+    if( flags_set & CI_EPLOCK_NETIF_RX_ACCOUNTING ) {
+      tcp_helper_handle_deferred_superbuf_init(thr);
+      flags_set &= ~CI_EPLOCK_NETIF_RX_ACCOUNTING;
+    }
 
     /* we have handled all the flags (that get handled before unlock) */
     ci_assert_nflags(flags_set, ~all_after_unlock_flags);

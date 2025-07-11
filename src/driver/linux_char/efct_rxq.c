@@ -11,6 +11,7 @@
 #include <kernel_utils/hugetlb.h>
 #include "linux_char_internal.h"
 #include <ci/efch/mmap.h>
+#include <ci/efhw/efct.h>
 
 
 
@@ -82,8 +83,8 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
     shm_ix = -1;
   }
 
-  rc = efrm_rxq_alloc(vi, alloc->in_qid, shm_ix,
-                      alloc->in_timestamp_req, false, alloc->in_n_hugepages,
+  rc = efrm_rxq_alloc(vi, alloc->in_qid, shm_ix, alloc->in_timestamp_req,
+                      false /* interrupt_req */, alloc->in_n_hugepages,
                       hugetlb_alloc, &rxq);
   if( (alloc->in_flags & EFCH_EFCT_RXQ_FLAG_UBUF) == 0 )
     oo_hugetlb_allocator_put(hugetlb_alloc);
@@ -92,6 +93,19 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
     EFCH_ERR("%s: ERROR: rxq_alloc failed (%d)", __FUNCTION__, rc);
     goto out;
   }
+
+  /* If we have allocated an RXQ which does not use a shared EVQ, we assume it
+   * generates RX events into its EVQ. In such a case, we need to perform some
+   * accounting of these events to avoid overflowing the EVQ. Since ef_vi does
+   * not currently support this mode of operation, the necessary plumbing to
+   * configure the starting conditions for such a mode is not in place. Should
+   * this ever change, ef_vi would need to grab the inverse of rxq->shared_evq
+   * to populate efct_get_rxq_state(vi, ix)->generates-events and also add the
+   * number of initial RX packets vi->ep_state->rxq.n_evq_rx_pkts. See also
+   * tcp_helper_post_filter_add for how onload does this.
+   * Currently, we can safely assume this as the interrupt_req parameter in the
+   * above call to efrm_rxq_alloc is false, which implies a shared EVQ. */
+  ci_assert(efrm_rxq_get_hw(rxq)->shared_evq);
 
   rs->rs_base = efrm_rxq_to_resource(rxq);
 out:

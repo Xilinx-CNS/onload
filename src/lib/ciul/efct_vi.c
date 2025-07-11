@@ -757,15 +757,42 @@ static void efct_ef_vi_receive_push(ef_vi* vi)
 
 static int rx_rollover(ef_vi* vi, int qid)
 {
+  const uint64_t pkts_per_superbuf = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
   uint32_t meta_pkt;
   ef_vi_efct_rxq_ptr* rxq_ptr = &vi->ep_state->rxq.rxq_ptr[qid];
+  ef_vi_efct_rxq_state* rxq_efct_state = &vi->ep_state->rxq.efct_state[qid];
+  ef_vi_rxq_state* rxq_state = &vi->ep_state->rxq;
   unsigned sbseq;
   bool sentinel;
   struct efct_rx_descriptor* desc;
+  int rc;
 
-  int rc = vi->efct_rxqs.ops->next(vi, qid, &sentinel, &sbseq);
+  /* Make sure rxq_state->n_evq_rx_pkts has enough space to store the maximum
+   * number of packets we allow an efct application to have */
+  EF_VI_BUILD_ASSERT(
+    /* Max number of packets stored in n_evq_rx_pkts */
+    (((1ull << ((8 * sizeof(rxq_state->n_evq_rx_pkts)) - 1)) << 1) | 1)
+    >=
+    /* Max number of packets possible = max rxqs * max pkts per rxq */
+    ((uint64_t)EF_VI_MAX_EFCT_RXQS * CI_EFCT_MAX_SUPERBUFS *
+     (EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE) /* pkts_per_superbuf */)
+  );
+
+  /* If this RXQ generates events, then we must make sure our EVQ has space to
+   * handle enough events for this superbuf. */
+  if( rxq_efct_state->generates_events &&
+      rxq_state->n_evq_rx_pkts < pkts_per_superbuf )
+    return -EAGAIN;
+
+  rc = vi->efct_rxqs.ops->next(vi, qid, &sentinel, &sbseq);
   if( rc < 0 )
     return rc;
+
+  /* Consume the packets required by the superbuf we just posted. It's worth
+   * noting that this isn't susceptible to a TOCTTOU race condition because
+   * onload will never call ef_eventq_poll on the same VI concurrently.*/
+  rxq_state->n_evq_rx_pkts -= (int)rxq_efct_state->generates_events *
+                              pkts_per_superbuf;
 
   meta_pkt = (qid * CI_EFCT_MAX_SUPERBUFS + rc) << PKT_ID_PKT_BITS;
 
@@ -916,6 +943,8 @@ static inline int efct_poll_rx(ef_vi* vi, int ix, ef_event* evs, int evs_len)
         struct efct_rx_descriptor* desc = efct_rx_desc(vi, pkt_id);
         int prev_sb = pkt_id_to_local_superbuf_ix(pkt_id);
         int next_sb = pkt_id_to_local_superbuf_ix(rxq_ptr_to_pkt_id(rxq_ptr->meta_pkt));
+        ef_vi_efct_rxq_state* rxq_efct_state =
+          &vi->ep_state->rxq.efct_state[ix];
         int nskipped;
         if( next_sb == prev_sb ) {
           /* We created the desc->refcnt assuming that this superbuf would be
@@ -938,6 +967,13 @@ static inline int efct_poll_rx(ef_vi* vi, int ix, ef_event* evs, int evs_len)
         }
 
         EF_VI_ASSERT(nskipped > 0);
+
+        /* Uncount partially counted RX events, as if we end up seeing a
+         * rollover during RX event processing, we can't quickly work
+         * out nskipped so just increment by the entire superbuf. */
+        qs->n_evq_rx_pkts -= (int)rxq_efct_state->generates_events *
+                             (rxq_ptr->superbuf_pkts - nskipped);
+
         EF_VI_ASSERT(nskipped <= desc->refcnt);
         desc->refcnt -= nskipped;
         if( desc->refcnt == 0 )
@@ -1039,6 +1075,24 @@ static int efct_tx_handle_control_event(ef_vi* vi, ci_qword_t event,
   return n_evs;
 }
 
+static void efct_evq_handle_rx_ev(ef_vi* vi, ci_qword_t event)
+{
+  /* On a rollover, we want to consume a full superbuf worth of packets, but
+   * rollover events also set the number of packets in the event to 1, so we
+   * reduce this value by 1 here to compensate. */
+  const uint64_t rollover_pkts = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE - 1;
+  ef_vi_rxq_state* rxq_state = &vi->ep_state->rxq;
+
+  /* If the hardware rolls over, then just consume an entire superbuf. We don't
+   * have access (quickly) to the queue index here, otherwise we could more
+   * finely count the packets per RXQ. Instead we depend upon the RX polling to
+   * spot a rollover, and reduce any partially counted packets we may have
+   * encountered (or will in the future). */
+  rxq_state->n_evq_rx_pkts +=
+    CI_QWORD_FIELD(event, EFCT_RX_EVENT_ROLLOVER) * rollover_pkts +
+    CI_QWORD_FIELD(event, EFCT_RX_EVENT_NUM_PACKETS);
+}
+
 int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
 {
   ef_eventq_state* evq = &vi->ep_state->evq;
@@ -1078,8 +1132,10 @@ int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
         n_evs += efct_tx_handle_control_event(vi, *event, &evs[n_evs]);
         break;
       case EFCT_EVENT_TYPE_RX:
-        /* processing the rxq should already be handled via efct_poll_rx, so
-         * there is no need to report events here. */
+        /* Processing the rxq should already be handled via efct_poll_rx, so
+         * there is no need to report events here, but we do want to look at
+         * some of these events to identify when a rollover is needed. */
+        efct_evq_handle_rx_ev(vi, *event);
         break;
       default:
         ef_log("%s:%d: ERROR: event="CI_QWORD_FMT,
