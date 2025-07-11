@@ -297,8 +297,14 @@ static void dummy_freer(struct efhw_efct_rxq *rxq)
 
 void efrm_rxq_flush(struct efrm_efct_rxq *rxq)
 {
+	int shm_ix = rxq->hw.qix;
+
 	efhw_nic_shared_rxq_unbind(rxq->rs.rs_client->nic, &rxq->hw,
 	                           dummy_freer);
+	if (shm_ix >= 0) {
+		efrm_fini_debugfs_efct_rxq(rxq);
+		rxq->vi->efct_shm->active_qs &= ~(1ull << shm_ix);
+	}
 }
 EXPORT_SYMBOL(efrm_rxq_flush);
 
@@ -306,11 +312,7 @@ void efrm_rxq_free(struct efrm_efct_rxq *rxq)
 {
 	if (__efrm_resource_release(&rxq->rs)) {
 		struct efrm_client *rs_client = rxq->rs.rs_client;
-		int shm_ix = rxq->hw.qix;
-		if (shm_ix >= 0) {
-			efrm_fini_debugfs_efct_rxq(rxq);
-			rxq->vi->efct_shm->active_qs &= ~(1ull << shm_ix);
-		}
+
 		list_del(&rxq->vi_link);
 		efrm_vi_resource_release(rxq->vi);
 		kfree(rxq);
