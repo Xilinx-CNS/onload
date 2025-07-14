@@ -10,6 +10,7 @@
 #include <ci/net/ipv4.h>
 #include <ci/net/ipv6.h>
 
+/* Update ci_addr_t and ci_addr_sh_t at the same time! */
 typedef union {
   struct {
 #if CI_CFG_IPV6

@@ -9,22 +9,37 @@
 #ifdef CI_ADDR_SH_IS_TYPEDEF
 typedef ci_addr_t ci_addr_sh_t CI_ALIGN(8);
 #else
-/*
- * ci_addr_sh_t type is similar to ci_addr_t, but there is no dependency of
- * CI_CFG_IPV6 option because address values should be shared between cplane
- * and onload. Cplane server has a permanent IPv6 support. Onload can be built
- * with or without IPv6 support according to CI_CFG_IPV6 value.
+/* The layout of the commonly used ci_addr_t type is different in cplane
+ * and Onload, when the latter is built without IPv6 support. Thus, to make
+ * Onload interface gracefully with cplane, i.e. make direct function calls
+ * involving IP addresses, we need to use a "shared" type, ci_addr_sh_t.
+ *
+ * Because the IPv4 flavour of ci_addr_t is literally a subset of its more
+ * comprehensive IPv6 flavour, we make ci_addr_sh_t identical to the IPv6
+ * flavour of ci_addr_t. This way, we allow Onload to use the IPv4 flavour
+ * of ci_addr_t, which makes a significant difference in the hot I/O paths,
+ * but we will require Onload to arrange the IPv6 flavour of ci_addr_t
+ * (named ci_addr_sh_t) to interface with cplane. At the same time, this
+ * requires no effort from cplane, which thinks that ci_addr_sh_t is exactly
+ * the same as ci_addr_t (see the typedef above).
  */
 typedef union {
   struct {
+    union {
       /*
        * There should be padding to be able to compare IPv4 mapped addresses
        * with IPv6 ones. IPv4 address padding should be filled with ::ffff: value.
        */
       ci_uint8 pad[12];
-      ci_ip_addr_t ip4;
+      struct {
+        /* IPv6 mapped address ::ffff:A.B.C.D */
+        ci_uint8 zeroes[10];
+        ci_uint16 ones;
+      };
+    };
+    ci_ip_addr_t ip4;
   };
-  ci_uint64     u64[2];
+  ci_uint64     u64[2] CI_ALIGN(8);
   ci_uint32     u32[4];
   ci_uint16     u16[8];
   ci_ip6_addr_t ip6;
