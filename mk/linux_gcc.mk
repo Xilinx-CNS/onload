@@ -129,8 +129,11 @@ ifndef CXXFLAGS
 endif
 
 ifdef NDEBUG
-MMAKE_CFLAGS	+= -fomit-frame-pointer
-MMAKE_CPPFLAGS	+= -DNDEBUG
+  MMAKE_CFLAGS   += -fomit-frame-pointer
+  MMAKE_CPPFLAGS += -DNDEBUG
+  ifdef F_LTO_AUTO
+    CFLAGS += -flto=auto -ffat-lto-objects
+  endif
 endif
 
 ifdef STRIP_LIBS
