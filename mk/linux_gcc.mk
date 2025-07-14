@@ -152,6 +152,10 @@ else
   MMAKE_CFLAGS += -DCI_HAVE_SDCI=0
 endif
 
+ifdef F_LTO_AUTO
+  CFLAGS += -flto=auto
+endif
+
 MMAKE_CFLAGS += -DTRANSPORT_CONFIG_OPT_HDR='<$(TRANSPORT_CONFIG_OPT_HDR)>'
 
 ######################################################################
