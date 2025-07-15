@@ -1019,7 +1019,9 @@ static int efx_probe_eventq(struct efx_channel *channel)
 	} else {
 		entries = roundup_pow_of_two(entries);
 	}
-	if (!efx_is_guaranteed_ringsize(efx, entries)) {
+	/* Only want these extra restrictions for EF100. */
+	if (efx_nic_rev(efx) == EFX_REV_EF100 &&
+	    !efx_is_guaranteed_ringsize(efx, entries)) {
 		unsigned int new_entries =
 			efx_next_guaranteed_ringsize(efx, entries, true);
 
@@ -1366,9 +1368,11 @@ static int efx_probe_channel(struct efx_channel *channel)
 	if (rc)
 		goto fail;
 
-	rc = efx_calc_queue_entries(efx);
-	if (rc)
-		return rc;
+	if (efx_nic_rev(efx) == EFX_REV_EF100) {
+		rc = efx_calc_queue_entries(efx);
+		if (rc)
+			return rc;
+	}
 
 	rc = efx_probe_eventq(channel);
 	if (rc)
@@ -1735,6 +1739,8 @@ int efx_channel_start_xsk_queue(struct efx_channel *channel)
 
 	return 0;
 fail:
+	netif_err(channel->efx, hw, channel->efx->net_dev,
+		  "failed to start XSK queue\n");
 	return rc;
 }
 

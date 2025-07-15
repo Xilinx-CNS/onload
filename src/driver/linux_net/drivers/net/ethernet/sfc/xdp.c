@@ -120,17 +120,14 @@ static int efx_xsk_pool_disable(struct efx_nic *efx, u16 qid)
 
 	if (if_running) {
 		rc = efx_channel_stop_xsk_queue(channel);
-		WARN_ON(rc);
 		if (rc)
 			goto xsk_q_stop_fail;
 	}
 
 	channel->zc = false;
 
-	if (if_running) {
-		rc = efx_channel_start_xsk_queue(channel);
-		WARN_ON(rc);
-	}
+	if (if_running)
+		efx_channel_start_xsk_queue(channel);
 
 	xsk_pool_dma_unmap(pool, 0);
 
@@ -260,17 +257,14 @@ static int efx_xsk_umem_disable(struct efx_nic *efx, u16 qid)
 
 	if (if_running) {
 		rc = efx_channel_stop_xsk_queue(channel);
-		WARN_ON(rc);
 		if (rc)
 			goto xsk_q_stop_fail;
 	}
 
 	channel->zc = false;
 
-	if (if_running) {
-		rc = efx_channel_start_xsk_queue(channel);
-		WARN_ON(rc);
-	}
+	if (if_running)
+		efx_channel_start_xsk_queue(channel);
 
 	efx_xsk_umem_dma_unmap(efx->pci_dev, umem);
 
