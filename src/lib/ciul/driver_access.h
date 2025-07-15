@@ -19,6 +19,7 @@
 
 struct ci_resource_alloc_s;
 struct ci_resource_op_s;
+struct ci_resource_free_s;
 
 
 /*! \i_efab_unix */
@@ -57,6 +58,15 @@ ci_resource_op(int fp, struct ci_resource_op_s* io)
   int r;
   if( (r = ioctl(fp, CI_RESOURCE_OP, io)) < 0 )  return -errno;
   return r;
+}
+
+
+/*! \i_efab_unix */
+ci_inline int
+ci_resource_free(int fp, struct ci_resource_free_s* io)
+{
+  if( ioctl(fp, CI_RESOURCE_FREE, io) < 0 ) return -errno;
+  return 0;
 }
 
 

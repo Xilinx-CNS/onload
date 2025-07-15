@@ -477,6 +477,12 @@ typedef struct ci_capabilities_op_s {
   };
 } ci_capabilities_op_t;
 
+/* Freeing resources */
+typedef struct ci_resource_free_s {
+  efch_resource_id_t id;
+} ci_resource_free_t;
+
+
 
 #define CI_IOC_CHAR_BASE       81
 
@@ -489,7 +495,7 @@ typedef struct ci_capabilities_op_s {
 #define CI_V3_LICENSE_CHALLENGE (CI_IOC_CHAR_BASE+ 6) /* V3 license challenge */
 #define CI_IOC_CHAR_MAX     (CI_IOC_CHAR_BASE+ 7)
 #define CI_RESOURCE_PRIME_QS (CI_IOC_CHAR_BASE+ 8)  /* prime VI queues (efct) */
-
+#define CI_RESOURCE_FREE    (CI_IOC_CHAR_BASE+ 9)  /* free resources */
 
 /**********************************************************************
  *

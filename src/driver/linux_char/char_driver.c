@@ -161,6 +161,16 @@ ioctl_capabilities_op (ci_private_char_t *priv, ulong arg)
 }
 
 
+ci_noinline int
+ioctl_resource_free (ci_private_char_t *priv, ulong arg)
+{
+  ci_resource_free_t local;
+  copy_from_user_ret(&local, (caddr_t) arg, sizeof(local), -EFAULT);
+  efch_resource_free(local.id, &priv->rt);
+  return 0;
+}
+
+
 static long
 ci_char_fop_ioctl(struct file *filp, uint cmd, ulong arg) 
 { 
@@ -190,6 +200,9 @@ ci_char_fop_ioctl(struct file *filp, uint cmd, ulong arg)
 
   case CI_V3_LICENSE_CHALLENGE:
     return -ENOTSUPP;
+
+  case CI_RESOURCE_FREE:
+    return ioctl_resource_free (priv, arg);
 
     default:
     ci_log("unknown ioctl (%u)", cmd);
