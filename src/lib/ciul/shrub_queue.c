@@ -235,16 +235,19 @@ fail_fifo:
   close(queue->shared_fds[EF_SHRUB_FD_SERVER_FIFO]);
 fail_shared:
   free(queue->buffers);
+  queue->fifo_size = 0;
   return rc;
 }
 
 void ef_shrub_queue_close(struct ef_shrub_queue* queue)
 {
   /* TODO ON-16708 close connections */
+  queue->vi->efct_rxqs.ops->detach(queue->vi, queue->ix);
   munmap(queue->fifo, fifo_bytes(queue));
   close(queue->shared_fds[EF_SHRUB_FD_BUFFERS]);
   close(queue->shared_fds[EF_SHRUB_FD_SERVER_FIFO]);
   free(queue->buffers);
+  queue->fifo_size = 0;
 }
 
 void ef_shrub_queue_poll(struct ef_shrub_queue* queue)
@@ -295,5 +298,6 @@ void ef_shrub_queue_detached(struct ef_shrub_queue* queue,
     fifo_index = next_fifo_index(queue, fifo_index);
   }
 
-  queue->connection_count--;
+  if( --queue->connection_count == 0 )
+    ef_shrub_queue_close(queue);
 }

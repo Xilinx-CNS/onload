@@ -311,7 +311,8 @@ void ef_shrub_server_close(struct ef_shrub_server* server)
   int i;
 
   for( i = 0; i < EF_VI_MAX_EFCT_RXQS; ++i )
-    ef_shrub_queue_close(&server->queues[i]);
+    if( server->queues[i].connection_count != 0 )
+      ef_shrub_queue_close(&server->queues[i]);
 
   ef_shrub_server_close_fd(server->client_fifo_fd);
   ef_shrub_server_sockets_close(&server->sockets);
