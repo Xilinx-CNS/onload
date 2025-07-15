@@ -15,6 +15,7 @@
 struct efct_ubufs_rxq
 {
   struct ef_shrub_client shrub_client;
+  efch_resource_id_t rxq_id;
   volatile uint64_t *rx_post_buffer_reg;
 };
 
@@ -340,6 +341,8 @@ static int efct_ubufs_attach(ef_vi* vi,
                              bool shared_mode)
 {
   int ix, rc;
+  struct efct_ubufs* ubufs = get_ubufs(vi);
+  struct efct_ubufs_rxq* rxq;
 
   if( n_superbufs > CI_EFCT_MAX_SUPERBUFS )
     return -EINVAL;
@@ -347,8 +350,9 @@ static int efct_ubufs_attach(ef_vi* vi,
   ix = efct_vi_find_free_rxq(vi, qid);
   if( ix < 0 )
     return ix;
+  rxq = &ubufs->q[ix];
 
-  rc = efct_ubufs_init_rxq_resource(vi, qid, n_superbufs);
+  rc = efct_ubufs_init_rxq_resource(vi, qid, n_superbufs, &rxq->rxq_id);
   if( rc < 0 ) {
     LOGVV(ef_log("%s: efct_ubufs_init_rxq_resource rxq %d", __FUNCTION__, rc));
     return rc;
@@ -360,13 +364,11 @@ static int efct_ubufs_attach(ef_vi* vi,
     return efct_ubufs_shared_attach_internal(vi, ix, qid, superbufs);
   }
   else {
-    unsigned resource_id = rc;
-    struct efct_ubufs* ubufs = get_ubufs(vi);
     rc = efct_ubufs_init_rxq_buffers(vi, qid, ix, fd, n_superbufs,
-                                     resource_id, ubufs->pd, ubufs->pd_dh,
+                                     rxq->rxq_id.index, ubufs->pd, ubufs->pd_dh,
                                      &ubufs->q[ix].rx_post_buffer_reg);
     if( rc < 0 ) {
-      LOGVV(ef_log("%s: efct_ubufs_init_rxq_resource rxq %d", __FUNCTION__, rc));
+      LOGVV(ef_log("%s: efct_ubufs_init_rxq_buffers rxq %d", __FUNCTION__, rc));
       return rc;
     }
 
@@ -392,6 +394,9 @@ static void efct_ubufs_detach(ef_vi* vi, int ix)
     efct_ubufs_free_rxq_buffers(vi, ix, rxq->rx_post_buffer_reg);
   else
     ef_shrub_client_close(&rxq->shrub_client);
+
+  efct_ubufs_free_resource(vi, rxq->rxq_id);
+  rxq->rxq_id = efch_resource_id_none();
 }
 
 static int efct_ubufs_prime(ef_vi* vi, ef_driver_handle dh)
@@ -476,13 +481,15 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
   }
 
   for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
-    ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[i];
+    struct efct_ubufs_rxq* rxq = &ubufs->q[i];
+    ef_vi_efct_rxq* efct_rxq = &vi->efct_rxqs.q[i];
     ef_vi_efct_rxq_state* efct_state = efct_get_rxq_state(vi, i);
 
-    rxq->live.superbuf_pkts = &efct_state->superbuf_pkts;
-    rxq->live.config_generation = &efct_state->config_generation;
+    rxq->rxq_id = efch_resource_id_none();
+    efct_rxq->live.superbuf_pkts = &efct_state->superbuf_pkts;
+    efct_rxq->live.config_generation = &efct_state->config_generation;
 #ifndef __KERNEL__
-    rxq->mappings = ubufs->q[i].shrub_client.mappings;
+    efct_rxq->mappings = ubufs->q[i].shrub_client.mappings;
 #endif
     /* NOTE: we don't need to store the latest time sync event in
      * rxq->live.time_sync as efct only uses it to get the clock

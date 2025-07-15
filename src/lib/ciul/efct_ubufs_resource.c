@@ -38,7 +38,8 @@ void efct_ubufs_post_kernel(ef_vi* vi, int ix, int sbid, bool sentinel)
   ci_resource_op(vi->dh, &op);
 }
 
-int efct_ubufs_init_rxq_resource(ef_vi *vi, int qid, unsigned n_superbufs)
+int efct_ubufs_init_rxq_resource(ef_vi *vi, int qid, unsigned n_superbufs,
+                                 efch_resource_id_t* resource_id_out)
 {
   int rc;
   ci_resource_alloc_t ra;
@@ -53,12 +54,26 @@ int efct_ubufs_init_rxq_resource(ef_vi *vi, int qid, unsigned n_superbufs)
   ra.u.rxq.in_vi_rs_id = efch_make_resource_id(vi->vi_resource_id);
   ra.u.rxq.in_n_hugepages = n_hugepages;
   ra.u.rxq.in_timestamp_req = true;
+
   rc = ci_resource_alloc(vi->dh, &ra);
   if( rc < 0 ) {
     LOGVV(ef_log("%s: ci_resource_alloc rxq %d", __FUNCTION__, rc));
     return rc;
   }
-  return ra.out_id.index;
+
+  *resource_id_out = ra.out_id;
+  return 0;
+}
+
+void efct_ubufs_free_resource(ef_vi* vi, efch_resource_id_t resource_id)
+{
+  ci_resource_free_t op = {};
+
+  if( efch_resource_id_is_none(resource_id) )
+    return;
+
+  op.id = resource_id;
+  ci_resource_free(vi->dh, &op);
 }
 
 int efct_ubufs_init_rxq_buffers(ef_vi* vi, int qid, int ix, int fd,

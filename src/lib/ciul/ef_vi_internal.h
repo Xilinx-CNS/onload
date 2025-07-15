@@ -240,7 +240,9 @@ extern int efct_ubufs_init(ef_vi*, ef_pd*, ef_driver_handle) EF_VI_HF;
 extern void* efct_ubufs_alloc_mem(size_t) EF_VI_HF;
 extern void efct_ubufs_free_mem(void*) EF_VI_HF;
 extern void efct_ubufs_post_kernel(ef_vi*, int, int, bool) EF_VI_HF;
-extern int efct_ubufs_init_rxq_resource(ef_vi*, int, unsigned) EF_VI_HF;
+extern int efct_ubufs_init_rxq_resource(ef_vi*, int, unsigned,
+                                        efch_resource_id_t*) EF_VI_HF;
+extern void efct_ubufs_free_resource(ef_vi*, efch_resource_id_t) EF_VI_HF;
 extern int efct_ubufs_init_rxq_buffers(ef_vi*, int, int, int, unsigned,
                                        unsigned, ef_pd*, ef_driver_handle,
                                        volatile uint64_t**) EF_VI_HF;

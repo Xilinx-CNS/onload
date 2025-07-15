@@ -16,9 +16,15 @@ void efct_ubufs_free_mem(void* p)
   kfree(p);
 }
 
-int efct_ubufs_init_rxq_resource(ef_vi *vi, int qid, unsigned n_superbufs)
+int efct_ubufs_init_rxq_resource(ef_vi *vi, int qid, unsigned n_superbufs,
+                                 efch_resource_id_t* resource_id_out)
 {
   return -EOPNOTSUPP;
+}
+
+void efct_ubufs_free_resource(ef_vi* vi, efch_resource_id_t id)
+{
+  /* not supported */
 }
 
 int efct_ubufs_init_rxq_buffers(ef_vi* vi, int qid, int ix,
@@ -30,7 +36,7 @@ int efct_ubufs_init_rxq_buffers(ef_vi* vi, int qid, int ix,
   return -EOPNOTSUPP;
 }
 
-void efct_ubufs_free_rxq_buffers(ef_vi*, int, volatile uint64_t*)
+void efct_ubufs_free_rxq_buffers(ef_vi* vi, int ix, volatile uint64_t* reg)
 {
   /* not supported */
 }

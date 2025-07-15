@@ -33,10 +33,17 @@ void efct_ubufs_post_kernel(ef_vi* vi, int ix, int sbid, bool sentinel)
   // TODO test this is called correctly
 }
 
-int efct_ubufs_init_rxq_resource(ef_vi *vi, int qid, unsigned n_superbufs)
+int efct_ubufs_init_rxq_resource(ef_vi *vi, int qid, unsigned n_superbufs,
+                                 efch_resource_id_t* resource_id_out)
 {
   // TODO check this is called correctly
-  return 42;
+  *resource_id_out = efch_make_resource_id(42);
+  return 0;
+}
+
+void efct_ubufs_free_resource(ef_vi* vi, efch_resource_id_t resource_id)
+{
+  // TODO check this is called correctly
 }
 
 int efct_ubufs_init_rxq_buffers(ef_vi* vi, int qid, int ix, int fd,
