@@ -84,6 +84,12 @@ static int mock_attach(struct ef_vi* vi_, int qid_, int buf_fd,
   return qix;
 }
 
+static void mock_detach(struct ef_vi* vi_, int qix_)
+{
+  CHECK(vi_, ==, vi);
+  CHECK(qix_, ==, qix);
+}
+
 static int mock_next(struct ef_vi* vi_, int qix_, bool* sentinel, unsigned* sbseq)
 {
   int index;
@@ -120,6 +126,7 @@ static void mock_free(struct ef_vi* vi_, int qix_, int buffer_index)
 
 ef_vi_efct_rxq_ops mock_ops = {
   .attach = mock_attach,
+  .detach = mock_detach,
   .next = mock_next,
   .free = mock_free,
 };

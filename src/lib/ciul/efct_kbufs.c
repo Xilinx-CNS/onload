@@ -205,6 +205,11 @@ static int efct_kbufs_attach(ef_vi* vi,
 #endif
 }
 
+static void efct_kbufs_detach(ef_vi* vi, int ix)
+{
+  /* Not supported */
+}
+
 static int
 efct_kbufs_refresh_mappings(ef_vi* vi, int ix, uint64_t b, uint64_t* m)
 {
@@ -337,6 +342,7 @@ int efct_kbufs_init_internal(ef_vi* vi,
   rxqs->ops.next = efct_kbufs_next;
   rxqs->ops.free = efct_kbufs_free;
   rxqs->ops.attach = efct_kbufs_attach;
+  rxqs->ops.detach = efct_kbufs_detach;
   rxqs->ops.refresh_mappings = efct_kbufs_refresh_mappings;
   rxqs->ops.prime = efct_kbufs_prime;
   rxqs->ops.cleanup = efct_kbufs_cleanup_internal;

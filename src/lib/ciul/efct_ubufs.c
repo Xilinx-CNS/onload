@@ -375,6 +375,24 @@ static int efct_ubufs_attach(ef_vi* vi,
   }
 }
 
+static void efct_ubufs_detach(ef_vi* vi, int ix)
+{
+  struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[ix];
+  ef_vi_rxq_state* qs = &vi->ep_state->rxq;
+  ef_vi_efct_rxq_state* eqs = &qs->efct_state[ix];
+
+  qs->efct_active_qs &= ~(1u << ix);
+
+  memset(eqs, 0, sizeof(*eqs));
+  eqs->free_head = eqs->fifo_head = -1;
+  eqs->fifo_tail_hw = eqs->fifo_tail_sw = -1;
+  eqs->qid = -1;
+
+  if( rxq_is_local(vi, ix) )
+    efct_ubufs_cleanup_rxq(vi, rxq->rx_post_buffer_reg);
+  else
+    ef_shrub_client_close(&rxq->shrub_client);
+}
 
 static int efct_ubufs_prime(ef_vi* vi, ef_driver_handle dh)
 {
@@ -402,13 +420,8 @@ static void efct_ubufs_cleanup(ef_vi* vi)
   struct efct_ubufs* ubufs = get_ubufs(vi);
 
   efct_superbufs_cleanup(vi);
-  for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
-    struct efct_ubufs_rxq* rxq = &ubufs->q[i];
-    if( rxq_is_local(vi, i) )
-      efct_ubufs_cleanup_rxq(vi, rxq->rx_post_buffer_reg);
-    else
-      ef_shrub_client_close(&rxq->shrub_client);
-  }
+  for( i = 0; i < vi->efct_rxqs.max_qs; ++i )
+    efct_ubufs_detach(vi, i);
 
   efct_ubufs_free_mem(ubufs);
 }
@@ -491,6 +504,7 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
   ubufs->ops.available = efct_ubufs_available;
   ubufs->ops.pre_attach = efct_ubufs_pre_attach;
   ubufs->ops.attach = efct_ubufs_attach;
+  ubufs->ops.detach = efct_ubufs_detach;
   ubufs->ops.refresh = efct_ubufs_refresh;
   ubufs->ops.refresh_mappings = efct_ubufs_refresh_mappings;
   ubufs->ops.prime = efct_ubufs_prime;

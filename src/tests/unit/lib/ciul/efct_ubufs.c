@@ -174,13 +174,14 @@ static void free_vi(ef_vi* vi)
 {
   int i;
 
+  vi->efct_rxqs.ops->cleanup(vi);
+
   /* Ignore changes to queue state during these tests.
    * FIXME: it might be nice to check that ununsed queues didn't change state.
    */
   for( i = 0; i < EF_VI_MAX_EFCT_RXQS; ++i )
     STATE_ACCEPT(vi->ep_state, rxq.efct_state[i]);
 
-  vi->efct_rxqs.ops->cleanup(vi);
   STATE_FREE(vi->ep_state);
   STATE_FREE(vi);
 }

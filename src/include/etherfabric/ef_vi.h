@@ -900,6 +900,8 @@ typedef struct {
                  int buf_fd,
                  unsigned n_superbufs,
                  bool shared_mode);
+  /** Detach a queue */
+  void (*detach)(struct ef_vi*, int ix);
   /** Refresh the internal config; called if config_generation changes */
   int  (*refresh)(struct ef_vi*, int ix);
   /** Second stage of refreshment (mapping kernel to user) if required */
