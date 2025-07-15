@@ -547,6 +547,7 @@ efct_filter_insert(struct efct_filter_state *state, struct efx_filter_spec *spec
         state->hw_filters[node.hw_filter].rxq = op_out.rxq;
         state->hw_filters[node.hw_filter].drv_id = op_out.drv_id;
         state->hw_filters[node.hw_filter].hw_id = op_out.filter_handle;
+        state->hw_filters[node.hw_filter].flags = flags;
       }
       *rxq = state->hw_filters[node.hw_filter].rxq;
       state->exclusive_rxq_mapping[*rxq] = pd_excl_token;
@@ -588,7 +589,7 @@ remove_exclusive_rxq_ownership(struct efct_filter_state *state, int hw_filter)
 
 bool
 efct_filter_remove(struct efct_filter_state *state, int filter_id,
-                   uint64_t *drv_id_out)
+                   uint64_t *drv_id_out, unsigned *flags_out)
 {
   int hw_filter;
   bool remove_drv = false;
@@ -601,6 +602,7 @@ efct_filter_remove(struct efct_filter_state *state, int filter_id,
     if( state->hw_filters[hw_filter].refcount == 0 ) {
         /* The above check implies the current filter is unused. */
         *drv_id_out = state->hw_filters[hw_filter].drv_id;
+        *flags_out = state->hw_filters[hw_filter].flags;
         remove_exclusive_rxq_ownership(state, hw_filter);
         remove_drv = true;
     }

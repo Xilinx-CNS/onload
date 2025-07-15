@@ -1636,9 +1636,48 @@ static int ef10ct_filter_op(const struct efct_filter_insert_in *in_data,
 static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in,
                                    struct efct_filter_insert_out *out)
 {
-  return ef10ct_filter_op(in, out, MC_CMD_FILTER_OP_IN_OP_INSERT);
+  struct filter_insert_params *params = (struct filter_insert_params*)
+                                        in->drv_opaque;
+  bool multi = params->flags & EFHW_FILTER_F_MULTI;
+
+  return ef10ct_filter_op(in, out, multi ? MC_CMD_FILTER_OP_IN_OP_SUBSCRIBE :
+                                           MC_CMD_FILTER_OP_IN_OP_INSERT);
 }
 
+/* Decide whether a filter should be exclusive or else should allow
+ * delivery to additional recipients.  Currently we decide that
+ * filters for specific local unicast MAC and IP addresses are
+ * exclusive.
+ *
+ * This matches the sfc net driver behaviour.
+ */
+static bool ef10ct_mcdi_filter_is_exclusive(const struct efx_filter_spec *spec)
+{
+  /* special case ether type and ip proto filters for onload */
+  if( spec->match_flags == EFX_FILTER_MATCH_ETHER_TYPE ||
+      spec->match_flags == EFX_FILTER_MATCH_IP_PROTO ||
+      spec->match_flags == (EFX_FILTER_MATCH_ETHER_TYPE |
+                            EFX_FILTER_MATCH_IP_PROTO) )
+    return true;
+
+  if( spec->match_flags & EFX_FILTER_MATCH_LOC_MAC &&
+      !is_multicast_ether_addr(spec->loc_mac) )
+    return true;
+
+  if( (spec->match_flags & (EFX_FILTER_MATCH_ETHER_TYPE |
+                            EFX_FILTER_MATCH_LOC_HOST)) ==
+      (EFX_FILTER_MATCH_ETHER_TYPE | EFX_FILTER_MATCH_LOC_HOST) ) {
+    if( spec->ether_type == htons(ETH_P_IP) &&
+        !(ipv4_is_multicast(spec->loc_host[0]) ||
+        ipv4_is_lbcast(spec->loc_host[0])) )
+      return true;
+    if (spec->ether_type == htons(ETH_P_IPV6) &&
+        ((const u8 *)spec->loc_host)[0] != 0xff )
+      return true;
+  }
+
+  return false;
+}
 
 static int
 ef10ct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
@@ -1650,17 +1689,20 @@ ef10ct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
   struct filter_insert_params params = {
     .nic = nic,
     .mask = mask,
-    .flags = flags,
   };
   int rc;
-
 
   rc = efx_spec_to_ethtool_flow(spec, &hw_filter);
   if( rc < 0 )
     return rc;
 
+  if( !ef10ct_mcdi_filter_is_exclusive(spec) )
+    flags |= EFHW_FILTER_F_MULTI;
+
   /* There's no special RXQ 0 here, so don't allow fallback to SW filter */
   flags |= EFHW_FILTER_F_USE_HW;
+
+  params.flags = flags;
   return efct_filter_insert(&ef10ct->filter_state, spec, &hw_filter, rxq,
                             pd_excl_token, flags, ef10ct_filter_insert_op,
                             &params, nic->filter_flags);
@@ -1682,12 +1724,17 @@ ef10ct_filter_remove(struct efhw_nic *nic, int filter_id)
   };
   bool remove_drv;
   uint64_t drv_id;
+  unsigned flags;
   int rc;
 
-  remove_drv = efct_filter_remove(&ef10ct->filter_state, filter_id, &drv_id);
+  remove_drv = efct_filter_remove(&ef10ct->filter_state, filter_id, &drv_id,
+                                  &flags);
 
   if( remove_drv ) {
-    EFHW_MCDI_SET_DWORD(in, FILTER_OP_IN_OP, MC_CMD_FILTER_OP_IN_OP_REMOVE);
+    bool multi = flags & EFHW_FILTER_F_MULTI;
+    EFHW_MCDI_SET_DWORD(in, FILTER_OP_IN_OP, multi ?
+                        MC_CMD_FILTER_OP_IN_OP_UNSUBSCRIBE :
+                        MC_CMD_FILTER_OP_IN_OP_REMOVE);
     EFHW_MCDI_SET_DWORD(in, FILTER_OP_IN_HANDLE_LO, drv_id);
     EFHW_MCDI_SET_DWORD(in, FILTER_OP_IN_HANDLE_HI, drv_id >> 32);
 

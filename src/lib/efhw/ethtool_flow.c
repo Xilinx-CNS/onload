@@ -457,6 +457,7 @@ void ethtool_flow_to_mcdi_op(ci_dword_t *buf, int rxq, int op,
   }
 
   EFHW_ASSERT((op == MC_CMD_FILTER_OP_IN_OP_INSERT) ||
+              (op == MC_CMD_FILTER_OP_IN_OP_SUBSCRIBE) ||
               (op == MC_CMD_FILTER_OP_IN_OP_REPLACE));
   EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_OP, op);
   EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_PORT_ID, EVB_PORT_ID_ASSIGNED);

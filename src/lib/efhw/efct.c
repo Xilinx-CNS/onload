@@ -1098,9 +1098,10 @@ efct_nic_filter_remove(struct efhw_nic *nic, int filter_id)
   struct xlnx_efct_client* cli;
   struct efhw_nic_efct *efct = nic->arch_extra;
   uint64_t drv_id;
+  unsigned flags;
   int rc;
   bool remove_drv = efct_filter_remove(&efct->filter_state, filter_id,
-                                       &drv_id);
+                                       &drv_id, &flags);
 
   if( remove_drv ) {
     EFCT_PRE(dev, edev, cli, nic, rc);

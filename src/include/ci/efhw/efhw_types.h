@@ -250,6 +250,8 @@ struct efx_filter_spec;
  */
 #define EFHW_FILTER_F_USE_HW   0x0010
 #define EFHW_FILTER_F_USE_SW   0x0020
+/* Filter is multi-recipient */
+#define EFHW_FILTER_F_MULTI    0x0040
 
 #define EFHW_PD_NON_EXC_TOKEN 0xFFFFFFFF
 
