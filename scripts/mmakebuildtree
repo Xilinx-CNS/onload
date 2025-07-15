@@ -97,7 +97,6 @@ do_top_level () {
 	W_NO_STRINGOP_OVERFLOW := $W_NO_STRINGOP_OVERFLOW
 	W_NO_DEPRECATED_DECLARATIONS := $W_NO_DEPRECATED_DECLARATIONS
 	M_NO_OUTLINE_ATOMICS := $M_NO_OUTLINE_ATOMICS
-	F_LTO_AUTO := $F_LTO_AUTO
 	$nt
 	$kpath
 EOF
@@ -363,10 +362,6 @@ fi
 
 if [ "$($mmaketool --libc_minor_version)" -ge 32 ] ; then
   W_NO_DEPRECATED_DECLARATIONS="1"
-fi
-
-if [ "$($mmaketool --gcc_major_version)" -ge 14 ] ; then
-  F_LTO_AUTO="1"
 fi
 
 [ -z "$SRCPATH" ] && SRCPATH=$("$mmaketool" --toppath)/src
