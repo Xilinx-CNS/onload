@@ -3,7 +3,6 @@
 
 /* Access to kernel resources for userland efct_ubufs */
 
-#include <etherfabric/memreg.h>
 #include <etherfabric/internal/efct_uk_api.h>
 #include <sys/mman.h>
 #include <linux/mman.h>
@@ -76,14 +75,40 @@ void efct_ubufs_free_resource(ef_vi* vi, efch_resource_id_t resource_id)
   ci_resource_free(vi->dh, &op);
 }
 
-int efct_ubufs_init_rxq_buffers(ef_vi* vi, int qid, int ix, int fd,
-                                unsigned n_superbufs, unsigned resource_id,
+static int memreg_alloc(ef_driver_handle vi_dh,
+                        ef_pd* pd, ef_driver_handle pd_dh,
+                        void* start, size_t bytes,
+                        ef_addr* dma_addrs_out,
+                        efch_resource_id_t* memreg_id_out)
+{
+  int rc;
+  ci_resource_alloc_t ra;
+
+  ef_vi_init_resource_alloc(&ra, EFRM_RESOURCE_MEMREG);
+  ra.u.memreg.in_vi_or_pd_id = efch_make_resource_id(pd->pd_resource_id);
+  ra.u.memreg.in_vi_or_pd_fd = pd_dh;
+  ra.u.memreg.in_mem_ptr = (uintptr_t) start;
+  ra.u.memreg.in_mem_bytes = bytes;
+  ra.u.memreg.in_addrs_out_ptr = (uintptr_t) dma_addrs_out;
+  ra.u.memreg.in_addrs_out_stride = sizeof(ef_addr);
+  ra.u.memreg.in_flags = 0;
+
+  rc = ci_resource_alloc(vi_dh, &ra);
+  if( rc == 0 )
+    *memreg_id_out = ra.out_id;
+  return rc;
+}
+
+int efct_ubufs_init_rxq_buffers(ef_vi* vi, int ix, int fd,
+                                unsigned n_superbufs,
+                                efch_resource_id_t rxq_id,
                                 ef_pd* pd, ef_driver_handle pd_dh,
+                                efch_resource_id_t* memreg_id_out,
                                 volatile uint64_t** post_buffer_reg_out)
 {
   int rc, sb;
   void* map;
-  ef_memreg memreg;
+  ef_addr* dma_addrs;
 
   int flags = (fd < 0 ? MAP_PRIVATE | MAP_ANONYMOUS : MAP_SHARED);
   size_t map_bytes = CI_ROUND_UP((size_t)n_superbufs * EFCT_RX_SUPERBUF_BYTES,
@@ -102,7 +127,13 @@ int efct_ubufs_init_rxq_buffers(ef_vi* vi, int qid, int ix, int fd,
     return -ENOMEM;
   }
 
-  rc = ef_memreg_alloc_flags(&memreg, vi->dh, pd, pd_dh, map, map_bytes, 0);
+  dma_addrs = malloc((map_bytes >> EF_VI_NIC_PAGE_SHIFT) * sizeof(ef_addr));
+  if( dma_addrs == NULL ) {
+    rc = -ENOMEM;
+    goto fail;
+  }
+
+  rc = memreg_alloc(vi->dh, pd, pd_dh, map, map_bytes, dma_addrs, memreg_id_out);
   if( rc < 0 ) {
     LOG(ef_log("%s: Unable to alloc buffers (%d). Are sufficient hugepages available?",
                __FUNCTION__, rc));
@@ -111,14 +142,14 @@ int efct_ubufs_init_rxq_buffers(ef_vi* vi, int qid, int ix, int fd,
 
   for( sb = 0; sb < n_superbufs; ++sb )
     efct_rx_desc_for_sb(vi, ix, sb)->dma_addr =
-      ef_memreg_dma_addr(&memreg, sb * EFCT_RX_SUPERBUF_BYTES);
+      dma_addrs[sb * (EFCT_RX_SUPERBUF_BYTES >> EF_VI_NIC_PAGE_SHIFT)];
 
-  ef_memreg_free(&memreg, vi->dh);
+  free(dma_addrs);
 
   if( vi->vi_flags & EF_VI_RX_PHYS_ADDR ) {
     void *p;
 
-    rc = ci_resource_mmap(vi->dh, resource_id, EFCH_VI_MMAP_RX_BUFFER_POST,
+    rc = ci_resource_mmap(vi->dh, rxq_id.index, EFCH_VI_MMAP_RX_BUFFER_POST,
                           CI_ROUND_UP(sizeof(uint64_t), CI_PAGE_SIZE),
                           &p);
     if( rc < 0 )

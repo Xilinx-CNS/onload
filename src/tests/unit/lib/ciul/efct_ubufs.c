@@ -46,15 +46,17 @@ void efct_ubufs_free_resource(ef_vi* vi, efch_resource_id_t resource_id)
   // TODO check this is called correctly
 }
 
-int efct_ubufs_init_rxq_buffers(ef_vi* vi, int qid, int ix, int fd,
-                                unsigned n_superbufs, unsigned resource_id,
+int efct_ubufs_init_rxq_buffers(ef_vi* vi, int ix, int fd,
+                                unsigned n_superbufs,
+                                efch_resource_id_t rxq_id,
                                 ef_pd* pd, ef_driver_handle pd_dh,
+                                efch_resource_id_t* memreg_id_out,
                                 volatile uint64_t** post_buffer_reg_out)
 {
   void* map;
 
   // TODO check this is called correctly
-  CHECK(resource_id, ==, 42);
+  CHECK(rxq_id.index, ==, 42);
 
   /* Don't need hugepages for testing */
   map = mmap((void*)vi->efct_rxqs.q[ix].superbuf,
@@ -66,6 +68,7 @@ int efct_ubufs_init_rxq_buffers(ef_vi* vi, int qid, int ix, int fd,
 
   // TODO set up dma addresses and buffer posting register if needed
   *post_buffer_reg_out = NULL;
+  *memreg_id_out = efch_make_resource_id(43);
 
   return 0;
 }

@@ -15,7 +15,7 @@
 struct efct_ubufs_rxq
 {
   struct ef_shrub_client shrub_client;
-  efch_resource_id_t rxq_id;
+  efch_resource_id_t rxq_id, memreg_id;
   volatile uint64_t *rx_post_buffer_reg;
 };
 
@@ -364,9 +364,9 @@ static int efct_ubufs_attach(ef_vi* vi,
     return efct_ubufs_shared_attach_internal(vi, ix, qid, superbufs);
   }
   else {
-    rc = efct_ubufs_init_rxq_buffers(vi, qid, ix, fd, n_superbufs,
-                                     rxq->rxq_id.index, ubufs->pd, ubufs->pd_dh,
-                                     &ubufs->q[ix].rx_post_buffer_reg);
+    rc = efct_ubufs_init_rxq_buffers(vi, ix, fd, n_superbufs,
+                                     rxq->rxq_id, ubufs->pd, ubufs->pd_dh,
+                                     &rxq->memreg_id, &rxq->rx_post_buffer_reg);
     if( rc < 0 ) {
       LOGVV(ef_log("%s: efct_ubufs_init_rxq_buffers rxq %d", __FUNCTION__, rc));
       return rc;
@@ -396,7 +396,8 @@ static void efct_ubufs_detach(ef_vi* vi, int ix)
     ef_shrub_client_close(&rxq->shrub_client);
 
   efct_ubufs_free_resource(vi, rxq->rxq_id);
-  rxq->rxq_id = efch_resource_id_none();
+  efct_ubufs_free_resource(vi, rxq->memreg_id);
+  rxq->rxq_id = rxq->memreg_id = efch_resource_id_none();
 }
 
 static int efct_ubufs_prime(ef_vi* vi, ef_driver_handle dh)
@@ -485,7 +486,7 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
     ef_vi_efct_rxq* efct_rxq = &vi->efct_rxqs.q[i];
     ef_vi_efct_rxq_state* efct_state = efct_get_rxq_state(vi, i);
 
-    rxq->rxq_id = efch_resource_id_none();
+    rxq->rxq_id = rxq->memreg_id = efch_resource_id_none();
     efct_rxq->live.superbuf_pkts = &efct_state->superbuf_pkts;
     efct_rxq->live.config_generation = &efct_state->config_generation;
 #ifndef __KERNEL__

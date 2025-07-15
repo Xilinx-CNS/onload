@@ -27,10 +27,11 @@ void efct_ubufs_free_resource(ef_vi* vi, efch_resource_id_t id)
   /* not supported */
 }
 
-int efct_ubufs_init_rxq_buffers(ef_vi* vi, int qid, int ix,
-                                int buffers_fd, unsigned n_superbufs,
-                                unsigned resource_id,
+int efct_ubufs_init_rxq_buffers(ef_vi* vi, int ix, int fd,
+                                unsigned n_superbufs,
+                                efch_resource_id_t rxq_id,
                                 ef_pd* pd, ef_driver_handle pd_dh,
+                                efch_resource_id_t* memreg_id,
                                 volatile uint64_t** post_buffer_reg_out)
 {
   return -EOPNOTSUPP;

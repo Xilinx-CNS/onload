@@ -243,9 +243,12 @@ extern void efct_ubufs_post_kernel(ef_vi*, int, int, bool) EF_VI_HF;
 extern int efct_ubufs_init_rxq_resource(ef_vi*, int, unsigned,
                                         efch_resource_id_t*) EF_VI_HF;
 extern void efct_ubufs_free_resource(ef_vi*, efch_resource_id_t) EF_VI_HF;
-extern int efct_ubufs_init_rxq_buffers(ef_vi*, int, int, int, unsigned,
-                                       unsigned, ef_pd*, ef_driver_handle,
-                                       volatile uint64_t**) EF_VI_HF;
+extern int efct_ubufs_init_rxq_buffers(ef_vi* vi, int ix, int fd,
+                                       unsigned n_superbufs,
+                                       efch_resource_id_t rxq_id,
+                                       ef_pd*, ef_driver_handle pd_dh,
+                                       efch_resource_id_t* memreg_id_out,
+                                       volatile uint64_t** post_buffer_reg_out) EF_VI_HF;
 extern void efct_ubufs_free_rxq_buffers(ef_vi*, int, volatile uint64_t*) EF_VI_HF;
 extern int efct_ubufs_set_shared_rxq_token(ef_vi*, uint64_t) EF_VI_HF;
 
