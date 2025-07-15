@@ -30,8 +30,9 @@ int efct_ubufs_init_rxq_buffers(ef_vi* vi, int qid, int ix,
   return -EOPNOTSUPP;
 }
 
-void efct_ubufs_cleanup_rxq(ef_vi* vi, volatile uint64_t* post_buffer_reg)
+void efct_ubufs_free_rxq_buffers(ef_vi*, int, volatile uint64_t*)
 {
+  /* not supported */
 }
 
 int efct_ubufs_set_shared_rxq_token(ef_vi* vi, uint64_t token)

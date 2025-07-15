@@ -63,7 +63,7 @@ int efct_ubufs_init_rxq_buffers(ef_vi* vi, int qid, int ix, int fd,
   return 0;
 }
 
-void efct_ubufs_cleanup_rxq(ef_vi* vi, volatile uint64_t* post_buffer_reg)
+void efct_ubufs_free_rxq_buffers(ef_vi* vi, int ix, volatile uint64_t* post_buffer_reg)
 {
   // TODO check this is called correctly
 }

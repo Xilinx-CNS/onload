@@ -244,7 +244,7 @@ extern int efct_ubufs_init_rxq_resource(ef_vi*, int, unsigned) EF_VI_HF;
 extern int efct_ubufs_init_rxq_buffers(ef_vi*, int, int, int, unsigned,
                                        unsigned, ef_pd*, ef_driver_handle,
                                        volatile uint64_t**) EF_VI_HF;
-extern void efct_ubufs_cleanup_rxq(ef_vi*, volatile uint64_t*) EF_VI_HF;
+extern void efct_ubufs_free_rxq_buffers(ef_vi*, int, volatile uint64_t*) EF_VI_HF;
 extern int efct_ubufs_set_shared_rxq_token(ef_vi*, uint64_t) EF_VI_HF;
 
 extern int efct_superbufs_reserve(ef_vi* vi, void* space);

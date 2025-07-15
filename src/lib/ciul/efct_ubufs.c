@@ -389,7 +389,7 @@ static void efct_ubufs_detach(ef_vi* vi, int ix)
   eqs->qid = -1;
 
   if( rxq_is_local(vi, ix) )
-    efct_ubufs_cleanup_rxq(vi, rxq->rx_post_buffer_reg);
+    efct_ubufs_free_rxq_buffers(vi, ix, rxq->rx_post_buffer_reg);
   else
     ef_shrub_client_close(&rxq->shrub_client);
 }

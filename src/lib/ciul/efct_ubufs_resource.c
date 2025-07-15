@@ -82,16 +82,16 @@ int efct_ubufs_init_rxq_buffers(ef_vi* vi, int qid, int ix, int fd,
   if( map == MAP_FAILED )
     return -errno;
   if( map != vi->efct_rxqs.q[ix].superbuf ) {
+    /* Paranoia: unmap the memory and bail if MAP_FIXED did the wrong thing */
     munmap(map, map_bytes);
     return -ENOMEM;
   }
 
   rc = ef_memreg_alloc_flags(&memreg, vi->dh, pd, pd_dh, map, map_bytes, 0);
   if( rc < 0 ) {
-    munmap(map, map_bytes);
     LOG(ef_log("%s: Unable to alloc buffers (%d). Are sufficient hugepages available?",
                __FUNCTION__, rc));
-    return rc;
+    goto fail;
   }
 
   for( sb = 0; sb < n_superbufs; ++sb )
@@ -106,21 +106,35 @@ int efct_ubufs_init_rxq_buffers(ef_vi* vi, int qid, int ix, int fd,
     rc = ci_resource_mmap(vi->dh, resource_id, EFCH_VI_MMAP_RX_BUFFER_POST,
                           CI_ROUND_UP(sizeof(uint64_t), CI_PAGE_SIZE),
                           &p);
-    if( rc < 0 ) {
-      munmap(map, map_bytes);
-      return rc;
-    }
+    if( rc < 0 )
+      goto fail;
+
     *post_buffer_reg_out = (volatile uint64_t *)p;
   }
 
   return 0;
+
+fail:
+  efct_ubufs_free_rxq_buffers(vi, ix, NULL);
+  return rc;
 }
 
-void efct_ubufs_cleanup_rxq(ef_vi* vi, volatile uint64_t* post_buffer_reg)
+void efct_ubufs_free_rxq_buffers(ef_vi* vi, int ix,
+                                 volatile uint64_t* post_buffer_reg)
 {
   if( post_buffer_reg != NULL )
     ci_resource_munmap(vi->dh, (void*)post_buffer_reg,
                        CI_ROUND_UP(sizeof(uint64_t), CI_PAGE_SIZE));
+
+  /* Don't unmap the buffer memory as we want to keep the address space
+   * reserved, and re-use it when attaching to another queue. Replace it
+   * with an inaccessible mapping to release the buffer pages. */
+  mmap((void*)vi->efct_rxqs.q[ix].superbuf,
+       (size_t)CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES,
+       PROT_NONE,
+       MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE |
+                   MAP_HUGETLB | MAP_HUGE_2MB,
+       -1, 0);
 }
 
 int efct_ubufs_set_shared_rxq_token(ef_vi* vi, uint64_t token)
