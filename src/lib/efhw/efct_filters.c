@@ -832,7 +832,7 @@ efct_filter_query(struct efct_filter_state *state, int filter_id,
     info->rxq = state->hw_filters[node->hw_filter].rxq;
     exclusivity_id = state->exclusive_rxq_mapping[info->rxq];
     if ( exclusivity_id != 0 && exclusivity_id != EFHW_PD_NON_EXC_TOKEN )
-      info->flags |= EFHW_FILTER_F_IS_EXCL;
+      info->flags |= EFHW_FILTER_INFO_IS_EXCL;
     rc = 0;
   }
   else {

@@ -253,7 +253,8 @@ struct efx_filter_spec;
 
 #define EFHW_PD_NON_EXC_TOKEN 0xFFFFFFFF
 
-#define EFHW_FILTER_F_IS_EXCL 0x0004
+/* Flags returned by the filter query op */
+#define EFHW_FILTER_INFO_IS_EXCL 0x0004
 
 /*--------------------------------------------------------------------
  *

@@ -13,6 +13,7 @@
 #include "filter_list.h"
 #include "char_internal.h"
 #include <ci/driver/driverlink_api.h>
+#include <etherfabric/vi.h>
 
 
 struct filter {
@@ -418,13 +419,24 @@ int efch_filter_list_del(struct efrm_resource *rs, struct efrm_pd *pd,
   return rc;
 }
 
+static enum ef_filter_info_flags
+efhw_filter_info_flags_to_ef_filter_info_flags(int efhw_flags)
+{
+  int vi_flags = 0;
+
+  if( efhw_flags & EFHW_FILTER_INFO_IS_EXCL )
+    vi_flags |= EF_FILTER_IS_EXCLUSIVE;
+
+  return vi_flags;
+}
 
 static int efch_filter_list_query(struct efrm_resource *rs, struct efrm_pd *pd,
                                   struct efch_filter_list *fl, int filter_id,
-                                  int *rxq, int *hw_id, int* flags)
+                                  int *rxq, int *hw_id, int* vi_flags)
 {
   struct filter* f;
   int rc = -EINVAL;
+  int efhw_flags;
 
   spin_lock(&fl->lock);
   CI_DLLIST_FOR_EACH2(struct filter, f, link, &fl->filters)
@@ -434,8 +446,11 @@ static int efch_filter_list_query(struct efrm_resource *rs, struct efrm_pd *pd,
     }
   spin_unlock(&fl->lock);
 
-  if( rc == 0 )
-    rc = efrm_filter_query(rs->rs_client, f->efrm_filter_id, rxq, hw_id, flags);
+  if( rc == 0 ) {
+    rc = efrm_filter_query(rs->rs_client, f->efrm_filter_id, rxq, hw_id,
+                           &efhw_flags);
+    *vi_flags = efhw_filter_info_flags_to_ef_filter_info_flags(efhw_flags);
+  }
 
   return rc;
 }
