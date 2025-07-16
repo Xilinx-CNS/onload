@@ -1,6 +1,6 @@
 Solarflare 6.X Linux network driver
 ===================================
-Version:  v6_1_0_1009
+Version:  v6_1_1_1004
 
 
 Overview
@@ -58,7 +58,7 @@ kernel
 Installation of the driver can be confirmed by typing:
    modinfo sfc | grep version
 and checking for the line:
-   version: v6_1_0_1009
+   version: v6_1_1_1004
 
 All network interfaces available on the system can be found with:
   ifconfig -a
@@ -92,6 +92,22 @@ Please contact your local AMD support representative or email
 
 Changelog
 ---------
+
+### v6_1_1_1004
+[General changes]
+~ Fixes for X4 adapter support
+
+X4-6458
+~ No longer advertise unsupported link modes
+
+X4-6165
+~ Report Extra Info in devlink versions
+
+SWNETLINUX-5713
+~ Reduce risk of EVQ overflow by reducing RXQ max fill
+
+SWNETLINUX-5683
+~ Add programmable pin for PPS_IN
 
 ### v6_1_0_1009
 [General changes]

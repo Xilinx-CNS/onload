@@ -1,10 +1,10 @@
-Onload-9.1~preview2
+Onload-9.1~preview3
 ===================
 
  This is a feature preview of Onload including a new version of the
  sfc net driver.
 
- This release is not generally supported.
+ This release is not generally supported for acceleration use cases.
 
  Please see the ChangeLog for a full list of changes.
 

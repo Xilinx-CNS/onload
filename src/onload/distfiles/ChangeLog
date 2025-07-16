@@ -1,19 +1,22 @@
-onload-9.1~preview2
+onload-9.1~preview3
 -------------------
 
-Update sfc net driver to v6.1.0.1011
+Update sfc net driver to v6.1.1.1005
 
 Add support for:
  - gcc-15
 
 Changes:
 
+ON-13964: dump unhandled MCDI event descriptor for diagnostics
 ON-15741: some legacy sample applications removed
 ON-16149: provide onload-examples package
 ON-16277: allow physical addressing mode selection in eflatency
 ON-16329: allow eflatency to parse payload length list as input
-ON-16330: handle sending ICMP over CTPIO
+ON-16330: handle sending ICMP and ICMPv6 over CTPIO
+ON-16451: trigger update-initramfs in module-assistant or make-kpkg
 ON-16486: update eflatency to show impact of reading data
+ON-16674: use initramfs.conf to ensure correct sfc module used from boot
 
 
 onload-9.0.2
