@@ -105,9 +105,11 @@ int ef_shrub_socket_send(uintptr_t socket, void* data, size_t bytes)
   return 0;
 }
 
+extern ssize_t (*ci_sys_recv)(int s, void*, size_t, int);
+
 int ef_shrub_socket_recv(uintptr_t socket, void* data, size_t bytes)
 {
-  int rc = recv(socket, data, bytes, 0);
+  int rc = ci_sys_recv(socket, data, bytes, 0);
   if( rc < 0 )
     return rc;
   if( rc < bytes )

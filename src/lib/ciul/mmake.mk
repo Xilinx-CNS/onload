@@ -55,6 +55,7 @@ LIB_SRCS	+=		\
 		shrub_queue.c   \
 		shrub_connection.c \
 		shrub_server_sockets.c \
+		syscall_stubs.c \
 
 # librt is needed on old glibc, e.g. on RHEL 6
 MMAKE_DIR_LINKFLAGS	:= $(MMAKE_DIR_LINKFLAGS) -lrt
