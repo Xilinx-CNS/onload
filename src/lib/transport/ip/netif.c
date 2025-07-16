@@ -669,6 +669,10 @@ static int __ci_netif_rx_post(ci_netif* ni, ef_vi* vi, int intf_i,
       pkt->intf_i = intf_i;
       pkt->pkt_start_off = ef_vi_receive_prefix_len(vi);
       ci_netif_poison_rx_pkt(pkt);
+
+      /* Ownership of buffers passes to the RX ring when they're posted, so
+       * we must have checked this won't fail before now. */
+      ci_assert(ef_vi_receive_space(vi));
       ef_vi_receive_init(vi, pkt_dma_addr_bufset(ni, pkt, intf_i, bufset),
                          OO_PKT_ID(pkt));
 #ifdef __powerpc__
@@ -723,16 +727,19 @@ void ci_netif_rx_post(ci_netif* netif, int intf_i)
   int max_n_to_post, rx_allowed, n_to_post;
   int bufset_id = NI_PKT_SET(netif);
   int ask_for_more_packets = 0;
+  ci_netif_state_nic_t* nsn = &netif->state->nic[intf_i];
 
-  if( vi->nic_type.arch == EF_VI_ARCH_EFCT ||
-      vi->nic_type.arch == EF_VI_ARCH_EF10CT )
-    return;
-
-  if( ! ef_vi_receive_capacity(vi) )
+  /* Don't post RX buffers if we're using RX_REF events */
+  if( nsn->oo_vi_flags & OO_VI_FLAGS_RX_REF )
     return;
 
   ci_assert(ci_netif_is_locked(netif));
-  ci_assert(ci_netif_rx_vi_space(netif, vi) >= CI_CFG_RX_DESC_BATCH);
+
+  /* Caller is responsible for ensuring that we have space to post */
+  ci_assert_ge(ci_netif_rx_vi_space(netif, vi), CI_CFG_RX_DESC_BATCH);
+  ci_assert_gt(ef_vi_receive_capacity(vi), 0);
+  ci_assert_le(ef_vi_receive_fill_level(vi) + CI_CFG_RX_DESC_BATCH,
+               ef_vi_receive_capacity(vi));
 
   max_n_to_post = ci_netif_rx_vi_space(netif, vi);
   rx_allowed = NI_OPTS(netif).max_rx_packets - netif->state->n_rx_pkts;

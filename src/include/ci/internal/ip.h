@@ -2317,7 +2317,10 @@ extern void ci_ipcache_update_flowlabel(ci_netif* ni, ci_sock_cmn* s) CI_HF;
  * negative, because rxq_limit changes dynamically.
  */
 ci_inline int ci_netif_rx_vi_space(ci_netif* ni, ef_vi* vi)
-{ return ni->state->rxq_limit - ef_vi_receive_fill_level(vi); }
+{
+  return CI_MIN(ni->state->rxq_limit, ef_vi_receive_capacity(vi)) -
+                ef_vi_receive_fill_level(vi);
+}
 
 
 /**********************************************************************

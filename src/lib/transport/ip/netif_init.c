@@ -3188,7 +3188,8 @@ static int __ci_netif_init_fill_rx_rings(ci_netif* ni)
   int intf_i, rxq_limit = ni->state->rxq_limit;
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
     ef_vi* vi = ci_netif_vi(ni, intf_i);
-    if( ! ef_vi_receive_capacity(vi) )
+    /* No RXQ or it's already full */
+    if( ci_netif_rx_vi_space(ni, vi) < CI_CFG_RX_DESC_BATCH )
       continue;
     ci_netif_rx_post(ni, intf_i);
     if( ef_vi_receive_fill_level(vi) < rxq_limit )
