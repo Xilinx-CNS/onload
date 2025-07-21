@@ -129,6 +129,8 @@ this preview release.
   datapath.
 - Filter redirection is not supported, which may lead to unexpected behaviour
   in scenerios where port numbers are reused.
+- Physical mode addressing is not supported with Onload and the Express
+  datapath. This limitation does not apply to ef_vi.
 
 
 X4 Datapath Restrictions
