@@ -118,11 +118,8 @@ void doTests() {
             sh(script: "$path make -C build/gnu_x86_64/tests/onload/onload_remote_monitor/internal_tests test")
           },
           "cplane system": {
-            sh(script: "echo skipping cplane system tests for now")
-            /*
             sh(script: "$path make -C build/gnu_x86_64/tests/onload/cplane_sysunit all")
             sh(script: "$path make -C build/gnu_x86_64/tests/onload/cplane_sysunit test")
-            */
           }
         ])
       }
