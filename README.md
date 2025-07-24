@@ -50,14 +50,17 @@ Please raise issues on _supported releases_ of Onload with
 
 ## Compatible Linux kernels and distributions
 
-This source tree is compatible with the following Linux kernels and
-distributions:
+This source tree is expected to be compatible with the following Linux kernels
+and distributions:
 
-* Debian 12
-* Ubuntu LTS 22.04, 24.04
-* Red Hat Enterprise Linux 8.6 - 8.10
-* Red Hat Enterprise Linux 9.0 - 9.4
-* kernel.org Linux kernels 5.11 - 6.9
+* Debian 12+
+* Ubuntu LTS 22.04+
+* EL 8.6+, 9.0+, 10.0+
+* kernel.org Linux kernels 5.11 - 6.14
+
+This list differs from the list of supported operating systems in [released
+versions](#support) of OpenOnload from the AMD Solarflare software download
+page.
 
 ## Onload with AMD Solarflare NICs
 
