@@ -214,6 +214,8 @@ ci_inline void ci_tcp_handle_rx_post_future(ci_netif* netif,
 }
 #endif
 
+#if OO_DO_STACK_POLL
 void ci_tcp_rst_cooldown_init(ci_netif* ni);
+#endif
 
 #endif  /* __TCP_RX_H__ */

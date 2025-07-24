@@ -249,7 +249,9 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
   assert_zero(nis->kernel_packets_pending);
 #endif
 
+#if OO_DO_STACK_POLL
   ci_tcp_rst_cooldown_init(ni);
+#endif
 }
 
 #endif
