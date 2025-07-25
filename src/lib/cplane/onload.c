@@ -206,8 +206,19 @@ int __oo_cp_route_resolve(struct oo_cplane_handle* cp,
       ~(fwd = cp_get_fwd_by_id(fwd_table, id))->flags &
         CICP_FWD_FLAG_DATA_VALID ||
       ! cp_fwd_find_row_found_perfect_match(fwd_table, id, key) ) {
-    if( ! ask_server )
+    if( ! ask_server ) {
+      /* The last chance to retrieve the routing entry.  If we ask the kernel
+       * to give us a route for any specific IP_TOS, but the response has
+       * IP_TOS of 0, it means the IP_TOS does not matter for the routing
+       * decision.  In contrast, if there is no route for the specific TOS,
+       * the kernel would respond with an error.
+       */
+      if( key->tos ) {
+        key->tos = 0;
+        goto find_again;
+      }
       return -ENOENT;
+    }
     oo_op_route_resolve(cp, key CI_KERNEL_ARG(fwd_table_id));
     ask_server = CI_FALSE;
     first_pass = 1;
