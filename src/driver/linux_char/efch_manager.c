@@ -196,6 +196,9 @@ void efch_resource_free(efch_resource_id_t id, ci_resource_table_t* rt)
   efch_resource_t* rs = xa_erase(&rt->table, id.index);
 
   if( rs != NULL ) {
+    EFCH_TRACE("%s: erased resource " EFCH_RESOURCE_ID_FMT " -> %p",
+               __func__, EFCH_RESOURCE_ID_PRI_ARG(id), rs);
+
     /* Ensure efch_resource_id_lookup hasn't accessed the resource without
      * taking a reference */
     synchronize_rcu();
@@ -209,11 +212,16 @@ void efch_resource_free_all(ci_resource_table_t* rt)
   efch_resource_t* rs;
 
   xa_for_each(&rt->table, i, rs) {
+    efch_resource_id_t id = efch_make_resource_id(i);
     int refs = refcount_read(&rs->ref_count) - 1;
+
     if( refs != 0 )
-      EFCH_WARN("%s: resource id=" EFCH_RESOURCE_ID_FMT
+      EFCH_WARN("%s: resource " EFCH_RESOURCE_ID_FMT
                 " may be leaked with %d refs",
-                __func__, (unsigned)i, refs);
+                __func__, EFCH_RESOURCE_ID_PRI_ARG(id), refs);
+
+    EFCH_TRACE("%s: erased resource " EFCH_RESOURCE_ID_FMT " -> %p",
+               __func__, EFCH_RESOURCE_ID_PRI_ARG(id), rs);
 
     efch_resource_put(rs);
   }
@@ -223,8 +231,10 @@ void efch_resource_free_all(ci_resource_table_t* rt)
 
 void efch_resource_put(efch_resource_t* rs)
 {
-  if( refcount_dec_and_test(&rs->ref_count) )
+  if( refcount_dec_and_test(&rs->ref_count) ) {
     free_resource(rs);
+    EFCH_TRACE("%s: freed resource %p", __func__, rs);
+  }
 }
 
 int
