@@ -194,3 +194,7 @@ CI_BUILD_ASSERT(__builtin_offsetof(struct ci_resource_prime_qs_op_s, rxq_current
 CI_BUILD_ASSERT(__builtin_offsetof(struct ci_resource_prime_qs_op_s, txq_current) == 108);
 
 CI_BUILD_ASSERT(sizeof(struct ci_capabilities_op_s) == 16);
+
+CI_BUILD_ASSERT(sizeof(struct ci_resource_free_s) == 4);
+CI_BUILD_ASSERT(__builtin_offsetof(struct ci_resource_free_s, id) == 0);
+
