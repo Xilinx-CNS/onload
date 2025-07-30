@@ -28,7 +28,8 @@ int ef_shrub_socket_open(uintptr_t* socket_out)
 
   /* TODO ON-16394 I don't think Onload will always do this in a user context.
    * We probably need to pass the net namespace in somehow. */
-  rc = sock_create_kern(current->nsproxy->net_ns, AF_UNIX, SOCK_STREAM, 0, &sock);
+  rc = sock_create_kern(current->nsproxy->net_ns, AF_UNIX, SOCK_SEQPACKET, 0,
+                        &sock);
   if( rc < 0 )
     return rc;
 

@@ -30,7 +30,7 @@ static int unix_server_epoll_create(struct ef_shrub_server_sockets* sockets)
 
 static int unix_server_socket(struct ef_shrub_server_sockets* sockets)
 {
-  int rc = socket(AF_UNIX, SOCK_STREAM, 0);
+  int rc = socket(AF_UNIX, SOCK_SEQPACKET, 0);
   if( rc < 0 )
     return -errno;
 
