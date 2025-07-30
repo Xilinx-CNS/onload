@@ -862,6 +862,9 @@ OO_STAT("Number of packets received via discard that subsequently passed sw "
         "csum checking.",
         ci_uint32, rx_sw_csum_pass, count)
 
+OO_STAT("Number of times an onload stack posted a superbuf via a kernel ioctl.",
+        ci_uint32, superbuf_ioctl_posts, count)
+
 #if CI_CFG_TCPDUMP
 OO_STAT("Number of packets not captured by onload_tcpdump because the "
         "dump ring was full.",

@@ -157,7 +157,7 @@ efab_stacks_seq_show(struct seq_file *seq, void *v)
   upid = pid_vnr(ci_netif_pid_lookup(ni, ni->state->pid));
   rcu_read_unlock();
   seq_printf(seq,
-             "%d: %d %d %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u\n",
+             "%d: %d %d %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u\n",
              NI_ID(ni), upid, uuid,
              s->periodic_polls, s->periodic_evs,
              s->timeout_interrupts, s->interrupts, s->interrupt_polls,
@@ -169,7 +169,7 @@ efab_stacks_seq_show(struct seq_file *seq, void *v)
              s->lock_wakes, s->deferred_work, s->sock_lock_sleeps,
              s->rx_future, s->rx_future_contend,
              s->rx_future_rollback_pkt, s->rx_future_rollback_event,
-             s->rx_future_rollback_timeout,
+             s->rx_future_rollback_timeout, s->superbuf_ioctl_posts,
              s->rx_evs, s->tx_evs);
   return 0;
 }

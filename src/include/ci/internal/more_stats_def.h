@@ -142,4 +142,3 @@ OO_STAT(MORE_STATS_DERIVED_DESC,
         unsigned, ef_vi_rx_ev_bad_q_label, count)
 OO_STAT(MORE_STATS_DERIVED_DESC,
         unsigned, ef_vi_evq_gap, count)
-

@@ -8383,8 +8383,10 @@ int efab_tcp_helper_efct_superbuf_config_refresh(
 int efab_tcp_helper_efct_superbuf_post(tcp_helper_resource_t* trs,
                                        oo_efct_superbuf_post_t* op)
 {
-  tcp_helper_post_superbuf(ci_netif_vi(&trs->netif, op->intf_i),
+  ci_netif* ni = &trs->netif;
+  tcp_helper_post_superbuf(ci_netif_vi(ni, op->intf_i),
                            op->qid, op->sbid, op->sentinel);
+  CITP_STATS_NETIF_INC(ni, superbuf_ioctl_posts);
   return 0;
 }
 
