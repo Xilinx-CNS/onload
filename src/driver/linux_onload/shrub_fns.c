@@ -99,12 +99,18 @@ int shrub_spawn_server(char* controller_id)
     NULL
   };
 
-  spin_lock(&shrub_lock);
-  path = kstrdup(shrub_get_controller_path(), GFP_KERNEL);
-  spin_unlock(&shrub_lock);
-
+  path = kmalloc(4096, GFP_KERNEL);
   if ( !path )
     return -ENOMEM;
+
+  spin_lock(&shrub_lock);
+  if ( shrub_controller_path != NULL && *shrub_controller_path != '\0' ) {
+    strncpy(path, shrub_controller_path, 4096);
+  } else {
+    strncpy(path, DEFAULT_SHRUB_CONTROLLER_PATH, 4096);
+  }
+  path[4095] = '\0';
+  spin_unlock(&shrub_lock);
 
   argv[0] = path;
   OO_DEBUG_TCPH(ci_log("%s: pid=%d path=%s controller_id=%s", __FUNCTION__,
