@@ -164,7 +164,7 @@ static int ef10ct_resource_init(struct efx_auxdev *edev,
     goto fail1;
   }
   for( i = 0; i < ef10ct->rxq_n; i++ ) {
-    ef10ct->rxq[i].evq = -1;
+    ef10ct->rxq[i].evq_id = -1;
     mutex_init(&ef10ct->rxq[i].bind_lock);
   }
 

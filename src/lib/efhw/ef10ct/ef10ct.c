@@ -1084,7 +1084,7 @@ static int ef10ct_fini_rxq(struct efhw_nic *nic, int rxq_num)
 
   rc = ef10ct_fw_rpc(nic, &rpc);
 
-  evq_id = ef10ct->rxq[rxq_num].evq;
+  evq_id = ef10ct->rxq[rxq_num].evq_id;
   ef10ct_evq = &ef10ct->evq[ef10ct_get_queue_num(evq_id)];
 
   atomic_inc(&ef10ct_evq->queues_flushing);
@@ -1129,11 +1129,11 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
     int evq_num;
 
     /* Already bound, so should have an associated evq */
-    EFHW_ASSERT(ef10ct->rxq[rxq_num].evq >= 0);
+    EFHW_ASSERT(ef10ct->rxq[rxq_num].evq_id >= 0);
     EFHW_ASSERT(ef10ct->rxq[rxq_num].state == EF10CT_RXQ_STATE_INITIALISED);
 
     /* Get whether the rxq we are binding to is using a shared evq or not. */
-    evq_num = ef10ct_get_queue_num(ef10ct->rxq[rxq_num].evq);
+    evq_num = ef10ct_get_queue_num(ef10ct->rxq[rxq_num].evq_id);
     real_evq = !ef10ct_is_shared_evq(nic, evq_num);
 
     goto out_good;
@@ -1244,8 +1244,8 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
     ef10ct->rxq[rxq_num].n_buffer_pages = 0;
   }
 
-  EFHW_ASSERT(ef10ct->rxq[rxq_num].evq == -1);
-  ef10ct->rxq[rxq_num].evq = evq;
+  EFHW_ASSERT(ef10ct->rxq[rxq_num].evq_id == -1);
+  ef10ct->rxq[rxq_num].evq_id = evq;
 
   EFHW_ASSERT(ef10ct->rxq[rxq_num].state == EF10CT_RXQ_STATE_ALLOCATED);
   ef10ct->rxq[rxq_num].state = EF10CT_RXQ_STATE_INITIALISED;
@@ -1301,7 +1301,7 @@ ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
   }
 
   iounmap(ef10ct->rxq[rxq_num].post_buffer_addr);
-  ef10ct->rxq[rxq_num].evq = -1;
+  ef10ct->rxq[rxq_num].evq_id = -1;
   ef10ct->rxq[rxq_num].post_buffer_addr = NULL;
 
   mutex_unlock(&ef10ct->rxq[rxq_num].bind_lock);

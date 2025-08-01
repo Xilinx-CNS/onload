@@ -55,7 +55,7 @@ enum efhw_nic_ef10ct_rxq_state {
 };
 
 struct efhw_nic_ef10ct_rxq {
-  int evq;
+  int evq_id;
   int ref_count;
   struct mutex bind_lock; /* Lock to serialise concurrent binds/unbinds */
   enum efhw_nic_ef10ct_rxq_state state;
