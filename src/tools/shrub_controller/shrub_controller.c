@@ -110,14 +110,14 @@ static void usage(void)
 }
 
 static int search_for_existing_server(shrub_controller_config *config,
-                                      cicp_hwport_mask_t new_hw_ports)
+                                      int ifindex)
 {
   shrub_if_config_t *current_interface = config->server_config_head;
   while ( current_interface != NULL ) {
-    if ( current_interface->hw_ports == new_hw_ports ) {
+    if ( current_interface->ifindex == ifindex ) {
       if ( config->debug_mode )
         ci_log("Info: shrub_controller found duplicate shrub_server "
-               "with hw_port %d", new_hw_ports);
+               "with ifindex %d", ifindex);
       current_interface->ref_count++;
       return current_interface->token_id;
     }
@@ -394,7 +394,7 @@ static int process_create_command(shrub_controller_config *config,
                                   cicp_hwport_mask_t hw_port, int ifindex,
                                   uint32_t buffer_count, uintptr_t client_fd)
 {
-  int rc = search_for_existing_server(config, hw_port);
+  int rc = search_for_existing_server(config, ifindex);
 
   /* Either rc is -1 and the cplane can't recognise the intf or we have a
      pre-existing shrub_token/server */
