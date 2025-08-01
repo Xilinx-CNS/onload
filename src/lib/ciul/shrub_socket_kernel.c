@@ -249,7 +249,7 @@ int ef_shrub_socket_mmap(uint64_t* mapping, void* addr, size_t size,
   struct file* file = (struct file*)file_;
   pgoff_t pgoff = offset >> PAGE_SHIFT;
 
-  if( offset & PAGE_MASK )
+  if( offset & ~PAGE_MASK )
     return -EINVAL;
 
   switch( type ) {
