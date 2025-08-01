@@ -102,19 +102,18 @@ static uint64_t
 ef10ct_nic_supported_filter_flags(struct efhw_nic *nic)
 {
   int rc;
-  int num_matches;
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   EFHW_MCDI_DECLARE_BUF(in, MC_CMD_GET_PARSER_DISP_INFO_IN_LEN);
-  EFHW_MCDI_DECLARE_BUF(out, MC_CMD_GET_PARSER_DISP_INFO_OUT_LENMAX);
   struct efx_auxdev_rpc rpc = {
     .cmd = MC_CMD_GET_PARSER_DISP_INFO,
     .inlen = sizeof(in),
     .inbuf = (void *)in,
-    .outlen = sizeof(out),
-    .outbuf = (void *)out,
+    .outlen = sizeof(ef10ct->supported_filter_matches),
+    .outbuf = (void *)ef10ct->supported_filter_matches,
   };
 
   EFHW_MCDI_INITIALISE_BUF(in);
-  EFHW_MCDI_INITIALISE_BUF(out);
+  EFHW_MCDI_INITIALISE_BUF(ef10ct->supported_filter_matches);
 
   EFHW_MCDI_SET_DWORD(in, GET_PARSER_DISP_INFO_IN_OP,
                  MC_CMD_GET_PARSER_DISP_INFO_IN_OP_GET_SUPPORTED_LL_RX_MATCHES);
@@ -131,10 +130,12 @@ ef10ct_nic_supported_filter_flags(struct efhw_nic *nic)
     return 0;
   }
 
-  num_matches = EFHW_MCDI_VAR_ARRAY_LEN(rpc.outlen_actual,
-                                    GET_PARSER_DISP_INFO_OUT_SUPPORTED_MATCHES);
+  EFHW_ASSERT(EFHW_MCDI_VAR_ARRAY_LEN(rpc.outlen_actual,
+                GET_PARSER_DISP_INFO_OUT_SUPPORTED_MATCHES) ==
+              EFHW_MCDI_DWORD(ef10ct->supported_filter_matches,
+                GET_PARSER_DISP_INFO_OUT_NUM_SUPPORTED_MATCHES));
 
-  return mcdi_parser_info_to_filter_flags(out, num_matches);
+  return mcdi_parser_info_to_filter_flags(ef10ct->supported_filter_matches);
 }
 
 

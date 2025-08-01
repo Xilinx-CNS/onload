@@ -446,7 +446,6 @@ efct_nic_supported_filter_flags(struct efhw_nic *nic)
   struct xlnx_efct_device* edev;
   struct xlnx_efct_client* cli;
   int rc;
-  int num_matches;
   size_t outlen_actual;
   EFHW_MCDI_DECLARE_BUF(in, MC_CMD_GET_PARSER_DISP_INFO_IN_LEN);
   EFHW_MCDI_DECLARE_BUF(out, MC_CMD_GET_PARSER_DISP_INFO_OUT_LENMAX);
@@ -475,10 +474,12 @@ efct_nic_supported_filter_flags(struct efhw_nic *nic)
     EFHW_ERR("%s: failed, expected response min len %d, got %zd", __FUNCTION__,
              MC_CMD_GET_PARSER_DISP_INFO_OUT_LENMIN, outlen_actual);
 
-  num_matches = EFHW_MCDI_VAR_ARRAY_LEN(outlen_actual,
-                                   GET_PARSER_DISP_INFO_OUT_SUPPORTED_MATCHES);
+  EFHW_ASSERT(EFHW_MCDI_VAR_ARRAY_LEN(outlen_actual,
+                GET_PARSER_DISP_INFO_OUT_SUPPORTED_MATCHES) ==
+              EFHW_MCDI_DWORD(out,
+                GET_PARSER_DISP_INFO_OUT_NUM_SUPPORTED_MATCHES));
 
-  return mcdi_parser_info_to_filter_flags(out, num_matches);
+  return mcdi_parser_info_to_filter_flags(out);
 }
 
 static int

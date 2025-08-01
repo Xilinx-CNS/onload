@@ -299,7 +299,7 @@ static int _ef10_nic_check_35388_workaround(struct efhw_nic *nic)
 
 void
 ef10_nic_check_supported_filters(struct efhw_nic *nic) {
-  int rc, num_matches;
+  int rc;
   size_t out_size;
 
   EFHW_MCDI_DECLARE_BUF(in, MC_CMD_GET_PARSER_DISP_INFO_IN_LEN);
@@ -318,10 +318,12 @@ ef10_nic_check_supported_filters(struct efhw_nic *nic) {
     EFHW_ERR("%s: failed, expected response min len %d, got %d", __FUNCTION__,
              MC_CMD_GET_PARSER_DISP_INFO_OUT_LENMIN, (int)out_size);
 
-  num_matches = EFHW_MCDI_VAR_ARRAY_LEN(out_size,
-                                   GET_PARSER_DISP_INFO_OUT_SUPPORTED_MATCHES);
+  EFHW_ASSERT(EFHW_MCDI_VAR_ARRAY_LEN(out_size,
+                GET_PARSER_DISP_INFO_OUT_SUPPORTED_MATCHES) ==
+              EFHW_MCDI_DWORD(out,
+                GET_PARSER_DISP_INFO_OUT_NUM_SUPPORTED_MATCHES));
 
-  nic->filter_flags |= mcdi_parser_info_to_filter_flags(out, num_matches);
+  nic->filter_flags |= mcdi_parser_info_to_filter_flags(out);
 
   /* If we have the hardware mismatch filters we can turn them into all filters
    * by blocking kernel traffic, so we can claim the all equivalents too */

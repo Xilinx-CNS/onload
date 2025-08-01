@@ -38,45 +38,47 @@
                              1 << MC_CMD_FILTER_OP_IN_MATCH_DST_MAC_LBN)
 
 
-static int
-check_supported_filter(ci_dword_t* matches, int len, unsigned filter)
+static bool
+check_supported_filter(const ci_dword_t* matches, unsigned filter)
 {
   int i;
+  int len = EFHW_MCDI_DWORD(matches,
+                            GET_PARSER_DISP_INFO_OUT_NUM_SUPPORTED_MATCHES);
   for(i = 0; i < len; i++)
     if ( EFHW_MCDI_ARRAY_DWORD(matches,
            GET_PARSER_DISP_INFO_OUT_SUPPORTED_MATCHES, i) == filter )
-      return 1;
+      return true;
 
-  return 0;
+  return false;
 }
 
 
 uint64_t
-mcdi_parser_info_to_filter_flags(ci_dword_t *out, int num_matches)
+mcdi_parser_info_to_filter_flags(ci_dword_t *out)
 {
   uint64_t flags = 0;
 
   /* We check types of filters that may be used by onload, or ef_vi
    * users.  This information will be exposed by the capabilities API.  */
-  if( check_supported_filter(out, num_matches, MC_FILTER_IP_LOCAL) )
+  if( check_supported_filter(out, MC_FILTER_IP_LOCAL) )
     flags |= NIC_FILTER_FLAG_RX_TYPE_IP_LOCAL;
-  if( check_supported_filter(out, num_matches, MC_FILTER_IP_FULL) )
+  if( check_supported_filter(out, MC_FILTER_IP_FULL) )
     flags |= NIC_FILTER_FLAG_RX_TYPE_IP_FULL;
-  if( check_supported_filter(out, num_matches, MC_FILTER_VLAN_IP_WILD) )
+  if( check_supported_filter(out, MC_FILTER_VLAN_IP_WILD) )
     flags |= NIC_FILTER_FLAG_IPX_VLAN_HW;
-  if( check_supported_filter(out, num_matches, MC_FILTER_ETH_LOCAL) )
+  if( check_supported_filter(out, MC_FILTER_ETH_LOCAL) )
     flags |= NIC_FILTER_FLAG_RX_TYPE_ETH_LOCAL;
-  if( check_supported_filter(out, num_matches, MC_FILTER_ETH_LOCAL_VLAN) )
+  if( check_supported_filter(out, MC_FILTER_ETH_LOCAL_VLAN) )
     flags |= NIC_FILTER_FLAG_RX_TYPE_ETH_LOCAL_VLAN;
-  if( check_supported_filter(out, num_matches, MC_FILTER_IP_PROTOCOL) )
+  if( check_supported_filter(out, MC_FILTER_IP_PROTOCOL) )
     flags |= NIC_FILTER_FLAG_RX_IP4_PROTO;
-  if( check_supported_filter(out, num_matches, MC_FILTER_ETHERTYPE) )
+  if( check_supported_filter(out, MC_FILTER_ETHERTYPE) )
     flags |= NIC_FILTER_FLAG_RX_ETHERTYPE;
-  if( check_supported_filter(out, num_matches, MC_FILTER_MAC_IP4_PROTO) )
+  if( check_supported_filter(out, MC_FILTER_MAC_IP4_PROTO) )
     flags |= NIC_FILTER_FLAG_RX_MAC_IP4_PROTO;
-  if( check_supported_filter(out, num_matches, MC_FILTER_UCAST_MISMATCH) )
+  if( check_supported_filter(out, MC_FILTER_UCAST_MISMATCH) )
     flags |= NIC_FILTER_FLAG_RX_TYPE_UCAST_MISMATCH;
-  if( check_supported_filter(out, num_matches, MC_FILTER_MCAST_MISMATCH) )
+  if( check_supported_filter(out, MC_FILTER_MCAST_MISMATCH) )
     flags |= NIC_FILTER_FLAG_RX_TYPE_MCAST_MISMATCH;
 
   return flags;
