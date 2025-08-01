@@ -2043,6 +2043,20 @@ static int set_shrub_sockets(ci_netif* ni, int shrub_socket_id, uint32_t intf_i)
   return oo_resource_op(fp, OO_IOC_SHRUB_SET_SOCKETS, &shrub_args);
 }
 
+static int set_shrub_token(ci_netif *ni, int shrub_socket_id, uint32_t intf)
+{
+  ci_fd_t fp = ci_netif_get_driver_handle(ni);
+  shrub_socket_ioctl_data_t shrub_args = {0};
+
+  ci_assert(NI_OPTS(ni).shrub_controller_id >= 0);
+  ci_assert(shrub_socket_id >= 0);
+
+  shrub_args.controller_id = NI_OPTS(ni).shrub_controller_id;
+  shrub_args.intf_i = intf;
+  shrub_args.shrub_socket_id = shrub_socket_id;
+  return oo_resource_op(fp, OO_IOC_SHRUB_SET_TOKEN, &shrub_args);
+}
+
 int oo_send_shrub_request(int controller_id,
                           shrub_controller_request_t *request) {
   int rc;
@@ -2119,6 +2133,13 @@ static int oo_init_shrub(ci_netif* ni, ef_vi* vi, ci_hwport_id_t hw_port, int ni
         return rc;
 
       efct_ubufs_set_shared(vi, NI_OPTS(ni).shrub_controller_id, rc);
+
+      rc = set_shrub_token(ni, shrub_socket_id, nic_i);
+      if (rc < 0)
+        return rc;
+
+      /* Nothing needs to be done with the userland vi, as filter insertion
+       * only takes place in the kernel. */
     }
 #endif
   return rc;

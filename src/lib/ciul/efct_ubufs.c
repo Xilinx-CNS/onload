@@ -4,7 +4,7 @@
 /* EFCT buffer management using user-allocated buffers */
 
 #include "ef_vi_internal.h"
-#include "shrub_client.h"
+#include <etherfabric/shrub_client.h>
 #include "logging.h"
 
 /* TODO move CI_EFCT_MAX_SUPERBUFS somewhere more sensible, or remove
