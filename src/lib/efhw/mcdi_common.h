@@ -10,6 +10,7 @@
 #include <ci/tools/sysdep.h>
 
 
+extern bool check_supported_filter(const ci_dword_t* matches, unsigned filter);
 extern uint64_t mcdi_parser_info_to_filter_flags(ci_dword_t *out);
 extern uint64_t mcdi_capability_info_to_nic_flags(ci_dword_t *out,
                                                   size_t out_size);

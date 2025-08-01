@@ -1608,6 +1608,12 @@ static int ef10ct_filter_op(const struct efct_filter_insert_in *in_data,
   EFHW_MCDI_INITIALISE_BUF(out);
   ethtool_flow_to_mcdi_op(in, rxq, op, in_data->filter);
 
+  /* If it's something we don't support check now, to allow us to return a
+   * specific error and avoid the MCDI. */
+  if( !check_supported_filter(ef10ct->supported_filter_matches,
+                              EFHW_MCDI_DWORD(in, FILTER_OP_IN_MATCH_FIELDS)) )
+    return -EPROTONOSUPPORT;
+
   rc = ef10ct_fw_rpc(params->nic, &rpc);
 
   if( rc == 0 ) {

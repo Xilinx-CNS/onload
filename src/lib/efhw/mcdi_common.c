@@ -38,7 +38,7 @@
                              1 << MC_CMD_FILTER_OP_IN_MATCH_DST_MAC_LBN)
 
 
-static bool
+bool
 check_supported_filter(const ci_dword_t* matches, unsigned filter)
 {
   int i;
