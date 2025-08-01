@@ -1126,9 +1126,16 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
   }
 
   if( ef10ct->rxq[rxq_num].ref_count > 0 ) {
+    int evq_num;
+
     /* Already bound, so should have an associated evq */
     EFHW_ASSERT(ef10ct->rxq[rxq_num].evq >= 0);
     EFHW_ASSERT(ef10ct->rxq[rxq_num].state == EF10CT_RXQ_STATE_INITIALISED);
+
+    /* Get whether the rxq we are binding to is using a shared evq or not. */
+    evq_num = ef10ct_get_queue_num(ef10ct->rxq[rxq_num].evq);
+    real_evq = !ef10ct_is_shared_evq(nic, evq_num);
+
     goto out_good;
   }
 

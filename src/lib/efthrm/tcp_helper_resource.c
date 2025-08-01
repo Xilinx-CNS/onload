@@ -1081,6 +1081,22 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
     if( qix == -EALREADY )
       return 0;
 
+    /* If we are using shrub for shared rxqs, then connect to the server before
+     * creating the efct_rxq resource (and thus binding to the hw rxq). This is
+     * done so that the shrub controller will be the first one to bind to the
+     * queue and so decide which evq it will use. */
+    if (shrub) {
+      ci_log("%s: using shrub for queue %d", __func__, rxq);
+      rc = efct_ubufs_shared_attach_internal(vi, qix, rxq,
+                                             vi->efct_rxqs.q[qix].superbufs);
+      if( rc < 0 ) {
+        if( rc != -EINTR )
+          ci_log("%s: ERROR: efct_ubufs_shared_attach_internal failed (%d)",
+                 __func__, rc);
+        return rc;
+      }
+    }
+
     rc = efrm_rxq_alloc(vi_rs, rxq,
                         nic->flags & NIC_FLAG_RX_KERNEL_SHARED ? qix : -1,
                         true, true, hugepages, trs->trs_efct_alloc,
@@ -1088,6 +1104,8 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
     if( rc < 0 ) {
       if( rc != -EINTR )
         ci_log("%s: ERROR: efrm_rxq_alloc failed (%d)", __func__, rc);
+      if (shrub)
+        vi->efct_rxqs.ops->detach(vi, qix);
       return rc;
     }
 
@@ -1112,17 +1130,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
     }
 #endif
 
-    if( shrub ) {
-      ci_log("%s: using shrub for queue %d", __func__, rxq);
-      rc = efct_ubufs_shared_attach_internal(vi, qix, rxq, vi->efct_rxqs.q[qix].superbufs);
-      if( rc < 0 ) {
-        if( rc != -EINTR )
-          ci_log("%s: ERROR: efct_ubufs_shared_attach_internal failed (%d)", __func__, rc);
-        efrm_rxq_release(trs->nic[intf_i].thn_efct_rxq[qix]);
-        return rc;
-      }
-    }
-    else if( vi->nic_type.arch == EF_VI_ARCH_EF10CT ) {
+    if (vi->nic_type.arch == EF_VI_ARCH_EF10CT && !shrub) {
       int pg, sb;
       const int pg_per_sb = EFCT_RX_SUPERBUF_BYTES / EFHW_NIC_PAGE_SIZE;
       ef_addr* dma_addrs;
@@ -1144,7 +1152,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
 
       efct_ubufs_local_attach_internal(vi, qix, rxq, superbufs);
     }
-    else {
+    else if (vi->nic_type.arch == EF_VI_ARCH_EFCT) {
       efct_vi_start_rxq(vi, qix, rxq);
     }
 
