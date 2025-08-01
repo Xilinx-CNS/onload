@@ -88,6 +88,8 @@ void client_munmap(uint64_t* mappings, uintptr_t* files,
   for( i = 0; i < EF_SHRUB_FD_COUNT; ++i ) {
     if( mappings[i] != 0 )
       ef_shrub_socket_munmap(mappings[i], map_size(metrics, i), i);
+    /* Zero out memory so it doesn't get double freed */
+    mappings[i] = 0;
     ef_shrub_socket_close_file(files[i]);
   }
 }
