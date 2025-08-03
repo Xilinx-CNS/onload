@@ -1552,6 +1552,7 @@ static int ef10ct_filter_op(const struct efct_filter_insert_in *in_data,
                                         in_data->drv_opaque;
   struct efhw_nic_ef10ct_rxq *ef10ct_rxq;
   struct efhw_nic_ef10ct *ef10ct;
+  uint32_t base_flow_type;
   int allocated = 0;
   int rxq_num;
   int rxq;
@@ -1566,6 +1567,15 @@ static int ef10ct_filter_op(const struct efct_filter_insert_in *in_data,
     .outbuf = (u32*)&out,
     .outlen = MC_CMD_FILTER_OP_OUT_LEN,
   };
+
+  /* Bail out early with a known error for IPv6 filters. We have a more
+   * specific test later based on declared FW support once we've translated
+   * the filter, but MCDI doesn't explicitly differentiate between IPv4 and
+   * IPv6, so we need to do check this separately. */
+  base_flow_type = (in_data->filter->flow_type & ~(FLOW_EXT | FLOW_MAC_EXT));
+  if( base_flow_type == TCP_V6_FLOW || base_flow_type == UDP_V6_FLOW )
+    return -EPROTONOSUPPORT;
+
   rxq_num = select_rxq(params, in_data->filter->ring_cookie, &allocated);
   if( rxq_num < 0 )
     return rxq_num;
