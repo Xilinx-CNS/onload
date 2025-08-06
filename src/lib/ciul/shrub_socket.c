@@ -3,6 +3,8 @@
 
 #include "ef_vi_internal.h"
 #include <etherfabric/shrub_client.h>
+
+#include <ci/tools/sysdep.h>
 #include <ci/tools/utils.h>
 
 #include <stddef.h>

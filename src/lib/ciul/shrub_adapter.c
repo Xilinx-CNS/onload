@@ -75,6 +75,9 @@ int shrub_adapter_send_hwport(shrub_request_sender_t send_request_func,
     * unix sockets.
    */
   shrub_controller_request_t request = {0};
+
+  CI_BUILD_ASSERT(sizeof(request.create_hwport.hw_port) >= sizeof(hw_port));
+
   request.controller_version = EF_SHRUB_VERSION;
   request.command = EF_SHRUB_CONTROLLER_CREATE_HWPORT;
   request.create_hwport.buffer_count = buffers;

@@ -18,8 +18,6 @@
 #ifndef __CI_CIUL_SHRUB_SHARED_H__
 #define __CI_CIUL_SHRUB_SHARED_H__
 
-#include <cplane/mib.h>
-
 /* Identifier for a buffer, an index into the shared buffer memory.
  * The MSB for the id corresponds to the sentinel for the buffer. */
 typedef uint32_t ef_shrub_buffer_id;
@@ -170,7 +168,7 @@ typedef struct {
     } create_ifindex; /* EF_SHRUB_CONTROLLER_CREATE_IFINDEX */
     struct {
       uint32_t buffer_count;
-      cicp_hwport_mask_t hw_port;
+      uint32_t hw_port;
     } create_hwport; /* EF_SHRUB_CONTROLLER_CREATE_HWPORT */
     struct {
       int shrub_token_id;
