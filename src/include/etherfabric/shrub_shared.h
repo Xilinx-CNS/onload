@@ -35,7 +35,7 @@ static inline uint32_t ef_shrub_buffer_sentinel(ef_shrub_buffer_id id)
 }
 
 /* Protocol version, to check compatibility between client and server */
-#define EF_SHRUB_VERSION 3
+#define EF_SHRUB_VERSION 4
 #define SHRUB_ERR_INCOMPATIBLE_VERSION -1000
 
 /* An identifier that does not represent a buffer, used to indicate empty
@@ -74,7 +74,7 @@ static inline uint32_t ef_shrub_buffer_sentinel(ef_shrub_buffer_id id)
   (sizeof(EF_SHRUB_DUMP_LOG_DIR) + EF_SHRUB_CONTROLLER_LEN +                   \
    EF_SHRUB_DUMP_LOG_SIZE + sizeof("/"))
 
-enum shrub_controller_command {
+enum ef_shrub_controller_command {
   EF_SHRUB_CONTROLLER_DESTROY,
   EF_SHRUB_CONTROLLER_CREATE_HWPORT,
   EF_SHRUB_CONTROLLER_CREATE_IFINDEX,
@@ -107,19 +107,19 @@ struct ef_shrub_queue_request {
   uint64_t qid;
 };
 
-/* This struct is sent to the shrub server to make various requests. */
+/* This structure is sent to the shrub server to make various requests. */
 struct ef_shrub_request {
   /* Client's protocol version, to check compatibility */
   uint64_t server_version;
-  /* Tag to specify request type */
-  enum ef_shrub_request_type type;
+  /* Tag to specify request type, ef_shrub_request_type */
+  uint64_t type;
   /* Data required to be sent corresponding to a request type. */
   union {
     /* Shared rxq token request tagged by EF_SHRUB_REQUEST_TOKEN */
     struct ef_shrub_token_request rxq_token;
     /* Queue request tagged by EF_SHRUB_REQUEST_QUEUE. */
     struct ef_shrub_queue_request queue;
-  } requests;
+  };
 };
 
 /* This structure is sent to each client immediately after accepting a
@@ -151,32 +151,32 @@ struct ef_shrub_shared_metrics {
 };
 
 /* Structure containing connection state sharable between instances */
-struct ef_shrub_client_state
-{
+struct ef_shrub_client_state {
   uint64_t server_fifo_index;
   uint64_t client_fifo_index;
   struct ef_shrub_shared_metrics metrics;
 };
 
-typedef struct {
-  uint8_t controller_version;
-  uint8_t command;
+struct ef_shrub_controller_request {
+  uint64_t controller_version;
+  uint64_t command;
   union {
     struct {
-      uint32_t buffer_count;
-      int ifindex;
+      uint64_t buffer_count;
+      uint64_t ifindex;
     } create_ifindex; /* EF_SHRUB_CONTROLLER_CREATE_IFINDEX */
     struct {
-      uint32_t buffer_count;
-      uint32_t hw_port;
+      uint64_t buffer_count;
+      uint64_t hw_port;
     } create_hwport; /* EF_SHRUB_CONTROLLER_CREATE_HWPORT */
     struct {
-      int shrub_token_id;
+      uint64_t shrub_token_id;
     } destroy; /* EF_SHRUB_CONTROLLER_DESTROY */
     struct {
       char file_name[EF_SHRUB_DUMP_LOG_SIZE];
     } dump; /* EF_SHRUB_CONTROLLER_DUMP */
   };
-} shrub_controller_request_t;
+};
+
 #endif
 

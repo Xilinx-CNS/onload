@@ -2062,7 +2062,7 @@ static int set_shrub_token(ci_netif *ni, int shrub_socket_id, uint32_t intf)
 }
 
 int oo_send_shrub_request(int controller_id,
-                          shrub_controller_request_t *request) {
+                          struct ef_shrub_controller_request *request) {
   int rc;
   ssize_t received_bytes;
   int client_fd;
@@ -2122,7 +2122,7 @@ static int oo_init_shrub(ci_netif* ni, ef_vi* vi, ci_hwport_id_t hw_port, int ni
        * There's no reliable way to detect whether there's a listening
        * controller already, so we try and connect, and if we fail, try
        * spawning one at that point. */
-      shrub_socket_id = shrub_adapter_send_hwport(
+      shrub_socket_id = ef_shrub_adapter_send_hwport(
         oo_send_shrub_request,
         NI_OPTS(ni).shrub_controller_id,
         hw_port,
@@ -2139,7 +2139,7 @@ static int oo_init_shrub(ci_netif* ni, ef_vi* vi, ci_hwport_id_t hw_port, int ni
 
         /* Now retry */
         for( i = 0; i < 200; i++ ) {
-          shrub_socket_id = shrub_adapter_send_hwport(oo_send_shrub_request,
+          shrub_socket_id = ef_shrub_adapter_send_hwport(oo_send_shrub_request,
                                               NI_OPTS(ni).shrub_controller_id,
                                               hw_port,
                                               NI_OPTS(ni).shrub_buffer_count);

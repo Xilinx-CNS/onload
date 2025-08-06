@@ -142,7 +142,7 @@ int ef_shrub_client_open(struct ef_shrub_client* client,
 
   request.server_version = EF_SHRUB_VERSION;
   request.type = EF_SHRUB_REQUEST_QUEUE;
-  request.requests.queue.qid = qid;
+  request.queue.qid = qid;
   rc = ef_shrub_socket_send(client->socket, &request, sizeof(request));
   if( rc < 0 )
     goto fail_request;

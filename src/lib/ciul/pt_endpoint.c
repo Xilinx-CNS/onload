@@ -653,8 +653,8 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
     else if ( ra.u.vi_out.nic_arch == EFHW_ARCH_EF10CT ) {
       rc = efct_ubufs_init(vi, pd, pd_or_vi_set_dh);
       if ( rc == 0 && shrub_controller_id >= 0 ) {
-        rc = shrub_adapter_send_ifname(
-          shrub_adapter_send_request,
+        rc = ef_shrub_adapter_send_ifname(
+          ef_shrub_adapter_send_request,
           shrub_controller_id,
           pd->pd_intf_name,
           shrub_buffer_count);

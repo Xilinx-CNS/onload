@@ -452,7 +452,7 @@ static int poll_socket(shrub_controller_config *config)
   const int max_events = 1;
   uint32_t buffer_count = EF_SHRUB_DEFAULT_BUFFER_COUNT;
   cicp_hwport_mask_t hwport_mask = 0xffffffff;
-  shrub_controller_request_t request;
+  struct ef_shrub_controller_request request;
   int ifindex = -1;
   struct epoll_event events[max_events];
   int response_status = 0;
@@ -477,8 +477,8 @@ static int poll_socket(shrub_controller_config *config)
         if ( request.controller_version != EF_SHRUB_VERSION ) {
           if ( config->debug_mode ) {
             ci_log("Error: shrub_controller being called from an "
-                   "incompatible client! request version %d, "
-                   "expected version %d ",
+                   "incompatible client! request version %" PRIu64
+                   ", expected version %d ",
                    request.controller_version, EF_SHRUB_VERSION);
           }
           response_status = SHRUB_ERR_INCOMPATIBLE_VERSION;
@@ -515,7 +515,7 @@ static int poll_socket(shrub_controller_config *config)
           default:
             if ( config->debug_mode ) {
               ci_log("Info: shrub_controller: An unknown command was passed via "
-                    "the config socket, command %d", request.command);
+                    "the config socket, command %" PRIu64, request.command);
             }
             response_status = -1;
             break;

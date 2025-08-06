@@ -10,30 +10,30 @@
 #include <stddef.h>
 #include <stdint.h>
 
-typedef int (*shrub_request_sender_t)(int, shrub_controller_request_t *);
+typedef int (*ef_shrub_request_sender)(int, struct ef_shrub_controller_request *);
 
 /* Shared Readable User Buffers, Controller API*/
-int shrub_adapter_send_request(int controller_id,
-                               shrub_controller_request_t *request);
+int ef_shrub_adapter_send_request(int controller_id,
+                                  struct ef_shrub_controller_request *request);
 
 /* Programmatic API for dynamically adding an interface to a shrub controller.
  */
-int shrub_adapter_send_ifindex(shrub_request_sender_t send_request_func,
-                               int controller_id, int ifindex,
-                               uint32_t buffers);
-int shrub_adapter_send_hwport(shrub_request_sender_t send_request_func,
-                              int controller_id, cicp_hwport_mask_t hw_port,
-                              uint32_t buffers);
-int shrub_adapter_send_ifname(shrub_request_sender_t send_request_func,
-                              int controller_id, const char *ifname,
-                              uint32_t buffers);
+int ef_shrub_adapter_send_ifindex(ef_shrub_request_sender send_request_func,
+                                  int controller_id, int ifindex,
+                                  uint32_t buffers);
+int ef_shrub_adapter_send_hwport(ef_shrub_request_sender send_request_func,
+                                 int controller_id, cicp_hwport_mask_t hw_port,
+                                 uint32_t buffers);
+int ef_shrub_adapter_send_ifname(ef_shrub_request_sender send_request_func,
+                                 int controller_id, const char *ifname,
+                                 uint32_t buffers);
 
 /* Dump the given state of the shrub controller */
-int shrub_adapter_send_dump(shrub_request_sender_t send_request_func,
-                            int controller_id, const char *filename);
+int ef_shrub_adapter_send_dump(ef_shrub_request_sender send_request_func,
+                               int controller_id, const char *filename);
 
 /* Programmatic API for killing a shrub server. */
-int shrub_adapter_stop_server(shrub_request_sender_t send_request_func,
-                              int controller_id, int shrub_token);
+int ef_shrub_adapter_stop_server(ef_shrub_request_sender send_request_func,
+                                 int controller_id, int shrub_token);
 
 #endif

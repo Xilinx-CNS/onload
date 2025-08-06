@@ -19,9 +19,9 @@
 #include <time.h>
 #include <unistd.h>
 
-
-int shrub_adapter_send_request(int controller_id,
-                               shrub_controller_request_t *request) {
+int ef_shrub_adapter_send_request(int controller_id,
+                                  struct ef_shrub_controller_request *request)
+{
   int rc;
   int received_bytes = 0;
   uintptr_t client_fd = 0;
@@ -57,9 +57,11 @@ clean_exit:
   return rc;
 }
 
-int shrub_adapter_send_ifindex(shrub_request_sender_t send_request_func,
-                               int controller_id, int ifindex, uint32_t buffers) {
-  shrub_controller_request_t request = {0};
+int ef_shrub_adapter_send_ifindex(ef_shrub_request_sender send_request_func,
+                                  int controller_id, int ifindex,
+                                  uint32_t buffers)
+{
+  struct ef_shrub_controller_request request = {0};
   request.controller_version = EF_SHRUB_VERSION;
   request.command = EF_SHRUB_CONTROLLER_CREATE_IFINDEX;
   request.create_ifindex.buffer_count = buffers;
@@ -67,14 +69,15 @@ int shrub_adapter_send_ifindex(shrub_request_sender_t send_request_func,
   return send_request_func(controller_id, &request);
 }
 
-int shrub_adapter_send_hwport(shrub_request_sender_t send_request_func,
-  int controller_id, cicp_hwport_mask_t hw_port,
-  uint32_t buffers) {
-    /*
-    * This path needs to wait for the shrub controller to spawn and setup the
-    * unix sockets.
+int ef_shrub_adapter_send_hwport(ef_shrub_request_sender send_request_func,
+                                 int controller_id, cicp_hwport_mask_t hw_port,
+                                 uint32_t buffers)
+{
+  /*
+   * This path needs to wait for the shrub controller to spawn and setup the
+   * unix sockets.
    */
-  shrub_controller_request_t request = {0};
+  struct ef_shrub_controller_request request = {0};
 
   CI_BUILD_ASSERT(sizeof(request.create_hwport.hw_port) >= sizeof(hw_port));
 
@@ -85,19 +88,21 @@ int shrub_adapter_send_hwport(shrub_request_sender_t send_request_func,
   return send_request_func(controller_id, &request);
 }
 
-int shrub_adapter_send_ifname(shrub_request_sender_t send_request_func,
-                              int controller_id, const char *ifname,
-                              uint32_t buffers) {
-                                unsigned int ifindex = if_nametoindex(ifname);
+int ef_shrub_adapter_send_ifname(ef_shrub_request_sender send_request_func,
+                                int controller_id, const char *ifname,
+                                uint32_t buffers)
+{
+  unsigned int ifindex = if_nametoindex(ifname);
   if ( ifindex == 0 )
     return -errno;
-  return shrub_adapter_send_ifindex(send_request_func, controller_id, ifindex,
-                                    buffers);
+  return ef_shrub_adapter_send_ifindex(send_request_func, controller_id,
+                                       ifindex, buffers);
 }
 
-int shrub_adapter_send_dump(shrub_request_sender_t send_request_func,
-                            int controller_id, const char *filename) {
-  shrub_controller_request_t request = {0};
+int ef_shrub_adapter_send_dump(ef_shrub_request_sender send_request_func,
+                               int controller_id, const char *filename)
+{
+  struct ef_shrub_controller_request request = {0};
   request.controller_version = EF_SHRUB_VERSION;
   request.command = EF_SHRUB_CONTROLLER_DUMP;
   strncpy(request.dump.file_name, filename, EF_SHRUB_DUMP_LOG_SIZE - 1);
@@ -105,9 +110,10 @@ int shrub_adapter_send_dump(shrub_request_sender_t send_request_func,
   return send_request_func(controller_id, &request);
 }
 
-int shrub_adapter_stop_server(shrub_request_sender_t send_request_func,
-                              int controller_id, int shrub_token) {
-  shrub_controller_request_t request = {0};
+int ef_shrub_adapter_stop_server(ef_shrub_request_sender send_request_func,
+                                 int controller_id, int shrub_token)
+{
+  struct ef_shrub_controller_request request = {0};
   request.controller_version = EF_SHRUB_VERSION;
   request.command = EF_SHRUB_CONTROLLER_DESTROY;
   request.destroy.shrub_token_id = shrub_token;
