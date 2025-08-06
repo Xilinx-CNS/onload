@@ -187,8 +187,6 @@ int ef_shrub_client_acquire_buffer(struct ef_shrub_client* client,
                                    uint32_t* buffer_id,
                                    bool* sentinel)
 {
-
-  ci_dword_t id2;
   struct ef_shrub_client_state* state = get_state(client);
   int i = state->server_fifo_index;
   ef_shrub_buffer_id id = get_server_fifo(client)[i];
@@ -198,9 +196,8 @@ int ef_shrub_client_acquire_buffer(struct ef_shrub_client* client,
   state->server_fifo_index =
     i == state->metrics.server_fifo_size - 1 ? 0 : i + 1;
 
-  id2.u32[0] = id;
-  *buffer_id = CI_DWORD_FIELD(id2, EF_SHRUB_BUFFER_ID);
-  *sentinel = CI_DWORD_FIELD(id2, EF_SHRUB_SENTINEL) == 1;
+  *buffer_id = ef_shrub_buffer_index(id);
+  *sentinel = ef_shrub_buffer_sentinel(id);
   return 0;
 }
 

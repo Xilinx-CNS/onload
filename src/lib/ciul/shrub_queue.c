@@ -5,7 +5,6 @@
 #include "shrub_queue.h"
 #include "shrub_connection.h"
 #include "shrub_server_sockets.h"
-#include "bitfield.h"
 
 #include <etherfabric/internal/efct_uk_api.h> // for CI_HUGEPAGE_SIZE
 
@@ -17,23 +16,10 @@ struct ef_shrub_queue_buffer
 };
 
 /* Make a munged id value suitable for writing into the outgoing fifo */
-static ef_shrub_buffer_id set_buffer_id(int index, bool sentinel)
+static ef_shrub_buffer_id make_buffer_id(int index, bool sentinel)
 {
-  ci_dword_t buffer_id;
-  CI_POPULATE_DWORD_2(
-    buffer_id,
-    EF_SHRUB_BUFFER_ID, index,
-    EF_SHRUB_SENTINEL, sentinel
-  );
-  return buffer_id.u32[0];
-}
-
-/* Extract the buffer index from a munged id value */
-static uint32_t get_buffer_index(ef_shrub_buffer_id id)
-{
-  ci_dword_t id2;
-  id2.u32[0] = id;
-  return CI_DWORD_FIELD(id2, EF_SHRUB_BUFFER_ID);
+  EF_VI_ASSERT(index >= 0);
+  return (sentinel << 31) | index;
 }
 
 static bool fifo_has_space(struct ef_shrub_queue* queue)
@@ -124,7 +110,7 @@ static void release_buffer(struct ef_shrub_queue* queue, int buffer_index)
       while( remove_fifo_index != queue->fifo_index ) {
         ef_shrub_buffer_id id = queue->fifo[remove_fifo_index];
         if( id != EF_SHRUB_INVALID_BUFFER ) {
-          int remove_buffer_index = get_buffer_index(id);
+          int remove_buffer_index = ef_shrub_buffer_index(id);
           queue->buffers[remove_buffer_index].fifo_index = -1;
           queue->fifo[remove_fifo_index] = EF_SHRUB_INVALID_BUFFER;
         }
@@ -176,7 +162,7 @@ static void poll_fifo(struct ef_shrub_queue* queue)
 
     int fifo_index = queue->fifo_index;
     assert(queue->fifo[fifo_index] == EF_SHRUB_INVALID_BUFFER);
-    queue->fifo[fifo_index] = set_buffer_id(buffer_index, sentinel);
+    queue->fifo[fifo_index] = make_buffer_id(buffer_index, sentinel);
 
     struct ef_shrub_queue_buffer* buffer = &queue->buffers[buffer_index];
     assert(buffer->ref_count == 0);
@@ -272,7 +258,7 @@ void ef_shrub_queue_attached(struct ef_shrub_queue* queue,
     /* Take a reference to this buffer */
     ef_shrub_buffer_id buffer_id = queue->fifo[fifo_index];
     assert(buffer_id != EF_SHRUB_INVALID_BUFFER);
-    queue->buffers[get_buffer_index(buffer_id)].ref_count++;
+    queue->buffers[ef_shrub_buffer_index(buffer_id)].ref_count++;
 
     /* This should never happen since the FIFO should never be completely full,
      * but we shouldn't loop forever if it does happen somehow. */
@@ -294,7 +280,7 @@ void ef_shrub_queue_detached(struct ef_shrub_queue* queue,
   while( fifo_index != queue->fifo_index ) {
     ef_shrub_buffer_id buffer_id = queue->fifo[fifo_index];
     assert(buffer_id != EF_SHRUB_INVALID_BUFFER);
-    release_buffer(queue, get_buffer_index(buffer_id));
+    release_buffer(queue, ef_shrub_buffer_index(buffer_id));
     fifo_index = next_fifo_index(queue, fifo_index);
   }
 

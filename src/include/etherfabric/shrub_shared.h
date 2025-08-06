@@ -24,6 +24,18 @@
  * The MSB for the id corresponds to the sentinel for the buffer. */
 typedef uint32_t ef_shrub_buffer_id;
 
+/* The index of a buffer id */
+static inline uint32_t ef_shrub_buffer_index(ef_shrub_buffer_id id)
+{
+  return id & 0x7fffffff;
+}
+
+/* The sentinel value of a buffer id */
+static inline uint32_t ef_shrub_buffer_sentinel(ef_shrub_buffer_id id)
+{
+  return id >> 31;
+}
+
 /* Protocol version, to check compatibility between client and server */
 #define EF_SHRUB_VERSION 3
 #define SHRUB_ERR_INCOMPATIBLE_VERSION -1000
@@ -32,10 +44,6 @@ typedef uint32_t ef_shrub_buffer_id;
  * slots in the FIFOs.
  */
 #define EF_SHRUB_INVALID_BUFFER ((ef_shrub_buffer_id)(-1))
-#define EF_SHRUB_BUFFER_ID_LBN 0
-#define EF_SHRUB_BUFFER_ID_WIDTH 31
-#define EF_SHRUB_SENTINEL_LBN 31
-#define EF_SHRUB_SENTINEL_WIDTH 1
 
 /* Memory is shared via an array of file descriptors passed as ancilliary
  * data alongside the metrics. These are the indexes and size for the array.
