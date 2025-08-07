@@ -5,7 +5,7 @@
 
 import groovy.transform.Field
 
-import com.solarflarecom.onload.autosmoke.AutosmokeManager;
+import com.solarflarecom.onload.autosmoke.AutosmokeManager
 import com.solarflarecom.onload.notifications.NotificationManager
 import com.solarflarecom.onload.properties.PropertyManager
 import com.solarflarecom.onload.scm.SCMManager
