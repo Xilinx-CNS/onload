@@ -508,7 +508,7 @@ static inline int efrm_follow_pfn(struct vm_area_struct *vma,
 #define efrm_follow_pte follow_pte
 #else
 #define efrm_follow_pte(vma, addr, ptep, ptl) \
-  follow_pte(vma->vm_mm, addr, ptep, ptl)
+  follow_pte((vma)->vm_mm, addr, ptep, ptl)
 #endif /* EFRM_HAVE_FOLLOW_PTE_VMA */
 
 static inline int efrm_follow_pfn(struct vm_area_struct *vma,
