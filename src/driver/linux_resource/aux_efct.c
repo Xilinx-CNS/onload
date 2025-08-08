@@ -5,6 +5,7 @@
 #include <ci/efhw/nic.h>
 #include <ci/efhw/efct.h>
 #include <ci/efhw/efct_filters.h>
+#include <ci/efhw/efct_wakeup.h>
 #include <ci/efhw/eventq.h>
 #include <ci/tools/sysdep.h>
 
@@ -40,23 +41,6 @@ void efct_unprovide_hugetlb_alloc(void)
 {
   efct_hugetlb_alloc = NULL;
   mutex_unlock(&efct_hugetlb_provision_mtx);
-}
-
-static bool seq_lt(uint32_t a, uint32_t b)
-{
-  return (int32_t)(a - b) < 0;
-}
-
-static uint32_t make_pkt_seq(unsigned sbseq, unsigned pktix)
-{
-  return (sbseq << 16) | pktix;
-}
-
-static int do_wakeup(struct efhw_nic_efct *efct, struct efhw_efct_rxq *app,
-                     int budget)
-{
-  return efct->nic->ev_handlers->wakeup_fn(efct->nic, app->wakeup_instance,
-                                           budget);
 }
 
 static void efct_reset_down(struct efhw_nic_efct *efct)
@@ -97,30 +81,10 @@ static int efct_handle_event(void *driver_data,
   switch( event->type ) {
     case XLNX_EVENT_WAKEUP: {
       struct efhw_nic_efct_rxq* q = &efct->rxq[event->rxq];
-      struct efhw_efct_rxq *app;
       unsigned sbseq = event->value >> 32;
       unsigned pktix = event->value & 0xffffffff;
-      uint32_t now = make_pkt_seq(sbseq, pktix);
-      int spent = 0;
 
-      CI_WRITE_ONCE(q->now, now);
-      ci_mb();
-      if( CI_READ_ONCE(q->awaiters) == 0 )
-        return 0;
-
-      for( app = q->live_apps; app; app = app->next ) {
-        uint32_t wake_at = CI_READ_ONCE(app->wake_at_seqno);
-        if( wake_at != EFCT_INVALID_PKT_SEQNO && seq_lt(wake_at, now) ) {
-          if( ci_cas32_succeed(&app->wake_at_seqno, wake_at, EFCT_INVALID_PKT_SEQNO) ) {
-            int rc;
-            ci_atomic32_dec(&q->awaiters);
-            rc = do_wakeup(efct, app, budget - spent);
-            if( rc >= 0 )
-              spent += rc;
-          }
-        }
-      }
-      return spent;
+      return efct_handle_wakeup(efct->nic, &q->apps, sbseq, pktix, budget);
     }
 
     case XLNX_EVENT_TIME_SYNC: {
@@ -129,7 +93,7 @@ static int efct_handle_event(void *driver_data,
       int spent = 0;
 
       q->time_sync = event->value;
-      for( app = q->live_apps; app; app = app->next ) {
+      for( app = q->apps.live_apps; app; app = app->next ) {
         CI_WRITE_ONCE(app->krxq.shm->time_sync, event->value);
         spent += 1;
       }
@@ -146,42 +110,6 @@ static int efct_handle_event(void *driver_data,
       return -ENOSYS;
   }
   return -ENOSYS;
-}
-
-int efct_request_wakeup(struct efhw_nic_efct *efct, struct efhw_efct_rxq *app,
-                        unsigned sbseq, unsigned pktix, bool allow_recursion)
-{
-  struct efhw_nic_efct_rxq* q = &efct->rxq[app->qid];
-  uint32_t pkt_seqno = make_pkt_seq(sbseq, pktix);
-  uint32_t now = CI_READ_ONCE(q->now);
-
-  EFHW_ASSERT(pkt_seqno != EFCT_INVALID_PKT_SEQNO);
-  /* Interrupt wakeups are traditionally defined simply by equality, but we
-   * need to use proper ordering because apps can run significantly ahead of
-   * the net driver due to interrupt coalescing, and it'd be contrary to the
-   * goal of being interrupt-driven to spin entering and exiting the kernel
-   * for an entire coalesce period */
-  if( seq_lt(pkt_seqno, now) ) {
-    if( allow_recursion )
-      do_wakeup(efct, app, 0);
-    return -EAGAIN;
-  }
-
-  if( ci_xchg32(&app->wake_at_seqno, pkt_seqno) == EFCT_INVALID_PKT_SEQNO )
-    ci_atomic32_inc(&q->awaiters);
-
-  ci_mb();
-  now = CI_READ_ONCE(q->now);
-  if( ! seq_lt(pkt_seqno, now) )
-    return 0;
-
-  if( ci_cas32_succeed(&app->wake_at_seqno, pkt_seqno, EFCT_INVALID_PKT_SEQNO) ) {
-    ci_atomic32_dec(&q->awaiters);
-    if( allow_recursion )
-      do_wakeup(efct, app, 0);
-    return -EAGAIN;
-  }
-  return -EAGAIN;
 }
 
 static int efct_alloc_hugepage(void *driver_data,
@@ -225,7 +153,7 @@ static void efct_hugepage_list_changed(void *driver_data, int rxq)
   struct efhw_nic_efct_rxq *q = &efct->rxq[rxq];
   struct efhw_efct_rxq *app;
 
-  for( app = q->live_apps; app; app = app->next ) {
+  for( app = q->apps.live_apps; app; app = app->next ) {
     if( ! app->krxq.destroy ) {
       unsigned new_gen = app->krxq.shm->config_generation + 1;
       /* Avoid 0 so that the reader can always use it as a 'not yet initialised'
@@ -573,7 +501,7 @@ void efct_remove(struct auxiliary_device *auxdev)
   /* Now any destruct work items we queued as a result of the final poll have
    * been drained, so everything should be gone. */
   for( i = 0; i < efct->rxq_n; ++i ) {
-    EFHW_ASSERT(efct->rxq[i].live_apps == NULL);
+    EFHW_ASSERT(efct->rxq[i].apps.live_apps == NULL);
     EFHW_ASSERT(efct->rxq[i].new_apps == NULL);
   }
 

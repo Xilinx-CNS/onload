@@ -9,6 +9,7 @@
 #include <ci/efhw/nic.h>
 #include <ci/efhw/efct.h>
 #include <ci/efhw/efct_filters.h>
+#include <ci/efhw/efct_wakeup.h>
 #include <ci/efhw/eventq.h>
 #include <ci/efhw/checks.h>
 #include <ci/efhw/mc_driver_pcol.h>
@@ -275,7 +276,8 @@ efct_nic_shared_rxq_request_wakeup(struct efhw_nic *nic,
                                    unsigned sbseq, unsigned pktix,
                                    bool allow_recursion)
 {
-  return efct_request_wakeup(nic->arch_extra, rxq, sbseq, pktix,
+  struct efhw_nic_efct* efct = nic->arch_extra;
+  return efct_request_wakeup(nic, &efct->rxq[rxq->qid].apps, rxq, sbseq, pktix,
                              allow_recursion);
 }
 

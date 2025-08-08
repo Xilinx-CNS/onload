@@ -61,12 +61,18 @@ struct efhw_efct_rxq {
   };
 };
 
+struct efhw_nic_efct_rxq_wakeup_bits {
+  struct efhw_efct_rxq *live_apps; /* Owned by NAPI context -- X3 only */
+  uint32_t now;
+  uint32_t awaiters;
+};
+
 /* TODO ON-16705 find somewhere better to put this */
 #define CI_EFCT_EVQ_DUMMY_MAX 1024
 
 struct efhw_nic_efct_rxq {
+  struct efhw_nic_efct_rxq_wakeup_bits apps;
   struct efhw_efct_rxq *new_apps;  /* Owned by process context */
-  struct efhw_efct_rxq *live_apps; /* Owned by NAPI context */
   struct efhw_efct_rxq *destroy_apps; /* Owned by NAPI context */
   uint32_t superbuf_refcount[CI_EFCT_MAX_SUPERBUFS];
   /* Tracks buffers passed to us from the driver in order they are going
@@ -87,8 +93,6 @@ struct efhw_nic_efct_rxq {
   } sbufs;
   uint32_t apps_max_sbufs;
   struct work_struct destruct_wq;
-  uint32_t now;
-  uint32_t awaiters;
   uint64_t time_sync;
   uint16_t total_sbufs;
 };
@@ -135,8 +139,6 @@ struct efhw_nic_efct {
 #if CI_HAVE_EFCT_AUX
 int efct_get_hugepages(struct efhw_nic *nic, int hwqid,
                        struct xlnx_efct_hugepage *pages, size_t n_pages);
-int efct_request_wakeup(struct efhw_nic_efct *efct, struct efhw_efct_rxq *app,
-                        unsigned sbseq, unsigned pktix, bool allow_recursion);
 bool efct_packet_matches_filter(struct efct_filter_state *state,
                                 struct net_device *net_dev, int rxq,
                                 const unsigned char* pkt, size_t pkt_len);
