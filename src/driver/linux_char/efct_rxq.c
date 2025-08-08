@@ -31,8 +31,8 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
   int shm_ix;
   int rc;
 
-  if ((alloc->in_flags & ~EFCH_EFCT_RXQ_FLAG_UBUF) != 0) {
-    EFCH_ERR("%s: ERROR: flags != 0", __FUNCTION__);
+  if ((alloc->in_flags & ~EFCH_EFCT_RXQ_GOOD_FLAGS) != 0) {
+    EFCH_ERR("%s: ERROR: flags = 0x%x != 0", __FUNCTION__, alloc->in_flags);
     return -EINVAL;
   }
 
@@ -84,8 +84,8 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
   }
 
   rc = efrm_rxq_alloc(vi, alloc->in_qid, shm_ix, alloc->in_timestamp_req,
-                      false /* interrupt_req */, alloc->in_n_hugepages,
-                      hugetlb_alloc, &rxq);
+                      !!(alloc->in_flags & EFCH_EFCT_RXQ_FLAG_IRQ),
+                      alloc->in_n_hugepages, hugetlb_alloc, &rxq);
   if( (alloc->in_flags & EFCH_EFCT_RXQ_FLAG_UBUF) == 0 )
     oo_hugetlb_allocator_put(hugetlb_alloc);
 

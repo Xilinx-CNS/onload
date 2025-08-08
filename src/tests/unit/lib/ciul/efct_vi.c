@@ -216,7 +216,9 @@ static void efct_mock_free(ef_vi* vi, int qid, int sbid)
     STATE_CHECK(ops, free_sbid, ops->rxqs->q[qid].shared_sbid_to_free);
 }
 
-static int efct_mock_attach(ef_vi* vi, int qid, int buf_fd, unsigned n_superbufs, bool shared_mode)
+static int efct_mock_attach(ef_vi* vi, int qid, int buf_fd,
+                            unsigned n_superbufs, bool shared_mode,
+                            bool interrupt_mode)
 {
   struct efct_mock_ops* ops = mock_ops(vi);
 

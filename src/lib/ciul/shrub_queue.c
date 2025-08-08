@@ -221,7 +221,7 @@ int ef_shrub_queue_open(struct ef_shrub_queue* queue,
                                  qid,
                                  queue->shared_fds[EF_SHRUB_FD_BUFFERS],
                                  queue->buffer_count,
-                                 false);
+                                 false, true);
   if (rc < 0)
     goto fail_queue_attach;
   

@@ -128,7 +128,8 @@ static int efct_kbufs_attach(ef_vi* vi,
                              int qid,
                              int buf_fd,
                              unsigned n_superbufs,
-                             bool shared_mode)
+                             bool shared_mode,
+                             bool interrupt_mode)
 {
 #ifdef __KERNEL__
   /* Onload does its own thing before calling attach_internal */

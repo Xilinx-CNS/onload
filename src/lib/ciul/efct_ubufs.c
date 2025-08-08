@@ -338,7 +338,8 @@ static int efct_ubufs_attach(ef_vi* vi,
                              int qid,
                              int fd,
                              unsigned n_superbufs,
-                             bool shared_mode)
+                             bool shared_mode,
+                             bool interrupt_mode)
 {
   int ix, rc;
   struct efct_ubufs* ubufs = get_ubufs(vi);
@@ -352,7 +353,8 @@ static int efct_ubufs_attach(ef_vi* vi,
     return ix;
   rxq = &ubufs->q[ix];
 
-  rc = efct_ubufs_init_rxq_resource(vi, qid, n_superbufs, &rxq->rxq_id);
+  rc = efct_ubufs_init_rxq_resource(vi, qid, n_superbufs, interrupt_mode,
+                                    &rxq->rxq_id);
   if( rc < 0 ) {
     LOGVV(ef_log("%s: efct_ubufs_init_rxq_resource rxq %d", __FUNCTION__, rc));
     return rc;
