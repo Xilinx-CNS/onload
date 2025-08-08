@@ -233,6 +233,8 @@
  * In principle, this could be set to other values; but we don't support that */
 #define EFCT_PKT_STRIDE 2048
 
+#define EFCT_RX_SUPERBUF_PKTS (EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE)
+
 /* Interrupt priming */
 #define ERF_HZ_READ_IDX_LBN 16
 #define ERF_HZ_READ_IDX_WIDTH 16

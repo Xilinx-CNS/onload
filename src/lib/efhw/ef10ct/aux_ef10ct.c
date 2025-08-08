@@ -5,6 +5,7 @@
 #include <ci/driver/ci_ef10ct.h>
 #include <ci/efhw/nic.h>
 #include <ci/efhw/ef10ct.h>
+#include <ci/efhw/eventq_macros.h>
 #include <ci/efhw/efct_filters.h>
 #include <ci/efhw/iopage.h>
 #include <lib/efhw/aux.h>
@@ -183,7 +184,9 @@ static int ef10ct_resource_init(struct efx_auxdev *edev,
 
   /* Shared evqs for rx vis. Need at least one for suppressed events */
   /* TODO ON-16670 determine how many more to add for interrupt affinity */
-  ef10ct->shared_n = 1;
+  /* Add a second shared evq, so that shared rxq which want interrupts can
+   * attach to. */
+  ef10ct->shared_n = 1 + 1;
   ef10ct->shared = vzalloc(sizeof(*ef10ct->shared) * ef10ct->shared_n);
   if( ! ef10ct->shared ) {
     rc = -ENOMEM;
@@ -227,7 +230,7 @@ static void ef10ct_vi_allocator_dtor(struct efhw_nic_ef10ct *nic)
   efhw_stack_allocator_dtor(&nic->vi_allocator.rx);
 }
 
-static irqreturn_t ef10ct_irq_handler(int irq, void *dev)
+static irqreturn_t ef10ct_flush_irq_handler(int irq, void *dev)
 {
   struct ef10ct_shared_kernel_evq *shared_evq = dev;
   struct efhw_nic_ef10ct_evq *evq = shared_evq->evq;
@@ -240,13 +243,27 @@ static irqreturn_t ef10ct_irq_handler(int irq, void *dev)
   return IRQ_HANDLED;
 }
 
-static int ef10ct_init_shared_irq(struct ef10ct_shared_kernel_evq *evq)
+static irqreturn_t ef10ct_event_irq_handler(int irq, void *dev)
+{
+  struct ef10ct_shared_kernel_evq *shared_evq = dev;
+  struct efhw_nic_ef10ct_evq *evq = shared_evq->evq;
+
+  if (shared_evq->irq != irq)
+    return IRQ_NONE;
+
+  schedule_delayed_work(&evq->handle_event, 0);
+
+  return IRQ_HANDLED;
+}
+
+static int ef10ct_init_shared_irq(struct ef10ct_shared_kernel_evq *evq,
+                                  irq_handler_t handler)
 {
   /* FIXME ON-16187: Better interrupt naming */
   snprintf(evq->name, sizeof(evq->name), "ef10ct-%d",
            ef10ct_get_queue_num(evq->evq_id));
 
-  return request_irq(evq->irq, ef10ct_irq_handler, 0, evq->name, evq);
+  return request_irq(evq->irq, handler, 0, evq->name, evq);
 }
 
 static void ef10ct_fini_shared_irq(struct ef10ct_shared_kernel_evq *evq)
@@ -254,7 +271,8 @@ static void ef10ct_fini_shared_irq(struct ef10ct_shared_kernel_evq *evq)
   free_irq(evq->irq, evq);
 }
 
-static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid)
+static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid,
+                                      bool events)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct efhw_nic_ef10ct_evq *ef10ct_evq;
@@ -262,6 +280,7 @@ static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid)
   struct efhw_evq_params params = {};
   int evq_id, rc, evq_num;
   struct ef10ct_shared_kernel_evq *shared_evq = &ef10ct->shared[qid];
+  irq_handler_t handler;
 
   evq_id = ef10ct_alloc_evq(nic);
   if(evq_id < 0) {
@@ -280,13 +299,18 @@ static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid)
   shared_evq->evq_id = evq_id;
   shared_evq->evq = &ef10ct->evq[evq_num];
 
-  rc = ef10ct_init_shared_irq(shared_evq);
+  handler = events ? ef10ct_event_irq_handler : ef10ct_flush_irq_handler;
+
+  rc = ef10ct_init_shared_irq(shared_evq, handler);
   if (rc < 0)
     goto fail_init_irq;
 
   rc = efhw_iopages_alloc(nic, &shared_evq->iopages, page_order, 1, 0);
   if( rc )
     goto fail_iopages_alloc;
+
+  memset(shared_evq->iopages.ptr, EFHW_CLEAR_EVENT_VALUE,
+         shared_evq->iopages.n_pages << PAGE_SHIFT);
 
   params.evq = evq_num;
   params.n_pages = 1 << page_order;
@@ -405,7 +429,10 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
 
   /* Init shared evqs for use with rx vis. */
   for( i = 0; i < ef10ct->shared_n; i++ ) {
-    rc = ef10ct_nic_init_shared_evq(nic, i);
+    /* TODO ON-16670 How to choose which evqs get interrupts. Currently the
+     * first shared evq on each interface will not be used for rx events, and
+     * any subsequent ones can be. */
+    rc = ef10ct_nic_init_shared_evq(nic, i, i != 0);
     if( rc < 0 ) {
       shared_n = i;
       goto fail4;

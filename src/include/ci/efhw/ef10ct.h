@@ -21,6 +21,7 @@ struct efhw_nic_ef10ct_evq {
   atomic_t queues_flushing;
   struct delayed_work check_flushes_polled;
   struct delayed_work check_flushes_irq;
+  struct delayed_work handle_event;
   ci_qword_t *base;
   unsigned capacity;
   unsigned next;
@@ -62,6 +63,10 @@ struct efhw_nic_ef10ct_rxq {
   uint64_t *post_buffer_addr;
   struct oo_hugetlb_page *buffer_pages;
   size_t n_buffer_pages;
+
+  /* Shared rxqs only */
+  struct efhw_nic_efct_rxq_wakeup_bits apps;
+  uint32_t pktix; /* Total number of packets, shift right for sbufs */
 };
 
 struct ef10ct_shared_kernel_evq {
