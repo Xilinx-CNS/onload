@@ -47,7 +47,7 @@
 
 /* verifies compile time expression is 0 or positive -
  * no-op for runtime expressions */
-#if __GNUC__ * 100 + __GNUC_MINOR__ >= 409
+#if defined(__clang__) || __GNUC__ * 100 + __GNUC_MINOR__ >= 409
 #define CI_BUILD_ASSERT_CONSTANT_NON_NEGATIVE(c) \
   do {                                                              \
     char __CI_BUILD_ASSERT_NAME(__LINE__)                           \
