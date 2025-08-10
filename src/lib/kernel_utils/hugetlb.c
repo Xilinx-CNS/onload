@@ -315,10 +315,15 @@ oo_hugetlb_page_offset(struct page *page)
 	 * for vanilla, and >= 5.14 for RHEL 9.6) where hugetlb_basepage_index()
 	 * was not present.
 	 */
-#if defined(EFRM_HAS_FILEMAP_LOCK_HUGETLB_FOLIO) && ! defined(EFRM_HAS_HUGETLB_BASEPAGE_INDEX)
-	return page->index * PAGE_SIZE;
+#ifdef EFRM_PAGE_HAS_FOLIO_INDEX
+	pgoff_t index = page->__folio_index;
 #else
-	return page->index * OO_HUGEPAGE_SIZE;
+	pgoff_t index = page->index;
+#endif
+#if defined(EFRM_HAS_FILEMAP_LOCK_HUGETLB_FOLIO) && ! defined(EFRM_HAS_HUGETLB_BASEPAGE_INDEX)
+	return index * PAGE_SIZE;
+#else
+	return index * OO_HUGEPAGE_SIZE;
 #endif
 }
 EXPORT_SYMBOL(oo_hugetlb_page_offset);
