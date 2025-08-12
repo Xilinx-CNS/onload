@@ -616,7 +616,7 @@ oof_local_port_free(struct oof_manager* fm, struct oof_local_port* lp)
     spin_unlock_bh(&fm->fm_inner_lock);
   }
 #endif
-  ci_free(lp->lp_addr);
+  ci_vfree(lp->lp_addr);
   ci_free(lp);
 }
 
@@ -634,7 +634,7 @@ oof_local_port_alloc(struct oof_manager* fm, int protocol, int lport)
   if( lp == NULL ) 
     return NULL;
 
-  lp->lp_addr = CI_ALLOC_ARRAY(struct oof_local_port_addr, 
+  lp->lp_addr = CI_VMALLOC_ARRAY(struct oof_local_port_addr, 
                                fm->fm_local_addr_max);
   if( lp->lp_addr == NULL ) {
     ci_free(lp);
