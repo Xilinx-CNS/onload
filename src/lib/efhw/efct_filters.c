@@ -126,6 +126,10 @@ hw_filters_are_equal(const struct efct_filter_node *node,
         sizeof(node->loc_mac)) && hw_filter->outer_vlan == node->vlan)
       return true;
     break;
+  case FILTER_CLASS_ethertype:
+    if (hw_filter->ethertype == node->ethertype)
+      return true;
+    break;
   default:
     /* This should only be called for filter types that correspond to a real
      * HW filter. */

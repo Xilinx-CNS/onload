@@ -60,11 +60,6 @@ int efx_spec_to_ethtool_flow(const struct efx_filter_spec *src,
        (EFX_FILTER_MATCH_REM_PORT | EFX_FILTER_MATCH_LOC_PORT)) ==
       EFX_FILTER_MATCH_REM_PORT )
     return -EPROTONOSUPPORT;
-  if( src->match_flags & EFX_FILTER_MATCH_ETHER_TYPE &&
-      src->ether_type != htons(ETH_P_IP) &&
-      src->ether_type != htons(ETH_P_IPV6) &&
-      src->ether_type != htons(ETH_P_ARP) )
-    return -EPROTONOSUPPORT;
 
   if( src->match_flags & EFX_FILTER_MATCH_IP_PROTO )
     proto = src->ip_proto;
