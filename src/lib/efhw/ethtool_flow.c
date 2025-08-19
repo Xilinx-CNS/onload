@@ -405,8 +405,8 @@ void ethtool_flow_to_mcdi_op(ci_dword_t *buf, int rxq, int op,
     if (filter->m_u.ether_spec.h_proto) {
       match_fields |= EFHW_MCDI_MATCH_FIELD_BIT(ETHER_TYPE);
       EFHW_MCDI_SET_WORD(buf, FILTER_OP_IN_ETHER_TYPE,
-                         htons(filter->h_u.ether_spec.h_proto &
-                               filter->m_u.ether_spec.h_proto) );
+                         filter->h_u.ether_spec.h_proto &
+                         filter->m_u.ether_spec.h_proto);
     }
     break;
   case SCTP_V4_FLOW:    /* SCTP over IPv4 */
