@@ -65,9 +65,9 @@ static int shrub_controller_path_get(char* buffer,
   spin_lock(&shrub_lock);
   path = shrub_get_controller_path();
   /* The magic 4096 is documented in linux/moduleparam.h. */
-  strncpy(buffer, path, 4096);
-  buffer[4095] = '\0';
-  len = strnlen(buffer, 4096);
+  strncpy(buffer, path, PATH_MAX);
+  buffer[PATH_MAX - 1] = '\0';
+  len = strnlen(buffer, PATH_MAX);
   spin_unlock(&shrub_lock);
 
   return len;
@@ -99,17 +99,13 @@ int shrub_spawn_server(char* controller_id)
     NULL
   };
 
-  path = kmalloc(4096, GFP_KERNEL);
+  path = kmalloc(PATH_MAX, GFP_KERNEL);
   if ( !path )
     return -ENOMEM;
 
   spin_lock(&shrub_lock);
-  if ( shrub_controller_path != NULL && *shrub_controller_path != '\0' ) {
-    strncpy(path, shrub_controller_path, 4096);
-  } else {
-    strncpy(path, DEFAULT_SHRUB_CONTROLLER_PATH, 4096);
-  }
-  path[4095] = '\0';
+  strncpy(path, shrub_get_controller_path(), PATH_MAX);
+  path[PATH_MAX - 1] = '\0';
   spin_unlock(&shrub_lock);
 
   argv[0] = path;
