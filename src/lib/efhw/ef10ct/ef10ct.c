@@ -1550,6 +1550,23 @@ static int select_rxq(struct filter_insert_params *params, uint64_t rxq_in,
 }
 
 
+static void ef10ct_populate_mcdi_common(ci_dword_t *buf, int op, int rxq)
+{
+  EFHW_ASSERT((op == MC_CMD_FILTER_OP_IN_OP_INSERT) ||
+              (op == MC_CMD_FILTER_OP_IN_OP_SUBSCRIBE) ||
+              (op == MC_CMD_FILTER_OP_IN_OP_REPLACE));
+  EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_OP, op);
+  EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_PORT_ID, EVB_PORT_ID_ASSIGNED);
+  EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_RX_DEST,
+                      MC_CMD_FILTER_OP_IN_RX_DEST_HOST);
+  EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_RX_QUEUE, rxq);
+  EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_RX_MODE,
+                      MC_CMD_FILTER_OP_IN_RX_MODE_SIMPLE);
+  EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_TX_DEST,
+                      MC_CMD_FILTER_OP_IN_TX_DEST_DEFAULT);
+}
+
+
 static int ef10ct_filter_op(const struct efct_filter_insert_in *in_data,
                             struct efct_filter_insert_out *out_data,
                             int op)
@@ -1557,7 +1574,7 @@ static int ef10ct_filter_op(const struct efct_filter_insert_in *in_data,
   struct filter_insert_params *params = (struct filter_insert_params*)
                                         in_data->drv_opaque;
   struct efhw_nic_ef10ct_rxq *ef10ct_rxq;
-  struct efhw_nic_ef10ct *ef10ct;
+  struct efhw_nic_ef10ct *ef10ct = params->nic->arch_extra;
   uint32_t base_flow_type;
   int allocated = 0;
   int rxq_num;
@@ -1582,6 +1599,19 @@ static int ef10ct_filter_op(const struct efct_filter_insert_in *in_data,
   if( base_flow_type == TCP_V6_FLOW || base_flow_type == UDP_V6_FLOW )
     return -EPROTONOSUPPORT;
 
+  EFHW_MCDI_INITIALISE_BUF(in);
+  EFHW_MCDI_INITIALISE_BUF(out);
+  rc = efct_filter_id_to_mcdi_match_fields(ef10ct->filter_state, in,
+                                           in_data->filter_id);
+  if( rc < 0 )
+    return rc;
+
+  /* If it's something we don't support check now, to allow us to return a
+   * specific error and avoid the MCDI. */
+  if( !check_supported_filter(ef10ct->supported_filter_matches,
+                              EFHW_MCDI_DWORD(in, FILTER_OP_IN_MATCH_FIELDS)) )
+    return -EPROTONOSUPPORT;
+
   rxq_num = select_rxq(params, in_data->filter->ring_cookie, &allocated);
   if( rxq_num < 0 )
     return rxq_num;
@@ -1594,7 +1624,6 @@ static int ef10ct_filter_op(const struct efct_filter_insert_in *in_data,
   EFHW_ASSERT(rxq_num < 256);
   rxq = ef10ct_reconstruct_queue_handle(rxq_num, EF10CT_QUEUE_HANDLE_TYPE_RXQ);
 
-  ef10ct = params->nic->arch_extra;
   ef10ct_rxq = &ef10ct->rxq[rxq_num];
   /* If we are attaching to an existing queue, check the state of it before
    * performing an op. */
@@ -1620,16 +1649,8 @@ static int ef10ct_filter_op(const struct efct_filter_insert_in *in_data,
     mutex_unlock(&ef10ct_rxq->bind_lock);
   }
 
-  EFHW_MCDI_INITIALISE_BUF(in);
-  EFHW_MCDI_INITIALISE_BUF(out);
-  ethtool_flow_to_mcdi_op(in, rxq, op, in_data->filter);
-
-  /* If it's something we don't support check now, to allow us to return a
-   * specific error and avoid the MCDI. */
-  if( !check_supported_filter(ef10ct->supported_filter_matches,
-                              EFHW_MCDI_DWORD(in, FILTER_OP_IN_MATCH_FIELDS)) )
-    return -EPROTONOSUPPORT;
-
+  /* Populate the rest of the MCDI cmd now */
+  ef10ct_populate_mcdi_common(in, op, rxq);
   rc = ef10ct_fw_rpc(params->nic, &rpc);
 
   if( rc == 0 ) {

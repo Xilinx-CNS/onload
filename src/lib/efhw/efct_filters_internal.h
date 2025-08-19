@@ -4,6 +4,8 @@
 #ifndef LIB_EFHW_EFCT_FILTERS_INTERNAL_H
 #define LIB_EFHW_EFCT_FILTERS_INTERNAL_H
 
+#include <ci/efhw/mc_driver_pcol.h>
+#include "mcdi_common.h"
 
 #define EFCT_ETHERTYPE_IG_FILTER 0xFFFF
 
@@ -90,6 +92,33 @@ static const size_t MAX_ALLOWED_ipproto_vlan = 128;
 static const size_t MAX_ALLOWED_ethertype = 128;
 static const size_t MAX_ALLOWED_mac = 128;
 static const size_t MAX_ALLOWED_mac_vlan = 128;
+
+static const uint32_t MCDI_MATCH_FLAGS_full_match =
+                          EFHW_MCDI_MATCH_FIELD_BIT(ETHER_TYPE) |
+                          EFHW_MCDI_MATCH_FIELD_BIT(IP_PROTO) |
+                          EFHW_MCDI_MATCH_FIELD_BIT(DST_IP) |
+                          EFHW_MCDI_MATCH_FIELD_BIT(DST_PORT) |
+                          EFHW_MCDI_MATCH_FIELD_BIT(SRC_IP) |
+                          EFHW_MCDI_MATCH_FIELD_BIT(SRC_PORT);
+static const uint32_t MCDI_MATCH_FLAGS_semi_wild =
+                          EFHW_MCDI_MATCH_FIELD_BIT(ETHER_TYPE) |
+                          EFHW_MCDI_MATCH_FIELD_BIT(IP_PROTO) |
+                          EFHW_MCDI_MATCH_FIELD_BIT(DST_IP) |
+                          EFHW_MCDI_MATCH_FIELD_BIT(DST_PORT);
+static const uint32_t MCDI_MATCH_FLAGS_ipproto =
+                          EFHW_MCDI_MATCH_FIELD_BIT(ETHER_TYPE) |
+                          EFHW_MCDI_MATCH_FIELD_BIT(IP_PROTO);
+static const uint32_t MCDI_MATCH_FLAGS_ipproto_vlan =
+                          EFHW_MCDI_MATCH_FIELD_BIT(ETHER_TYPE) |
+                          EFHW_MCDI_MATCH_FIELD_BIT(IP_PROTO) |
+                          EFHW_MCDI_MATCH_FIELD_BIT(OUTER_VLAN);
+static const uint32_t MCDI_MATCH_FLAGS_ethertype =
+                          EFHW_MCDI_MATCH_FIELD_BIT(ETHER_TYPE);
+static const uint32_t MCDI_MATCH_FLAGS_mac =
+                          EFHW_MCDI_MATCH_FIELD_BIT(DST_MAC);
+static const uint32_t MCDI_MATCH_FLAGS_mac_vlan =
+                          EFHW_MCDI_MATCH_FIELD_BIT(DST_MAC) |
+                          EFHW_MCDI_MATCH_FIELD_BIT(OUTER_VLAN);
 
 #define FOR_EACH_FILTER_CLASS(action) \
   action(full_match) \

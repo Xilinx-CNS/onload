@@ -4,9 +4,12 @@
 #ifndef LIB_EFHW_EFCT_FILTERS_H
 #define LIB_EFHW_EFCT_FILTERS_H
 
+#include <ci/tools/bitfield.h>
+
 struct efct_filter_insert_in {
   void *drv_opaque;
   const struct ethtool_rx_flow_spec *filter;
+  int filter_id;
 };
 struct efct_filter_insert_out {
   int rxq;
@@ -45,5 +48,8 @@ extern void
 efct_filter_state_reserve_rxq(struct efct_filter_state *state, int rxq);
 extern void
 efct_filter_assert_all_filters_gone(struct efct_filter_state *state);
+extern int
+efct_filter_id_to_mcdi_match_fields(struct efct_filter_state *state,
+                                    ci_dword_t *buf, int filter_id);
 #endif
 

@@ -40,6 +40,16 @@ enum filter_class_id {
   FOR_EACH_FILTER_CLASS(ACTION_DEFINE_FILTER_CLASS_ENUM)
 };
 
+static uint32_t filter_class_to_mcdi_flags(int clas)
+{
+  uint32_t flags = 0;
+#define ACTION_DO_MCDI_FLAGS(F) \
+    if( clas == FILTER_CLASS_##F ) \
+      flags = MCDI_MATCH_FLAGS_##F;
+  FOR_EACH_FILTER_CLASS(ACTION_DO_MCDI_FLAGS)
+  return flags;
+}
+
 static u32 filter_hash_table_seed;
 static bool filter_hash_table_seed_inited = false;
 
@@ -551,6 +561,7 @@ efct_filter_insert(struct efct_filter_state *state, struct efx_filter_spec *spec
     op_in = (struct efct_filter_insert_in) {
       .drv_opaque = insert_data,
       .filter = hw_filter,
+      .filter_id = node.filter_id,
     };
 
     rc = insert_op(&op_in, &op_out);
@@ -900,5 +911,72 @@ efct_unicast_block(struct efct_filter_state *state, bool block)
                         state->block_kernel & ~EFCT_NIC_BLOCK_KERNEL_UNICAST);
   return 0;
 }
+
+
+int efct_filter_id_to_mcdi_match_fields(struct efct_filter_state *state,
+                                        ci_dword_t *buf, int filter_id)
+{
+  int clas = get_filter_class(filter_id);
+  uint32_t match_fields = filter_class_to_mcdi_flags(clas);
+  struct efct_filter_node *node = lookup_filter_by_id(state, filter_id, NULL);
+  struct efct_hw_filter *filter;
+
+  if( !node || (node->hw_filter < 0) )
+    return -ENOENT;
+
+  filter = &state->hw_filters[node->hw_filter];
+
+  EFHW_BUILD_ASSERT(sizeof(match_fields) ==
+                    MC_CMD_FILTER_OP_IN_MATCH_FIELDS_LEN);
+
+  /* For IP filters we only translate IPv4 filters here, as no efct HW
+   * supports IPv6. */
+  if( match_fields & (EFHW_MCDI_MATCH_FIELD_BIT(SRC_IP) |
+                      EFHW_MCDI_MATCH_FIELD_BIT(DST_IP)) )
+    EFHW_ASSERT(filter->ethertype == htons(ETH_P_IP));
+
+  if( match_fields & EFHW_MCDI_MATCH_FIELD_BIT(ETHER_TYPE) )
+    EFHW_MCDI_SET_WORD(buf, FILTER_OP_IN_ETHER_TYPE, filter->ethertype);
+
+  if( match_fields & EFHW_MCDI_MATCH_FIELD_BIT(IP_PROTO) )
+    EFHW_MCDI_SET_WORD(buf, FILTER_OP_IN_IP_PROTO, filter->ip_proto);
+
+  if( match_fields & EFHW_MCDI_MATCH_FIELD_BIT(SRC_IP) )
+    EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_SRC_IP, filter->remote_ip);
+
+  if( match_fields & EFHW_MCDI_MATCH_FIELD_BIT(DST_IP) )
+    EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_DST_IP, filter->local_ip);
+
+  if( match_fields & EFHW_MCDI_MATCH_FIELD_BIT(SRC_PORT) )
+    EFHW_MCDI_SET_WORD(buf, FILTER_OP_IN_SRC_PORT, filter->remote_port);
+
+  if( match_fields & EFHW_MCDI_MATCH_FIELD_BIT(DST_PORT) )
+    EFHW_MCDI_SET_WORD(buf, FILTER_OP_IN_DST_PORT, filter->local_port);
+
+  if( match_fields & EFHW_MCDI_MATCH_FIELD_BIT(DST_MAC) ) {
+    EFHW_BUILD_ASSERT(sizeof(filter->loc_mac) ==
+                      MC_CMD_FILTER_OP_IN_DST_MAC_LEN);
+    EFHW_BUILD_ASSERT(sizeof(filter->loc_mac) == ETH_ALEN);
+    memcpy(EFHW_MCDI_PTR(buf, FILTER_OP_IN_DST_MAC), filter->loc_mac, ETH_ALEN);
+  }
+
+  /* We don't have a specific class for most VLAN filters, so just set the VLAN
+   * in cases where it's specified for those filter types. */
+  if( match_fields & EFHW_MCDI_MATCH_FIELD_BIT(OUTER_VLAN) ) {
+    EFHW_MCDI_SET_WORD(buf, FILTER_OP_IN_OUTER_VLAN, filter->outer_vlan);
+  }
+  else if( (clas == FILTER_CLASS_semi_wild ||
+            clas == FILTER_CLASS_full_match ||
+            clas == FILTER_CLASS_ethertype)
+           && (filter->outer_vlan >= 0) ) {
+    EFHW_MCDI_SET_WORD(buf, FILTER_OP_IN_OUTER_VLAN, filter->outer_vlan);
+    match_fields |= EFHW_MCDI_MATCH_FIELD_BIT(OUTER_VLAN);
+  }
+
+  EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_MATCH_FIELDS, match_fields);
+
+  return 0;
+}
+
 
 #endif
