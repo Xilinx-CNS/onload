@@ -23,6 +23,7 @@
 #include <linux/hashtable.h>
 #include <etherfabric/internal/internal.h>
 #include "efct.h"
+#include "efct_filters_internal.h"
 #include "efct_superbuf.h"
 
 #if CI_HAVE_EFCT_COMMON
@@ -94,6 +95,14 @@ void efct_filter_state_free(struct efct_filter_state *state)
   vfree(state->hw_filters);
   kfree(state->exclusive_rxq_mapping);
   kfree(state);
+}
+
+
+void efct_filter_assert_all_filters_gone(struct efct_filter_state *state)
+{
+#define ACTION_ASSERT_HASH_TABLE_EMPTY(F) \
+    EFHW_ASSERT(state->filters.F##_n == 0);
+  FOR_EACH_FILTER_CLASS(ACTION_ASSERT_HASH_TABLE_EMPTY)
 }
 
 

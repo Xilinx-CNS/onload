@@ -516,10 +516,7 @@ efct_nic_release_hardware(struct efhw_nic* nic)
 {
 #ifndef NDEBUG
   struct efhw_nic_efct* efct = nic->arch_extra;
-
-#define ACTION_ASSERT_HASH_TABLE_EMPTY(F) \
-    EFHW_ASSERT(efct->filter_state->filters.F##_n == 0);
-  FOR_EACH_FILTER_CLASS(ACTION_ASSERT_HASH_TABLE_EMPTY)
+  efct_filter_assert_all_filters_gone(efct->filter_state);
 #endif
 }
 

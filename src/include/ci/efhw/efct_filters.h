@@ -43,5 +43,7 @@ extern void
 efct_filter_state_free(struct efct_filter_state *state);
 extern void
 efct_filter_state_reserve_rxq(struct efct_filter_state *state, int rxq);
+extern void
+efct_filter_assert_all_filters_gone(struct efct_filter_state *state);
 #endif
 

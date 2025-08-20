@@ -14,6 +14,7 @@
 
 #include "linux_resource_internal.h"
 #include "debugfs.h"
+#include "efct_filters_internal.h"
 
 
 #ifdef CONFIG_DEBUG_FS
