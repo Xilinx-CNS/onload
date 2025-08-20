@@ -93,7 +93,7 @@ struct efhw_nic_ef10ct {
     struct efhw_stack_allocator rx;
     struct mutex lock;
   } vi_allocator;
-  struct efct_filter_state filter_state;
+  struct efct_filter_state *filter_state;
   struct efrm_debugfs_dir debug_dir;
   struct xarray irqs;
   struct mutex irq_lock;

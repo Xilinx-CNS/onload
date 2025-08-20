@@ -43,20 +43,31 @@ static u32 filter_hash_table_seed;
 static bool filter_hash_table_seed_inited = false;
 
 
-int efct_filter_state_init(struct efct_filter_state *state, int num_filter,
-                           int rx_queues)
+struct efct_filter_state* efct_filter_state_init(int num_filter, int rx_queues)
 {
+  int rc;
+  struct efct_filter_state *state = kzalloc(sizeof(struct efct_filter_state),
+                                            GFP_KERNEL);
+  if( !state ) {
+    rc = -ENOMEM;
+    goto fail;
+  }
+
   mutex_init(&state->driver_filters_mtx);
 
   state->hw_filters_n = num_filter;
   state->hw_filters = vzalloc(sizeof(*state->hw_filters) * state->hw_filters_n);
-  if( ! state->hw_filters )
-    return -ENOMEM;
+  if( ! state->hw_filters ) {
+    rc = -ENOMEM;
+    goto fail1;
+  }
 
   state->exclusive_rxq_mapping = kzalloc(sizeof(*state->exclusive_rxq_mapping)
                                          * rx_queues, GFP_KERNEL);
-  if( ! state->exclusive_rxq_mapping )
-    return -ENOMEM;
+  if( ! state->exclusive_rxq_mapping ) {
+    rc = -ENOMEM;
+    goto fail2;
+  }
 
   if( ! filter_hash_table_seed_inited ) {
     filter_hash_table_seed_inited = true;
@@ -67,16 +78,22 @@ int efct_filter_state_init(struct efct_filter_state *state, int num_filter,
         hash_init(state->filters.F);
   FOR_EACH_FILTER_CLASS(ACTION_INIT_HASH_TABLE)
 
-  return 0;
+  return state;
+
+fail2:
+  vfree(state->hw_filters);
+fail1:
+  kfree(state);
+fail:
+  return ERR_PTR(rc);
 }
 
 
 void efct_filter_state_free(struct efct_filter_state *state)
 {
-  if( state->hw_filters )
-    vfree(state->hw_filters);
-  if( state->exclusive_rxq_mapping )
-    kfree(state->exclusive_rxq_mapping);
+  vfree(state->hw_filters);
+  kfree(state->exclusive_rxq_mapping);
+  kfree(state);
 }
 
 

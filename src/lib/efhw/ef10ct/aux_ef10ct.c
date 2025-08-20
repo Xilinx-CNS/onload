@@ -132,9 +132,14 @@ static int ef10ct_resource_init(struct efx_auxdev *edev,
   if( rc < 0 )
     return rc;
 
-  rc = efct_filter_state_init(&ef10ct->filter_state,
+  ef10ct->filter_state = efct_filter_state_init(
                               ef10ct->efx_design_params.num_filters,
                               ef10ct->efx_design_params.rx_queues);
+  if( IS_ERR(ef10ct->filter_state) ) {
+    rc = PTR_ERR(ef10ct->filter_state);
+    ef10ct->filter_state = NULL;
+    goto fail;
+  }
 
   res_dim->efhw_ops = &ef10ct_char_functional_units;
 
@@ -142,7 +147,7 @@ static int ef10ct_resource_init(struct efx_auxdev *edev,
   ef10ct->evq = vzalloc(sizeof(*ef10ct->evq) * ef10ct->evq_n);
   if( ! ef10ct->evq ) {
     rc = -ENOMEM;
-    goto fail;
+    goto fail0;
   }
 
   res_dim->vi_min = 0;
@@ -193,8 +198,9 @@ fail2:
   vfree(ef10ct->rxq);
 fail1:
   vfree(ef10ct->evq);
+fail0:
+  efct_filter_state_free(ef10ct->filter_state);
 fail:
-  efct_filter_state_free(&ef10ct->filter_state);
   return rc;
 }
 
@@ -512,7 +518,7 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
    * the rest. */
   edev->llct_ops->base_ops->close(client);
 
-  efct_filter_state_free(&ef10ct->filter_state);
+  efct_filter_state_free(ef10ct->filter_state);
 
   /* iounmap the superbuf post registers */
   for (i = 0; i < ef10ct->rxq_n; i++)

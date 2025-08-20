@@ -37,9 +37,8 @@ efct_multicast_block(struct efct_filter_state *state, bool block);
 extern int
 efct_unicast_block(struct efct_filter_state *state, bool block);
 
-extern int
-efct_filter_state_init(struct efct_filter_state *state, int num_filter,
-                       int rx_queues);
+extern struct efct_filter_state*
+efct_filter_state_init(int num_filter, int rx_queues);
 extern void
 efct_filter_state_free(struct efct_filter_state *state);
 extern void

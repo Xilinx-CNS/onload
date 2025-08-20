@@ -518,7 +518,7 @@ efct_nic_release_hardware(struct efhw_nic* nic)
   struct efhw_nic_efct* efct = nic->arch_extra;
 
 #define ACTION_ASSERT_HASH_TABLE_EMPTY(F) \
-    EFHW_ASSERT(efct->filter_state.filters.F##_n == 0);
+    EFHW_ASSERT(efct->filter_state->filters.F##_n == 0);
   FOR_EACH_FILTER_CLASS(ACTION_ASSERT_HASH_TABLE_EMPTY)
 #endif
 }
@@ -1080,7 +1080,7 @@ efct_nic_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
     flags |= EFHW_FILTER_F_USE_SW;
   }
 
-  rc = efct_filter_insert(&efct->filter_state, spec, &hw_filter, rxq,
+  rc = efct_filter_insert(efct->filter_state, spec, &hw_filter, rxq,
                           pd_excl_token, flags, filter_insert_op, &params,
                           nic->filter_flags);
 
@@ -1101,7 +1101,7 @@ efct_nic_filter_remove(struct efhw_nic *nic, int filter_id)
   uint64_t drv_id;
   unsigned flags;
   int rc;
-  bool remove_drv = efct_filter_remove(&efct->filter_state, filter_id,
+  bool remove_drv = efct_filter_remove(efct->filter_state, filter_id,
                                        &drv_id, &flags);
 
   if( remove_drv ) {
@@ -1116,21 +1116,21 @@ efct_nic_filter_query(struct efhw_nic *nic, int filter_id,
                   struct efhw_filter_info *info)
 {
   struct efhw_nic_efct *efct = nic->arch_extra;
-  return efct_filter_query(&efct->filter_state, filter_id, info);
+  return efct_filter_query(efct->filter_state, filter_id, info);
 }
 
 static int
 efct_nic_multicast_block(struct efhw_nic *nic, bool block)
 {
   struct efhw_nic_efct *efct = nic->arch_extra;
-  return efct_multicast_block(&efct->filter_state, block);
+  return efct_multicast_block(efct->filter_state, block);
 }
 
 static int
 efct_nic_unicast_block(struct efhw_nic *nic, bool block)
 {
   struct efhw_nic_efct *efct = nic->arch_extra;
-  return efct_unicast_block(&efct->filter_state, block);
+  return efct_unicast_block(efct->filter_state, block);
 }
 
 

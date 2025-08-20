@@ -254,8 +254,8 @@ bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
   EFHW_ASSERT(CI_OWORD_FIELD(*header, EFCT_RX_HEADER_NEXT_FRAME_LOC) == 1);
   pkt += EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
 
-  return efct_packet_matches_filter(&efct->filter_state, efct->nic->net_dev, rxq,
-                                    pkt, pkt_len);
+  return efct_packet_matches_filter(efct->filter_state, efct->nic->net_dev,
+                                    rxq, pkt, pkt_len);
 }
 
 struct xlnx_efct_drvops efct_ops = {
@@ -338,13 +338,16 @@ static int efct_resource_init(struct xlnx_efct_device *edev,
   if( rc < 0 )
     return rc;
 
-  rc = efct_filter_state_init(&efct->filter_state,
-                              val.design_params.num_filter,
-                              val.design_params.rx_queues);
-  if( rc < 0 )
+  efct->filter_state = efct_filter_state_init(val.design_params.num_filter,
+                                              val.design_params.rx_queues);
+  if( IS_ERR(efct->filter_state) ) {
+    rc = PTR_ERR(efct->filter_state);
+    efct->filter_state = NULL;
     return rc;
+  }
+
   /* The Net driver owns queue 0 */
-  efct_filter_state_reserve_rxq(&efct->filter_state, 0);
+  efct_filter_state_reserve_rxq(efct->filter_state, 0);
 
   efct->rxq_n = val.design_params.rx_queues;
   efct->rxq = vzalloc(sizeof(*efct->rxq) * efct->rxq_n);
@@ -526,7 +529,8 @@ int efct_probe(struct auxiliary_device *auxdev,
  fail2:
   edev->ops->close(client);
  fail1:
-  efct_filter_state_free(&efct->filter_state);
+  if( efct->filter_state )
+    efct_filter_state_free(efct->filter_state);
   if( efct->rxq )
     vfree(efct->rxq);
   if( efct->evq )
@@ -598,7 +602,7 @@ void efct_remove(struct auxiliary_device *auxdev)
    * TODO: rethink where to call close and how to synchronise with
    * the rest. */
   edev->ops->close(client);
-  efct_filter_state_free(&efct->filter_state);
+  efct_filter_state_free(efct->filter_state);
   vfree(efct->rxq);
   kfree(efct->evq);
   vfree(efct);

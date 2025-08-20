@@ -258,7 +258,7 @@ struct efhw_nic_efct {
   } vi_allocator;
   /* ZF emu includes this file from UL */
 #ifdef __KERNEL__
-  struct efct_filter_state filter_state;
+  struct efct_filter_state *filter_state;
   struct efrm_debugfs_dir debug_dir;
 #endif
   struct {

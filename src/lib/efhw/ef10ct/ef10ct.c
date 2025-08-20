@@ -1720,7 +1720,7 @@ ef10ct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
   flags |= EFHW_FILTER_F_USE_HW;
 
   params.flags = flags;
-  return efct_filter_insert(&ef10ct->filter_state, spec, &hw_filter, rxq,
+  return efct_filter_insert(ef10ct->filter_state, spec, &hw_filter, rxq,
                             pd_excl_token, flags, ef10ct_filter_insert_op,
                             &params, nic->filter_flags);
 }
@@ -1744,7 +1744,7 @@ ef10ct_filter_remove(struct efhw_nic *nic, int filter_id)
   unsigned flags;
   int rc;
 
-  remove_drv = efct_filter_remove(&ef10ct->filter_state, filter_id, &drv_id,
+  remove_drv = efct_filter_remove(ef10ct->filter_state, filter_id, &drv_id,
                                   &flags);
 
   if( remove_drv ) {
@@ -1777,7 +1777,7 @@ ef10ct_filter_query(struct efhw_nic *nic, int filter_id,
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
 
-  return efct_filter_query(&ef10ct->filter_state, filter_id, info);
+  return efct_filter_query(ef10ct->filter_state, filter_id, info);
 }
 
 
