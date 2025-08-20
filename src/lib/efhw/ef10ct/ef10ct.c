@@ -1703,32 +1703,34 @@ static bool ef10ct_mcdi_filter_is_exclusive(const struct efx_filter_spec *spec)
 }
 
 static int
-ef10ct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
-                     int *rxq, unsigned pd_excl_token,
-                     const struct cpumask *mask, unsigned flags)
+ef10ct_filter_insert(struct efhw_nic *nic,
+                     struct efhw_filter_params *efhw_params)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct ethtool_rx_flow_spec hw_filter;
   struct filter_insert_params params = {
     .nic = nic,
-    .mask = mask,
+    .mask = efhw_params->mask,
   };
   int rc;
+  unsigned flags = efhw_params->flags;
 
-  rc = efx_spec_to_ethtool_flow(spec, &hw_filter);
+  rc = efx_spec_to_ethtool_flow(efhw_params->spec, &hw_filter);
   if( rc < 0 )
     return rc;
 
-  if( !ef10ct_mcdi_filter_is_exclusive(spec) )
+  if( !ef10ct_mcdi_filter_is_exclusive(efhw_params->spec) )
     flags |= EFHW_FILTER_F_MULTI;
 
   /* There's no special RXQ 0 here, so don't allow fallback to SW filter */
   flags |= EFHW_FILTER_F_USE_HW;
 
   params.flags = flags;
-  return efct_filter_insert(ef10ct->filter_state, spec, &hw_filter, rxq,
-                            pd_excl_token, flags, ef10ct_filter_insert_op,
-                            &params, nic->filter_flags);
+  return efct_filter_insert(ef10ct->filter_state, efhw_params->spec,
+                            &hw_filter, efhw_params->rxq,
+                            efhw_params->exclusive_rxq_token, flags,
+                            ef10ct_filter_insert_op, &params,
+                            nic->filter_flags);
 }
 
 
@@ -1771,7 +1773,7 @@ ef10ct_filter_remove(struct efhw_nic *nic, int filter_id)
 
 static int
 ef10ct_filter_redirect(struct efhw_nic *nic, int filter_id,
-                       struct efx_filter_spec *spec)
+                       struct efhw_filter_params *params)
 {
   return -ENOSYS;
 }

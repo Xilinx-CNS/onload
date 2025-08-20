@@ -213,13 +213,13 @@
 	((nic)->efhw_func->rss_free ? \
 	 (nic)->efhw_func->rss_free((nic), (rss_context)) : -EOPNOTSUPP)
 
-#define efhw_nic_filter_insert(nic, spec, rxq, exclusive_rxq_token, mask, flags) \
-	((nic)->efhw_func->filter_insert((nic), (spec), (rxq), (exclusive_rxq_token), (mask), (flags)))
+#define efhw_nic_filter_insert(nic, params) \
+	((nic)->efhw_func->filter_insert((nic), (params)))
 #define efhw_nic_filter_remove(nic, filter_id) \
 	((nic)->efhw_func->filter_remove((nic), (filter_id)))
-#define efhw_nic_filter_redirect(nic, filter_id, spec) \
+#define efhw_nic_filter_redirect(nic, filter_id, params) \
 	((nic)->efhw_func->filter_redirect ? \
-	 (nic)->efhw_func->filter_redirect((nic), (filter_id), (spec)) : \
+	 (nic)->efhw_func->filter_redirect((nic), (filter_id), (params)) : \
 	 -EOPNOTSUPP)
 #define efhw_nic_filter_query(nic, filter_id, info) \
 	((nic)->efhw_func->filter_query ? \

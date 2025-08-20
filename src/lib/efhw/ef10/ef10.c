@@ -2316,9 +2316,7 @@ ef10_rss_free(struct efhw_nic *nic, u32 rss_context)
 
 
 static int
-ef10_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
-                   int *rxq, unsigned pd_excl_token,
-                   const struct cpumask *mask, unsigned flags)
+ef10_filter_insert(struct efhw_nic *nic, struct efhw_filter_params *params)
 {
   int rc;
   struct device *dev;
@@ -2326,8 +2324,8 @@ ef10_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
   struct efx_auxdev_client *cli;
 
   AUX_PRE(dev, auxdev, cli, nic, rc);
-  rc = auxdev->onload_ops->filter_insert(cli, spec,
-                                  (flags & EFHW_FILTER_F_REPLACE) != 0);
+  rc = auxdev->onload_ops->filter_insert(cli, params->spec,
+                                (params->flags & EFHW_FILTER_F_REPLACE) != 0);
   AUX_POST(dev, auxdev, cli, nic, rc);
 
   return rc;
@@ -2357,22 +2355,24 @@ ef10_filter_remove(struct efhw_nic *nic, int filter_id)
 
 static int
 ef10_filter_redirect(struct efhw_nic *nic, int filter_id,
-                     struct efx_filter_spec *spec)
+                     struct efhw_filter_params *params)
 {
   int rc;
   struct device *dev;
   struct efx_auxdev *auxdev;
   struct efx_auxdev_client *cli;
-  int stack_id = spec->flags & EFX_FILTER_FLAG_STACK_ID ?  spec->stack_id : 0;
+  int stack_id = params->spec->flags & EFX_FILTER_FLAG_STACK_ID ?
+                 params->spec->stack_id : 0;
   /* If the RSS flag is not set we can pass NULL to indicate that we don't
    * want a context, otherwise use the value from the spec. */
-  unsigned *rss_context = (spec->flags & EFX_FILTER_FLAG_RX_RSS ) ?
-                           &spec->rss_context : NULL;
+  unsigned *rss_context = (params->spec->flags & EFX_FILTER_FLAG_RX_RSS ) ?
+                           &params->spec->rss_context : NULL;
 
 
   AUX_PRE(dev, auxdev, cli, nic, rc);
-  rc = auxdev->onload_ops->filter_redirect(cli, filter_id, spec->dmaq_id,
-                                    rss_context, stack_id);
+  rc = auxdev->onload_ops->filter_redirect(cli, filter_id,
+                                           params->spec->dmaq_id, rss_context,
+                                           stack_id);
   AUX_POST(dev, auxdev, cli, nic, rc);
 
   return rc;

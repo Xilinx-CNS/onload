@@ -1002,9 +1002,8 @@ int filter_insert_op(const struct efct_filter_insert_in *in,
 }
 
 static int
-efct_nic_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
-                       int *rxq, unsigned pd_excl_token,
-                       const struct cpumask *mask, unsigned flags)
+efct_nic_filter_insert(struct efhw_nic *nic,
+                       struct efhw_filter_params *efhw_params)
 {
   struct device *dev;
   struct xlnx_efct_device* edev;
@@ -1012,6 +1011,7 @@ efct_nic_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
   struct efhw_nic_efct *efct = nic->arch_extra;
   struct filter_insert_params params;
   struct ethtool_rx_flow_spec hw_filter;
+  unsigned flags = efhw_params->flags;
   int rc;
 
   if( flags & EFHW_FILTER_F_REPLACE )
@@ -1020,20 +1020,20 @@ efct_nic_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
   /* rxq_n is based on design param caps, and is used to size various data
    * structs. There may turn out not to actually be the full range of queues
    * available, but we can safely handle queues in that range. */
-  if( *rxq >= (int)efct->rxq_n )
+  if( *efhw_params->rxq >= (int)efct->rxq_n )
     return -EINVAL;
 
   /* Get the straight translation to ethtool spec of the requested filter.
    * This allows us to make any necessary checks on the actually requested
    * filter before we furtle it later on. */
-  rc = efx_spec_to_ethtool_flow(spec, &hw_filter);
+  rc = efx_spec_to_ethtool_flow(efhw_params->spec, &hw_filter);
   if( rc < 0 )
     return rc;
 
   params.nic = nic;
   params.efct_params = (struct xlnx_efct_filter_params) {
     .spec = &hw_filter,
-    .mask = mask ? mask : cpu_all_mask,
+    .mask = efhw_params->mask ? efhw_params->mask : cpu_all_mask,
   };
   if( flags & EFHW_FILTER_F_ANY_RXQ )
     params.efct_params.flags |= XLNX_EFCT_FILTER_F_ANYQUEUE_LOOSE;
@@ -1077,13 +1077,14 @@ efct_nic_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
     flags |= EFHW_FILTER_F_USE_SW;
   }
 
-  rc = efct_filter_insert(efct->filter_state, spec, &hw_filter, rxq,
-                          pd_excl_token, flags, filter_insert_op, &params,
-                          nic->filter_flags);
+  rc = efct_filter_insert(efct->filter_state, efhw_params->spec, &hw_filter,
+                          efhw_params->rxq, efhw_params->exclusive_rxq_token,
+                          flags, filter_insert_op, &params, nic->filter_flags);
 
   /* If we are returning successfully having requested an exclusive queue, that
    * queue should not be shared with the net driver. */
-  EFHW_ASSERT((rc < 0) || !(flags & EFHW_FILTER_F_EXCL_RXQ) || (*rxq > 0));
+  EFHW_ASSERT((rc < 0) || !(flags & EFHW_FILTER_F_EXCL_RXQ) ||
+              (*efhw_params->rxq > 0));
 
   return rc;
 }

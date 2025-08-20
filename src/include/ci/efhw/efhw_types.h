@@ -149,6 +149,14 @@ struct efhw_dmaq_params {
 	} rx;
 };
 
+struct efhw_filter_params {
+	struct efx_filter_spec *spec;
+	int *rxq;
+	unsigned exclusive_rxq_token;
+	const struct cpumask *mask;
+	unsigned flags;
+};
+
 struct efhw_efct_rxq;
 struct efhw_shared_bind_params {
 	int qid;
@@ -429,14 +437,12 @@ struct efhw_func_ops {
 
 	/* Insert a filter */
 	int (*filter_insert)(struct efhw_nic *nic,
-			     struct efx_filter_spec *spec, int *rxq,
-				 unsigned exclusive_rxq_token, const struct cpumask *mask,
-				 unsigned flags);
+			     struct efhw_filter_params *params);
 	/* Remove a filter */
 	void (*filter_remove)(struct efhw_nic *nic, int filter_id);
 	/* Redirect an existing filter */
 	int (*filter_redirect)(struct efhw_nic *nic, int filter_id,
-			       struct efx_filter_spec *spec);
+			       struct efhw_filter_params *params);
 	/* Query info about an existing filter */
 	int (*filter_query)(struct efhw_nic *nic, int filter_id,
 	                    struct efhw_filter_info *info);

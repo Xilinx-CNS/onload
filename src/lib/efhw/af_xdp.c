@@ -1402,9 +1402,7 @@ static int af_xdp_efx_spec_to_ethtool_flow(struct efx_filter_spec* efx_spec,
 }
 
 static int
-af_xdp_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
-                     int *rxq, unsigned pd_excl_token, const struct cpumask *mask,
-                     unsigned flags)
+af_xdp_filter_insert(struct efhw_nic *nic, struct efhw_filter_params *params)
 {
 	struct net_device *dev = nic->net_dev;
 	int rc;
@@ -1416,12 +1414,12 @@ af_xdp_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
 		return AF_XDP_NO_FILTER_MAGIC_ID; /* pretend a filter is installed */
 	memset(&info, 0, sizeof(info));
 	info.cmd = ETHTOOL_SRXCLSRLINS;
-	rc = af_xdp_efx_spec_to_ethtool_flow(spec, &info.fs);
+	rc = af_xdp_efx_spec_to_ethtool_flow(params->spec, &info.fs);
 	if ( rc < 0 )
 		return rc;
 
 	if (info.fs.flow_type & FLOW_RSS)
-		info.rss_context = spec->rss_context;
+		info.rss_context = params->spec->rss_context;
 
 	rtnl_lock();
 
@@ -1468,7 +1466,7 @@ af_xdp_filter_remove(struct efhw_nic *nic, int filter_id)
 
 static int
 af_xdp_filter_redirect(struct efhw_nic *nic, int filter_id,
-		       struct efx_filter_spec *spec)
+		       struct efhw_filter_params *params)
 {
 	/* This error code is proxied by efrm_filter_redirect() and goes to
 	 * oo_hw_filter_set_hwport().  Do not change this value without

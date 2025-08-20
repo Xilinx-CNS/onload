@@ -317,7 +317,10 @@ oo_hw_filter_set_hwport_common(struct oo_hw_filter* oofilter, int hwport,
 
     if( redirect ) {
       ci_assert_ge(oofilter->filter_id[hwport], 0);
-      rc = efrm_filter_redirect(get_client(hwport), oofilter->filter_id[hwport], &spec);
+      rc = efrm_filter_redirect(get_client(hwport),
+                                oofilter->filter_id[hwport], &spec, &rxq,
+                                exclusive_rxq_token,
+                                &oofilter->trs->filter_irqmask, insert_flags);
       if( rc == -ENOENT || rc == -ENODEV ) {
         /* net driver either:
          *  * does not know about our filter, let's better
