@@ -523,9 +523,6 @@ int __efx_net_alloc(struct efx_nic *efx)
 	if (rc)
 		return rc;
 	efx_set_interrupt_affinity(efx);
-#ifdef EFX_USE_IRQ_NOTIFIERS
-	efx_register_irq_notifiers(efx);
-#endif
 
 	down_write(&efx->filter_sem);
 	rc = efx->type->init(efx);

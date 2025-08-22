@@ -90,7 +90,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"5.3.19.1019"
+#define EFX_DRIVER_VERSION	"5.3.19.1023"
 #endif
 
 #ifdef DEBUG
@@ -109,10 +109,6 @@
 #endif
 #define EFX_USE_FAKE_VLAN_TX_ACCEL 1
 #endif
-#endif
-
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SMP) && defined(CONFIG_XPS) && defined(EFX_HAVE_IRQ_NOTIFIERS)
-#define EFX_USE_IRQ_NOTIFIERS
 #endif
 
 /**************************************************************************
@@ -265,6 +261,7 @@ struct efx_tx_buffer {
  *	as an index in to %efx_channel->tx_queues
  * @csum_offload: Is checksum offloading enabled for this queue?
  * @tso_version: Version of TSO in use for this queue.
+ * @tso_wanted_version: Version of TSO wanted for this queue
  * @tso_encap: Is encapsulated TSO supported? Supported in TSOv2 on 8000 series.
  * @channel: The associated channel
  * @core_txq: The networking core TX queue structure
@@ -351,6 +348,7 @@ struct efx_tx_queue {
 	unsigned int label;
 	unsigned int csum_offload;
 	unsigned int tso_version;
+	unsigned int tso_wanted_version;
 	bool tso_encap;
 	struct efx_channel *channel;
 	struct netdev_queue *core_txq;
@@ -830,9 +828,6 @@ struct efx_rss_context {
  * @sync_timestamp_major: Major part of the last ptp sync event
  * @sync_timestamp_minor: Minor part of the last ptp sync event
  * @irq_mem_node: Memory NUMA node of interrupt
- * @irq_affinity: IRQ affinity notifier context
- * @irq_affinity.notifier: IRQ notifier for changes to irq affinity
- * @irq_affinity.complete: IRQ notifier completion structure
  *
  * A channel comprises an event queue, at least one TX queue, at least
  * one RX queue, and an associated tasklet for processing the event
@@ -920,13 +915,6 @@ struct efx_channel {
 #endif
 
 	int irq_mem_node;
-
-#ifdef EFX_USE_IRQ_NOTIFIERS
-	struct {
-		struct irq_affinity_notify notifier;
-		struct completion complete;
-	} irq_affinity;
-#endif
 };
 
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)

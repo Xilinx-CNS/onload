@@ -2618,11 +2618,10 @@ static int efx_ef10_tx_init(struct efx_tx_queue *tx_queue)
 #endif
 	    efx_ef10_has_cap(nic_data->datapath_caps2, TX_TSO_V2)) {
 		tso_v2 = true;
-		netif_dbg(efx, hw, efx->net_dev, "Using TSOv2 for channel %u\n",
-				channel->channel);
+		tx_queue->tso_wanted_version = 2;
 	}
 
-	rc = efx_mcdi_tx_init(tx_queue, tso_v2);
+	rc = efx_mcdi_tx_init(tx_queue, &tso_v2);
 	if (rc)
 		goto fail;
 
@@ -2654,6 +2653,8 @@ static int efx_ef10_tx_init(struct efx_tx_queue *tx_queue)
 	tx_queue->write_count = 1;
 
 	if (tso_v2) {
+		netif_dbg(efx, hw, efx->net_dev, "Using TSOv2 for channel %u\n",
+			  channel->channel);
 		tx_queue->handle_tso = efx_ef10_tx_tso_desc;
 		tx_queue->tso_version = 2;
 

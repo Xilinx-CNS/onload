@@ -190,7 +190,7 @@ fail:
 			outbuf, outlen, rc);
 }
 
-int efx_mcdi_tx_init(struct efx_tx_queue *tx_queue, bool tso_v2)
+int efx_mcdi_tx_init(struct efx_tx_queue *tx_queue, bool *tso_v2)
 {
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_INIT_TXQ_EXT_IN_LEN);
 	size_t entries = DIV_ROUND_UP(tx_queue->txd.len, EFX_BUF_SIZE);
@@ -220,8 +220,8 @@ int efx_mcdi_tx_init(struct efx_tx_queue *tx_queue, bool tso_v2)
 			return rc;
 	}
 
-	netif_dbg(efx, hw, efx->net_dev, "pushing TXQ %d. %zu entries (%llx)\n",
-		  tx_queue->queue, entries, (u64)dma_addr);
+	netif_dbg(efx, hw, efx->net_dev, "pushing TXQ %d. %zu entries (%llx) *tso_v2 %d\n",
+		  tx_queue->queue, entries, (u64)dma_addr, *tso_v2);
 
 	for (i = 0; i < entries; ++i) {
 		MCDI_SET_ARRAY_QWORD(inbuf, INIT_TXQ_EXT_IN_DMA_ADDR, i,
@@ -238,13 +238,13 @@ int efx_mcdi_tx_init(struct efx_tx_queue *tx_queue, bool tso_v2)
 		 */
 		MCDI_POPULATE_DWORD_6(inbuf, INIT_TXQ_EXT_IN_FLAGS,
 				      INIT_TXQ_EXT_IN_FLAG_TSOV2_EN,
-				      tso_v2,
+				      *tso_v2,
 				      INIT_TXQ_EXT_IN_FLAG_IP_CSUM_DIS,
-				      tso_v2 || !outer_csum_offload,
+				      *tso_v2 || !outer_csum_offload,
 				      INIT_TXQ_EXT_IN_FLAG_TCP_CSUM_DIS,
 				      !outer_csum_offload,
 				      INIT_TXQ_EXT_IN_FLAG_INNER_IP_CSUM_EN,
-				      inner_csum_offload && !tso_v2,
+				      inner_csum_offload && !*tso_v2,
 				      INIT_TXQ_EXT_IN_FLAG_INNER_TCP_CSUM_EN,
 				      inner_csum_offload,
 				      INIT_TXQ_EXT_IN_FLAG_TIMESTAMP,
@@ -254,11 +254,9 @@ int efx_mcdi_tx_init(struct efx_tx_queue *tx_queue, bool tso_v2)
 				inbuf, sizeof(inbuf),
 				NULL, 0, NULL);
 
-		if (rc == -ENOSPC && tso_v2) {
+		if (rc == -ENOSPC && *tso_v2) {
 			/* Retry without TSOv2 if we're short on contexts. */
-			tso_v2 = false;
-			netif_warn(efx, probe, efx->net_dev,
-					"TSOv2 context not available to segment in hardware. TCP performance may be reduced.\n");
+			*tso_v2 = false;
 		} else if (rc) {
 			efx_mcdi_display_error(efx, MC_CMD_INIT_TXQ,
 					MC_CMD_INIT_TXQ_EXT_IN_LEN,
