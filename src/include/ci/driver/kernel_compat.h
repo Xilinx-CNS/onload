@@ -484,7 +484,7 @@ static inline int kstrtobool(const char *s, bool *res)
 #endif
 
 #ifdef EFRM_HAVE_FOLLOW_PFNMAP_START
-/* linux >= 6.12 */
+/* linux >= 6.12: things are generally clean here */
 static inline int efrm_follow_pfn(struct vm_area_struct *vma,
                                   unsigned long addr, unsigned long *pfn)
 {
@@ -500,6 +500,13 @@ static inline int efrm_follow_pfn(struct vm_area_struct *vma,
 	}
 
 	return rc;
+}
+#elif defined(EFRM_HAVE_FOLLOW_PFN)
+/* linux <= 6.9 */
+static inline int efrm_follow_pfn(struct vm_area_struct *vma,
+                                  unsigned long addr, unsigned long *pfn)
+{
+	return follow_pfn(vma, addr, pfn);
 }
 #elif defined(EFRM_HAVE_FOLLOW_PTE)
 /* exported in linux 5.10+ */
@@ -533,11 +540,7 @@ static inline int efrm_follow_pfn(struct vm_area_struct *vma,
 	return rc;
 }
 #else
-static inline int efrm_follow_pfn(struct vm_area_struct *vma,
-                                  unsigned long addr, unsigned long *pfn)
-{
-	return follow_pfn(vma, addr, pfn);
-}
+ #error "Unsupported kernel!"
 #endif
 
 #endif /* DRIVER_LINUX_RESOURCE_KERNEL_COMPAT_H */

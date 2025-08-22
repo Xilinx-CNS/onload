@@ -162,6 +162,7 @@ EFRM_HAVE_WARN_FLUSHING_SYSTEMWIDE_WQ symbol __warn_flushing_systemwide_wq inclu
 
 EFRM_NEED_STRSCPY	nsymbol	strscpy	include/linux/fortify-string.h	include/linux/string.h
 
+EFRM_HAVE_FOLLOW_PFN	symtype	follow_pfn	include/linux/mm.h	int(struct vm_area_struct*, unsigned long, unsigned long*)
 EFRM_HAVE_FOLLOW_PFNMAP_START symbol follow_pfnmap_start include/linux/mm.h
 
 EFRM_HAVE_FOLLOW_PTE symbol follow_pte include/linux/mm.h
