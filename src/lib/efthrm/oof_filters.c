@@ -207,6 +207,29 @@ extern int scalable_filter_gid;
 ***********************************************************************
 **********************************************************************/
 
+
+static unsigned oof_effective_vlan_mask(struct oof_manager* fm)
+{
+  int hwport;
+  int alternate;
+  unsigned mask = fm->fm_hwports_vlan_filters;
+
+  /* For any hwport in the mask we need to check whether it has an alternate.
+   * If so, then check whether that hwport also supports vlan filters and
+   * downgrade this one if not. This is because FW currently requires matched
+   * capabilities between datapaths for replication to work. */
+  for( hwport = 0; hwport < CI_CFG_MAX_HWPORTS; ++hwport ) {
+    if( (1u << hwport) & fm->fm_hwports_vlan_filters ) {
+      alternate = oo_nics[hwport].alternate_hwport;
+      if( (alternate >= 0) &&
+          !((1u << alternate) & fm->fm_hwports_vlan_filters) )
+        mask &= ~(1u << hwport);
+    }
+  }
+
+  return mask;
+}
+
 /* Indicates whether oof attempted setting the filters
  * This function does not work with KERNEL_REDIRECT filters
  * (exclusive tproxy case), where
@@ -485,7 +508,7 @@ static int oof_hw_filter_update(struct oof_manager* fm,
   oof_hw_filter_update_hwport_masks(fm, protocol, oofilter->thc != NULL,
                                     &hwport_mask, &drop_hwports_mask);
   rc = oo_hw_filter_update(oofilter, new_stack, &oo_filter_spec,
-                           fm->fm_hwports_vlan_filters & hwport_mask,
+                           oof_effective_vlan_mask(fm) & hwport_mask,
                            hwport_mask | drop_hwports_mask, drop_hwports_mask,
                            src_flags);
   spin_lock_bh(&fm->fm_inner_lock);
@@ -3925,7 +3948,7 @@ ci_inline unsigned oof_mcast_conflicted_hwports(struct oof_manager* fm,
             * conflict mask.
             */
            (vlan_id != mf->mf_vlan_id ?
-           ~fm->fm_hwports_vlan_filters : (unsigned)-1);
+           ~oof_effective_vlan_mask(fm) : (unsigned)-1);
   else
     return 0;
 }
@@ -3954,7 +3977,8 @@ oof_mcast_filter_duplicate_hwports(struct oof_manager* fm,
       (mf->mf_maddr == mf2->mf_maddr) )
     /* The filter matches, now check for hwport overlap on non-vlan hwports */
     hwport_mask = oof_mcast_filter_hwport_mask(fm, mf) &
-         (oo_hw_filter_hwports(&mf2->mf_filter) & ~fm->fm_hwports_vlan_filters);
+                  (oo_hw_filter_hwports(&mf2->mf_filter) &
+                   ~oof_effective_vlan_mask(fm));
 
   return hwport_mask;
 }
@@ -4061,7 +4085,7 @@ oof_mcast_install(struct oof_manager* fm, struct oof_mcast_member* mm,
                 mm->mm_ifindex, mm->mm_hwport_mask,
                 oof_cb_stack_id(mf->mf_filter.trs), mf->mf_hwport_mask,
                 fm->fm_hwports_mcast_replicate_capable,
-                fm->fm_hwports_vlan_filters);
+                oof_effective_vlan_mask(fm));
         ci_assert(mf->mf_filter.thc == NULL);
       oof_hw_filter_clear_hwports(fm, &mf->mf_filter, conflicted_port_mask);
       }
@@ -4138,7 +4162,7 @@ oof_mcast_remove(struct oof_manager* fm, struct oof_mcast_member* mm,
    * In that case we need to pass ownership of the hwfilter rather than
    * removing it to avoid a gap where there is no filter installed.
    */
-  if( mm->mm_hwport_mask & ~fm->fm_hwports_vlan_filters ) {
+  if( mm->mm_hwport_mask & ~oof_effective_vlan_mask(fm) ) {
     CI_DLLIST_FOR_EACH2(struct oof_mcast_filter, mf2, mf_lp_link,
                         &lp->lp_mcast_filters)
       if( (mf2 != mf) &&
