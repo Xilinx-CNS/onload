@@ -47,7 +47,7 @@ EFRM_HAVE_ALLOC_FILE_PSEUDO		symbol	alloc_file_pseudo	include/linux/file.h
 EFRM_NET_HAS_PROC_INUM			member	struct_net proc_inum	include/net/net_namespace.h
 EFRM_NET_HAS_USER_NS			member	struct_net user_ns	include/net/net_namespace.h
 
-EFRM_HAVE_OLD_FAULT			memtype struct_vm_operations_struct	fault	include/linux/mm.h	int (*)(struct vm_area_struct *vma, struct vm_fault *vmf)
+EFRM_HAVE_OLD_FAULT			memtype struct_vm_operations_struct	fault	include/linux/mm.h	int (*)(struct vm_fault *vmf)
 EFRM_HAVE_NEW_FAULT			memtype struct_vm_operations_struct	fault	include/linux/mm.h	vm_fault_t (*)(struct vm_fault *vmf)
 
 EFRM_HAVE_SCHED_TASK_H			file	include/linux/sched/task.h
@@ -187,6 +187,9 @@ EFRM_HAVE_FOLLOW_PFNMAP_START symbol follow_pfnmap_start include/linux/mm.h
 
 EFRM_HAVE_FOLLOW_PTE symbol follow_pte include/linux/mm.h
 EFRM_HAVE_FOLLOW_PTE_VMA symtype follow_pte include/linux/mm.h int(struct vm_area_struct*, unsigned long, pte_t**, spinlock_t**)
+
+EFRM_PAGE_HAS_FOLIO_INDEX		member	struct_page	__folio_index	include/linux/mm_types.h
+EFRM_NEED_UNIXCB			nsymbol	UNIXCB	include/net/af_unix.h
 
 # TODO move onload-related stuff from net kernel_compat
 " | grep -E -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
