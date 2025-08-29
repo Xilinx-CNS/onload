@@ -39,8 +39,8 @@ ci_inline void oo_pkt_filler_init(struct oo_pkt_filler* pf,
                                   ci_ip_pkt_fmt* pkt, void* buf_start) {
   pf->last_pkt = pf->pkt = pkt;
   pf->buf_start = buf_start;
-  /* ?? or could this just be ((char*) pkt + 2048) ? */
-  pf->buf_end = CI_PTR_ALIGN_FWD(PKT_START(pkt), 2048);
+  /* ?? or could this just be ((char*) pkt + CI_CFG_PKT_BUF_SIZE) ? */
+  pf->buf_end = CI_PTR_ALIGN_FWD(PKT_START(pkt), CI_CFG_PKT_BUF_SIZE);
   /* ?? FIXME: should depend on runtime buffer size */
 }
 
