@@ -13,6 +13,8 @@
 #include <ci/tools/cpu_features.h>
 #include <ci/internal/transport_config_opt.h>
 
+#define EFCT_TX_CHUNK_SIZE (sizeof(efct_tx_aperture_t))
+#define EFCT_TX_TAIL_SIZE (EFCT_TX_CHUNK_SIZE / (sizeof(efct_tx_aperture_t)))
 
 #define EF_VI_EVENT_OFFSET(q, i)                                \
   (((q)->ep_state->evq.evq_ptr + (i) * sizeof(ef_vi_qword)) &   \
@@ -237,14 +239,14 @@ struct efct_tx_state
 {
   /* base address of the aperture */
   volatile efct_tx_aperture_t* aperture;
-  /* up to 7 bytes left over after writing a block in 64-bit chunks */
-  efct_tx_aperture_t tail;
   /* number of left over bytes in 'tail' */
   unsigned tail_len;
   /* number of 64-bit words from start of aperture */
   uint64_t offset;
   /* mask to keep offset within the aperture range */
   uint64_t mask;
+  /* left over bytes after writing a block */
+  efct_tx_aperture_t tail[EFCT_TX_TAIL_SIZE] EF_VI_ALIGN(EF_VI_DMA_ALIGN);
 };
 
 /* generic tx header */
@@ -294,50 +296,72 @@ ci_inline bool efct_tx_check(ef_vi* vi, int len)
 ci_inline void efct_tx_init(ef_vi* vi, struct efct_tx_state* tx)
 {
   unsigned offset = vi->ep_state->txq.ct_added;
+  int i;
   BUG_ON(offset % EFCT_TX_ALIGNMENT != 0);
   tx->aperture = (void*) vi->vi_ctpio_mmap_ptr;
-  tx->tail = 0;
   tx->tail_len = 0;
   tx->offset = efct_tx_scale_offset_bytes(offset);
   tx->mask = vi->vi_txq.efct_aperture_mask;
+  for( i = 0; i < EFCT_TX_TAIL_SIZE; i++)
+    tx->tail[i] = 0;
 }
 
 /* store a left-over byte from the start or end of a block */
 ci_inline void efct_tx_tail_byte(struct efct_tx_state* tx, uint8_t byte)
 {
-  BUG_ON(tx->tail_len >= 8);
-  tx->tail = (tx->tail << 8) | byte;
+  const int idx = tx->tail_len / sizeof(tx->tail[0]);
+  BUG_ON(tx->tail_len >= sizeof(tx->tail));
+  tx->tail[idx] = (tx->tail[idx] << 8) | byte;
   tx->tail_len++;
 }
 
 /* write a 64-bit word to the CTPIO aperture, dealing with wrapping */
 ci_inline void efct_tx_word(struct efct_tx_state* tx,
-                            const efct_tx_aperture_t value)
+                            const efct_tx_aperture_t* src)
 {
-  tx->aperture[tx->offset++ & tx->mask] = value;
+  tx->aperture[tx->offset++ & tx->mask] = *src;
+}
+
+/* write a chunk to the CTPIO aperture */
+ci_inline void efct_tx_chunk(struct efct_tx_state* tx, const void* src)
+{
+  efct_tx_word(tx, src);
+}
+
+/* write the tail to the CTPIO aperture */
+ci_inline void efct_tx_tail(struct efct_tx_state* tx)
+{
+  int i;
+
+  for( i = 0; i < EFCT_TX_TAIL_SIZE; i++ )
+    tx->tail[i] = CI_BSWAP_BE64(tx->tail[i]);
+
+  efct_tx_chunk(tx, tx->tail);
+
+  for( i = 0; i < EFCT_TX_TAIL_SIZE; i++ )
+    tx->tail[i] = 0;
+  tx->tail_len = 0;
 }
 
 /* write a block of bytes to the CTPIO aperture, dealing with wrapping and leftovers */
 ci_inline void efct_tx_block(struct efct_tx_state* __restrict__ tx, char* base, int len)
 {
   if( tx->tail_len != 0 ) {
-    while( len > 0 && tx->tail_len < 8 ) {
+    while( len > 0 && tx->tail_len < EFCT_TX_CHUNK_SIZE ) {
       efct_tx_tail_byte(tx, *base);
       base++;
       len--;
     }
 
-    if( tx->tail_len == 8 ) {
-      efct_tx_word(tx, CI_BSWAP_BE64(tx->tail));
-      tx->tail = 0;
-      tx->tail_len = 0;
+    if( tx->tail_len == EFCT_TX_CHUNK_SIZE ) {
+      efct_tx_tail(tx);
     }
   }
 
-  while( len >= 8 ) {
-    efct_tx_word(tx, *(uint64_t*)base);
-    base += 8;
-    len -= 8;
+  while( len >= EFCT_TX_CHUNK_SIZE ) {
+    efct_tx_chunk(tx, base);
+    base += EFCT_TX_CHUNK_SIZE;
+    len -= EFCT_TX_CHUNK_SIZE;
   }
 
   while( len > 0 ) {
@@ -356,11 +380,11 @@ ci_inline void efct_tx_complete(ef_vi* vi, struct efct_tx_state* tx, uint32_t dm
   int i = qs->added & q->mask;
 
   if( tx->tail_len != 0 ) {
-    tx->tail <<= (8 - tx->tail_len) * 8;
-    efct_tx_word(tx, CI_BSWAP_BE64(tx->tail));
+    tx->tail[tx->tail_len / sizeof(tx->tail[0])] <<= (8 - tx->tail_len) * 8;
+    efct_tx_tail(tx);
   }
   while( tx->offset % efct_tx_scale_offset_bytes(EFCT_TX_ALIGNMENT) != 0 )
-    efct_tx_word(tx, 0);
+    efct_tx_chunk(tx, tx->tail);
 
   /* Force the write-combined traffic to be flushed to PCIe, to limit the
    * maximum possible reordering the NIC will see to one packet. Benchmarks
@@ -505,12 +529,14 @@ static int efct_ef_vi_transmit(ef_vi* vi, ef_addr base, int len,
 {
   /* TODO need to avoid calling this with CTPIO fallback buffers */
   struct efct_tx_state tx;
+  uint64_t header;
 
   if( ! efct_tx_check(vi, len) )
     return -EAGAIN;
 
   efct_tx_init(vi, &tx);
-  efct_tx_word(&tx, efct_tx_pkt_header(vi, len, EFCT_TX_CT_DISABLE));
+  header = efct_tx_pkt_header(vi, len, EFCT_TX_CT_DISABLE);
+  efct_tx_block(&tx, (void*)&header, sizeof(header));
   efct_tx_block(&tx, (void*)(uintptr_t)base, len);
   efct_tx_complete(vi, &tx, dma_id, len);
 
@@ -521,6 +547,7 @@ static int efct_ef_vi_transmitv(ef_vi* vi, const ef_iovec* iov, int iov_len,
                                 ef_request_id dma_id)
 {
   struct efct_tx_state tx;
+  uint64_t header;
   int len = 0, i;
 
   efct_tx_init(vi, &tx);
@@ -531,7 +558,8 @@ static int efct_ef_vi_transmitv(ef_vi* vi, const ef_iovec* iov, int iov_len,
   if( ! efct_tx_check(vi, len) )
     return -EAGAIN;
 
-  efct_tx_word(&tx, efct_tx_pkt_header(vi, len, EFCT_TX_CT_DISABLE));
+  header = efct_tx_pkt_header(vi, len, EFCT_TX_CT_DISABLE);
+  efct_tx_block(&tx, (void*)&header, sizeof(header));
 
   for( i = 0; i < iov_len; ++i )
     efct_tx_block(&tx, (void*)(uintptr_t)iov[i].iov_base, iov[i].iov_len);
@@ -606,6 +634,7 @@ static void efct_ef_vi_transmitv_ctpio(ef_vi* vi, size_t len,
 {
   struct efct_tx_state tx;
   unsigned threshold_extra;
+  uint64_t header;
   int i;
   uint32_t dma_id;
 
@@ -628,7 +657,8 @@ static void efct_ef_vi_transmitv_ctpio(ef_vi* vi, size_t len,
     threshold = (threshold + threshold_extra) / EFCT_TX_ALIGNMENT;
 
   threshold = CI_MAX((unsigned)vi->vi_txq.ct_thresh_min, threshold);
-  efct_tx_word(&tx, efct_tx_pkt_header(vi, len, threshold));
+  header = efct_tx_pkt_header(vi, len, threshold);
+  efct_tx_block(&tx, (void*)&header, sizeof(header));
 
   for( i = 0; i < iovcnt; ++i )
     efct_tx_block(&tx, iov[i].iov_base, iov[i].iov_len);
