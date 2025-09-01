@@ -344,6 +344,7 @@ efct_test_init_tx_default(int q_max, int evq_size, int txq_size, int arch,
                           int nic_flags)
 {
   struct efct_test* t = efct_test_init_test(q_max, arch, nic_flags);
+  const int aperture_size = 4096;
 
   assert(EF_VI_IS_POW2(evq_size));
   t->vi->evq_mask = evq_size * 8 - 1;
@@ -362,8 +363,9 @@ efct_test_init_tx_default(int q_max, int evq_size, int txq_size, int arch,
   assert(t->vi->vi_txq.ids);
   t->vi->tx_push_thresh = 0;
 
-  t->vi->vi_txq.efct_aperture_mask = (4096 - 1) >> 3;
-  t->vi->vi_ctpio_mmap_ptr = calloc(4096, sizeof(uint8_t));
+  t->vi->vi_txq.efct_aperture_mask =
+    efct_tx_scale_offset_bytes(aperture_size - 1);
+  t->vi->vi_ctpio_mmap_ptr = calloc(aperture_size, sizeof(uint8_t));
   assert(t->vi->vi_ctpio_mmap_ptr != NULL);
 
   STATE_STASH(t->vi);

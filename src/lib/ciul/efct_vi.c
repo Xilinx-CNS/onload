@@ -236,9 +236,9 @@ static bool efct_rx_check_event(const ef_vi* vi)
 struct efct_tx_state
 {
   /* base address of the aperture */
-  volatile uint64_t* aperture;
+  volatile efct_tx_aperture_t* aperture;
   /* up to 7 bytes left over after writing a block in 64-bit chunks */
-  uint64_t tail;
+  efct_tx_aperture_t tail;
   /* number of left over bytes in 'tail' */
   unsigned tail_len;
   /* number of 64-bit words from start of aperture */
@@ -298,7 +298,7 @@ ci_inline void efct_tx_init(ef_vi* vi, struct efct_tx_state* tx)
   tx->aperture = (void*) vi->vi_ctpio_mmap_ptr;
   tx->tail = 0;
   tx->tail_len = 0;
-  tx->offset = offset >> 3;
+  tx->offset = efct_tx_scale_offset_bytes(offset);
   tx->mask = vi->vi_txq.efct_aperture_mask;
 }
 
@@ -311,7 +311,8 @@ ci_inline void efct_tx_tail_byte(struct efct_tx_state* tx, uint8_t byte)
 }
 
 /* write a 64-bit word to the CTPIO aperture, dealing with wrapping */
-ci_inline void efct_tx_word(struct efct_tx_state* tx, uint64_t value)
+ci_inline void efct_tx_word(struct efct_tx_state* tx,
+                            const efct_tx_aperture_t value)
 {
   tx->aperture[tx->offset++ & tx->mask] = value;
 }
@@ -358,7 +359,7 @@ ci_inline void efct_tx_complete(ef_vi* vi, struct efct_tx_state* tx, uint32_t dm
     tx->tail <<= (8 - tx->tail_len) * 8;
     efct_tx_word(tx, CI_BSWAP_BE64(tx->tail));
   }
-  while( tx->offset % (EFCT_TX_ALIGNMENT >> 3) != 0 )
+  while( tx->offset % efct_tx_scale_offset_bytes(EFCT_TX_ALIGNMENT) != 0 )
     efct_tx_word(tx, 0);
 
   /* Force the write-combined traffic to be flushed to PCIe, to limit the
@@ -1329,15 +1330,18 @@ efct_design_parameters(struct ef_vi* vi, struct efab_nic_design_parameters* dp)
   }
 
   /* When writing to the aperture we use a bitmask to keep within range. This
-   * requires the size a power of two, and we shift by 3 because we write
-   * a uint64_t (8 bytes) at a time.
+   * requires the size be a power of two. The value is also scaled down in line
+   * with the scaling applied to the offset, which must still satisfy this
+   * power of two condition.
    */
   if( ! EF_VI_IS_POW2(GET(tx_aperture_bytes)) ) {
     LOG(ef_log("%s: unsupported tx_aperture_bytes, %ld not a power of 2",
                __FUNCTION__, (long)GET(tx_aperture_bytes)));
     return -EOPNOTSUPP;
   }
-  vi->vi_txq.efct_aperture_mask = (GET(tx_aperture_bytes) - 1) >> 3;
+  vi->vi_txq.efct_aperture_mask =
+    efct_tx_scale_offset_bytes(GET(tx_aperture_bytes) - 1);
+  BUG_ON(!EF_VI_IS_POW2(vi->vi_txq.efct_aperture_mask + 1));
 
   /* FIXME ON-15570: We need proper handling of configurable size ctpio windows */
   /* On EF10CT nics the size of the memory backing the CTPIO window is
