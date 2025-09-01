@@ -365,7 +365,8 @@ efct_test_init_tx_default(int q_max, int evq_size, int txq_size, int arch,
 
   t->vi->vi_txq.efct_aperture_mask =
     efct_tx_scale_offset_bytes(aperture_size - 1);
-  t->vi->vi_ctpio_mmap_ptr = calloc(aperture_size, sizeof(uint8_t));
+  assert(posix_memalign((void**)&t->vi->vi_ctpio_mmap_ptr, EF_VI_DMA_ALIGN,
+                        aperture_size * sizeof(uint8_t)) == 0);
   assert(t->vi->vi_ctpio_mmap_ptr != NULL);
 
   STATE_STASH(t->vi);
