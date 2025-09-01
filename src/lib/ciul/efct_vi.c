@@ -13,7 +13,20 @@
 #include <ci/tools/cpu_features.h>
 #include <ci/internal/transport_config_opt.h>
 
+#if CI_CFG_CXL
+#ifndef __KERNEL__
+#ifndef CI_HAVE_X86INTRIN
+#error "CXL support requires x86intrin.h for movdir64b"
+#endif /* CI_HAVE_X64INTRIN */
+#include <x86intrin.h>
+/* The kernel has a helper for movdir64b (via linux/mman.h) since v5.10. We
+ * match the kernel function's name rather than the underscored intrinsic. */
+#define movdir64b _movdir64b
+#endif /* __KERNEL__ */
+#define EFCT_TX_CHUNK_SIZE (EF_VI_CACHE_LINE_SIZE)
+#else /* CI_CFG_CXL */
 #define EFCT_TX_CHUNK_SIZE (sizeof(efct_tx_aperture_t))
+#endif /* CI_CFG_CXL */
 #define EFCT_TX_TAIL_SIZE (EFCT_TX_CHUNK_SIZE / (sizeof(efct_tx_aperture_t)))
 
 #define EF_VI_EVENT_OFFSET(q, i)                                \
@@ -322,10 +335,32 @@ ci_inline void efct_tx_word(struct efct_tx_state* tx,
   tx->aperture[tx->offset++ & tx->mask] = *src;
 }
 
+#if CI_CFG_CXL
+/* write an entire cacheline to the CTPIO aperture */
+ci_inline void efct_tx_cacheline(struct efct_tx_state* tx, const void* src)
+{
+  void* dst = (void*)&tx->aperture[tx->offset & tx->mask];
+  const uint64_t tx_offset_inc =
+    efct_tx_scale_offset_bytes(EF_VI_CACHE_LINE_SIZE);
+  /* The aperture offset increases by the same amount every time, and we must
+   * be certain that we can't end up writing past the end of our aperture. As
+   * such, it must be true that the aperture is divisible by the amount we
+   * increase the offset by for each write with no remainder. */
+  BUG_ON((tx->mask + 1) % tx_offset_inc != 0);
+  BUG_ON(EF_VI_CACHE_LINE_SIZE != 64);
+  movdir64b(dst, src);
+  tx->offset += tx_offset_inc;
+}
+#endif
+
 /* write a chunk to the CTPIO aperture */
 ci_inline void efct_tx_chunk(struct efct_tx_state* tx, const void* src)
 {
+#if ! CI_CFG_CXL
   efct_tx_word(tx, src);
+#else
+  efct_tx_cacheline(tx, src);
+#endif
 }
 
 /* write the tail to the CTPIO aperture */
