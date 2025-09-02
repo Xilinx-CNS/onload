@@ -16,15 +16,6 @@
 #ifndef __CI_TOOLS_CPU_FEATURES_H__
 #define __CI_TOOLS_CPU_FEATURES_H__
 
-#define CI_CPU_OK 	(0)  /* CPU checked out ok */
-#define CI_CPU_OLD 	(-1) /* CPU didn't respond to the cpuid instruction */
-#define CI_CPU_ERROR	(-2) /* CPU cannot run this build */
-#define CI_CPU_WARNING	(-3) /* CPU can run this build but performance could
-				be impacted */
-
-/*! Comment? */
-extern int ci_cpu_features_check(int verbose);
-
 extern int ci_cpu_has_feature(char* feature);
 
 #endif  /* __CI_TOOLS_CPU_FEATURES_H__ */
