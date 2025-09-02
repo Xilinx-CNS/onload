@@ -1012,6 +1012,13 @@ efct_nic_filter_insert(struct efhw_nic *nic,
   struct filter_insert_params params;
   struct ethtool_rx_flow_spec hw_filter;
   unsigned flags = efhw_params->flags;
+  struct efct_filter_params efct_params = {
+    .rxq = efhw_params->rxq,
+    .pd_excl_token = efhw_params->exclusive_rxq_token,
+    .insert_op = filter_insert_op,
+    .insert_data = &params,
+    .filter_flags = nic->filter_flags,
+  };
   int rc;
 
   if( flags & EFHW_FILTER_F_REPLACE )
@@ -1077,9 +1084,9 @@ efct_nic_filter_insert(struct efhw_nic *nic,
     flags |= EFHW_FILTER_F_USE_SW;
   }
 
+  efct_params.flags = flags;
   rc = efct_filter_insert(efct->filter_state, efhw_params->spec, &hw_filter,
-                          efhw_params->rxq, efhw_params->exclusive_rxq_token,
-                          flags, filter_insert_op, &params, nic->filter_flags);
+                          &efct_params);
 
   /* If we are returning successfully having requested an exclusive queue, that
    * queue should not be shared with the net driver. */

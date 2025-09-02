@@ -1575,7 +1575,6 @@ static int ef10ct_filter_op(const struct efct_filter_insert_in *in_data,
                                         in_data->drv_opaque;
   struct efhw_nic_ef10ct_rxq *ef10ct_rxq;
   struct efhw_nic_ef10ct *ef10ct = params->nic->arch_extra;
-  uint32_t base_flow_type;
   int allocated = 0;
   int rxq_num;
   int rxq;
@@ -1591,14 +1590,6 @@ static int ef10ct_filter_op(const struct efct_filter_insert_in *in_data,
     .outlen = MC_CMD_FILTER_OP_OUT_LEN,
   };
 
-  /* Bail out early with a known error for IPv6 filters. We have a more
-   * specific test later based on declared FW support once we've translated
-   * the filter, but MCDI doesn't explicitly differentiate between IPv4 and
-   * IPv6, so we need to do check this separately. */
-  base_flow_type = (in_data->filter->flow_type & ~(FLOW_EXT | FLOW_MAC_EXT));
-  if( base_flow_type == TCP_V6_FLOW || base_flow_type == UDP_V6_FLOW )
-    return -EPROTONOSUPPORT;
-
   EFHW_MCDI_INITIALISE_BUF(in);
   EFHW_MCDI_INITIALISE_BUF(out);
   rc = efct_filter_id_to_mcdi_match_fields(ef10ct->filter_state, in,
@@ -1612,7 +1603,7 @@ static int ef10ct_filter_op(const struct efct_filter_insert_in *in_data,
                               EFHW_MCDI_DWORD(in, FILTER_OP_IN_MATCH_FIELDS)) )
     return -EPROTONOSUPPORT;
 
-  rxq_num = select_rxq(params, in_data->filter->ring_cookie, &allocated);
+  rxq_num = select_rxq(params, in_data->rxq, &allocated);
   if( rxq_num < 0 )
     return rxq_num;
 
@@ -1651,6 +1642,11 @@ static int ef10ct_filter_op(const struct efct_filter_insert_in *in_data,
 
   /* Populate the rest of the MCDI cmd now */
   ef10ct_populate_mcdi_common(in, op, rxq);
+  if( op == MC_CMD_FILTER_OP_IN_OP_REPLACE ) {
+    EFHW_MCDI_SET_DWORD(in, FILTER_OP_IN_HANDLE_LO,
+                        in_data->drv_id & 0xffffffff);
+    EFHW_MCDI_SET_DWORD(in, FILTER_OP_IN_HANDLE_HI, in_data->drv_id >> 32);
+  }
   rc = ef10ct_fw_rpc(params->nic, &rpc);
 
   if( rc == 0 ) {
@@ -1683,10 +1679,27 @@ static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in,
   struct filter_insert_params *params = (struct filter_insert_params*)
                                         in->drv_opaque;
   bool multi = params->flags & EFHW_FILTER_F_MULTI;
+  uint32_t base_flow_type;
+
+  /* Bail out early with a known error for IPv6 filters. We have a more
+   * specific test later based on declared FW support once we've translated
+   * the filter, but MCDI doesn't explicitly differentiate between IPv4 and
+   * IPv6, so we need to do check this separately. */
+  base_flow_type = (in->filter->flow_type & ~(FLOW_EXT | FLOW_MAC_EXT));
+  if( base_flow_type == TCP_V6_FLOW || base_flow_type == UDP_V6_FLOW )
+    return -EPROTONOSUPPORT;
 
   return ef10ct_filter_op(in, out, multi ? MC_CMD_FILTER_OP_IN_OP_SUBSCRIBE :
                                            MC_CMD_FILTER_OP_IN_OP_INSERT);
 }
+
+
+static int ef10ct_filter_redirect_op(const struct efct_filter_insert_in *in,
+                                     struct efct_filter_insert_out *out)
+{
+  return ef10ct_filter_op(in, out, MC_CMD_FILTER_OP_IN_OP_REPLACE);
+}
+
 
 /* Decide whether a filter should be exclusive or else should allow
  * delivery to additional recipients.  Currently we decide that
@@ -1729,12 +1742,19 @@ ef10ct_filter_insert(struct efhw_nic *nic,
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct ethtool_rx_flow_spec hw_filter;
+  unsigned flags = efhw_params->flags;
   struct filter_insert_params params = {
     .nic = nic,
     .mask = efhw_params->mask,
   };
+  struct efct_filter_params efct_params = {
+    .rxq = efhw_params->rxq,
+    .pd_excl_token = efhw_params->exclusive_rxq_token,
+    .insert_op = ef10ct_filter_insert_op,
+    .insert_data = &params,
+    .filter_flags = nic->filter_flags,
+  };
   int rc;
-  unsigned flags = efhw_params->flags;
 
   rc = efx_spec_to_ethtool_flow(efhw_params->spec, &hw_filter);
   if( rc < 0 )
@@ -1747,11 +1767,9 @@ ef10ct_filter_insert(struct efhw_nic *nic,
   flags |= EFHW_FILTER_F_USE_HW;
 
   params.flags = flags;
+  efct_params.flags = flags;
   return efct_filter_insert(ef10ct->filter_state, efhw_params->spec,
-                            &hw_filter, efhw_params->rxq,
-                            efhw_params->exclusive_rxq_token, flags,
-                            ef10ct_filter_insert_op, &params,
-                            nic->filter_flags);
+                            &hw_filter, &efct_params);
 }
 
 
@@ -1794,9 +1812,24 @@ ef10ct_filter_remove(struct efhw_nic *nic, int filter_id)
 
 static int
 ef10ct_filter_redirect(struct efhw_nic *nic, int filter_id,
-                       struct efhw_filter_params *params)
+                       struct efhw_filter_params *efhw_params)
 {
-  return -ENOSYS;
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  struct filter_insert_params params = {
+    .nic = nic,
+    .mask = efhw_params->mask,
+    .flags = efhw_params->flags | EFHW_FILTER_F_USE_HW,
+  };
+  struct efct_filter_params efct_params = {
+    .rxq = efhw_params->rxq,
+    .pd_excl_token = efhw_params->exclusive_rxq_token,
+    .flags = params.flags,
+    .insert_op = ef10ct_filter_redirect_op,
+    .insert_data = &params,
+    .filter_flags = nic->filter_flags,
+  };
+
+  return efct_filter_redirect(ef10ct->filter_state, filter_id, &efct_params);
 }
 
 

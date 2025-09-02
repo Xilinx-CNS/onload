@@ -10,6 +10,8 @@ struct efct_filter_insert_in {
   void *drv_opaque;
   const struct ethtool_rx_flow_spec *filter;
   int filter_id;
+  uint64_t drv_id;
+  int rxq;
 };
 struct efct_filter_insert_out {
   int rxq;
@@ -22,13 +24,23 @@ struct efct_filter_state;
 
 typedef int (*drv_filter_insert)(const struct efct_filter_insert_in *in,
                                  struct efct_filter_insert_out *out);
+struct efct_filter_params {
+  int *rxq;
+  unsigned pd_excl_token;
+  unsigned flags;
+  drv_filter_insert insert_op;
+  void *insert_data;
+  uint64_t filter_flags;
+};
 
 extern int
-efct_filter_insert(struct efct_filter_state *state, struct efx_filter_spec *spec,
+efct_filter_insert(struct efct_filter_state *state,
+                   struct efx_filter_spec *spec,
                    struct ethtool_rx_flow_spec *hw_filter,
-                   int *rxq, unsigned pd_excl_token, unsigned flags,
-                   drv_filter_insert insert_op, void *insert_data,
-                   uint64_t filter_flags);
+                   struct efct_filter_params *params);
+extern int
+efct_filter_redirect(struct efct_filter_state *state, int filter_id,
+                     struct efct_filter_params *params);
 extern bool
 efct_filter_remove(struct efct_filter_state *state, int filter_id,
                    uint64_t *drv_id_out, unsigned *flags_out);

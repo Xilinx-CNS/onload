@@ -349,12 +349,35 @@ static void do_filter_del(struct efct_filter_state *state, int filter_id,
   }
 }
 
+
+static int efct_filter_check_queue_perm(struct efct_filter_state *state,
+                                        int rxq, unsigned new_token)
+{
+  unsigned current_token;
+
+  if ( rxq >= 0 ) {
+    current_token = state->exclusive_rxq_mapping[rxq];
+
+    /* If both tokens are 0, we are in a fresh state and can claim it.
+     * If both the current and new tokens are EFHW_PD_NON_EXC_TOKEN, we are
+     * in a non-exclusive queue.
+     * If the current one is set, but the new one does not match, then the new
+     * one is overstepping on another rxq.
+     * The q state is owned and managed by the driver and persists external to
+     * the application. */
+    if ( ( current_token > 0 ) && ( current_token != new_token ) )
+      return -EPERM;
+  }
+
+  return 0;
+}
+
+
 int
-efct_filter_insert(struct efct_filter_state *state, struct efx_filter_spec *spec,
-                    struct ethtool_rx_flow_spec *hw_filter,
-                   int *rxq, unsigned pd_excl_token, unsigned flags,
-                   drv_filter_insert insert_op, void *insert_data,
-                   uint64_t filter_flags)
+efct_filter_insert(struct efct_filter_state *state,
+                   struct efx_filter_spec *spec,
+                   struct ethtool_rx_flow_spec *hw_filter,
+                   struct efct_filter_params *params)
 {
   int rc = 0;
   struct efct_filter_insert_in op_in;
@@ -365,7 +388,8 @@ efct_filter_insert(struct efct_filter_state *state, struct efx_filter_spec *spec
   int clas;
   bool insert_hw_filter = false;
   unsigned no_vlan_flags = spec->match_flags & ~EFX_FILTER_MATCH_OUTER_VID;
-  unsigned q_excl_token = 0;
+  int *rxq = params->rxq;
+  unsigned flags = params->flags;
 
   if( *rxq >= 0 )
     hw_filter->ring_cookie = *rxq;
@@ -467,20 +491,10 @@ efct_filter_insert(struct efct_filter_state *state, struct efx_filter_spec *spec
   /* Step 2 of 2: Insert efct_filter_node in to the correct hash table */
   mutex_lock(&state->driver_filters_mtx);
 
-  if ( *rxq >= 0 ) {
-    q_excl_token = state->exclusive_rxq_mapping[*rxq];
-
-    /* If the q excl tokens are 0, we are in a fresh state and can claim it.
-     * If both the pd and q are EFHW_PD_NON_EXC_TOKEN, we are in a non-exclusive
-     * queue.
-     * If the q one is set, but the pd one does not match, then the pd is
-     * overstepping on another rxq.
-     * The q state is owned and managed by the driver and persists external to
-     * the application. */
-    if ( ( q_excl_token > 0 ) && ( q_excl_token != pd_excl_token ) ) {
-      mutex_unlock(&state->driver_filters_mtx);
-      return -EPERM;
-    }
+  rc = efct_filter_check_queue_perm(state, *rxq, params->pd_excl_token);
+  if( rc < 0 ) {
+    mutex_unlock(&state->driver_filters_mtx);
+    return rc;
   }
 
   if( flags & EFHW_FILTER_F_USE_HW ) {
@@ -491,7 +505,7 @@ efct_filter_insert(struct efct_filter_state *state, struct efx_filter_spec *spec
         avail = i;
       else {
         if( hw_filters_are_equal(&node, &state->hw_filters[i], clas,
-                                 filter_flags) ) {
+                                 params->filter_flags) ) {
 
           if( ! (flags & (EFHW_FILTER_F_ANY_RXQ | EFHW_FILTER_F_PREF_RXQ) ) &&
               *rxq >= 0 && *rxq != state->hw_filters[i].rxq ) {
@@ -499,7 +513,7 @@ efct_filter_insert(struct efct_filter_state *state, struct efx_filter_spec *spec
             return -EEXIST;
           }
 
-          if ( pd_excl_token !=
+          if ( params->pd_excl_token !=
                state->exclusive_rxq_mapping[state->hw_filters[i].rxq] ) {
             /* Trying to attach onto an rxq owned by someone else. */
             mutex_unlock(&state->driver_filters_mtx);
@@ -559,12 +573,14 @@ efct_filter_insert(struct efct_filter_state *state, struct efx_filter_spec *spec
 
   if( insert_hw_filter ) {
     op_in = (struct efct_filter_insert_in) {
-      .drv_opaque = insert_data,
+      .drv_opaque = params->insert_data,
       .filter = hw_filter,
       .filter_id = node.filter_id,
+      .drv_id = EFCT_HW_FILTER_DRV_ID_DUMMY,
+      .rxq = *rxq,
     };
 
-    rc = insert_op(&op_in, &op_out);
+    rc = params->insert_op(&op_in, &op_out);
 
     if( rc == -ENOSPC && sw_filter_node->refcount == 1 ) {
       /* We discovered we had fewer hardware filters than we thought - undo a
@@ -592,7 +608,7 @@ efct_filter_insert(struct efct_filter_state *state, struct efx_filter_spec *spec
         state->hw_filters[node.hw_filter].flags = flags;
       }
       *rxq = state->hw_filters[node.hw_filter].rxq;
-      state->exclusive_rxq_mapping[*rxq] = pd_excl_token;
+      state->exclusive_rxq_mapping[*rxq] = params->pd_excl_token;
     }
     else {
       *rxq = 0;
@@ -602,6 +618,64 @@ efct_filter_insert(struct efct_filter_state *state, struct efx_filter_spec *spec
 
   return rc < 0 ? rc : node.filter_id;
 }
+
+
+int
+efct_filter_redirect(struct efct_filter_state *state, int filter_id,
+                     struct efct_filter_params *params)
+{
+  int rc = 0;
+  struct efct_filter_insert_in op_in;
+  struct efct_filter_insert_out op_out;
+  struct efct_filter_node *node;
+  int hw_filter_idx = -1;
+  int *rxq = params->rxq;
+
+  mutex_lock(&state->driver_filters_mtx);
+
+  node = lookup_filter_by_id(state, filter_id, NULL);
+  if( !node ) {
+    rc = -ENOENT;
+    goto unlock_out;
+  }
+
+  /* We only support redirect for hw filters */
+  hw_filter_idx = node->hw_filter;
+  if( hw_filter_idx < 0 ) {
+    rc = -ENOENT;
+    goto unlock_out;
+  }
+
+  rc = efct_filter_check_queue_perm(state, *rxq, params->pd_excl_token);
+  if( rc < 0 )
+    goto unlock_out;
+
+  op_in = (struct efct_filter_insert_in) {
+    .drv_opaque = params->insert_data,
+    .filter = NULL,
+    .filter_id = node->filter_id,
+    .drv_id = state->hw_filters[hw_filter_idx].drv_id,
+    .rxq = *rxq,
+  };
+
+  rc = params->insert_op(&op_in, &op_out);
+
+  /* Redirect succeeded, update filter state */
+  if( rc == 0 ) {
+    state->hw_filters[hw_filter_idx].rxq = op_out.rxq;
+    state->hw_filters[hw_filter_idx].drv_id = op_out.drv_id;
+    state->hw_filters[hw_filter_idx].hw_id = op_out.filter_handle;
+    state->hw_filters[hw_filter_idx].flags = params->flags;
+    *rxq = state->hw_filters[hw_filter_idx].rxq;
+    state->exclusive_rxq_mapping[*rxq] = params->pd_excl_token;
+  }
+
+unlock_out:
+  mutex_unlock(&state->driver_filters_mtx);
+
+  return rc < 0 ? rc : node->filter_id;
+}
+
 
 static void
 remove_exclusive_rxq_ownership(struct efct_filter_state *state, int hw_filter)
