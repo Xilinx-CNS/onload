@@ -11,7 +11,6 @@ LIB_SRCS	:= \
 		crc16.c \
 		crc32.c \
 		toeplitz.c \
-		cpu_features.c \
 		dllist.c \
 		eth_addr.c \
 		fail.c \
