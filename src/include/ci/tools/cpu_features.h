@@ -41,6 +41,7 @@ typedef struct ci_cpu_feature_s {
   })
 
 #define CI_CPU_FEATURE_PCLMULQDQ CI_CPU_FEATURE(1, 0, ECX, 1)
+#define CI_CPU_FEATURE_MOVDIR64B CI_CPU_FEATURE(7, 0, ECX, 28)
 
 #if defined(__i386__)
 #if defined(__GNUC__)

@@ -10,6 +10,8 @@
 #include <ci/efhw/common.h>
 #include <ci/tools/byteorder.h>
 #include <ci/tools/sysdep.h>
+#include <ci/tools/cpu_features.h>
+#include <ci/internal/transport_config_opt.h>
 
 
 #define EF_VI_EVENT_OFFSET(q, i)                                \
@@ -1767,6 +1769,13 @@ int efct_vi_init(ef_vi* vi)
 {
   int i;
   EF_VI_ASSERT( vi->nic_type.nic_flags & EFHW_VI_NIC_CTPIO_ONLY );
+
+#if CI_CFG_CXL
+  if( ! ci_cpu_has_feature(CI_CPU_FEATURE_MOVDIR64B) ) {
+    ef_log("This build of onload uses the movdir64b instruction, but it appears this CPU doesn't support this instruction. Try building without CI_CFG_CXL.");
+    return -EOPNOTSUPP;
+  }
+#endif
 
   efct_vi_initialise_ops(vi);
   vi->evq_phase_bits = 1;
