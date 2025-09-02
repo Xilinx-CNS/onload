@@ -285,7 +285,7 @@ static struct efct_test* efct_test_init_test(int q_max, int arch, int nic_flags)
   vi->ep_state = &t->ep_state;
   vi->nic_type.arch = arch;
   vi->nic_type.nic_flags = nic_flags;
-  efct_vi_init(vi);
+  assert(efct_vi_init(vi) == 0);
 
   mock_ops->rxqs = &t->mock_rxqs;
   mock_ops->ops.available = efct_mock_available;

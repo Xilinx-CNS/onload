@@ -1763,7 +1763,7 @@ static void efct_vi_initialise_ops(ef_vi* vi)
   vi->ops.receive_poll = efct_ef_receive_poll;
 }
 
-void efct_vi_init(ef_vi* vi)
+int efct_vi_init(ef_vi* vi)
 {
   int i;
   EF_VI_ASSERT( vi->nic_type.nic_flags & EFHW_VI_NIC_CTPIO_ONLY );
@@ -1786,5 +1786,7 @@ void efct_vi_init(ef_vi* vi)
     ef_vi_efct_rxq* q = &vi->efct_rxqs.q[i];
     q->live.superbuf_pkts = &q->config_generation;
   }
+
+  return 0;
 }
 

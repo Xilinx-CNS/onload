@@ -206,7 +206,7 @@
 /* ******************************************************************** 
  */
 
-extern void ef10_vi_init(ef_vi*) EF_VI_HF;
+extern int ef10_vi_init(ef_vi*) EF_VI_HF;
 
 extern void ef10_ef_eventq_prime(ef_vi*);
 extern void ef10_ef_eventq_prime_bug35388_workaround(ef_vi*);
@@ -231,10 +231,10 @@ extern void ef100_ef_eventq_timer_run(ef_vi*, unsigned v);
 extern void ef100_ef_eventq_timer_clear(ef_vi*);
 extern void ef100_ef_eventq_timer_zero(ef_vi*);
 
-extern void efxdp_vi_init(ef_vi*) EF_VI_HF;
+extern int efxdp_vi_init(ef_vi*) EF_VI_HF;
 extern long efxdp_vi_mmap_bytes(ef_vi*);
 
-extern void efct_vi_init(ef_vi*) EF_VI_HF;
+extern int efct_vi_init(ef_vi*) EF_VI_HF;
 extern int efct_kbufs_init(ef_vi*) EF_VI_HF;
 extern int efct_ubufs_init(ef_vi*, ef_pd*, ef_driver_handle) EF_VI_HF;
 extern void* efct_ubufs_alloc_mem(size_t) EF_VI_HF;
