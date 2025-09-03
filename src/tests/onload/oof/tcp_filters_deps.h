@@ -24,5 +24,7 @@ struct efhw_nic;
 #include "efrm_interface.h"
 #include "stack_interface.h"
 
+#define EFRM_WARN(fmt, ...) fprintf(stderr, fmt, __VA_ARGS__)
+#define EFRM_ERR(fmt, ...) fprintf(stderr, fmt, __VA_ARGS__)
 
 #endif /* __OOF_TEST_TCP_FILTERS_DEPS_H__ */

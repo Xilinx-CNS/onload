@@ -330,6 +330,16 @@ oo_hw_filter_set_hwport_common(struct oo_hw_filter* oofilter, int hwport,
         oofilter->filter_id[hwport] = rc;
       }
       else {
+        if( rc >= 0 ) {
+          /* If the redirect succeeded perform any post-add actions */
+          rc = tcp_helper_post_filter_add(oofilter->trs, hwport, &spec, rxq);
+          if( rc < 0 ) {
+            efrm_filter_remove(get_client(hwport),
+                               oofilter->filter_id[hwport]);
+            EFRM_WARN("%s: Post add failed for redirected filter (hwport %x "
+                      "rxq %d rc %d", __func__, hwport, rxq, rc);
+          }
+        }
         /* Moving filter either:
          *  * succeeded, or
          *  * failed
