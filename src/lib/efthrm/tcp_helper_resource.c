@@ -1040,8 +1040,7 @@ static int tcp_helper_rxq_map(tcp_helper_resource_t* trs, int intf_i, int qix,
 
 
 int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
-                               const struct efx_filter_spec* spec, int rxq,
-                               bool replace)
+                               const struct efx_filter_spec* spec, int rxq)
 {
   int intf_i;
   struct efhw_nic* nic;

@@ -357,26 +357,14 @@ oo_hw_filter_set_hwport_common(struct oo_hw_filter* oofilter, int hwport,
        * stacks, therefore is fundamentally at odds with RSS. This could (like
        * everything) change in the future, but it's difficult to predict in
        * what way. */
+      if( !cluster ) {
+        rc = tcp_helper_post_filter_add(oofilter->trs, hwport, &spec, rxq);
+        if( rc < 0 )
+          efrm_filter_remove(get_client(hwport), oofilter->filter_id[hwport]);
+      }
 #if ! CI_CFG_ENDPOINT_MOVE
       ci_assert_equal(cluster, 0);
-#else
-      if( cluster )
-        rc = tcp_helper_cluster_post_filter_add(oofilter->thc, hwport, &spec,
-                                                rxq, replace);
-      else
 #endif
-        rc = tcp_helper_post_filter_add(oofilter->trs, hwport, &spec, rxq,
-                                        replace);
-      if( rc < 0 ) {
-        if( ! replace )
-          efrm_filter_remove(get_client(hwport), oofilter->filter_id[hwport]);
-        /* We ideally want to restore replaced filters too, but we're not
-         * keeping enough info to know how. In any case, we currently have no
-         * hardware on which this matters (no hardware uses both a non-trivial
-         * tcp_helper_post_filter_add() and the replace option), so it'd be
-         * untested code. If/when that hardware comes, there are many possible
-         * locations for the solution. */
-      }
     }
   }
   else {
