@@ -100,6 +100,7 @@ static const char*      cfg_save_file = NULL;
 static const char*      cfg_yaml_file = NULL;
 static bool             cfg_data_read = false;
 static bool             cfg_data_peek = false;
+static bool             cfg_shared = false;
 enum mode {
   MODE_DMA = 1,
   MODE_PIO = 2,
@@ -721,7 +722,10 @@ static const test_t* do_init(int mode, struct eflatency_vi* latency_vi,
 
  got_vi:
   if( latency_vi == &rx_vi ) {
-    ef_filter_spec_init(&filter_spec, EF_FILTER_FLAG_EXCLUSIVE_RXQ);
+    if ( cfg_shared )
+      ef_filter_spec_init(&filter_spec, EF_FILTER_FLAG_SHARED_RXQ);
+    else
+      ef_filter_spec_init(&filter_spec, EF_FILTER_FLAG_EXCLUSIVE_RXQ);
     TRY(ef_filter_spec_set_ip4_local(&filter_spec, IPPROTO_UDP, htonl(raddr_he),
                                     htons(port_he)));
     TRY(ef_vi_filter_add(vi, driver_handle, &filter_spec, NULL));
@@ -845,6 +849,7 @@ static __attribute__((noreturn)) void usage(const char* fmt, ...)
   fprintf(stderr, "                      - [p]eek at buffer ahead of arrival\n");
   fprintf(stderr, "  -o <filename>       - save raw timings to file\n");
   fprintf(stderr, "  -y <filename>       - save result data to file (YAML)\n");
+  fprintf(stderr, "  -S                  - use shared RXQ (if available)\n");
   fprintf(stderr, "\n");
   exit(1);
 }
@@ -887,7 +892,7 @@ int main(int argc, char* argv[])
     p = (unsigned int)__v;                                   \
   } while( 0 );
 
-  while( (c = getopt (argc, argv, "n:s:w:c:pm:t:d:o:y:")) != -1 )
+  while( (c = getopt (argc, argv, "n:s:w:c:pm:t:d:o:y:S")) != -1 )
     switch( c ) {
     case 'n':
       OPT_INT(optarg, cfg_iter);
@@ -974,6 +979,9 @@ int main(int argc, char* argv[])
           usage("Unknown data mode '%c'", optarg[i]);
         }
       }
+      break;
+    case 'S':
+      cfg_shared = true;
       break;
     case '?':
       usage(NULL);
