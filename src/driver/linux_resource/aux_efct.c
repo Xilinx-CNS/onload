@@ -509,7 +509,7 @@ void efct_remove(struct auxiliary_device *auxdev)
   efrm_notify_nic_remove(nic);
 
   /* flush all outstanding dma queues */
-  efrm_nic_flush_all_queues(nic, 0);
+  efrm_nic_flush_all_queues(nic, EFRM_FLUSH_QUEUES_F_NONE);
 
   lnic->drv_device = NULL;
   /* Wait for all in-flight driverlink calls to finish.  Since we

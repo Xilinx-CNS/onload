@@ -509,7 +509,7 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
   efrm_notify_nic_remove(nic);
 
   /* flush all outstanding dma queues */
-  efrm_nic_flush_all_queues(nic, 0);
+  efrm_nic_flush_all_queues(nic, EFRM_FLUSH_QUEUES_F_NONE);
 
   /* Disable/free all shared evqs. We do this even in the case that the NIC
    * is being reset, as some of the resources here are host side, such as
