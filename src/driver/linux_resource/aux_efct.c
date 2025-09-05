@@ -60,7 +60,7 @@ static void efct_reset_up(struct efhw_nic_efct *efct, bool success)
   EFRM_NOTICE("%s: %s success=%d", __func__, dev_name(nic->dev), success);
 
   /* TODO ON-16688 Add support for ef_vi reset injection */
-  efrm_nic_flush_all_queues(nic, EFRM_FLUSH_QUEUES_F_NOHW);
+  efrm_nic_flush_all_queues(nic, EFRM_FLUSH_QUEUES_F_NO_HW);
 
   if( success )
     nic->resetting = 0;
