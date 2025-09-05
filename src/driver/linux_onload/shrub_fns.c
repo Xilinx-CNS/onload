@@ -7,8 +7,8 @@
 #include <onload/shrub_fns.h>
 #include <onload/fd_private.h>
 #include <onload/tcp_helper_fns.h>
-#include <etherfabric/shrub_shared.h>
-#include <etherfabric/shrub_client.h>
+#include <etherfabric/internal/shrub_shared.h>
+#include <etherfabric/internal/shrub_client.h>
 #include <ci/efrm/pd.h>
 
 #include <linux/uaccess.h>

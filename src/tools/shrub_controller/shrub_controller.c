@@ -17,8 +17,8 @@
 #include <etherfabric/efct_vi.h>
 #include <etherfabric/pd.h>
 #include <etherfabric/internal/shrub_socket.h>
-#include <etherfabric/shrub_server.h>
-#include <etherfabric/shrub_shared.h>
+#include <etherfabric/internal/shrub_server.h>
+#include <etherfabric/internal/shrub_shared.h>
 #include <etherfabric/vi.h>
 #include <fcntl.h>
 #include <ftw.h>

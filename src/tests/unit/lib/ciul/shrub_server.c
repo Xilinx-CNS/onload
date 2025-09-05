@@ -2,7 +2,7 @@
 /* SPDX-FileCopyrightText: Copyright (C) 2025, Advanced Micro Devices, Inc. */
 
 /* Functions under test */
-#include <etherfabric/shrub_server.h>
+#include <etherfabric/internal/shrub_server.h>
 
 /* Test infrastructure */
 #include "unit_test.h"
@@ -12,7 +12,7 @@
 #include <string.h>
 
 #include <ci/efch/op_types.h>
-#include <etherfabric/shrub_shared.h>
+#include <etherfabric/internal/shrub_shared.h>
 #include <etherfabric/ef_vi.h>
 
 #include "shrub_queue.h"

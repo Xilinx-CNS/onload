@@ -8,7 +8,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <etherfabric/shrub_shared.h>
+#include <etherfabric/internal/shrub_shared.h>
 
 struct ef_shrub_queue {
   int shared_fds[EF_SHRUB_FD_COUNT];

@@ -3,8 +3,8 @@
 
 #include "ef_vi_internal.h"
 
-#include <etherfabric/shrub_server.h>
-#include <etherfabric/shrub_shared.h>
+#include <etherfabric/internal/shrub_server.h>
+#include <etherfabric/internal/shrub_shared.h>
 
 #include "shrub_server_sockets.h"
 #include "shrub_connection.h"

@@ -8,7 +8,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include <etherfabric/shrub_shared.h>
+#include <etherfabric/internal/shrub_shared.h>
 
 struct ef_shrub_queue;
 

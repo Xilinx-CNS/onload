@@ -23,8 +23,8 @@
 #include <stdio.h>
 #include <net/if.h>
 
-#include <etherfabric/shrub_shared.h>
-#include <etherfabric/shrub_adapter.h>
+#include <etherfabric/internal/shrub_shared.h>
+#include <etherfabric/internal/shrub_adapter.h>
 
 #define CTPIO_MMAP_LEN CI_PAGE_SIZE
 

@@ -11,7 +11,7 @@
 #ifndef __CI_CIUL_SHRUB_CLIENT_H__
 #define __CI_CIUL_SHRUB_CLIENT_H__
 
-#include <etherfabric/shrub_shared.h>
+#include <etherfabric/internal/shrub_shared.h>
 
 /* Structure for managing a client instance */
 struct ef_shrub_client

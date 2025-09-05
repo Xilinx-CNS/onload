@@ -5,7 +5,7 @@
 #define __CI_CIUL_SHRUB_ADAPTER_H__
 
 #include <cplane/mib.h>
-#include <etherfabric/shrub_shared.h>
+#include <etherfabric/internal/shrub_shared.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>

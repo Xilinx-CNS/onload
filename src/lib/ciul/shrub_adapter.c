@@ -5,8 +5,8 @@
 #include <errno.h>
 #include <stdint.h>
 #include <stddef.h>
-#include <etherfabric/shrub_adapter.h>
-#include <etherfabric/shrub_shared.h>
+#include <etherfabric/internal/shrub_adapter.h>
+#include <etherfabric/internal/shrub_shared.h>
 #include <etherfabric/internal/shrub_socket.h>
 #include <net/if.h>
 #include <stdio.h>

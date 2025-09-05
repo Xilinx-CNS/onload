@@ -24,8 +24,8 @@
 
 #ifndef __KERNEL__
 #include <sys/un.h>
-#include <etherfabric/shrub_adapter.h>
-#include <etherfabric/shrub_shared.h>
+#include <etherfabric/internal/shrub_adapter.h>
+#include <etherfabric/internal/shrub_shared.h>
 #include <cplane/cplane.h>
 #include <cplane/create.h>
 #include <net/if.h>
