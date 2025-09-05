@@ -206,7 +206,7 @@ oo_hugetlb_page_alloc_raw(struct oo_hugetlb_allocator *allocator,
 	}
 
 	mmap_read_lock(current->mm);
-	rc = ci_pin_user_pages(addr, 1, FOLL_WRITE, page_out);
+	rc = ci_pin_user_pages(addr, 1, FOLL_WRITE | FOLL_LONGTERM, page_out);
 	mmap_read_unlock(current->mm);
 
 	vm_munmap(addr, OO_HUGEPAGE_SIZE);
