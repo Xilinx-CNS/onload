@@ -158,6 +158,16 @@ oo_hugetlb_page_alloc_raw(struct oo_hugetlb_allocator *allocator,
 	EFRM_ASSERT(filp_out);
 	EFRM_ASSERT(page_out);
 
+	/* It would be nice if we could do this without a user context, since
+	 * that is wanted in some situations. Unfortunately, there is no kernel
+	 * API to DMA-pin non-user pages, and any attempt to do so would be a
+	 * grotesque hack and likely to break as the kernel changes. */
+	if (current->mm == NULL) {
+		EFRM_NOTICE("%s: unable to allocate huge page without user context",
+		            __func__);
+		return -ENOMEM;
+	}
+
 	mutex_lock(&allocator->lock);
 
 	*filp_out = get_file(allocator->filp);
