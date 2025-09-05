@@ -48,7 +48,6 @@ LIB_SRCS	+=		\
 		capabilities.c	\
 		ctpio.c         \
 		efct_ubufs_resource.c         \
-		shrub_pool.c    \
 		shrub_server.c  \
 		shrub_socket.c  \
 		shrub_adapter.c \
