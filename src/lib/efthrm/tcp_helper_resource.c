@@ -1086,13 +1086,13 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
      * done so that the shrub controller will be the first one to bind to the
      * queue and so decide which evq it will use. */
     if (shrub) {
-      ci_log("%s: using shrub for queue %d", __func__, rxq);
+      LOG_NC(ci_log("%s: using shrub for queue %d", __func__, rxq));
       rc = efct_ubufs_shared_attach_internal(vi, qix, rxq,
                                              vi->efct_rxqs.q[qix].superbufs);
       if( rc < 0 ) {
         if( rc != -EINTR )
-          ci_log("%s: ERROR: efct_ubufs_shared_attach_internal failed (%d)",
-                 __func__, rc);
+          LOG_E(ci_log("%s: ERROR: efct_ubufs_shared_attach_internal failed (%d)",
+                        __func__, rc));
         return rc;
       }
     }
@@ -1103,7 +1103,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
                         &trs->nic[intf_i].thn_efct_rxq[qix]);
     if( rc < 0 ) {
       if( rc != -EINTR )
-        ci_log("%s: ERROR: efrm_rxq_alloc failed (%d)", __func__, rc);
+        LOG_E(ci_log("%s: ERROR: efrm_rxq_alloc failed (%d)", __func__, rc));
       if (shrub)
         vi->efct_rxqs.ops->detach(vi, qix);
       return rc;
@@ -1140,7 +1140,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
                               vi->efct_rxqs.q[qix].superbufs,
                               &dma_addrs);
       if( rc < 0 ) {
-        ci_log("%s: ERROR: tcp_helper_rxq_map failed (%d)", __func__, rc);
+        LOG_E(ci_log("%s: ERROR: tcp_helper_rxq_map failed (%d)", __func__, rc));
         efrm_rxq_release(trs->nic[intf_i].thn_efct_rxq[qix]);
         return rc;
       }
