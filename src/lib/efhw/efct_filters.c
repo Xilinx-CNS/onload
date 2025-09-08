@@ -505,6 +505,7 @@ efct_filter_insert(struct efct_filter_state *state, struct efx_filter_spec *spec
       /* If we have no free hw filters, that's fine: we'll just use rxq0 */
       if( avail >= 0 ) {
         node.hw_filter = avail;
+        state->hw_filters[avail].ethertype = node.ethertype;
         state->hw_filters[avail].ip_proto = node.proto;
         state->hw_filters[avail].local_ip = node.u.ip4.lip;
         state->hw_filters[avail].local_port = node.lport;
