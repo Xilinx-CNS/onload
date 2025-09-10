@@ -2228,7 +2228,6 @@ static void cleanup_ef_vi(ef_vi* vi)
     if ( vi->nic_type.arch == EFHW_ARCH_EF10CT ) {
       unmap_efct_ubuf_rxq_io_windows(vi);
     }
-    vi->efct_rxqs.ops->cleanup(vi);
   }
 }
 
