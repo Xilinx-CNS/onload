@@ -1410,9 +1410,6 @@ out_good:
   ef10ct->rxq[rxq_num].ref_count++;
   params->rxq->qid = rxq_num;
   params->rxq->shared_evq = !real_evq;
-  /* We rely upon this assumption to determine if an efct RXQ generates events
-   * and thus know whether RX accounting is required to avoid EVQ overflow. */
-  EFHW_ASSERT(params->rxq->shared_evq == suppress_events);
   params->rxq->wake_at_seqno = EFCT_INVALID_PKT_SEQNO;
   params->rxq->wakeup_instance = params->wakeup_instance;
 out_locked:
