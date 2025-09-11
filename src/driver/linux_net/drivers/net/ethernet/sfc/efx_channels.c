@@ -695,10 +695,10 @@ static void efx_set_tph_hint(struct efx_channel *channel, unsigned int cpu)
 	if (!efx->pci_dev->tph_enabled)
 		return;
 
-	if (WARN_ON_ONCE(channel->irq_index < 0))
+	if (EFX_WARN_ON_ONCE_PARANOID(channel->irq_index < 0))
 		return;
 	msi_context = xa_load(&pd->irq_pool, channel->irq_index);
-	if (WARN_ON_ONCE(!msi_context))
+	if (EFX_WARN_ON_ONCE_PARANOID(!msi_context))
 		return;
 
 	rc = pcie_tph_get_cpu_st(efx->pci_dev, TPH_MEM_TYPE_VM, cpu, &tag);
@@ -1012,9 +1012,12 @@ static int efx_probe_eventq(struct efx_channel *channel)
 	}
 
 	if (entries > efx_max_evtq_size(efx)) {
-		netif_warn(efx, probe, efx->net_dev,
-			   "chan %d ev queue too large at %lu, capped at %lu\n",
-			   channel->channel, entries, efx_max_evtq_size(efx));
+		if (entries - efx_max_evtq_size(efx) > efx->max_evq_over) {
+			efx->max_evq_over = entries - efx_max_evtq_size(efx);
+			netif_warn(efx, probe, efx->net_dev,
+				   "chan %d ev queue oversubscribed - ev max size of %lu, but potential for up to %lu events. Consider reconfiguring the channel with smaller tx/rx rings\n",
+				   channel->channel, efx_max_evtq_size(efx), entries);
+		}
 		entries = efx_max_evtq_size(efx);
 	} else {
 		entries = roundup_pow_of_two(entries);
@@ -1452,6 +1455,7 @@ int efx_probe_channels(struct efx_nic *efx)
 	INIT_WORK(&efx->schedule_all_channels_work, efx_schedule_all_channels);
 #endif
 
+	efx->max_evq_over = 0;
 	/* Probe channels in reverse, so that any 'extra' channels
 	 * use the start of the buffer table. This allows the traffic
 	 * channels to be resized without moving them or wasting the

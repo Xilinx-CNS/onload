@@ -877,6 +877,7 @@ static const struct efx_debugfs_parameter efx_debugfs_channel_type_parameters[] 
 #ifdef EFX_NOT_UPSTREAM
 	EFX_CLIENT_TYPE_PARAMETER(struct efx_channel_type, client_type),
 #endif
+	{NULL},
 };
 
 /* Per-channel parameters */

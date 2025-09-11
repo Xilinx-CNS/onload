@@ -3146,6 +3146,7 @@ void efx_ptp_remove(struct efx_nic *efx)
 
 	destroy_workqueue(ptp_data->workwq);
 	ptp_data->workwq = NULL;
+	ptp_data->channel = NULL;
 }
 
 static void efx_ptp_remove_channel(struct efx_channel *channel)

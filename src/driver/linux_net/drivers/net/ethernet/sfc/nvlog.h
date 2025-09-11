@@ -17,8 +17,11 @@ struct efx_nvlog_data {
 
 int efx_nvlog_to_devlink(struct efx_nvlog_data *nvlog_data,
 			 struct devlink_fmsg *fmsg);
+
+#define EFX_NVLOG_F_READ	0x1
+#define EFX_NVLOG_F_CLEAR	0x2
 int efx_nvlog_do(struct efx_nic *efx, struct efx_nvlog_data *nvlog_data,
-		 u32 type, bool read, bool clear);
+		 u32 type, unsigned int flags);
 #else
 struct devlink_fmsg;
 struct efx_nvlog_data;
@@ -31,7 +34,7 @@ static inline int efx_nvlog_to_devlink(struct efx_nic *efx,
 
 static inline int efx_nvlog_do(struct efx_nic *efx,
 			       struct efx_nvlog_data *nvlog_data,
-			       u32 type, bool read, bool clear)
+			       u32 type, unsigned int flags)
 {
 	return -EOPNOTSUPP;
 }

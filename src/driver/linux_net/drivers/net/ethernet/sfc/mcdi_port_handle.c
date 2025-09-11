@@ -604,28 +604,51 @@ static u32 ethtool_fec_to_x4_mcdi(u32 supported_fec, u32 ethtool_fec)
 	return MC_CMD_FEC_NONE;
 }
 
-static u32 x4_mcdi_fec_to_ethtool(u32 fec_mode, u32 requested_fec)
+static u32 x4_mcdi_fec_to_ethtool(struct efx_x4_mcdi_port_data *port_data)
 {
-	bool baser_req = requested_fec & BIT(MC_CMD_FEC_BASER);
-	bool rs_req = requested_fec & BIT(MC_CMD_FEC_RS);
-	bool baser = fec_mode == MC_CMD_FEC_BASER;
-	bool rs = fec_mode == MC_CMD_FEC_RS;
-	u32 ethtool_fec = 0;
+	if ((port_data->link.control & BIT(MC_CMD_LINK_FLAGS_AUTONEG_EN))) {
+		/* Autonegotiation is enabled. Firmware computed the
+		 * advertised abilites from either the FEC_MODE in an
+		 * earlier LINK_CTRL command, or the firmware default.
+		 * Deduce the FEC config from the advertised abilities.
+		 */
+		u32 requested_fec = port_data->advertised.requested_fec;
+		u32 fec = port_data->advertised.fec;
 
-	if (fec_mode == MC_CMD_FEC_NONE)
-		return ETHTOOL_FEC_OFF;
+		if (fec == 0 || fec == BIT(MC_CMD_FEC_NONE))
+			return ETHTOOL_FEC_OFF;
 
-	if (rs_req)
-		ethtool_fec |= ETHTOOL_FEC_RS;
-	if (rs != rs_req)
-		ethtool_fec |= ETHTOOL_FEC_AUTO;
+		if (fec == requested_fec)
+			return ETHTOOL_FEC_AUTO;
 
-	if (baser_req)
-		ethtool_fec |= ETHTOOL_FEC_BASER;
-	if (baser != baser_req)
-		ethtool_fec |= ETHTOOL_FEC_AUTO;
+		if (fec & requested_fec & BIT(MC_CMD_FEC_RS))
+			return ETHTOOL_FEC_RS;
 
-	return ethtool_fec;
+		if (fec & requested_fec & BIT(MC_CMD_FEC_BASER))
+			return ETHTOOL_FEC_BASER;
+
+		/* Unknown advertised FEC mode(s) reported */
+		return ETHTOOL_FEC_AUTO;
+	} else {
+		/* Autonegotiation is disabled, firmware has not populated
+		 * the advertised abilities. The original FEC config cannot
+		 * be deduced from available information, so report the
+		 * active FEC mode as the best approximation.
+		 */
+		switch (port_data->link.fec) {
+		case MC_CMD_FEC_NONE:
+			return ETHTOOL_FEC_OFF;
+		case MC_CMD_FEC_BASER:
+			return ETHTOOL_FEC_BASER;
+		case MC_CMD_FEC_RS:
+			return ETHTOOL_FEC_RS;
+		default:
+			/* We don't know what firmware has picked. AUTO is
+			 * as good a "can't happen" value as any other.
+			 */
+			return ETHTOOL_FEC_AUTO;
+		}
+	}
 }
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_LINK_MODE_FEC_BITS)
@@ -716,6 +739,9 @@ static int efx_x4_mcdi_link_ctrl(struct efx_nic *efx, u32 loopback_mode,
 
 	if (efx->phy_mode & PHY_MODE_LOW_POWER)
 		flags |= BIT(MC_CMD_LINK_FLAGS_LINK_DISABLE);
+
+	if (flags & BIT(MC_CMD_LINK_FLAGS_AUTONEG_EN))
+		flags |= BIT(MC_CMD_LINK_FLAGS_PARALLEL_DETECT_EN);
 
 	MCDI_SET_DWORD(inbuf, LINK_CTRL_IN_PORT_HANDLE, efx->port_handle);
 	MCDI_SET_DWORD(inbuf, LINK_CTRL_IN_CONTROL_FLAGS, flags);
@@ -1084,9 +1110,10 @@ int efx_x4_mcdi_phy_probe(struct efx_nic *efx)
 		pci_info(efx->pci_dev, "get link state failed rc=%d\n", rc);
 		goto fail;
 	}
-	autoneg = port_data->link.control & BIT(MC_CMD_LINK_FLAGS_AUTONEG_EN);
+	autoneg = (port_data->link.supported_autoneg != MC_CMD_AN_NONE) &&
+		(port_data->link.control & BIT(MC_CMD_LINK_FLAGS_AUTONEG_EN));
 
-	if (!autoneg || port_data->link.supported_autoneg == MC_CMD_AN_NONE) {
+	if (!autoneg) {
 		__set_bit(port_data->link.tech, tech_mask);
 		x4_mcdi_to_ethtool_linkset(efx, autoneg, tech_mask,
 					   port_data->link.pause,
@@ -1107,9 +1134,7 @@ int efx_x4_mcdi_phy_probe(struct efx_nic *efx)
 	/* Set the initial link mode */
 	efx_x4_mcdi_phy_decode_link(efx, &efx->link_state, port_data, fcntl);
 
-	efx->fec_config =
-		x4_mcdi_fec_to_ethtool(port_data->link.fec,
-				       port_data->advertised.requested_fec);
+	efx->fec_config = x4_mcdi_fec_to_ethtool(port_data);
 
 	/* Default to Autonegotiated flow control if the PHY supports it */
 	efx->wanted_fc = EFX_FC_RX | EFX_FC_TX;
@@ -1429,9 +1454,7 @@ int efx_x4_mcdi_phy_get_fecparam(struct efx_nic *efx,
 	if (rc)
 		return rc;
 
-	fecparam->fec =
-		x4_mcdi_fec_to_ethtool(port_data->link.fec,
-				       port_data->advertised.requested_fec);
+	fecparam->fec = x4_mcdi_fec_to_ethtool(port_data);
 
 	switch (port_data->link.fec) {
 	case MC_CMD_FEC_NONE:
