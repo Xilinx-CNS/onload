@@ -3960,6 +3960,7 @@ oof_mcast_filter_duplicate_hwports(struct oof_manager* fm,
                                    struct oof_mcast_filter* mf2)
 {
   unsigned hwport_mask = 0;
+  unsigned mf_port_mask = oof_mcast_filter_hwport_mask(fm, mf);
 
   /* An oof_mcast_filter is unique per maddr/port/vlan.  However, on hwports
    * that don't support vlan filters that means that the exact filter one
@@ -3974,11 +3975,17 @@ oof_mcast_filter_duplicate_hwports(struct oof_manager* fm,
    * - mf2 already has installed a filter on that hwport
    */
   if( (mf->mf_filter.trs == mf2->mf_filter.trs) && 
-      (mf->mf_maddr == mf2->mf_maddr) )
+      (mf->mf_maddr == mf2->mf_maddr) ) {
     /* The filter matches, now check for hwport overlap on non-vlan hwports */
-    hwport_mask = oof_mcast_filter_hwport_mask(fm, mf) &
+    hwport_mask = mf_port_mask &
                   (oo_hw_filter_hwports(&mf2->mf_filter) &
                    ~oof_effective_vlan_mask(fm));
+    /* For multipath NICs we also need to avoid installing a duplicate filter
+     * if we already have a matching filter on one of the hwports.
+     */
+    hwport_mask |= oo_hw_filter_hidden_ports(&mf2->mf_filter,
+                                  mf_port_mask & ~oof_effective_vlan_mask(fm));
+  }
 
   return hwport_mask;
 }
