@@ -180,7 +180,7 @@ ef10ct_nic_release_hardware(struct efhw_nic *nic)
  *
  *--------------------------------------------------------------------*/
 
-static void ef10ct_free_rxq(struct efhw_nic *nic, int rxq_id)
+void ef10ct_free_rxq(struct efhw_nic *nic, int rxq_id)
 {
   int rc = 0;
   int rxq_num;
@@ -928,7 +928,7 @@ void ef10ct_free_evq(struct efhw_nic *nic, int evq_id)
    * the upper layers will not restore it if the NIC comes back. */
 }
 
-static int ef10ct_alloc_txq(struct efhw_nic *nic)
+int ef10ct_alloc_txq(struct efhw_nic *nic)
 {
   struct efx_auxdev_client* cli;
   struct efx_auxdev* edev;
@@ -942,7 +942,7 @@ static int ef10ct_alloc_txq(struct efhw_nic *nic)
   return txq;
 }
 
-static void ef10ct_free_txq(struct efhw_nic *nic, int txq_id)
+void ef10ct_free_txq(struct efhw_nic *nic, int txq_id)
 {
   struct efx_auxdev_client* cli;
   struct efx_auxdev* edev;
@@ -954,7 +954,7 @@ static void ef10ct_free_txq(struct efhw_nic *nic, int txq_id)
   AUX_POST(dev, edev, cli, nic, rc);
 }
 
-static int ef10ct_alloc_rxq(struct efhw_nic *nic)
+int ef10ct_alloc_rxq(struct efhw_nic *nic)
 {
   struct efx_auxdev_client* cli;
   struct efx_auxdev* edev;
