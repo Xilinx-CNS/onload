@@ -376,7 +376,7 @@ static void usage_msg(FILE* f)
   fprintf(f, "  -r <send-rate>    - set UDP message send rate\n");
   fprintf(f, "  -n <n>            - measure latency for 1-in-n sends\n");
   fprintf(f, "  -i <num-iter>     - number of samples to measure\n");
-  fprintf(f, "  -n <num-warmups>  - number of warmup samples\n");
+  fprintf(f, "  -w <num-warmups>  - number of warmup samples\n");
   fprintf(f, "  -s                - use software timestamps\n");
   fprintf(f, "  -l <log-level>    - set log level\n");
   fprintf(f, "  -p <port>         - set TCP/UDP port number\n");
