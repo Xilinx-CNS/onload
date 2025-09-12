@@ -273,7 +273,7 @@ static void ef10ct_fini_shared_irq(struct ef10ct_shared_kernel_evq *evq)
   free_irq(evq->irq, evq);
 }
 
-static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid,
+static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int shared_ix,
                                       bool events)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
@@ -281,7 +281,7 @@ static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid,
   uint page_order = 0; /* TODO: What should the size be? */
   struct efhw_evq_params params = {};
   int evq_id, rc, evq_num;
-  struct ef10ct_shared_kernel_evq *shared_evq = &ef10ct->shared[qid];
+  struct ef10ct_shared_kernel_evq *shared_evq = &ef10ct->shared[shared_ix];
   irq_handler_t handler;
 
   evq_id = ef10ct_alloc_evq(nic);
@@ -342,14 +342,14 @@ fail_alloc_evq:
   return rc;
 }
 
-static void ef10ct_nic_free_shared_evq(struct efhw_nic *nic, int qid)
+static void ef10ct_nic_free_shared_evq(struct efhw_nic *nic, int shared_ix)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct ef10ct_shared_kernel_evq *shared_evq;
 
-  EFHW_ASSERT(qid >= 0);
-  EFHW_ASSERT(qid < ef10ct->shared_n);
-  shared_evq = &ef10ct->shared[qid];
+  EFHW_ASSERT(shared_ix >= 0);
+  EFHW_ASSERT(shared_ix < ef10ct->shared_n);
+  shared_evq = &ef10ct->shared[shared_ix];
 
   /* Neither client_id nor time_sync_events_enabled are used for ef10ct */
   efhw_nic_event_queue_disable(nic, ef10ct_get_queue_num(shared_evq->evq_id),
