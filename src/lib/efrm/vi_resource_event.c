@@ -181,7 +181,8 @@ eventq_mark_callback_busy(struct efrm_nic *rnic, unsigned instance,
 			 * wakeups and EF100-style interrupts on a given queue are
 			 * serialised by the lower-level mechanisms that despatch them. */
 			if (rnic->efhw_nic.devtype.arch != EFHW_ARCH_AF_XDP &&
-			    rnic->efhw_nic.devtype.arch != EFHW_ARCH_EFCT) {
+			    rnic->efhw_nic.devtype.arch != EFHW_ARCH_EFCT &&
+			    rnic->efhw_nic.devtype.arch != EFHW_ARCH_EF10CT ) {
 				EFRM_ERR("%s:%d: evq_state[%d] corrupted!",
 					 __FUNCTION__, __LINE__, instance);
 				EFRM_ASSERT(0);
