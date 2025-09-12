@@ -3935,12 +3935,13 @@ ci_inline unsigned oof_mcast_conflicted_hwports(struct oof_manager* fm,
                                                 ci_uint16 vlan_id,
                                                 struct oof_mcast_filter* mf)
 {
+  unsigned mask = 0;
   /* There can only be a conflict is this is for the same address, but a
    * different stack.
    */
   if( maddr == mf->mf_maddr && stack != mf->mf_filter.trs )
     /* Add to conflict mask ports which appear in both hwport masks */
-    return hwport_mask & mf->mf_hwport_mask &
+    mask = hwport_mask & mf->mf_hwport_mask &
            /* remove from conflict mask ports that support mcast replication */
            ~fm->fm_hwports_mcast_replicate_capable &
            /* If vlan id differs then remove from conflict mask ports which
@@ -3949,8 +3950,10 @@ ci_inline unsigned oof_mcast_conflicted_hwports(struct oof_manager* fm,
             */
            (vlan_id != mf->mf_vlan_id ?
            ~oof_effective_vlan_mask(fm) : (unsigned)-1);
-  else
-    return 0;
+
+  IPF_LOG("%s: %pI4(%u) hwports=%x conflicts=%x", __func__, &maddr, vlan_id,
+          hwport_mask, mask);
+  return mask;
 }
 
 
@@ -3987,6 +3990,8 @@ oof_mcast_filter_duplicate_hwports(struct oof_manager* fm,
                                   mf_port_mask & ~oof_effective_vlan_mask(fm));
   }
 
+  IPF_LOG("%s: %pI4 hwports=%x dups=%x", __func__, &mf->mf_maddr, mf_port_mask,
+          hwport_mask);
   return hwport_mask;
 }
 
