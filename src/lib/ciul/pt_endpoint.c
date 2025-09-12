@@ -490,7 +490,7 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   if( (s = getenv("EF_SHRUB_CONTROLLER")) ) {
     shrub_controller_id = atoi(s);
   } else {
-    shrub_controller_id = -1;
+    shrub_controller_id = EF_SHRUB_NO_SHRUB;
   }
 
   if( (s = getenv("EF_SHRUB_BUFFER_COUNT")) ) {

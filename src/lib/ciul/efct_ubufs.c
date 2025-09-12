@@ -506,7 +506,7 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
   ubufs->pd = pd;
   ubufs->pd_dh = pd_dh;
   ubufs->is_shrub_token_set = false;
-  ubufs->shrub_controller_id = -1;
+  ubufs->shrub_controller_id = EF_SHRUB_NO_SHRUB;
   ubufs->shrub_server_socket_id = -1;
 
   ubufs->ops.free = efct_ubufs_free;
