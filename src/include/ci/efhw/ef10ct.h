@@ -146,6 +146,6 @@ ef10ct_reconstruct_queue_handle(u32 queue_num,
 }
 
 int ef10ct_alloc_evq(struct efhw_nic *nic);
-void ef10ct_free_evq(struct efhw_nic *nic, int evq);
+void ef10ct_free_evq(struct efhw_nic *nic, int evq_id);
 
 #endif /* CI_EFHW_EF10CT_H */

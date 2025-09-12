@@ -180,7 +180,7 @@ ef10ct_nic_release_hardware(struct efhw_nic *nic)
  *
  *--------------------------------------------------------------------*/
 
-static void ef10ct_free_rxq(struct efhw_nic *nic, int qid)
+static void ef10ct_free_rxq(struct efhw_nic *nic, int rxq_id)
 {
   int rc = 0;
   int rxq_num;
@@ -189,14 +189,14 @@ static void ef10ct_free_rxq(struct efhw_nic *nic, int qid)
   struct efx_auxdev_client* cli;
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
 
-  EFHW_TRACE("%s: qid %x", __func__, qid);
+  EFHW_TRACE("%s: rxq_id %x", __func__, rxq_id);
 
-  rxq_num = ef10ct_get_queue_num(qid);
+  rxq_num = ef10ct_get_queue_num(rxq_id);
   EFHW_ASSERT(mutex_is_locked(&ef10ct->rxq[rxq_num].bind_lock));
   EFHW_ASSERT(ef10ct->rxq[rxq_num].state == EF10CT_RXQ_STATE_FREEING);
 
   AUX_PRE(dev, edev, cli, nic, rc);
-  edev->llct_ops->rxq_free(cli, qid);
+  edev->llct_ops->rxq_free(cli, rxq_id);
   AUX_POST(dev, edev, cli, nic, rc);
 
   ef10ct->rxq[rxq_num].state = EF10CT_RXQ_STATE_FREE;
@@ -912,7 +912,7 @@ int ef10ct_alloc_evq(struct efhw_nic *nic)
   return evq;
 }
 
-void ef10ct_free_evq(struct efhw_nic *nic, int evq)
+void ef10ct_free_evq(struct efhw_nic *nic, int evq_id)
 {
   struct efx_auxdev_client* cli;
   struct efx_auxdev* edev;
@@ -920,7 +920,7 @@ void ef10ct_free_evq(struct efhw_nic *nic, int evq)
   int rc = 0;
 
   AUX_PRE(dev, edev, cli, nic, rc);
-  edev->llct_ops->channel_free(cli, evq);
+  edev->llct_ops->channel_free(cli, evq_id);
   AUX_POST(dev, edev, cli, nic, rc);
 
   /* Failure here will only occur in the case that the NIC is unavailable.
@@ -942,7 +942,7 @@ static int ef10ct_alloc_txq(struct efhw_nic *nic)
   return txq;
 }
 
-static void ef10ct_free_txq(struct efhw_nic *nic, int txq)
+static void ef10ct_free_txq(struct efhw_nic *nic, int txq_id)
 {
   struct efx_auxdev_client* cli;
   struct efx_auxdev* edev;
@@ -950,7 +950,7 @@ static void ef10ct_free_txq(struct efhw_nic *nic, int txq)
   int rc = 0;
 
   AUX_PRE(dev, edev, cli, nic, rc);
-  edev->llct_ops->txq_free(cli, txq);
+  edev->llct_ops->txq_free(cli, txq_id);
   AUX_POST(dev, edev, cli, nic, rc);
 }
 
