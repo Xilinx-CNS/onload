@@ -49,7 +49,6 @@ struct efhw_sw_bt* efhw_sw_bt_by_owner(struct efhw_nic* nic, int owner_id)
   return &sw_bt[owner_id];
 }
 
-/* Reallocing isn't currently supported */
 int efhw_sw_bt_alloc(struct efhw_nic *nic, int owner, int order,
                      struct efhw_buffer_table_block **block_out,
                      int reset_pending)
@@ -238,4 +237,10 @@ void efhw_sw_bt_clear(struct efhw_nic *nic,
                       struct efhw_buffer_table_block *block, int first_entry,
                       int n_entries)
 {
+}
+
+int efhw_sw_bt_realloc(struct efhw_nic *nic, int owner, int order,
+                       struct efhw_buffer_table_block *block)
+{
+  return 0;
 }

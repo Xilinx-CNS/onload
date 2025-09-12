@@ -65,3 +65,7 @@ dma_addr_t efhw_sw_bt_get_dma_addr(struct efhw_sw_bt *table, long index);
 void efhw_sw_bt_clear(struct efhw_nic *nic,
                       struct efhw_buffer_table_block *block, int first_entry,
                       int n_entries);
+
+/* Reallocates the sw buffer table as required. */
+int efhw_sw_bt_realloc(struct efhw_nic *nic, int owner, int order,
+                       struct efhw_buffer_table_block *block);

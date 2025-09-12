@@ -2253,6 +2253,7 @@ struct efhw_func_ops ef10ct_char_functional_units = {
   .buffer_table_orders = ef10ct_nic_buffer_table_orders,
   .buffer_table_orders_num = CI_ARRAY_SIZE(ef10ct_nic_buffer_table_orders),
   .buffer_table_alloc = efhw_sw_bt_alloc,
+  .buffer_table_realloc = efhw_sw_bt_realloc,
   .buffer_table_free = efhw_sw_bt_free,
   .buffer_table_set = efhw_sw_bt_set,
   .buffer_table_clear = efhw_sw_bt_clear,
