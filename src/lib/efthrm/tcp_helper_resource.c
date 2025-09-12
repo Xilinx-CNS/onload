@@ -1053,6 +1053,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
   nic = efrm_client_get_nic(trs->nic[intf_i].thn_oo_nic->efrm_client);
   if( efhw_nic_max_shared_rxqs(nic) ) {
     struct efrm_vi* vi_rs = tcp_helper_vi(trs, intf_i);
+    struct efrm_pd* pd = efrm_vi_get_pd(tcp_helper_vi(trs, intf_i));
     ci_netif_state_nic_t* ni_nic = &trs->netif.state->nic[intf_i];
     ef_vi* vi = ci_netif_vi(&trs->netif, intf_i);
     int qix;
@@ -1060,10 +1061,9 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
     int hugepages = 0;
     int superbufs;
 
-    /* FIXME ON-16391 we need some way to determine which queues need shrub connections.
-     * For testing purposes, use the EF_LLCT_TEST_SHRUB option. */
+    /* FIXME ON-16391 avoid the arch check here */
     bool shrub = vi->nic_type.arch == EF_VI_ARCH_EF10CT &&
-                 NI_OPTS_TRS(trs).llct_test_shrub;
+                 (token == efrm_pd_shared_rxq_token_get(pd));
     if( ! shrub )
       hugepages = max(1,
                       DIV_ROUND_UP(NI_OPTS_TRS(trs).rxq_size * EFCT_PKT_STRIDE,
@@ -1095,6 +1095,9 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
                         __func__, rc));
         return rc;
       }
+      /* It doesn't matter if we set this now and then fail later, this value
+       * is only valid to read for queues we know are already attached. */
+      trs->nic[intf_i].thn_shrub_queues[qix] = true;
     }
 
     rc = efrm_rxq_alloc(vi_rs, rxq,
@@ -1921,6 +1924,8 @@ static int allocate_vis(tcp_helper_resource_t* trs,
            sizeof(trs->nic[intf_i].thn_efct_rxq));
     memset(trs->nic[intf_i].thn_efct_iobs, 0,
            sizeof(trs->nic[intf_i].thn_efct_iobs));
+    memset(trs->nic[intf_i].thn_shrub_queues, 0,
+           sizeof(trs->nic[intf_i].thn_shrub_queues));
   }
 
   /* This loop does the work of allocating a vi, using the information built
