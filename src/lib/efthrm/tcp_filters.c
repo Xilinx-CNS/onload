@@ -269,6 +269,15 @@ oo_hw_filter_set_hwport_common(struct oo_hw_filter* oofilter, int hwport,
   unsigned exclusive_rxq_token = EFHW_PD_NON_EXC_TOKEN;
   int rss_context = -1;
   unsigned stack_id;
+  struct tcp_helper_filter_params params = {
+    .vi_id = &vi_id,
+    .rxq = &rxq,
+    .flags = &insert_flags,
+    .exclusive_rxq_token = &exclusive_rxq_token,
+  };
+  bool is_mcast4 = (oo_filter_spec->type == OO_HW_FILTER_TYPE_IP) &&
+                   (oo_filter_spec->addr.ip.protocol == IPPROTO_UDP) &&
+                   ipv4_is_multicast(oo_filter_spec->addr.ip.daddr[0]);
 
   ci_assert_nequal(oofilter->trs == NULL, oofilter->thc == NULL);
   ci_assert_equal(!!redirect, oofilter->filter_id[hwport] >= 0);
@@ -276,8 +285,7 @@ oo_hw_filter_set_hwport_common(struct oo_hw_filter* oofilter, int hwport,
   if( cluster )
     vi_id = tcp_helper_cluster_vi_base(oofilter->thc, hwport);
   else
-    tcp_helper_get_filter_params(oofilter->trs, hwport, &vi_id, &rxq,
-                                 &insert_flags, &exclusive_rxq_token);
+    tcp_helper_get_filter_params(oofilter->trs, hwport, is_mcast4, &params);
 
   if( vi_id  >= 0 ) {
     int flags = EFX_FILTER_FLAG_RX_SCATTER;

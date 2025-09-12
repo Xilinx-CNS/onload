@@ -949,9 +949,10 @@ int tcp_helper_vi_hw_drop_filter_supported(tcp_helper_resource_t* trs,
     return -1;
 }
 
+
 void tcp_helper_get_filter_params(tcp_helper_resource_t* trs, int hwport,
-                                  int* vi_id, int* rxq, unsigned *flags,
-                                  unsigned *exclusive_rxq_token)
+                                  bool mcast4,
+                                  struct tcp_helper_filter_params *params)
 {
   int intf_i;
   struct efrm_pd *pd;
@@ -972,24 +973,24 @@ void tcp_helper_get_filter_params(tcp_helper_resource_t* trs, int hwport,
   if( (intf_i = trs->netif.hwport_to_intf_i[hwport]) >= 0 ) {
     ef_vi* vi = &trs->netif.nic_hw[intf_i].vi;
     nic = efrm_client_get_nic(trs->nic[intf_i].thn_oo_nic->efrm_client);
-    *vi_id = EFAB_VI_RESOURCE_INSTANCE(tcp_helper_vi(trs, intf_i));
+    *params->vi_id = EFAB_VI_RESOURCE_INSTANCE(tcp_helper_vi(trs, intf_i));
     pd = efrm_vi_get_pd(tcp_helper_vi(trs, intf_i));
     if( NI_OPTS_TRS(trs).llct_test_shrub ||
         (nic->flags & NIC_FLAG_RX_KERNEL_SHARED) )
-      *exclusive_rxq_token = efrm_pd_shared_rxq_token_get(pd);
+      *params->exclusive_rxq_token = efrm_pd_shared_rxq_token_get(pd);
     else
-      *exclusive_rxq_token = efrm_pd_exclusive_rxq_token_get(pd);
+      *params->exclusive_rxq_token = efrm_pd_exclusive_rxq_token_get(pd);
     if( NI_OPTS_TRS(trs).shared_rxq_num >= 0 ) {
-      *rxq = NI_OPTS_TRS(trs).shared_rxq_num;
-      *flags |= EFHW_FILTER_F_PREF_RXQ;
+      *params->rxq = NI_OPTS_TRS(trs).shared_rxq_num;
+      *params->flags |= EFHW_FILTER_F_PREF_RXQ;
     }
     else if( vi->efct_rxqs.active_qs ) {
       if( *vi->efct_rxqs.active_qs & 1 ) {
-        *rxq = efct_get_rxq_state(vi, 0)->qid;
-        *flags |= EFHW_FILTER_F_PREF_RXQ;
+        *params->rxq = efct_get_rxq_state(vi, 0)->qid;
+        *params->flags |= EFHW_FILTER_F_PREF_RXQ;
       }
       else {
-        *flags |= EFHW_FILTER_F_ANY_RXQ;
+        *params->flags |= EFHW_FILTER_F_ANY_RXQ;
       }
     }
   }

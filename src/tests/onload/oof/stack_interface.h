@@ -37,10 +37,15 @@ extern int tcp_helper_vi_hw_rx_loopback_supported(tcp_helper_resource_t* trs,
 extern int tcp_helper_vi_hw_drop_filter_supported(tcp_helper_resource_t* trs,
                                                   int hwport);
 
+struct tcp_helper_filter_params {
+  int* vi_id;
+  int* rxq;
+  unsigned *flags;
+  unsigned *exclusive_rxq_token;
+};
 extern void tcp_helper_get_filter_params(tcp_helper_resource_t* trs,
-                                         int hwport, int* vi_id, int* rxq,
-                                         unsigned *flags,
-                                         unsigned *exclusive_rxq_token);
+                                         int hwport, bool mcast,
+                                         struct tcp_helper_filter_params *out);
 
 int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
                                const struct efx_filter_spec* spec, int rxq,
