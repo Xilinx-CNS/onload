@@ -22,6 +22,9 @@
 #include "ef100_vdpa.h"
 #include "mcdi_filters.h"
 #endif
+#ifdef EFX_HAVE_TRY_LOOKUP_NOPERM
+#include <linux/namei.h>
+#endif
 
 
 /* Parameter definition bound to a structure - each file has one of these */
@@ -84,10 +87,15 @@ static struct file_operations efx_debugfs_file_ops = {
  */
 void efx_fini_debugfs_child(struct dentry *dir, const char *name)
 {
-	struct qstr child_name = QSTR_INIT(name, strlen(name));
 	struct dentry *child;
 
+#ifdef EFX_HAVE_TRY_LOOKUP_NOPERM
+	child = try_lookup_noperm(&QSTR(name), dir);
+#else
+	struct qstr child_name = QSTR_INIT(name, strlen(name));
+
 	child = d_hash_and_lookup(dir, &child_name);
+#endif
 	if (!IS_ERR_OR_NULL(child)) {
 		/* If it's a "regular" file, free its parameter binding */
 		if (S_ISREG(child->d_inode->i_mode))
