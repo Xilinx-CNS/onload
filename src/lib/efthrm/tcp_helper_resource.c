@@ -950,6 +950,24 @@ int tcp_helper_vi_hw_drop_filter_supported(tcp_helper_resource_t* trs,
 }
 
 
+static int tcp_helper_select_rxq(tcp_helper_resource_t *trs, int intf_i,
+                                 ef_vi *vi, bool want_shrub)
+{
+  int i;
+  int rxq = -1;
+
+  for( i = 0; i < EF_VI_MAX_EFCT_RXQS; i++ ) {
+    if( (*vi->efct_rxqs.active_qs & (1ull << i)) &&
+        (!!trs->nic[intf_i].thn_shrub_queues[i] == !!want_shrub) ) {
+      rxq = efct_get_rxq_state(vi, i)->qid;
+      break;
+    }
+  }
+
+  return rxq;
+}
+
+
 void tcp_helper_get_filter_params(tcp_helper_resource_t* trs, int hwport,
                                   bool mcast4,
                                   struct tcp_helper_filter_params *params)
@@ -957,6 +975,7 @@ void tcp_helper_get_filter_params(tcp_helper_resource_t* trs, int hwport,
   int intf_i;
   struct efrm_pd *pd;
   struct efhw_nic* nic;
+  bool want_shrub = (NI_OPTS_TRS(trs).shrub_controller_id >= 0) && mcast4;
 
   ci_assert_lt((unsigned) hwport, CI_CFG_MAX_HWPORTS);
 
@@ -975,8 +994,7 @@ void tcp_helper_get_filter_params(tcp_helper_resource_t* trs, int hwport,
     nic = efrm_client_get_nic(trs->nic[intf_i].thn_oo_nic->efrm_client);
     *params->vi_id = EFAB_VI_RESOURCE_INSTANCE(tcp_helper_vi(trs, intf_i));
     pd = efrm_vi_get_pd(tcp_helper_vi(trs, intf_i));
-    if( NI_OPTS_TRS(trs).llct_test_shrub ||
-        (nic->flags & NIC_FLAG_RX_KERNEL_SHARED) )
+    if( want_shrub || (nic->flags & NIC_FLAG_RX_KERNEL_SHARED) )
       *params->exclusive_rxq_token = efrm_pd_shared_rxq_token_get(pd);
     else
       *params->exclusive_rxq_token = efrm_pd_exclusive_rxq_token_get(pd);
@@ -985,13 +1003,13 @@ void tcp_helper_get_filter_params(tcp_helper_resource_t* trs, int hwport,
       *params->flags |= EFHW_FILTER_F_PREF_RXQ;
     }
     else if( vi->efct_rxqs.active_qs ) {
-      if( *vi->efct_rxqs.active_qs & 1 ) {
-        *params->rxq = efct_get_rxq_state(vi, 0)->qid;
+      *params->rxq = tcp_helper_select_rxq(trs, intf_i, vi, want_shrub);
+      if( *params->rxq >= 0 )
         *params->flags |= EFHW_FILTER_F_PREF_RXQ;
-      }
-      else {
+      else
         *params->flags |= EFHW_FILTER_F_ANY_RXQ;
-      }
+      OO_DEBUG_IPF(ci_log("%s: intf_i:%d rxq:%d flags:%x shrub:%d", __func__,
+                          intf_i, *params->rxq, *params->flags, want_shrub));
     }
   }
 }
