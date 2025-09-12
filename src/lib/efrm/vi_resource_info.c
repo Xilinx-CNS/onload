@@ -103,10 +103,17 @@ EXPORT_SYMBOL(efrm_vi_get_dev);
 
 int efrm_vi_get_channel(struct efrm_vi *virs)
 {
-	struct efrm_nic *nic = efrm_nic(virs->rs.rs_client->nic);
+	struct efhw_nic *efhw_nic = efrm_client_get_nic(virs->rs.rs_client);
+	struct efrm_nic *nic = efrm_nic(efhw_nic);
+
 	/* interrupt is managed by us. */
 	if (virs->vec != NULL)
 		return virs->vec->channel;
+
+	/* For AF_XDP, wakeup channel must match the AF_XDP queue number */
+	if (efhw_nic->devtype.arch == EFHW_ARCH_AF_XDP)
+		return virs->rs.rs_instance;
+
 	/* interrupt is managed by net driver. */
 	return virs->net_drv_wakeup_channel >= 0 ?
 		virs->net_drv_wakeup_channel :
