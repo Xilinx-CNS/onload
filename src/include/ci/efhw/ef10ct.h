@@ -14,8 +14,9 @@
 
 extern struct efhw_func_ops ef10ct_char_functional_units;
 
+#define EF10CT_QUEUE_NUM_NO_QUEUE -1
+
 #define EF10CT_EVQ_DUMMY_MAX 1024
-#define EF10CT_EVQ_NO_TXQ -1
 struct efhw_nic_ef10ct_evq {
   struct efhw_nic *nic;
   atomic_t queues_flushing;
@@ -26,7 +27,7 @@ struct efhw_nic_ef10ct_evq {
   unsigned capacity;
   unsigned next;
   int txq_num;
-  unsigned queue_num;
+  int queue_num;
 };
 
 /** enum_nic_ef10ct_rxq_state - Current state of the rxq.

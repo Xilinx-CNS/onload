@@ -155,8 +155,10 @@ static int ef10ct_resource_init(struct efx_auxdev *edev,
   res_dim->vi_lim = EF10CT_EVQ_DUMMY_MAX;
   res_dim->mem_bar = VI_RES_MEM_BAR_UNDEFINED;
 
-  for( i = 0; i < ef10ct->evq_n; i++ )
-    ef10ct->evq[i].txq = EF10CT_EVQ_NO_TXQ;
+  for( i = 0; i < ef10ct->evq_n; i++ ) {
+    ef10ct->evq[i].queue_num = EF10CT_QUEUE_NUM_NO_QUEUE;
+    ef10ct->evq[i].txq_num = EF10CT_QUEUE_NUM_NO_QUEUE;
+  }
 
   ef10ct->rxq_n = ef10ct->efx_design_params.rx_queues;
   ef10ct->rxq = vzalloc(sizeof(*ef10ct->rxq) * ef10ct->rxq_n);
@@ -165,7 +167,7 @@ static int ef10ct_resource_init(struct efx_auxdev *edev,
     goto fail1;
   }
   for( i = 0; i < ef10ct->rxq_n; i++ ) {
-    ef10ct->rxq[i].evq_id = -1;
+    ef10ct->rxq[i].evq_id = EF10CT_QUEUE_NUM_NO_QUEUE;
     mutex_init(&ef10ct->rxq[i].bind_lock);
   }
 

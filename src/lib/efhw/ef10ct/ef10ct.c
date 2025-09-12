@@ -988,7 +988,7 @@ static int ef10ct_vi_alloc_hw(struct efhw_nic *nic,
   }
 
   evq_num = ef10ct_get_queue_num(evq_rc);
-  EFHW_ASSERT(ef10ct->evq[evq_num].txq_num == EF10CT_EVQ_NO_TXQ);
+  EFHW_ASSERT(ef10ct->evq[evq_num].txq_num == EF10CT_QUEUE_NUM_NO_QUEUE);
 
   if( evc->want_txq) {
     txq_rc = ef10ct_alloc_txq(nic);
@@ -1061,13 +1061,13 @@ static void ef10ct_vi_free_hw(struct efhw_nic *nic, int evq_num)
 
   ef10ct_free_evq(nic, evq_id);
 
-  if( txq_num != EF10CT_EVQ_NO_TXQ ) {
+  if( txq_num != EF10CT_QUEUE_NUM_NO_QUEUE ) {
     int txq_id = ef10ct_reconstruct_queue_handle(txq_num,
                                                  EF10CT_QUEUE_HANDLE_TYPE_TXQ);
     ef10ct_free_txq(nic, txq_id);
   }
 
-  ef10ct->evq[evq_num].txq_num = EF10CT_EVQ_NO_TXQ;
+  ef10ct->evq[evq_num].txq_num = EF10CT_QUEUE_NUM_NO_QUEUE;
 }
 
 static void ef10ct_vi_free_sw(struct efhw_nic *nic, int evq_num)
@@ -1124,7 +1124,7 @@ ef10ct_dmaq_tx_q_init(struct efhw_nic *nic,
   EFHW_TRACE("%s: txq 0x%x evq 0x%x", __func__, txq_id, evq_id);
 
   EFHW_ASSERT(evq_num < ef10ct->evq_n);
-  EFHW_ASSERT(txq_num != EFCT_EVQ_NO_TXQ);
+  EFHW_ASSERT(txq_num != EF10CT_QUEUE_NUM_NO_QUEUE);
 
   EFHW_MCDI_INITIALISE_BUF(in);
 
