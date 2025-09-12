@@ -26,6 +26,22 @@ static void ef10ct_reset_suspend(struct efx_auxdev_client * client,
 }
 
 
+static int ef10ct_retrieve_design_params(struct efx_auxdev_client *client,
+                                         struct efhw_nic_ef10ct *ef10ct)
+{
+  union efx_auxiliary_param_value val;
+  int rc;
+
+  val.design_params = &ef10ct->efx_design_params;
+  rc = ef10ct->edev->llct_ops->base_ops->get_param(client, EFX_DESIGN_PARAM,
+                                                   &val);
+  if( rc < 0 )
+    return rc;
+
+  return 0;
+}
+
+
 static void ef10ct_handle_reset(struct efx_auxdev_client *client,
                                 struct efhw_nic *nic, int result)
 {
@@ -128,8 +144,7 @@ static int ef10ct_resource_init(struct efx_auxdev *edev,
   int rc;
   int i;
 
-  val.design_params = &ef10ct->efx_design_params;
-  rc = edev->llct_ops->base_ops->get_param(client, EFX_DESIGN_PARAM, &val);
+  rc = ef10ct_retrieve_design_params(client, ef10ct);
   if( rc < 0 )
     return rc;
 
