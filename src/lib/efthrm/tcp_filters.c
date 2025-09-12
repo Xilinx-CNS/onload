@@ -332,7 +332,8 @@ oo_hw_filter_set_hwport_common(struct oo_hw_filter* oofilter, int hwport,
       else {
         if( rc >= 0 ) {
           /* If the redirect succeeded perform any post-add actions */
-          rc = tcp_helper_post_filter_add(oofilter->trs, hwport, &spec, rxq);
+          rc = tcp_helper_post_filter_add(oofilter->trs, hwport, &spec, rxq,
+                                          exclusive_rxq_token);
           if( rc < 0 ) {
             efrm_filter_remove(get_client(hwport),
                                oofilter->filter_id[hwport]);
@@ -368,7 +369,8 @@ oo_hw_filter_set_hwport_common(struct oo_hw_filter* oofilter, int hwport,
        * everything) change in the future, but it's difficult to predict in
        * what way. */
       if( !cluster ) {
-        rc = tcp_helper_post_filter_add(oofilter->trs, hwport, &spec, rxq);
+        rc = tcp_helper_post_filter_add(oofilter->trs, hwport, &spec, rxq,
+                                        exclusive_rxq_token);
         if( rc < 0 )
           efrm_filter_remove(get_client(hwport), oofilter->filter_id[hwport]);
       }

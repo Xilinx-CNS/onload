@@ -63,7 +63,7 @@ extern void tcp_helper_get_filter_params(tcp_helper_resource_t* trs,
  * if one has been added */
 extern int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
                                       const struct efx_filter_spec* spec,
-                                      int rxq);
+                                      int rxq, unsigned token);
 
 /*--------------------------------------------------------------------
 *
