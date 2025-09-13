@@ -377,7 +377,10 @@ static int create_onload_config_socket(const char *socket_path, uintptr_t* confi
     goto cleanup_socket;
   }
 
-  rc = ef_shrub_socket_listen(*config_socket_fd, 5);
+  /* We have a connection per-interface per-client. Onload clients will use
+   * all interfaces by default, and it's reasonable that many apps are starting
+   * up at once, so we need a generous backlog. */
+  rc = ef_shrub_socket_listen(*config_socket_fd, 2048);
   if ( rc < 0 ) {
     ci_log("Error: shrub_controller onload socket listen failed");
     goto cleanup_socket;
