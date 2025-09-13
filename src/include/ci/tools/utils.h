@@ -15,6 +15,10 @@
 #ifndef __CI_TOOLS_UTILS_H__
 #define __CI_TOOLS_UTILS_H__
 
+#ifndef __KERNEL__
+#include <sys/socket.h>
+#include <sys/un.h>
+#endif
 
 /**********************************************************************
  * misc
@@ -231,6 +235,26 @@ static inline int ci_ffs64(ci_uint64 x)
 }
 #else
 # define ci_ffs64 __builtin_ffsll
+#endif
+
+
+#ifndef __KERNEL__
+static inline int ci_init_unix_addr(const char *name, struct sockaddr_un *addr,
+                                    socklen_t *addr_len)
+{
+  /* Add one for null terminator */
+  size_t name_len = strlen(name) + 1;
+  *addr_len = offsetof(struct sockaddr_un, sun_path) + name_len;
+
+  if( name_len > sizeof(addr->sun_path) )
+    return -EINVAL;
+
+  memset(addr, 0, sizeof(*addr));
+  addr->sun_family = AF_UNIX;
+  strcpy(addr->sun_path, name);
+
+  return 0;
+}
 #endif
 
 

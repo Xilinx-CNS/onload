@@ -2068,25 +2068,25 @@ int oo_send_shrub_request(int controller_id,
   int client_fd;
   struct sockaddr_un addr;
   char socket_path[EF_SHRUB_NEGOTIATION_SOCKET_LEN];
+  socklen_t addr_len;
 
   ci_assert(controller_id >= 0);
 
-  rc = snprintf(socket_path, sizeof(socket_path), EF_SHRUB_CONTROLLER_PATH_FORMAT
-                "%s", EF_SHRUB_SOCK_DIR_PATH, controller_id,
-                EF_SHRUB_NEGOTIATION_SOCKET);
+  rc = snprintf(socket_path, sizeof(socket_path),
+                EF_SHRUB_CONTROLLER_PATH_FORMAT "%s", EF_SHRUB_SOCK_DIR_PATH,
+                controller_id, EF_SHRUB_NEGOTIATION_SOCKET);
   if ( rc < 0 || rc >= sizeof(socket_path) )
     return -EINVAL;
+
+  rc = ci_init_unix_addr(socket_path, &addr, &addr_len);
+  if( rc < 0 )
+    return rc;
 
   client_fd = ci_sys_socket(AF_UNIX, SOCK_SEQPACKET, 0);
   if ( client_fd == -1 )
     return -errno;
 
-  memset(&addr, 0, sizeof(addr));
-  addr.sun_family = AF_UNIX;
-  strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
-  addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
-
-  rc = ci_sys_connect(client_fd, (struct sockaddr *)&addr, sizeof(addr));
+  rc = ci_sys_connect(client_fd, (struct sockaddr *)&addr, addr_len);
   if ( rc < 0 ) {
     rc = -errno;
     goto clean_exit;
