@@ -94,6 +94,8 @@ int shrub_spawn_server(char* controller_id)
     NULL,
     "-c",
     controller_id,
+    "-D",
+    "-K",
     NULL
   };
   char* envp_flags = "";
