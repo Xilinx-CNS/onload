@@ -26,6 +26,7 @@
 #include <ci/tools/debug.h>
 #include <ci/app/testapp.h>
 #include <ci/tools/namespace.h>
+#include <ci/tools/onload_server.h>
 #include <ci/net/ipv4.h>
 
 #include "private.h"
@@ -53,6 +54,8 @@ extern int oo_fd_open(int * fd_out);
 CI_BUILD_ASSERT(CHAR_BIT * sizeof(cicp_hwport_mask_t) >= CI_CFG_MAX_HWPORTS);
 
 #define DEV_KMSG "/dev/kmsg"
+#define SERVER_BIN "onload_cp_server"
+#define SERVER_NAME "Onload Cplane Server"
 
 static char* cp_log_prefix;
 
@@ -189,12 +192,8 @@ CI_NORETURN init_failed(const char* msg, ...)
 {
   va_list args;
   va_start(args, msg);
-  ci_vlog(msg, args);
+  ci_server_init_failed(SERVER_NAME, msg, args);
   va_end(args);
-  ci_log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-  ci_log("!!! Onload Control Plane server has FAILED TO START !!!");
-  ci_log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-  exit(1);
 }
 
 /* We pass the cp_session parameter through the function call chain, and in
@@ -751,102 +750,6 @@ static int init_main_cplane(struct cp_session* s)
   return 0;
 }
 
-static void set_log_prefix(void)
-{
-  asprintf(&cp_log_prefix, "onload_cp_server[%d]: ", getpid());
-  ci_set_log_prefix(cp_log_prefix);
-}
-
-/* Fork off a daemon process according to the recipe in "man 7 daemon".  This
- * function returns only in the context of the daemon, and only on success;
- * otherwise, it exits. */
-static void daemonise(void)
-{
-  pid_t child;
-  int rc;
-  int devnull;
-  int i;
-  sigset_t sigset;
-  struct rlimit rlim;
-
-  /* Start with some tidy-up.  We don't check errors here as failure is non-
-   * fatal. */
-
-  /* Close all files above stderr. */
-  if( getrlimit(RLIMIT_NOFILE, &rlim) == 0 )
-    for( i = STDERR_FILENO + 1; i < rlim.rlim_max; ++i )
-      close(i);
-
-  /* Reset all signal handlers. */
-  for( i = 0; i < _NSIG; ++i )
-    signal(i, SIG_DFL);
-
-  /* Unblock all signals. */
-  sigfillset(&sigset);
-  sigprocmask(SIG_UNBLOCK, &sigset, NULL);
-
-  /* Make sure we're not a process group leader so that setsid() will give us a
-   * new session. */
-  child = fork();
-  if( child == -1 )
-    init_failed("Failed to fork: %s", strerror(errno));
-  else if( child != 0 )
-    /* Parent process. */
-    exit(0);
-
-  /* Get a new session. */
-  rc = setsid();
-  if( rc == -1 )
-    init_failed("setsid() failed: %s", strerror(errno));
-
-  /* Fork to relinquish position as process group leader. */
-  child = fork();
-  if( child == -1 ) {
-    init_failed("Failed to fork: %s", strerror(errno));
-  }
-  else if( child != 0 ) {
-    /* Parent process.  The child is the 'real' daemon. */
-    exit(0);
-  }
-  ci_log("Spawned daemon process %d", getpid());
-
-  umask(0);
-  rc = chdir("/");
-  if( rc == -1 )
-    init_failed("Failed to change to root directory: %s", strerror(errno));
-
-  devnull = open("/dev/null", O_RDONLY);
-  if( devnull == -1 )
-    init_failed("Failed to open /dev/null for reading: %s", strerror(errno));
-  rc = dup2(devnull, STDIN_FILENO);
-  if( rc == -1 )
-    init_failed("Failed to dup /dev/null onto stdin: %s", strerror(errno));
-  close(devnull);
-
-  devnull = open(ci_cfg_log_to_kern ? DEV_KMSG : "/dev/null", O_WRONLY);
-  if( devnull == -1 )
-    init_failed("Failed to open /dev/null for writing: %s", strerror(errno));
-
-  /* Start logging to syslog before we nullify std{out,err}. */
-  if( ! ci_cfg_log_to_kern ) {
-    ci_set_log_prefix("");
-    ci_log_fn = ci_log_syslog;
-    openlog(NULL, LOG_PID, LOG_DAEMON);
-  }
-  else {
-    /* Use the new PID when logging. */
-    set_log_prefix();
-  }
-
-  rc = dup2(devnull, STDOUT_FILENO);
-  if( rc == -1 )
-    init_failed("Failed to dup /dev/null onto stdout: %s", strerror(errno));
-  rc = dup2(devnull, STDERR_FILENO);
-  if( rc == -1 )
-    init_failed("Failed to dup /dev/null onto stderr: %s", strerror(errno));
-  close(devnull);
-}
-
 
 /* Normally the kernel will refuse to allow the server to start if there are no
  * active clients for the namespace (i.e. if there are sufficiently few
@@ -997,7 +900,7 @@ int main(int argc, char** argv)
   int rc;
 
   /* Set sutable prefix */
-  set_log_prefix();
+  ci_server_set_log_prefix(&cp_log_prefix, SERVER_BIN);
 
   /* Ensure that early errors are not lost */
   struct stat stat;
@@ -1022,7 +925,8 @@ int main(int argc, char** argv)
     sched_setaffinity(0, sizeof(cfg_affinity), (cpu_set_t*)&cfg_affinity);
 
   if( cfg_daemonise )
-    daemonise();
+    ci_server_daemonise(ci_cfg_log_to_kern, &cp_log_prefix, SERVER_NAME,
+                        SERVER_BIN);
 
   /* If a namespace was specified on the command line, switch into it before
    * bringing up any of our state. */
