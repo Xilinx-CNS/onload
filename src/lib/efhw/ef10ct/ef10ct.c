@@ -1453,7 +1453,16 @@ ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
     return;
   }
 
-  EFHW_ASSERT(ef10ct->rxq[rxq_num].state == EF10CT_RXQ_STATE_INITIALISED);
+  /* We might think that we were using this queue, but failed to reallocate it
+   * after the NIC was reset. In this case, lets exit early. */
+  if( ef10ct->rxq[rxq_num].state == EF10CT_RXQ_STATE_FREEING ||
+      ef10ct->rxq[rxq_num].state == EF10CT_RXQ_STATE_FREE ) {
+    mutex_unlock(&ef10ct->rxq[rxq_num].bind_lock);
+    return;
+  }
+
+  EFHW_ASSERT(ef10ct->rxq[rxq_num].state == EF10CT_RXQ_STATE_INITIALISED ||
+              ef10ct->rxq[rxq_num].state == EF10CT_RXQ_STATE_ALLOCATED);
   ef10ct->rxq[rxq_num].state = EF10CT_RXQ_STATE_FREEING;
 
   if( ef10ct->rxq[rxq_num].buffer_pages != NULL ) {
