@@ -16,6 +16,46 @@
 
 #if CI_HAVE_EF10CT
 
+static int ef10ct_nic_shared_evq_enable(struct efhw_nic *nic, int shared_ix)
+{
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  struct ef10ct_shared_kernel_evq *shared_evq = &ef10ct->shared[shared_ix];
+  struct efhw_evq_params params = {};
+  int rc, evq_num;
+
+  evq_num = ef10ct_get_queue_num(shared_evq->evq_id);
+
+  params.evq = evq_num;
+  params.n_pages = 1 << shared_evq->page_order;
+  params.evq_size = (params.n_pages << PAGE_SHIFT) / sizeof(efhw_event_t);
+  params.dma_addrs = shared_evq->iopages.dma_addrs;
+  params.virt_base = shared_evq->iopages.ptr;
+  params.wakeup_channel = shared_evq->channel;
+  /* Do we care about flags? */
+
+  rc = efhw_nic_event_queue_enable(nic, &params);
+  if( rc < 0 )
+    return rc;
+
+  /* After our EVQ is enabled, the NIC can start delivering events to it, so we
+   * want to be woken up when this happens. */
+  efhw_nic_wakeup_request(nic, NULL, evq_num, 0);
+
+  return 0;
+}
+
+static void ef10ct_nic_shared_evq_disable(struct efhw_nic *nic, int shared_ix)
+{
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  struct ef10ct_shared_kernel_evq *shared_evq = &ef10ct->shared[shared_ix];
+  int evq_num = ef10ct_get_queue_num(shared_evq->evq_id);
+  /* We don't use any flags that would enable time sync events on the shared
+   * event queues. */
+  int time_sync_events_enabled = 0;
+
+  efhw_nic_event_queue_disable(nic, evq_num, time_sync_events_enabled);
+}
+
 static void ef10ct_reset_suspend(struct efx_auxdev_client * client,
                                  struct efhw_nic *nic)
 {
@@ -288,13 +328,12 @@ static void ef10ct_fini_shared_irq(struct ef10ct_shared_kernel_evq *evq)
   free_irq(evq->irq, evq);
 }
 
-static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int shared_ix,
-                                      bool events)
+static int ef10ct_nic_create_shared_evq(struct efhw_nic *nic, int shared_ix,
+                                        bool events)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct efhw_nic_ef10ct_evq *ef10ct_evq;
   uint page_order = 0; /* TODO: What should the size be? */
-  struct efhw_evq_params params = {};
   int evq_id, rc, evq_num;
   struct ef10ct_shared_kernel_evq *shared_evq = &ef10ct->shared[shared_ix];
   irq_handler_t handler;
@@ -322,6 +361,7 @@ static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int shared_ix,
   if (rc < 0)
     goto fail_init_irq;
 
+  shared_evq->page_order = page_order;
   rc = efhw_iopages_alloc(nic, &shared_evq->iopages, page_order, 1, 0);
   if( rc )
     goto fail_iopages_alloc;
@@ -329,19 +369,9 @@ static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int shared_ix,
   memset(shared_evq->iopages.ptr, EFHW_CLEAR_EVENT_VALUE,
          shared_evq->iopages.n_pages << PAGE_SHIFT);
 
-  params.evq = evq_num;
-  params.n_pages = 1 << page_order;
-  params.evq_size = (params.n_pages << PAGE_SHIFT) / sizeof(efhw_event_t);
-  params.dma_addrs = shared_evq->iopages.dma_addrs;
-  params.virt_base = shared_evq->iopages.ptr;
-  params.wakeup_channel = shared_evq->channel;
-  /* Do we care about flags? */
-
-  rc = efhw_nic_event_queue_enable(nic, &params);
+  rc = ef10ct_nic_shared_evq_enable(nic, shared_ix);
   if( rc < 0 )
     goto fail_evq_enable;
-
-  efhw_nic_wakeup_request(nic, NULL, evq_num, 0);
 
   return 0;
 
@@ -366,10 +396,7 @@ static void ef10ct_nic_free_shared_evq(struct efhw_nic *nic, int shared_ix)
   EFHW_ASSERT(shared_ix < ef10ct->shared_n);
   shared_evq = &ef10ct->shared[shared_ix];
 
-  /* Neither client_id nor time_sync_events_enabled are used for ef10ct */
-  efhw_nic_event_queue_disable(nic, ef10ct_get_queue_num(shared_evq->evq_id),
-                               0);
-
+  ef10ct_nic_shared_evq_disable(nic, shared_ix);
   ef10ct_free_evq(nic, shared_evq->evq_id);
   efhw_iopages_free(nic, &shared_evq->iopages);
   ef10ct_fini_shared_irq(shared_evq);
@@ -449,7 +476,7 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
     /* TODO ON-16670 How to choose which evqs get interrupts. Currently the
      * first shared evq on each interface will not be used for rx events, and
      * any subsequent ones can be. */
-    rc = ef10ct_nic_init_shared_evq(nic, i, i != 0);
+    rc = ef10ct_nic_create_shared_evq(nic, i, i != 0);
     if( rc < 0 ) {
       shared_n = i;
       goto fail4;

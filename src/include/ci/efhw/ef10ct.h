@@ -73,6 +73,7 @@ struct efhw_nic_ef10ct_rxq {
 struct ef10ct_shared_kernel_evq {
   int evq_id;
   struct efhw_nic_ef10ct_evq *evq;
+  uint page_order;
   struct efhw_iopages iopages;
   uint32_t irq;
   uint32_t channel;
