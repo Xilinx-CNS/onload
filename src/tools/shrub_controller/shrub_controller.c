@@ -8,6 +8,7 @@
 #include <assert.h>
 #include <ci/compat.h>
 #include <ci/tools/log.h>
+#include <ci/tools/onload_server.h>
 #include <cplane/cplane.h>
 #include <cplane/create.h>
 #include <cplane/mib.h>
@@ -49,6 +50,12 @@ static volatile sig_atomic_t call_shrub_dump = 0;
 #define EF_SHRUB_CONFIG_SOCKET_LOCK EF_SHRUB_NEGOTIATION_SOCKET "_lock"
 #define EF_SHRUB_CONFIG_SOCKET_LOCK_LEN (EF_SHRUB_SOCKET_DIR_LEN + \
                                          sizeof(EF_SHRUB_CONFIG_SOCKET_LOCK))
+
+#define DEV_KMSG "/dev/kmsg"
+#define SERVER_BIN "shrub_controller"
+#define SERVER_NAME "Onload Shrub Server"
+
+static char* shrub_log_prefix;
 
 struct shrub_controller_stats
 {
@@ -107,6 +114,8 @@ static void usage(void)
   fprintf(stderr, "Options:\n");
   fprintf(stderr, "  -d       Enable debug mode\n");
   fprintf(stderr, "  -c       Set controller_id\n");
+  fprintf(stderr, "  -D       Daemonise on startup\n");
+  fprintf(stderr, "  -K       Log to kmsg\n");
 }
 
 static int search_for_existing_server(shrub_controller_config *config,
@@ -853,13 +862,29 @@ static void controller_cplane_disconnect(shrub_controller_config *config)
 int main(int argc, char *argv[])
 {
   int rc = 0;
+  bool daemonise = false;
+  bool log_to_kern = false;
+  struct stat stat;
   int option;
   shrub_controller_config config = {0};
   config.config_socket_fd = INVALID_SOCKET_FD;
   config.interface_token = 1;
   config.controller_id = 0;
 
-  while ( (option = getopt(argc, argv, "dc:")) != -1 ) {
+  /* Set sutable prefix */
+  ci_server_set_log_prefix(&shrub_log_prefix, SERVER_BIN);
+
+  /* Ensure that early errors are not lost */
+  if( fstat(STDOUT_FILENO, &stat) != 0 ) {
+    int fd = open(DEV_KMSG, O_WRONLY);
+    if( fd != STDERR_FILENO ) {
+      dup2(fd, STDERR_FILENO);
+      /* Do not check the return code from dup2, as cannot log errors anyway.
+       * Maybe daemonise() will have more luck, let it check for problems. */
+    }
+  }
+
+  while ( (option = getopt(argc, argv, "dc:DK")) != -1 ) {
     switch (option)
     {
     case 'd':
@@ -869,11 +894,21 @@ int main(int argc, char *argv[])
     case 'c':
       config.controller_id = atoi(optarg);
       break;
+    case 'D':
+      daemonise = true;
+      break;
+    case 'K':
+      log_to_kern = true;
+      break;
     default:
       usage();
       return EXIT_FAILURE;
     }
   }
+
+  if( daemonise )
+    ci_server_daemonise(log_to_kern, &shrub_log_prefix, SERVER_NAME,
+                        SERVER_BIN);
 
   controller_init_signals();
   rc = controller_init_paths(&config);
