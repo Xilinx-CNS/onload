@@ -1780,3 +1780,7 @@ CI_CFG_OPT("EF_SHRUB_BUFFER_COUNT", shrub_buffer_count, ci_uint32,
 "a shrub controller. ",
            , , EF_SHRUB_DEFAULT_BUFFER_COUNT, EF_SHRUB_DEFAULT_BUFFER_COUNT,
            100000, count)
+
+CI_CFG_OPT("EF_SHRUB_DEBUG", shrub_debug, ci_uint32,
+"Output debug logging from shrub controller.",
+           1, , 0, 0, 1, yesno)

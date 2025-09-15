@@ -1345,6 +1345,9 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
   if( (s = getenv("EF_SHRUB_BUFFER_COUNT")) )
     opts->shrub_buffer_count = atoi(s);
 
+  if( (s = getenv("EF_SHRUB_DEBUG")) )
+    opts->shrub_debug = atoi(s);
+
 }
 
 
@@ -2027,6 +2030,7 @@ static int spawn_shrub_controller(ci_netif* ni)
   ci_assert(NI_OPTS(ni).shrub_controller_id >= 0);
 
   shrub_args.controller_id = NI_OPTS(ni).shrub_controller_id;
+  shrub_args.debug = NI_OPTS(ni).shrub_debug;
   return oo_resource_op(fp, OO_IOC_SHRUB_SPAWN_SERVER, &shrub_args);
 }
 
