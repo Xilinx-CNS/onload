@@ -46,6 +46,7 @@ LIB_SRCS	+= drv_log_fn.c memleak_debug.c
 else
 LIB_SRCS	+= get_cpu_khz.c log_fn.c log_file.c
 LIB_SRCS	+= glibc_version.c
+LIB_SRCS	+= onload_server.c
 endif
 
 
