@@ -58,9 +58,6 @@ ifeq (${PLATFORM},gnu_x86_64)
 MMAKE_CFLAGS	+= -mpclmul -msse4.1
 endif
 
-# Only needed for i386 
-LIB_OBJS	+=  ci_tools_cas64u.o
-
 all: $(TARGET)
 
 lib: $(TARGET)
