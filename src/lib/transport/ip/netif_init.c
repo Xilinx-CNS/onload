@@ -2115,20 +2115,47 @@ clean_exit:
 static int oo_init_shrub(ci_netif* ni, ef_vi* vi, ci_hwport_id_t hw_port, int nic_i) {
   int rc = 0;
   int shrub_socket_id = -1;
+  int i;
 #ifndef __KERNEL__
   if ( NI_OPTS(ni).shrub_controller_id >= 0 ) {
-      rc = spawn_shrub_controller(ni);
-      if( rc < 0 )
-        return rc;
-
+      /* Try requesting first, as there might be an existing shrub controller.
+       * There's no reliable way to detect whether there's a listening
+       * controller already, so we try and connect, and if we fail, try
+       * spawning one at that point. */
       shrub_socket_id = shrub_adapter_send_hwport(
         oo_send_shrub_request,
         NI_OPTS(ni).shrub_controller_id,
         hw_port,
         NI_OPTS(ni).shrub_buffer_count
       );
+
+      /* No listening socket, try spawning */
+      if( (shrub_socket_id == -ECONNREFUSED) ||
+          (shrub_socket_id == -ENOENT) ) {
+        LOG_NC(ci_log("%s: send to shrub failed, trying spawn", __func__));
+        rc = spawn_shrub_controller(ni);
+        if( rc < 0 )
+          return rc;
+
+        /* Now retry */
+        for( i = 0; i < 200; i++ ) {
+          shrub_socket_id = shrub_adapter_send_hwport(oo_send_shrub_request,
+                                              NI_OPTS(ni).shrub_controller_id,
+                                              hw_port,
+                                              NI_OPTS(ni).shrub_buffer_count);
+          if( (shrub_socket_id >= 0) ||
+              ((shrub_socket_id != -ECONNREFUSED) &&
+               (shrub_socket_id != -ENOENT)) )
+            break;
+          usleep(1000 * 10); /* 10ms */
+        }
+      }
+
+      /* Failure at this point is now fatal */
       if ( shrub_socket_id < 0 ) {
         rc = shrub_socket_id;
+        LOG_U(ci_log("%s: retry of send after spawn failed (rc %d), giving up",
+                     __func__, rc));
         return rc;
       }
 
