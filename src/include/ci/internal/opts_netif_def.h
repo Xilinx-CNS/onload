@@ -788,7 +788,10 @@ CI_CFG_OPT("EF_RXQ_SIZE", rxq_size, ci_uint16,
 "or 4096.\n"
 
 "A larger ring size can absorb larger packet bursts without drops, but may "
-"reduce efficiency because the working set size is increased.",
+"reduce efficiency because the working set size is increased.\n"
+
+"If the value is lower than is supported by the hardware this will be rounded "
+"up. Set EF_LOG to include more_config_warnings to log if this occurs.",
            , , 512, 0, 32768, bincount)
 
 CI_CFG_OPT("EF_TXQ_SIZE", txq_size, ci_uint16,

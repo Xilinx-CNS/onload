@@ -2467,7 +2467,7 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
       efrm_vi_n_q_entries(NI_OPTS(ni).txq_size, nic->q_sizes[EFHW_TXQ]) : 0;
 
     if( NI_OPTS(ni).rxq_size < vi_rxq_size )
-      NI_LOG(ni, CONFIG_WARNINGS,
+      NI_LOG(ni, MORE_CONFIG_WARNINGS,
              "WARNING: EF_RXQ_SIZE=%d rounded up to %d for dev %s",
              NI_OPTS(ni).rxq_size, vi_rxq_size, nic->net_dev->name);
     if( NI_OPTS(ni).txq_size < vi_txq_size )
