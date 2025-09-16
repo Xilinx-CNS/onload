@@ -298,8 +298,8 @@ static void ef10ct_check_for_flushes_polled(struct work_struct *work)
 
   rc = ef10ct_check_for_flushes_common(evq);
   if (rc == -EAGAIN) {
-    EFHW_ERR("%s: WARNING: No flush found, scheduling delayed work",
-             __FUNCTION__);
+    EFHW_TRACE("%s: WARNING: No flush found, scheduling delayed work",
+               __FUNCTION__);
     schedule_delayed_work(&evq->check_flushes_polled, 100);
   }
 }
