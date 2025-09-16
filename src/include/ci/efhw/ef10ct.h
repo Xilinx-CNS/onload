@@ -25,7 +25,7 @@ struct efhw_nic_ef10ct_evq {
   ci_qword_t *base;
   unsigned capacity;
   unsigned next;
-  int txq;
+  int txq_num;
   unsigned queue_num;
 };
 

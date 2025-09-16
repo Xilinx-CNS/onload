@@ -988,7 +988,7 @@ static int ef10ct_vi_alloc_hw(struct efhw_nic *nic,
   }
 
   evq_num = ef10ct_get_queue_num(evq_rc);
-  EFHW_ASSERT(ef10ct->evq[evq_num].txq == EF10CT_EVQ_NO_TXQ);
+  EFHW_ASSERT(ef10ct->evq[evq_num].txq_num == EF10CT_EVQ_NO_TXQ);
 
   if( evc->want_txq) {
     txq_rc = ef10ct_alloc_txq(nic);
@@ -998,7 +998,7 @@ static int ef10ct_vi_alloc_hw(struct efhw_nic *nic,
       evq_rc = txq_rc;
     }
     else {
-      ef10ct->evq[evq_num].txq = txq_rc;
+      ef10ct->evq[evq_num].txq_num = ef10ct_get_queue_num(txq_rc);
     }
   }
 
@@ -1051,7 +1051,7 @@ static int ef10ct_vi_alloc(struct efhw_nic *nic,
 static void ef10ct_vi_free_hw(struct efhw_nic *nic, int evq_num)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
-  int txq = ef10ct->evq[evq_num].txq;
+  int txq_num = ef10ct->evq[evq_num].txq_num;
   int evq_id;
 
   evq_id = ef10ct_reconstruct_queue_handle(evq_num,
@@ -1061,11 +1061,13 @@ static void ef10ct_vi_free_hw(struct efhw_nic *nic, int evq_num)
 
   ef10ct_free_evq(nic, evq_id);
 
-  if( txq != EF10CT_EVQ_NO_TXQ) {
-    ef10ct_free_txq(nic, txq);
+  if( txq_num != EF10CT_EVQ_NO_TXQ ) {
+    int txq_id = ef10ct_reconstruct_queue_handle(txq_num,
+                                                 EF10CT_QUEUE_HANDLE_TYPE_TXQ);
+    ef10ct_free_txq(nic, txq_id);
   }
 
-  ef10ct->evq[evq_num].txq = EF10CT_EVQ_NO_TXQ;
+  ef10ct->evq[evq_num].txq_num = EF10CT_EVQ_NO_TXQ;
 }
 
 static void ef10ct_vi_free_sw(struct efhw_nic *nic, int evq_num)
@@ -1109,23 +1111,26 @@ ef10ct_dmaq_tx_q_init(struct efhw_nic *nic,
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct efhw_nic_ef10ct_evq *ef10ct_evq;
   struct efx_auxdev_rpc rpc;
-  int evq_id, evq_num;
+  int evq_id, evq_num, txq_id, txq_num;
   int rc;
 
   evq_num = txq_params->evq;
   evq_id = ef10ct_reconstruct_queue_handle(evq_num,
                                            EF10CT_QUEUE_HANDLE_TYPE_EVQ);
   ef10ct_evq = &ef10ct->evq[evq_num];
-  EFHW_TRACE("%s: txq 0x%x evq 0x%x", __func__, ef10ct_evq->txq, evq_id);
+  txq_num = ef10ct_evq->txq_num;
+  txq_id = ef10ct_reconstruct_queue_handle(txq_num,
+                                           EF10CT_QUEUE_HANDLE_TYPE_TXQ);
+  EFHW_TRACE("%s: txq 0x%x evq 0x%x", __func__, txq_id, evq_id);
 
   EFHW_ASSERT(evq_num < ef10ct->evq_n);
-  EFHW_ASSERT(ef10ct_evq->txq != EFCT_EVQ_NO_TXQ);
+  EFHW_ASSERT(txq_num != EFCT_EVQ_NO_TXQ);
 
   EFHW_MCDI_INITIALISE_BUF(in);
 
   EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_TARGET_EVQ, evq_id);
   EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_LABEL, txq_params->tag);
-  EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_INSTANCE, ef10ct_evq->txq);
+  EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_INSTANCE, txq_id);
   EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_PORT_ID, EVB_PORT_ID_ASSIGNED);
   /* FIXME ON-15570 - This value should match vi->vi_txq.ct_fifo_bytes +
    * EFCT_TX_ALIGNMENT + EFCT_TX_HEADER_BYTES */
@@ -1145,7 +1150,7 @@ ef10ct_dmaq_tx_q_init(struct efhw_nic *nic,
 
   rc = ef10ct_fw_rpc(nic, &rpc);
   if( rc == 0 )
-    txq_params->qid_out = ef10ct_evq->txq;
+    txq_params->qid_out = txq_id;
 
   return rc;
 }
