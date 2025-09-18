@@ -280,6 +280,7 @@ void usage(void)
 
   fprintf(stderr, "  -n                  - number of packets to send (negative = unlimited)\n");
   fprintf(stderr, "  -b                  - enable loopback on the VI\n");
+  fprintf(stderr, "  -p                  - enable physical address mode\n");
   fprintf(stderr, "  -t                  - disable tx push (on by default)\n");
   fprintf(stderr, "  -B                  - maximum send batch size\n");
   fprintf(stderr, "  -s                  - microseconds to sleep between batches\n");
@@ -299,7 +300,7 @@ static int parse_opts(int argc, char *argv[], enum ef_pd_flags *pd_flags_out,
 {
   int c;
 
-  while((c = getopt(argc, argv, "n:m:s:B:l:V:btvxc")) != -1)
+  while((c = getopt(argc, argv, "n:m:s:B:l:V:bptvxc")) != -1)
     switch( c ) {
     case 'n':
       cfg_iter = (uint64_t)atoll(optarg);
@@ -321,6 +322,9 @@ static int parse_opts(int argc, char *argv[], enum ef_pd_flags *pd_flags_out,
       break;
     case 'b':
       cfg_loopback = 1;
+      break;
+    case 'p':
+      *pd_flags_out |= EF_PD_PHYS_MODE;
       break;
     case 't':
       cfg_disable_tx_push = 1;
