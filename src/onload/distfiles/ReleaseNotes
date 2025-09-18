@@ -1,5 +1,5 @@
-Onload-9.1~preview3
-===================
+Unreleased Onload
+=================
 
  This is a feature preview of Onload including a new version of the
  sfc net driver.
@@ -13,8 +13,8 @@ Linux distribution support
 --------------------------
 
  This package can be installed on:
- - Red Hat Enterprise Linux 8.6 - 8.10
- - Red Hat Enterprise Linux 9.2 - 9.6
+ - Red Hat Enterprise Linux 8.10
+ - Red Hat Enterprise Linux 9.4 - 9.6
  - Red Hat Enterprise Linux 10.0
  - Canonical Ubuntu Server LTS 22.04 and 24.04
  - Debian 12 "Bookworm"

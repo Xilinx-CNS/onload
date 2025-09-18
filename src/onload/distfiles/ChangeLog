@@ -1,10 +1,14 @@
-onload-9.1~preview3
--------------------
+Unreleased Onload
+-----------------
 
-Update sfc net driver to v6.1.1.1005
+Update sfc net driver to v6.2.0
 
 Add support for:
  - gcc-15
+
+Remove support for:
+ - Red Hat Enterprise Linux 8.6-8.9
+ - Red Hat Enterprise Linux 9.2-9.3
 
 Changes:
 
