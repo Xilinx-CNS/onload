@@ -397,6 +397,7 @@ static void ef10ct_check_for_flushes_irq(struct work_struct *work)
 {
   struct efhw_nic_ef10ct_evq *evq;
   bool found_flush = false;
+  int next;
 
   evq = container_of(work, struct efhw_nic_ef10ct_evq,
                      check_flushes_irq.work);
@@ -406,10 +407,13 @@ static void ef10ct_check_for_flushes_irq(struct work_struct *work)
 
   ef10ct_poll_evq(evq, &found_flush);
 
-  if (!found_flush) {
-    int next = evq->next & (evq->capacity - 1);
-    efhw_nic_wakeup_request(evq->nic, NULL, evq->queue_num, next);
-  }
+  /* We always re-prime here. In theory we could keep track of how many queues
+   * have flushes outstanding, and re-prime here only if there are outstanding
+   * flushes, and also prime each time we fini an attached RXQ. However, it's
+   * simplest to handle this by just keeping primed. If there are no events we
+   * just won't get any interrupts. */
+  next = evq->next & (evq->capacity - 1);
+  efhw_nic_wakeup_request(evq->nic, NULL, evq->queue_num, next);
 }
 
 static void ef10ct_handle_evq_event(struct work_struct *work)
