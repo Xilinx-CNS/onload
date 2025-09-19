@@ -978,6 +978,9 @@ void tcp_helper_get_filter_params(tcp_helper_resource_t* trs, int hwport,
   struct efhw_nic* nic;
   bool want_shrub = (NI_OPTS_TRS(trs).shrub_controller_id >= 0) && mcast4;
 
+  if( want_shrub )
+    *params->flags |= EFHW_FILTER_F_FIND_BY_TOKEN;
+
   ci_assert_lt((unsigned) hwport, CI_CFG_MAX_HWPORTS);
 
   /* This is a suitable hwport for us if we have a VI available for RX. We

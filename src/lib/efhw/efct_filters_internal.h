@@ -160,6 +160,7 @@ struct efct_filter_state {
    * of 0 indicates the rxq is not being used. Otherwise the queue is owned and
    * in-use.  */
   uint32_t* exclusive_rxq_mapping;
+  int rxq_n;
 
   /* We could have one filter set per rxq, effectively adding a few more bits
    * to the hash key. Let's not for now: the memory trade-off doesn't seem

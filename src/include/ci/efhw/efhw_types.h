@@ -244,12 +244,16 @@ struct efx_filter_spec;
  * The exclusivity flag is used for exclusivity purposes.
  * (see EF_FILTER_FLAG_EXCLUSIVE_RXQ)
  *
+ * The FIND_BY_TOKEN flag indicates that if this owner already has a queue
+ * then an existing queue should be selected.
+ *
  * The absense of a specific flag, with a field defined for rxq_no
  * indicates to the driver that a given hardware queue must be used.
  */
 #define EFHW_FILTER_F_PREF_RXQ 0x0002
 #define EFHW_FILTER_F_ANY_RXQ  0x0004
 #define EFHW_FILTER_F_EXCL_RXQ 0x0008
+#define EFHW_FILTER_F_FIND_BY_TOKEN 0x0010
 /* The below flags indicate acceptable filter types.
  *
  * If _USE_HW is set then use of a HW filter will be attempted.

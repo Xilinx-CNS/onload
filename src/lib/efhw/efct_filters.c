@@ -79,6 +79,7 @@ struct efct_filter_state* efct_filter_state_init(int num_filter, int rx_queues)
     rc = -ENOMEM;
     goto fail2;
   }
+  state->rxq_n = rx_queues;
 
   if( ! filter_hash_table_seed_inited ) {
     filter_hash_table_seed_inited = true;
@@ -373,6 +374,32 @@ static int efct_filter_check_queue_perm(struct efct_filter_state *state,
 }
 
 
+static int
+efct_filter_find_queue_by_token(struct efct_filter_state *state,
+                                unsigned token)
+{
+  int i;
+
+  for( i = 0; i < state->rxq_n; i++ )
+    if( token == state->exclusive_rxq_mapping[i] )
+      return i;
+
+  return -1;
+}
+
+static void
+efct_filter_update_queue_choice(struct efct_filter_state *state,
+                                unsigned token, unsigned *flags, int *rxq)
+{
+  /* If we don't have an rxq yet, and we've been asked to find one, do so
+   * now. If we get one, we can clear the ANY flag. */
+  if( (*flags & EFHW_FILTER_F_FIND_BY_TOKEN) && (*rxq == -1) ) {
+    *rxq = efct_filter_find_queue_by_token(state, token);
+    if( *rxq >= 0 )
+      *flags &= ~EFHW_FILTER_F_ANY_RXQ;
+  }
+}
+
 int
 efct_filter_insert(struct efct_filter_state *state,
                    struct efx_filter_spec *spec,
@@ -572,6 +599,8 @@ efct_filter_insert(struct efct_filter_state *state,
   }
 
   if( insert_hw_filter ) {
+    efct_filter_update_queue_choice(state, params->pd_excl_token, &flags, rxq);
+
     op_in = (struct efct_filter_insert_in) {
       .drv_opaque = params->insert_data,
       .filter = hw_filter,
@@ -631,6 +660,7 @@ efct_filter_redirect(struct efct_filter_state *state, int filter_id,
   struct efct_filter_node *node;
   int hw_filter_idx = -1;
   int *rxq = params->rxq;
+  unsigned flags = params->flags;
 
   mutex_lock(&state->driver_filters_mtx);
 
@@ -650,6 +680,8 @@ efct_filter_redirect(struct efct_filter_state *state, int filter_id,
   rc = efct_filter_check_queue_perm(state, *rxq, params->pd_excl_token);
   if( rc < 0 )
     goto unlock_out;
+
+  efct_filter_update_queue_choice(state, params->pd_excl_token, &flags, rxq);
 
   op_in = (struct efct_filter_insert_in) {
     .drv_opaque = params->insert_data,
