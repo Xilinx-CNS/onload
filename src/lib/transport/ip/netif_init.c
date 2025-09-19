@@ -1345,6 +1345,9 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
   if( (s = getenv("EF_SHRUB_BUFFER_COUNT")) )
     opts->shrub_buffer_count = atoi(s);
 
+  if( (s = getenv("EF_SHRUB_UNICAST")) )
+    opts->shrub_unicast = atoi(s);
+
   if( (s = getenv("EF_SHRUB_DEBUG")) )
     opts->shrub_debug = atoi(s);
 

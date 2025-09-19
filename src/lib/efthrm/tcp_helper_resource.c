@@ -976,7 +976,8 @@ void tcp_helper_get_filter_params(tcp_helper_resource_t* trs, int hwport,
   int intf_i;
   struct efrm_pd *pd;
   struct efhw_nic* nic;
-  bool want_shrub = (NI_OPTS_TRS(trs).shrub_controller_id >= 0) && mcast4;
+  bool want_shrub = (NI_OPTS_TRS(trs).shrub_controller_id >= 0) &&
+                    (mcast4 || (NI_OPTS_TRS(trs).shrub_unicast > 0));
 
   if( want_shrub )
     *params->flags |= EFHW_FILTER_F_FIND_BY_TOKEN;

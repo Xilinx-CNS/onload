@@ -1781,6 +1781,14 @@ CI_CFG_OPT("EF_SHRUB_BUFFER_COUNT", shrub_buffer_count, ci_uint32,
            , , EF_SHRUB_DEFAULT_BUFFER_COUNT, EF_SHRUB_DEFAULT_BUFFER_COUNT,
            100000, count)
 
+CI_CFG_OPT("EF_SHRUB_UNICAST", shrub_unicast, ci_uint32,
+"Direct unicast traffic to shrub managed queues.\n"
+"By default multicast traffic on NICs that support shrub will be directed to "
+"shrub managed queues. Unicast traffic will be directed to an exclusive queue."
+" Setting this option forces unicast traffic to also be sent to the shrub "
+"managed queue. This can be useful to reduce the number of queues consumed.",
+           1, , 0, 0, 1, yesno)
+
 CI_CFG_OPT("EF_SHRUB_DEBUG", shrub_debug, ci_uint32,
 "Output debug logging from shrub controller.",
            1, , 0, 0, 1, yesno)
