@@ -1218,10 +1218,6 @@ ef_vi_stats_query_layout(ef_vi* vi,
 ** Retrieve a set of statistic values.
 **
 ** If do_reset is true, the statistics are reset after reading.
-**
-** \note This requires full feature firmware. If used with low-latency
-** firmware, no error is given, and the statistics are invalid (typically
-** all zeroes).
 */
 extern int
 ef_vi_stats_query(ef_vi* vi, ef_driver_handle vi_dh,
