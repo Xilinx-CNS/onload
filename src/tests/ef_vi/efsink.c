@@ -630,10 +630,7 @@ int main(int argc, char* argv[])
   if( cfg_rx_merge )
     vi_flags |= EF_VI_RX_EVENT_MERGE;
 
-  /* Use Express datapath as default for X4 interfaces. For NICs which
-   * don't have multiple datapaths, parse_interface_with_flags() will
-   * clear this from pd_flags */
-  pd_flags = EF_PD_EXPRESS;
+  pd_flags = EF_PD_DEFAULT;
 
   /* Open driver and allocate a VI. */
   TRY(ef_driver_open(&res->dh));

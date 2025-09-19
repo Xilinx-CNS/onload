@@ -34,6 +34,7 @@ void efct_ubufs_post_kernel(ef_vi* vi, int ix, int sbid, bool sentinel)
 }
 
 int efct_ubufs_init_rxq_resource(ef_vi *vi, int qid, unsigned n_superbufs,
+                                 bool interrupt_mode,
                                  efch_resource_id_t* resource_id_out)
 {
   // TODO check this is called correctly
@@ -207,7 +208,7 @@ static void test_efct_ubufs(void)
   ef_vi* vi = alloc_vi();
   ef_vi_efct_rxq_ops* ops = vi->efct_rxqs.ops;
 
-  CHECK(ops->attach(vi, 0, -1, SUPERBUF_COUNT, false), ==, 0);
+  CHECK(ops->attach(vi, 0, -1, SUPERBUF_COUNT, false, false), ==, 0);
   STATE_CHECK(vi->ep_state, rxq.efct_active_qs, 1);
 
   for( rep = 0; rep < 3; ++rep ) {
@@ -249,7 +250,7 @@ static void test_sentinel(void)
   ef_vi* vi = alloc_vi();
   ef_vi_efct_rxq_ops* ops = vi->efct_rxqs.ops;
 
-  CHECK(ops->attach(vi, 0, -1, 1, false), ==, 0);
+  CHECK(ops->attach(vi, 0, -1, 1, false, false), ==, 0);
   STATE_CHECK(vi->ep_state, rxq.efct_active_qs, 1);
 
   buf = ops->next(vi, 0, &sentinel, &sbseq);
@@ -291,7 +292,7 @@ static void test_poison(void)
   ef_vi_efct_rxq_ops* ops = vi->efct_rxqs.ops;
 
   ops = vi->efct_rxqs.ops;
-  CHECK(ops->attach(vi, 0, -1, 1, false), ==, 0);
+  CHECK(ops->attach(vi, 0, -1, 1, false, false), ==, 0);
   STATE_CHECK(vi->ep_state, rxq.efct_active_qs, 1);
 
   buf = ops->next(vi, 0, &sentinel, &sbseq);

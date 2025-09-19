@@ -207,6 +207,29 @@ extern int scalable_filter_gid;
 ***********************************************************************
 **********************************************************************/
 
+
+static unsigned oof_effective_vlan_mask(struct oof_manager* fm)
+{
+  int hwport;
+  int alternate;
+  unsigned mask = fm->fm_hwports_vlan_filters;
+
+  /* For any hwport in the mask we need to check whether it has an alternate.
+   * If so, then check whether that hwport also supports vlan filters and
+   * downgrade this one if not. This is because FW currently requires matched
+   * capabilities between datapaths for replication to work. */
+  for( hwport = 0; hwport < CI_CFG_MAX_HWPORTS; ++hwport ) {
+    if( (1u << hwport) & fm->fm_hwports_vlan_filters ) {
+      alternate = oo_nics[hwport].alternate_hwport;
+      if( (alternate >= 0) &&
+          !((1u << alternate) & fm->fm_hwports_vlan_filters) )
+        mask &= ~(1u << hwport);
+    }
+  }
+
+  return mask;
+}
+
 /* Indicates whether oof attempted setting the filters
  * This function does not work with KERNEL_REDIRECT filters
  * (exclusive tproxy case), where
@@ -485,7 +508,7 @@ static int oof_hw_filter_update(struct oof_manager* fm,
   oof_hw_filter_update_hwport_masks(fm, protocol, oofilter->thc != NULL,
                                     &hwport_mask, &drop_hwports_mask);
   rc = oo_hw_filter_update(oofilter, new_stack, &oo_filter_spec,
-                           fm->fm_hwports_vlan_filters & hwport_mask,
+                           oof_effective_vlan_mask(fm) & hwport_mask,
                            hwport_mask | drop_hwports_mask, drop_hwports_mask,
                            src_flags);
   spin_lock_bh(&fm->fm_inner_lock);
@@ -617,7 +640,7 @@ oof_local_port_free(struct oof_manager* fm, struct oof_local_port* lp)
     spin_unlock_bh(&fm->fm_inner_lock);
   }
 #endif
-  ci_free(lp->lp_addr);
+  ci_vfree(lp->lp_addr);
   ci_free(lp);
 }
 
@@ -635,7 +658,7 @@ oof_local_port_alloc(struct oof_manager* fm, int protocol, int lport)
   if( lp == NULL ) 
     return NULL;
 
-  lp->lp_addr = CI_ALLOC_ARRAY(struct oof_local_port_addr, 
+  lp->lp_addr = CI_VMALLOC_ARRAY(struct oof_local_port_addr, 
                                fm->fm_local_addr_max);
   if( lp->lp_addr == NULL ) {
     ci_free(lp);
@@ -1086,6 +1109,8 @@ oof_manager_alloc(unsigned local_addr_max, void* owner_private)
   fm->fm_hwports_vlan_filters_new = 0;
   fm->fm_hwports_no5tuple = 0;
   fm->fm_hwports_no5tuple_new = 0;
+  fm->fm_hwports_rx_shared = 0;
+  fm->fm_hwports_rx_shared_new = 0;
   fm->fm_hwports_mcast_update_seen = 0;
   {
     int tag;
@@ -1814,6 +1839,7 @@ void oof_hwport_up_down(struct oof_manager* fm, int hwport, int up,
     fm->fm_hwports_mcast_replicate_capable_new &= ~(1 << hwport);
     fm->fm_hwports_vlan_filters_new &= ~(1 << hwport);
     fm->fm_hwports_no5tuple_new &= ~(1 << hwport);
+    fm->fm_hwports_rx_shared_new &= ~(1 << hwport);
   }
 
   if( flags & OOF_HWPORT_FLAG_MCAST_REPLICATE )
@@ -1823,6 +1849,8 @@ void oof_hwport_up_down(struct oof_manager* fm, int hwport, int up,
     fm->fm_hwports_vlan_filters_new |= 1 << hwport;
   if( flags & OOF_HWPORT_FLAG_NO_5TUPLE )
     fm->fm_hwports_no5tuple_new |= 1 << hwport;
+  if( flags & OOF_HWPORT_FLAG_RX_SHARED )
+    fm->fm_hwports_rx_shared_new |= 1 << hwport;
   if( up ) {
     fm->fm_hwports_up_new |= 1 << hwport;
     fm->fm_hwports_down_new &= ~(1 << hwport);
@@ -1879,6 +1907,14 @@ __oof_hwport_un_available(struct oof_manager* fm, ci_hwport_id_t hwport,
 }
 
 
+static unsigned oof_update_hwport_mask(unsigned *current_val, unsigned *new)
+{
+  unsigned hwports_changed = *current_val ^ *new;
+  *current_val = *new;
+  return hwports_changed;
+}
+
+
 void __oof_do_deferred_work(struct oof_manager* fm)
 {
   /* Invoked with both outer and inner locks held. */
@@ -1889,21 +1925,18 @@ void __oof_do_deferred_work(struct oof_manager* fm)
 
   spin_lock_bh(&fm->fm_cplane_updates_lock);
 
-  hwports_changed = fm->fm_hwports_mcast_replicate_capable ^
-    fm->fm_hwports_mcast_replicate_capable_new;
+  hwports_changed = oof_update_hwport_mask(
+                         &fm->fm_hwports_mcast_replicate_capable,
+                         &fm->fm_hwports_mcast_replicate_capable_new);
 
-  fm->fm_hwports_mcast_replicate_capable =
-    fm->fm_hwports_mcast_replicate_capable_new;
+  hwports_changed |= oof_update_hwport_mask(&fm->fm_hwports_vlan_filters,
+                                            &fm->fm_hwports_vlan_filters_new);
 
-  hwports_changed |= fm->fm_hwports_vlan_filters ^
-                     fm->fm_hwports_vlan_filters_new;
+  hwports_changed |= oof_update_hwport_mask(&fm->fm_hwports_no5tuple,
+                                            &fm->fm_hwports_no5tuple_new);
 
-  fm->fm_hwports_vlan_filters = fm->fm_hwports_vlan_filters_new;
-
-  hwports_changed |= fm->fm_hwports_no5tuple ^
-                     fm->fm_hwports_no5tuple_new;
-
-  fm->fm_hwports_no5tuple = fm->fm_hwports_no5tuple_new;
+  hwports_changed |= oof_update_hwport_mask(&fm->fm_hwports_rx_shared,
+                                            &fm->fm_hwports_rx_shared_new);
 
   hwports_removed = fm->fm_hwports_removed;
   hwports_up_new = fm->fm_hwports_up_new;
@@ -1933,7 +1966,7 @@ void __oof_do_deferred_work(struct oof_manager* fm)
      * separately.
      */
     IPF_LOG("%s: changed=%x, up=%x down=%x removed=%x, new state: up=%x, down=%x "
-            "mcast replicate=%x vlan filters=%x",
+            "mcast replicate=%x vlan filters=%x rx_shared=%x",
             __FUNCTION__,
             hwports_changed,
             hwports_up_new &~ fm->fm_hwports_up,
@@ -1941,7 +1974,8 @@ void __oof_do_deferred_work(struct oof_manager* fm)
             hwports_removed,
             hwports_up_new, hwports_down_new,
             fm->fm_hwports_mcast_replicate_capable,
-            fm->fm_hwports_vlan_filters);
+            fm->fm_hwports_vlan_filters,
+            fm->fm_hwports_rx_shared);
 
     /* the ports, which went from up -> down -> up might have stale filter ids if
      * up was result of hotplug, lets remove the filters by indicating that
@@ -3901,12 +3935,13 @@ ci_inline unsigned oof_mcast_conflicted_hwports(struct oof_manager* fm,
                                                 ci_uint16 vlan_id,
                                                 struct oof_mcast_filter* mf)
 {
+  unsigned mask = 0;
   /* There can only be a conflict is this is for the same address, but a
    * different stack.
    */
   if( maddr == mf->mf_maddr && stack != mf->mf_filter.trs )
     /* Add to conflict mask ports which appear in both hwport masks */
-    return hwport_mask & mf->mf_hwport_mask &
+    mask = hwport_mask & mf->mf_hwport_mask &
            /* remove from conflict mask ports that support mcast replication */
            ~fm->fm_hwports_mcast_replicate_capable &
            /* If vlan id differs then remove from conflict mask ports which
@@ -3914,9 +3949,11 @@ ci_inline unsigned oof_mcast_conflicted_hwports(struct oof_manager* fm,
             * conflict mask.
             */
            (vlan_id != mf->mf_vlan_id ?
-           ~fm->fm_hwports_vlan_filters : (unsigned)-1);
-  else
-    return 0;
+           ~oof_effective_vlan_mask(fm) : (unsigned)-1);
+
+  IPF_LOG("%s: %pI4(%u) hwports=%x conflicts=%x", __func__, &maddr, vlan_id,
+          hwport_mask, mask);
+  return mask;
 }
 
 
@@ -3926,6 +3963,7 @@ oof_mcast_filter_duplicate_hwports(struct oof_manager* fm,
                                    struct oof_mcast_filter* mf2)
 {
   unsigned hwport_mask = 0;
+  unsigned mf_port_mask = oof_mcast_filter_hwport_mask(fm, mf);
 
   /* An oof_mcast_filter is unique per maddr/port/vlan.  However, on hwports
    * that don't support vlan filters that means that the exact filter one
@@ -3940,11 +3978,20 @@ oof_mcast_filter_duplicate_hwports(struct oof_manager* fm,
    * - mf2 already has installed a filter on that hwport
    */
   if( (mf->mf_filter.trs == mf2->mf_filter.trs) && 
-      (mf->mf_maddr == mf2->mf_maddr) )
+      (mf->mf_maddr == mf2->mf_maddr) ) {
     /* The filter matches, now check for hwport overlap on non-vlan hwports */
-    hwport_mask = oof_mcast_filter_hwport_mask(fm, mf) &
-         (oo_hw_filter_hwports(&mf2->mf_filter) & ~fm->fm_hwports_vlan_filters);
+    hwport_mask = mf_port_mask &
+                  (oo_hw_filter_hwports(&mf2->mf_filter) &
+                   ~oof_effective_vlan_mask(fm));
+    /* For multipath NICs we also need to avoid installing a duplicate filter
+     * if we already have a matching filter on one of the hwports.
+     */
+    hwport_mask |= oo_hw_filter_hidden_ports(&mf2->mf_filter,
+                                  mf_port_mask & ~oof_effective_vlan_mask(fm));
+  }
 
+  IPF_LOG("%s: %pI4 hwports=%x dups=%x", __func__, &mf->mf_maddr, mf_port_mask,
+          hwport_mask);
   return hwport_mask;
 }
 
@@ -4050,7 +4097,7 @@ oof_mcast_install(struct oof_manager* fm, struct oof_mcast_member* mm,
                 mm->mm_ifindex, mm->mm_hwport_mask,
                 oof_cb_stack_id(mf->mf_filter.trs), mf->mf_hwport_mask,
                 fm->fm_hwports_mcast_replicate_capable,
-                fm->fm_hwports_vlan_filters);
+                oof_effective_vlan_mask(fm));
         ci_assert(mf->mf_filter.thc == NULL);
       oof_hw_filter_clear_hwports(fm, &mf->mf_filter, conflicted_port_mask);
       }
@@ -4127,7 +4174,7 @@ oof_mcast_remove(struct oof_manager* fm, struct oof_mcast_member* mm,
    * In that case we need to pass ownership of the hwfilter rather than
    * removing it to avoid a gap where there is no filter installed.
    */
-  if( mm->mm_hwport_mask & ~fm->fm_hwports_vlan_filters ) {
+  if( mm->mm_hwport_mask & ~oof_effective_vlan_mask(fm) ) {
     CI_DLLIST_FOR_EACH2(struct oof_mcast_filter, mf2, mf_lp_link,
                         &lp->lp_mcast_filters)
       if( (mf2 != mf) &&
@@ -5331,9 +5378,9 @@ oof_manager_dump(struct oof_manager* fm,
   log(loga, "  down=%x unavailable=%x update_seen=%x ",
       fm->fm_hwports_down,
       ~fm->fm_hwports_available, fm->fm_hwports_mcast_update_seen);
-  log(loga, "  mcast_replicate=%x vlan_filters=%x no_5tuple=%x",
+  log(loga, "  mcast_replicate=%x vlan_filters=%x no_5tuple=%x rx_shared=%x",
       fm->fm_hwports_mcast_replicate_capable, fm->fm_hwports_vlan_filters,
-      fm->fm_hwports_no5tuple);
+      fm->fm_hwports_no5tuple, fm->fm_hwports_rx_shared);
 
   log(loga, "%s: local_addr_n=%d", __FUNCTION__, fm->fm_local_addr_n);
   for( la_i = 0; la_i < fm->fm_local_addr_n; ++la_i ) {
@@ -5385,7 +5432,7 @@ int oof_hwports_list(struct oof_manager* fm, struct seq_file* seq)
     unsigned portmask = 1 << i;
     if( portmask &
         (fm->fm_hwports_up | fm->fm_hwports_down | fm->fm_hwports_removed) ) {
-      seq_printf(seq, "port %d%s%s%s\t%s%s%s\tcapable of%s%s\n", i,
+      seq_printf(seq, "port %d%s%s%s\t%s%s%s\tcapable of%s%s%s\n", i,
                  (portmask & fm->fm_hwports_up) ? " up" : "",
                  (portmask & fm->fm_hwports_down) ? " down" : "",
                  (portmask & fm->fm_hwports_removed) ? " removed" : "",
@@ -5400,7 +5447,9 @@ int oof_hwports_list(struct oof_manager* fm, struct seq_file* seq)
                  (portmask & fm->fm_hwports_mcast_replicate_capable) ?
                  " macst_replicate" : "",
                  (portmask & fm->fm_hwports_vlan_filters) ?
-                 " vlan_filters" : "");
+                 " vlan_filters" : "",
+                 (portmask & fm->fm_hwports_rx_shared) ?
+                 " rx_shared" : "");
     }
   }
   return 0;

@@ -6,7 +6,10 @@
 #include <onload/debug.h>
 #include <onload/shrub_fns.h>
 #include <onload/fd_private.h>
+#include <onload/tcp_helper_fns.h>
 #include <etherfabric/shrub_shared.h>
+#include <etherfabric/shrub_client.h>
+#include <ci/efrm/pd.h>
 
 #include <linux/uaccess.h>
 #include <linux/string.h>
@@ -65,9 +68,9 @@ static int shrub_controller_path_get(char* buffer,
   spin_lock(&shrub_lock);
   path = shrub_get_controller_path();
   /* The magic 4096 is documented in linux/moduleparam.h. */
-  strncpy(buffer, path, 4096);
-  buffer[4095] = '\0';
-  len = strnlen(buffer, 4096);
+  strncpy(buffer, path, PATH_MAX);
+  buffer[PATH_MAX - 1] = '\0';
+  len = strnlen(buffer, PATH_MAX);
   spin_unlock(&shrub_lock);
 
   return len;
@@ -83,7 +86,7 @@ MODULE_PARM_DESC(shrub_controller_path,
                  "Sets the path to the shrub_controller binary. Defaults to "
                  DEFAULT_SHRUB_CONTROLLER_PATH" if empty.");
 
-int shrub_spawn_server(char* controller_id)
+static int shrub_spawn_server(char* controller_id, bool debug)
 {
   int rc = 0;
   char* path;
@@ -91,6 +94,9 @@ int shrub_spawn_server(char* controller_id)
     NULL,
     "-c",
     controller_id,
+    "-D",
+    "-K",
+    debug ? "-d" : NULL,
     NULL
   };
   char* envp_flags = "";
@@ -99,12 +105,14 @@ int shrub_spawn_server(char* controller_id)
     NULL
   };
 
-  spin_lock(&shrub_lock);
-  path = kstrdup(shrub_get_controller_path(), GFP_KERNEL);
-  spin_unlock(&shrub_lock);
-
+  path = kmalloc(PATH_MAX, GFP_KERNEL);
   if ( !path )
     return -ENOMEM;
+
+  spin_lock(&shrub_lock);
+  strncpy(path, shrub_get_controller_path(), PATH_MAX);
+  path[PATH_MAX - 1] = '\0';
+  spin_unlock(&shrub_lock);
 
   argv[0] = path;
   OO_DEBUG_TCPH(ci_log("%s: pid=%d path=%s controller_id=%s", __FUNCTION__,
@@ -141,7 +149,7 @@ int oo_shrub_spawn_server(ci_private_t *priv, void *arg) {
   rc = snprintf(controller_id, sizeof(controller_id), "%u", shrub_data->controller_id);
   if ( rc < 0 || rc >= sizeof(controller_id) )
     return -EINVAL;
-  return shrub_spawn_server(controller_id);
+  return shrub_spawn_server(controller_id, shrub_data->debug);
 }
 
 int oo_shrub_set_sockets(ci_private_t *priv, void* arg) {
@@ -170,6 +178,49 @@ int oo_shrub_set_sockets(ci_private_t *priv, void* arg) {
   trs = priv->thr;
   vi = ci_netif_vi(&trs->netif, shrub_data->intf_i);
   return efct_ubufs_set_shared(vi, shrub_data->controller_id, shrub_data->shrub_socket_id);
+}
+
+static int shrub_pre_attach(shrub_socket_ioctl_data_t *shrub_data,
+                            struct efrm_pd *pd)
+{
+  char attach_path[EF_SHRUB_SERVER_SOCKET_LEN];
+  struct ef_shrub_token_response response;
+  int rc;
+
+  memset(attach_path, 0, sizeof(attach_path));
+  rc = snprintf(attach_path, sizeof(attach_path),
+                EF_SHRUB_CONTROLLER_PATH_FORMAT EF_SHRUB_SHRUB_FORMAT,
+                EF_SHRUB_SOCK_DIR_PATH, shrub_data->controller_id,
+                shrub_data->shrub_socket_id);
+  if ( rc < 0 || rc >= sizeof(attach_path) )
+    return -EINVAL;
+  attach_path[sizeof(attach_path) - 1] = '\0';
+
+
+  rc = ef_shrub_client_request_token(attach_path, &response);
+  if (rc)
+    return rc;
+
+  efrm_pd_shared_rxq_token_set(pd, response.shared_rxq_token);
+
+  return rc;
+}
+
+int oo_shrub_set_token(ci_private_t *priv, void *arg)
+{
+  shrub_socket_ioctl_data_t *shrub_data = (shrub_socket_ioctl_data_t *) arg;
+  tcp_helper_resource_t *trs;
+  struct efrm_vi *virs;
+
+  if (!priv || !arg)
+    return -EINVAL;
+
+  if (priv->thr == NULL)
+    return -EINVAL;
+
+  trs = priv->thr;
+  virs = tcp_helper_vi(trs, shrub_data->intf_i);
+  return shrub_pre_attach(shrub_data, efrm_vi_get_pd(virs));
 }
 
 int

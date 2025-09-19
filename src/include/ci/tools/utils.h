@@ -15,6 +15,10 @@
 #ifndef __CI_TOOLS_UTILS_H__
 #define __CI_TOOLS_UTILS_H__
 
+#ifndef __KERNEL__
+#include <sys/socket.h>
+#include <sys/un.h>
+#endif
 
 /**********************************************************************
  * misc
@@ -40,6 +44,14 @@
 #ifdef CI_HAVE_FRC64
 ci_inline ci_uint64 ci_frc64_get(void) {
   ci_uint64 now;
+  ci_frc64(&now);
+  return now;
+}
+ci_inline ci_uint64 ci_frc64_get_accurate(void) {
+  ci_uint64 now;
+  /* This is needed to avoid code reordering when you care about exactly 
+   * what you're measuring */
+  ci_frc_flush();
   ci_frc64(&now);
   return now;
 }
@@ -223,6 +235,26 @@ static inline int ci_ffs64(ci_uint64 x)
 }
 #else
 # define ci_ffs64 __builtin_ffsll
+#endif
+
+
+#ifndef __KERNEL__
+static inline int ci_init_unix_addr(const char *name, struct sockaddr_un *addr,
+                                    socklen_t *addr_len)
+{
+  /* Add one for null terminator */
+  size_t name_len = strlen(name) + 1;
+  *addr_len = offsetof(struct sockaddr_un, sun_path) + name_len;
+
+  if( name_len > sizeof(addr->sun_path) )
+    return -EINVAL;
+
+  memset(addr, 0, sizeof(*addr));
+  addr->sun_family = AF_UNIX;
+  strcpy(addr->sun_path, name);
+
+  return 0;
+}
 #endif
 
 

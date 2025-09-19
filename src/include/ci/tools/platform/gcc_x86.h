@@ -38,19 +38,52 @@
 #define CI_HAVE_FRC64
 #define CI_HAVE_FRC32
 
-#define ci_frc32(pval)  __asm__ __volatile__("rdtsc" : "=a" (*pval) : : "edx")
-
-
 #if defined(__x86_64__)
 
 #define CI_HAVE_X86INTRIN
 
 #endif
 
+/* Would be nice to use the compiler intrinsics here if CI_HAVE_X86INTRIN
+ * but we would either still need our own asm versions for the kernel, or have
+ * to use Linux equivalents and deal with kernel compat breakages 
+ */
+
+/* Be careful before changing this define.  In most cases, although rdtscp will give
+ * higher accuracy due to preventing code reordering it is also higher overhead and
+ * changing this across the board is unlikely to be the right solution, other than
+ * for debugging.
+ * Consider using ci_frc64_get_accurate() or ci_frc_flush() instead in the places
+ * where it really matters.  */
+#define CI_FRC_USES_RDTSCP 0
+
+#if CI_FRC_USES_RDTSCP
+
+ci_inline void ci_frc32(ci_uint32* pval) {
+  ci_uint32 low, high, aux;
+  asm volatile ( "rdtscp" : "=a" (low), "=d" (high), "=c" (aux) : : );
+  *pval = low;
+}
+
+ci_inline void ci_frc64(ci_uint64* pval) {
+  ci_uint32 low, high, aux;
+  asm volatile ( "rdtscp" : "=a" (low), "=d" (high), "=c" (aux) : : );
+  *pval = ((ci_uint64)high << 32) | low;
+}
+
+/* Without a call to ci_frc_flush() before/after ci_frc32/64 code can be 
+ * reordered meaning you don't profile the thing you intended to.
+ *
+ * Nop when rdtscp is in use as it doesn't need additional serialisation
+ */
+#define ci_frc_flush()
+
+#else /* CI_FRC_USES_RDTSCP */
+
+#define ci_frc32(pval)  __asm__ __volatile__("rdtsc" : "=a" (*pval) : : "edx")
 
 #if defined(__x86_64__)
 ci_inline void ci_frc64(ci_uint64* pval) {
-  /* temp fix until we figure how to get this out in one bite */	   
   ci_uint64 low, high;
   __asm__ __volatile__("rdtsc" : "=a" (low) , "=d" (high));	 	
   *pval = (high << 32) | low;
@@ -60,8 +93,14 @@ ci_inline void ci_frc64(ci_uint64* pval) {
 #define ci_frc64(pval)  __asm__ __volatile__("rdtsc" : "=A" (*pval))
 #endif
 
-#define ci_frc_flush()  /* ?? Need a pipeline barrier. */
+/* Without a call to ci_frc_flush() before/after ci_frc32/64 code can be 
+ * reordered meaning you don't profile the thing you intended to.
+ *
+ * Choice of lfence is to match rdtscp behaviour
+ */
+#define ci_frc_flush()  ci_x86_lfence()
 
+#endif /* CI_FRC_USES_RDTSCP */
 
 /**********************************************************************
  * Atomic integer.

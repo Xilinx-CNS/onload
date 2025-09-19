@@ -197,26 +197,26 @@ endif
 ifndef EFX_UPSTREAM
 
 # Compiler flags
-EXTRA_CFLAGS += -I$(src) -DWITH_MCDI_V2
+ccflags-y += -I$(src) -DWITH_MCDI_V2
 
 ifdef KMP_RELEASE
-EXTRA_CFLAGS += -DKMP_RELEASE
+ccflags-y += -DKMP_RELEASE
 endif
 
 ifdef EFX_NOT_EXPORTED
 ifdef GCOV
-EXTRA_CFLAGS += -fprofile-arcs -ftest-coverage
+ccflags-y += -fprofile-arcs -ftest-coverage
 endif
 endif # EFX_NOT_EXPORTED
 
 ifndef EFX_DISABLE_GRO
-EXTRA_CFLAGS += -DEFX_USE_GRO
+ccflags-y += -DEFX_USE_GRO
 endif
 ifndef EFX_DISABLE_SFC_LRO
-EXTRA_CFLAGS += -DEFX_USE_SFC_LRO
+ccflags-y += -DEFX_USE_SFC_LRO
 endif
 ifndef EFX_DISABLE_OVERLAY_TX_CSUM
-EXTRA_CFLAGS += -DEFX_USE_OVERLAY_TX_CSUM
+ccflags-y += -DEFX_USE_OVERLAY_TX_CSUM
 endif
 
 all_sfc_ko = $(subst .o,.ko,$(filter-out siena/,$(obj-m)))
@@ -253,7 +253,7 @@ ifndef cc-disable-warning
 cc-disable-warning = $(call try-run,\
 	$(CC) $(KBUILD_CPPFLAGS) $(KBUILD_CFLAGS) -W$(strip $(1)) -c -xc /dev/null -o "$$TMP",-Wno-$(strip $(1)))
 endif
-override EXTRA_CFLAGS += $(call cc-disable-warning, unused-but-set-variable) \
+override ccflags-y += $(call cc-disable-warning, unused-but-set-variable) \
 			 $(call cc-disable-warning, format-zero-length)
 
 else # !KERNELRELEASE

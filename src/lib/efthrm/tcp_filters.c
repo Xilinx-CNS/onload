@@ -115,7 +115,144 @@ void oo_hw_filter_clear_hwports(struct oo_hw_filter* oofilter,
 
 
 static int
-oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
+oo_hw_filter_populate_spec(const struct oo_hw_filter_spec *oo_filter_spec,
+                           struct efx_filter_spec *spec, int flags, int vi_id,
+                           int rss_context, bool *replace)
+{
+  const u8* mac_ptr = NULL;
+  int rc = 0;
+
+  efx_filter_init_rx(spec, EFX_FILTER_PRI_REQUIRED, flags, vi_id);
+
+  if( flags & EFX_FILTER_FLAG_RX_RSS )
+    spec->rss_context = rss_context;
+
+  switch( oo_filter_spec->type ) {
+  case OO_HW_FILTER_TYPE_MAC:
+    mac_ptr = oo_filter_spec->addr.mac.mac;
+    *replace = true;
+    break;
+
+  case OO_HW_FILTER_TYPE_ETHERTYPE:
+    /* Ethertype filter is not MAC-qualified. There are no primitives in the
+     * net driver, so we need to set filter flags manually. */
+    spec->ether_type = oo_filter_spec->addr.ethertype.t;
+    mac_ptr = oo_filter_spec->addr.ethertype.mac;
+    spec->match_flags |= EFX_FILTER_MATCH_ETHER_TYPE;
+    *replace = true;
+    break;
+
+  case OO_HW_FILTER_TYPE_IP_PROTO_MAC:
+    mac_ptr = oo_filter_spec->addr.ipproto.mac;
+    ci_fallthrough;
+  case OO_HW_FILTER_TYPE_IP_PROTO:
+    /* As in the case of the ethertype filter above, we have to populate
+     * [spec] ourselves. */
+    spec->ip_proto = oo_filter_spec->addr.ipproto.p;
+    spec->ether_type = oo_filter_spec->addr.ipproto.ethertype;
+    spec->match_flags |= EFX_FILTER_MATCH_ETHER_TYPE |
+                        EFX_FILTER_MATCH_IP_PROTO;
+    *replace = true;
+    break;
+
+  case OO_HW_FILTER_TYPE_IP:
+#if CI_CFG_IPV6
+    if( IS_AF_INET6(oo_filter_spec->addr.ip.af) ) {
+      struct in6_addr saddr;
+      struct in6_addr daddr;
+
+      memcpy(&saddr, oo_filter_spec->addr.ip.saddr, sizeof(saddr));
+      memcpy(&daddr, oo_filter_spec->addr.ip.daddr, sizeof(daddr));
+
+      if( oo_filter_spec->addr.ip.sport != 0 )
+        rc = efx_filter_set_ipv6_full(spec,
+                                      oo_filter_spec->addr.ip.protocol,
+                                      daddr,
+                                      oo_filter_spec->addr.ip.dport,
+                                      saddr,
+                                      oo_filter_spec->addr.ip.sport);
+      else
+        rc = efx_filter_set_ipv6_local(spec,
+                                       oo_filter_spec->addr.ip.protocol,
+                                       &daddr,
+                                       oo_filter_spec->addr.ip.dport);
+    }
+    else
+#endif
+    {
+      if( oo_filter_spec->addr.ip.sport != 0 )
+        rc = efx_filter_set_ipv4_full(spec,
+                                      oo_filter_spec->addr.ip.protocol,
+                                      oo_filter_spec->addr.ip.daddr[0],
+                                      oo_filter_spec->addr.ip.dport,
+                                      oo_filter_spec->addr.ip.saddr[0],
+                                      oo_filter_spec->addr.ip.sport);
+      else
+        rc = efx_filter_set_ipv4_local(spec,
+                                       oo_filter_spec->addr.ip.protocol,
+                                       oo_filter_spec->addr.ip.daddr[0],
+                                       oo_filter_spec->addr.ip.dport);
+    }
+    /* Even though they return an error, the filter setup functions cannot fail
+     * and we work on the assumption that this interface behaviour does not
+     * change. */
+    ci_assert_equal(rc, 0);
+    break;
+
+  default:
+    /* Invalid filter type. */
+    ci_assert(0);
+    return -EINVAL;
+  }
+
+  if( oo_filter_spec->vlan_id != OO_HW_VLAN_UNSPEC || mac_ptr != NULL ) {
+    u16 efx_vlan_id = (oo_filter_spec->vlan_id == OO_HW_VLAN_UNSPEC) ?
+                      EFX_FILTER_VID_UNSPEC : (u16) oo_filter_spec->vlan_id;
+    rc = efx_filter_set_eth_local(spec, efx_vlan_id, mac_ptr);
+    /* Even though they return an error, the filter setup functions cannot fail
+     * and we work on the assumption that this interface behaviour does not
+     * change. */
+    ci_assert_equal(rc, 0);
+  }
+
+  return rc;
+}
+
+
+static int
+oo_hw_filter_set_hwport_kernel_redirect(struct oo_hw_filter* oofilter,
+                    int hwport, const struct oo_hw_filter_spec* oo_filter_spec)
+{
+  struct efx_filter_spec spec;
+  int rc = 0;
+  int rxq = -1;
+  int rss_context = -1;
+  bool replace = false;
+
+  ci_assert_lt(oofilter->filter_id[hwport], 0);
+
+  oo_hw_filter_populate_spec(oo_filter_spec, &spec, EFX_FILTER_FLAG_RX_SCATTER,
+                             KERNEL_REDIRECT_VI_ID, rss_context, &replace);
+
+  rc = efrm_filter_insert(get_client(hwport), &spec, &rxq,
+                          EFHW_PD_NON_EXC_TOKEN, NULL, 0);
+
+  /* ENETDOWN indicates that the hardware has gone away. This is not a
+   * failure condition at this layer as we can attempt to restore filters
+   * when the hardware comes back. A negative filter ID signifies that there
+   * is no filter from the net driver's point of view, so we are justified in
+   * storing [rc] in the [filter_id] array. */
+  if( rc >= 0 || rc == -ENETDOWN ) {
+    oofilter->filter_id[hwport] = rc;
+    rc = 0;
+  }
+
+  return rc;
+}
+
+
+static int
+oo_hw_filter_set_hwport_common(struct oo_hw_filter* oofilter, int hwport,
                         const struct oo_hw_filter_spec* oo_filter_spec,
                         unsigned src_flags)
 {
@@ -123,32 +260,37 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
   int rc = 0;
   int rxq = -1;
   int vi_id = -1;
-  const u8* mac_ptr = NULL;
-  int replace = false;
-  int kernel_redirect = src_flags & OO_HW_SRC_FLAG_KERNEL_REDIRECT;
+  bool replace = false;
   int redirect = src_flags & OO_HW_SRC_FLAG_REDIRECT;
-  int cluster = (oofilter->thc != NULL) && ! kernel_redirect;
+  int cluster = (oofilter->thc != NULL);
   int drop = (src_flags & OO_HW_SRC_FLAG_DROP) &&
              ! cluster; /* drop not supported for RSS - use proper filter */
   unsigned insert_flags = 0;
   unsigned exclusive_rxq_token = EFHW_PD_NON_EXC_TOKEN;
+  int rss_context = -1;
+  unsigned stack_id;
+  struct tcp_helper_filter_params params = {
+    .vi_id = &vi_id,
+    .rxq = &rxq,
+    .flags = &insert_flags,
+    .exclusive_rxq_token = &exclusive_rxq_token,
+  };
+  bool is_mcast4 = (oo_filter_spec->type == OO_HW_FILTER_TYPE_IP) &&
+                   (oo_filter_spec->addr.ip.protocol == IPPROTO_UDP) &&
+                   ipv4_is_multicast(oo_filter_spec->addr.ip.daddr[0]);
 
-  if( ! kernel_redirect )
-    ci_assert_nequal(oofilter->trs == NULL, oofilter->thc == NULL);
+  ci_assert_nequal(oofilter->trs == NULL, oofilter->thc == NULL);
   ci_assert_equal(!!redirect, oofilter->filter_id[hwport] >= 0);
 
-  if( kernel_redirect )
-    vi_id = KERNEL_REDIRECT_VI_ID;
-  else if( cluster )
+  if( cluster )
     vi_id = tcp_helper_cluster_vi_base(oofilter->thc, hwport);
   else
-    tcp_helper_get_filter_params(oofilter->trs, hwport, &vi_id, &rxq,
-                                 &insert_flags, &exclusive_rxq_token);
+    tcp_helper_get_filter_params(oofilter->trs, hwport, is_mcast4, &params);
 
   if( vi_id  >= 0 ) {
     int flags = EFX_FILTER_FLAG_RX_SCATTER;
     /* FIXME: enable loopback when installing drop filter */
-    int hw_rx_loopback_supported = (cluster || kernel_redirect || drop) ?
+    int hw_rx_loopback_supported = (cluster || drop) ?
       0 : tcp_helper_vi_hw_rx_loopback_supported(oofilter->trs, hwport);
 
     if( drop && tcp_helper_vi_hw_drop_filter_supported(oofilter->trs, hwport) )
@@ -159,13 +301,8 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
       flags |= EFX_FILTER_FLAG_TX;
     }
 
-    if( cluster && ! drop && oofilter->thc->thc_cluster_size > 1 )
+    if( cluster && ! drop && oofilter->thc->thc_cluster_size > 1 ) {
       flags |= EFX_FILTER_FLAG_RX_RSS;
-
-    efx_filter_init_rx(&spec, EFX_FILTER_PRI_REQUIRED, flags, vi_id);
-
-    if( flags & EFX_FILTER_FLAG_RX_RSS ) {
-      int rss_context = -1;
       if( src_flags & OO_HW_SRC_FLAG_RSS_DST )
         rss_context = efrm_vi_set_get_rss_context
             (oofilter->thc->thc_vi_set[hwport], EFRM_RSS_MODE_ID_DST);
@@ -175,102 +312,23 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
             (oofilter->thc->thc_vi_set[hwport], EFRM_RSS_MODE_ID_DEFAULT);
       if( rss_context == -1 )
         rss_context = EFX_FILTER_RSS_CONTEXT_DEFAULT;
-      spec.rss_context = rss_context;
     }
 
-    if( ! kernel_redirect ) {
-      unsigned stack_id = cluster ?
-        tcp_helper_cluster_vi_hw_stack_id(oofilter->thc, hwport) :
-        tcp_helper_vi_hw_stack_id(oofilter->trs, hwport);
-      ci_assert( stack_id >= 0 );
-      efx_filter_set_stack_id(&spec, stack_id);
-    }
+    oo_hw_filter_populate_spec(oo_filter_spec, &spec, flags, vi_id,
+                               rss_context, &replace);
 
-    switch( oo_filter_spec->type ) {
-    case OO_HW_FILTER_TYPE_MAC:
-      mac_ptr = oo_filter_spec->addr.mac.mac;
-      replace = true;
-      break;
+    stack_id = cluster ?
+      tcp_helper_cluster_vi_hw_stack_id(oofilter->thc, hwport) :
+      tcp_helper_vi_hw_stack_id(oofilter->trs, hwport);
+    ci_assert( stack_id >= 0 );
+    efx_filter_set_stack_id(&spec, stack_id);
 
-    case OO_HW_FILTER_TYPE_ETHERTYPE:
-      /* Ethertype filter is not MAC-qualified. There are no primitives in the
-       * net driver, so we need to set filter flags manually. */
-      spec.ether_type = oo_filter_spec->addr.ethertype.t;
-      mac_ptr = oo_filter_spec->addr.ethertype.mac;
-      spec.match_flags |= EFX_FILTER_MATCH_ETHER_TYPE;
-      replace = true;
-      break;
-
-    case OO_HW_FILTER_TYPE_IP_PROTO_MAC:
-      mac_ptr = oo_filter_spec->addr.ipproto.mac;
-      ci_fallthrough;
-    case OO_HW_FILTER_TYPE_IP_PROTO:
-      /* As in the case of the ethertype filter above, we have to populate
-       * [spec] ourselves. */
-      spec.ip_proto = oo_filter_spec->addr.ipproto.p;
-      spec.ether_type = oo_filter_spec->addr.ipproto.ethertype;
-      spec.match_flags |= EFX_FILTER_MATCH_ETHER_TYPE |
-                          EFX_FILTER_MATCH_IP_PROTO;
-      replace = true;
-      break;
-
-    case OO_HW_FILTER_TYPE_IP:
-#if CI_CFG_IPV6
-      if( IS_AF_INET6(oo_filter_spec->addr.ip.af) ) {
-        struct in6_addr saddr;
-        struct in6_addr daddr;
-
-        memcpy(&saddr, oo_filter_spec->addr.ip.saddr, sizeof(saddr));
-        memcpy(&daddr, oo_filter_spec->addr.ip.daddr, sizeof(daddr));
-
-        if( oo_filter_spec->addr.ip.sport != 0 )
-          rc = efx_filter_set_ipv6_full(&spec,
-                                        oo_filter_spec->addr.ip.protocol,
-                                        daddr,
-                                        oo_filter_spec->addr.ip.dport,
-                                        saddr,
-                                        oo_filter_spec->addr.ip.sport);
-        else
-          rc = efx_filter_set_ipv6_local(&spec,
-                                         oo_filter_spec->addr.ip.protocol,
-                                         &daddr,
-                                         oo_filter_spec->addr.ip.dport);
-      }
-      else
-#endif
-      {
-        if( oo_filter_spec->addr.ip.sport != 0 )
-          rc = efx_filter_set_ipv4_full(&spec,
-                                        oo_filter_spec->addr.ip.protocol,
-                                        oo_filter_spec->addr.ip.daddr[0],
-                                        oo_filter_spec->addr.ip.dport,
-                                        oo_filter_spec->addr.ip.saddr[0],
-                                        oo_filter_spec->addr.ip.sport);
-        else
-          rc = efx_filter_set_ipv4_local(&spec,
-                                         oo_filter_spec->addr.ip.protocol,
-                                         oo_filter_spec->addr.ip.daddr[0],
-                                         oo_filter_spec->addr.ip.dport);
-      }
-      ci_assert_equal(rc, 0);
-      break;
-
-    default:
-      /* Invalid filter type. */
-      ci_assert(0);
-      return -EINVAL;
-    }
-
-    /* note: bug 42561 affecting loopback on VLAN 0 with fw <= v4_0_6_6688 */
-    if( oo_filter_spec->vlan_id != OO_HW_VLAN_UNSPEC || mac_ptr != NULL ) {
-      u16 efx_vlan_id = (oo_filter_spec->vlan_id == OO_HW_VLAN_UNSPEC) ?
-                        EFX_FILTER_VID_UNSPEC : (u16) oo_filter_spec->vlan_id;
-      rc = efx_filter_set_eth_local(&spec, efx_vlan_id, mac_ptr);
-      ci_assert_equal(rc, 0);
-    }
     if( redirect ) {
       ci_assert_ge(oofilter->filter_id[hwport], 0);
-      rc = efrm_filter_redirect(get_client(hwport), oofilter->filter_id[hwport], &spec);
+      rc = efrm_filter_redirect(get_client(hwport),
+                                oofilter->filter_id[hwport], &spec, &rxq,
+                                exclusive_rxq_token,
+                                &oofilter->trs->filter_irqmask, insert_flags);
       if( rc == -ENOENT || rc == -ENODEV ) {
         /* net driver either:
          *  * does not know about our filter, let's better
@@ -280,6 +338,17 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
         oofilter->filter_id[hwport] = rc;
       }
       else {
+        if( rc >= 0 ) {
+          /* If the redirect succeeded perform any post-add actions */
+          rc = tcp_helper_post_filter_add(oofilter->trs, hwport, &spec, rxq,
+                                          exclusive_rxq_token);
+          if( rc < 0 ) {
+            efrm_filter_remove(get_client(hwport),
+                               oofilter->filter_id[hwport]);
+            EFRM_WARN("%s: Post add failed for redirected filter (hwport %x "
+                      "rxq %d rc %d", __func__, hwport, rxq, rc);
+          }
+        }
         /* Moving filter either:
          *  * succeeded, or
          *  * failed
@@ -291,8 +360,7 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
       insert_flags |= EFHW_FILTER_F_REPLACE;
     rc = efrm_filter_insert(get_client(hwport), &spec, &rxq,
                             exclusive_rxq_token,
-                            cluster || kernel_redirect ? NULL :
-                                              &oofilter->trs->filter_irqmask,
+                            cluster ? NULL : &oofilter->trs->filter_irqmask,
                             insert_flags);
     /* ENETDOWN indicates that the hardware has gone away. This is not a
      * failure condition at this layer as we can attempt to restore filters
@@ -308,28 +376,15 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
        * stacks, therefore is fundamentally at odds with RSS. This could (like
        * everything) change in the future, but it's difficult to predict in
        * what way. */
-      if( ! kernel_redirect ) {
-#if ! CI_CFG_ENDPOINT_MOVE
-        ci_assert_equal(cluster, 0);
-#else
-        if( cluster )
-          rc = tcp_helper_cluster_post_filter_add(oofilter->thc, hwport, &spec,
-                                                  rxq, replace);
-        else
-#endif
-          rc = tcp_helper_post_filter_add(oofilter->trs, hwport, &spec, rxq,
-                                          replace);
-        if( rc < 0 ) {
-          if( ! replace )
-            efrm_filter_remove(get_client(hwport), oofilter->filter_id[hwport]);
-          /* We ideally want to restore replaced filters too, but we're not
-           * keeping enough info to know how. In any case, we currently have no
-           * hardware on which this matters (no hardware uses both a non-trivial
-           * tcp_helper_post_filter_add() and the replace option), so it'd be
-           * untested code. If/when that hardware comes, there are many possible
-           * locations for the solution. */
-        }
+      if( !cluster ) {
+        rc = tcp_helper_post_filter_add(oofilter->trs, hwport, &spec, rxq,
+                                        exclusive_rxq_token);
+        if( rc < 0 )
+          efrm_filter_remove(get_client(hwport), oofilter->filter_id[hwport]);
       }
+#if ! CI_CFG_ENDPOINT_MOVE
+      ci_assert_equal(cluster, 0);
+#endif
     }
   }
   else {
@@ -338,6 +393,23 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
     return -ELNRNG;
   }
   return rc;
+}
+
+
+static int
+oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
+                        const struct oo_hw_filter_spec* oo_filter_spec,
+                        unsigned src_flags)
+{
+  if( src_flags & OO_HW_SRC_FLAG_KERNEL_REDIRECT ) {
+    ci_assert_equal(src_flags, OO_HW_SRC_FLAG_KERNEL_REDIRECT );
+    return oo_hw_filter_set_hwport_kernel_redirect(oofilter, hwport,
+                                                   oo_filter_spec);
+  }
+  else {
+    return oo_hw_filter_set_hwport_common(oofilter, hwport, oo_filter_spec,
+                                          src_flags);
+  }
 }
 
 

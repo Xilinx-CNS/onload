@@ -1517,6 +1517,7 @@ oo_operations_table_t oo_operations[] = {
   /* include/onload/ioctl_shrub.h: */
   op(OO_IOC_SHRUB_SPAWN_SERVER,   oo_shrub_spawn_server),
   op(OO_IOC_SHRUB_SET_SOCKETS, oo_shrub_set_sockets),
+  op(OO_IOC_SHRUB_SET_TOKEN, oo_shrub_set_token),
   /* include/onload/ioctl.h: */
   op(OO_IOC_DBG_GET_STACK_INFO, efab_tcp_helper_get_info),
   op(OO_IOC_DBG_WAIT_STACKLIST_UPDATE, efab_tcp_helper_wait_stack_list_update),

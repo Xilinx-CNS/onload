@@ -2475,10 +2475,9 @@ static int cplane_server_path_get(char* buffer,
 
   spin_lock(&cp_lock);
   path = cp_get_server_path();
-  /* The magic 4096 is documented in linux/moduleparam.h. */
-  strncpy(buffer, path, 4096);
-  buffer[4095] = '\0';
-  len = strnlen(buffer, 4096);
+  strncpy(buffer, path, PATH_MAX);
+  buffer[PATH_MAX - 1] = '\0';
+  len = strnlen(buffer, PATH_MAX);
   spin_unlock(&cp_lock);
 
   return len;
@@ -2696,8 +2695,7 @@ cplane_server_params_get(char* buffer,
   char* s;
   size_t add, len;
   int n;
-  /* The magic 4096 is documented in linux/moduleparam.h. */
-  const int BUFFER_LEN = 4096;
+  const int BUFFER_LEN = PATH_MAX;
 
   spin_lock(&cp_lock);
   s = buffer;

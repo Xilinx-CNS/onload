@@ -8,6 +8,7 @@
 #include <assert.h>
 #include <ci/compat.h>
 #include <ci/tools/log.h>
+#include <ci/tools/onload_server.h>
 #include <cplane/cplane.h>
 #include <cplane/create.h>
 #include <cplane/mib.h>
@@ -49,6 +50,12 @@ static volatile sig_atomic_t call_shrub_dump = 0;
 #define EF_SHRUB_CONFIG_SOCKET_LOCK EF_SHRUB_NEGOTIATION_SOCKET "_lock"
 #define EF_SHRUB_CONFIG_SOCKET_LOCK_LEN (EF_SHRUB_SOCKET_DIR_LEN + \
                                          sizeof(EF_SHRUB_CONFIG_SOCKET_LOCK))
+
+#define DEV_KMSG "/dev/kmsg"
+#define SERVER_BIN "shrub_controller"
+#define SERVER_NAME "Onload Shrub Server"
+
+static char* shrub_log_prefix;
 
 struct shrub_controller_stats
 {
@@ -107,17 +114,19 @@ static void usage(void)
   fprintf(stderr, "Options:\n");
   fprintf(stderr, "  -d       Enable debug mode\n");
   fprintf(stderr, "  -c       Set controller_id\n");
+  fprintf(stderr, "  -D       Daemonise on startup\n");
+  fprintf(stderr, "  -K       Log to kmsg\n");
 }
 
 static int search_for_existing_server(shrub_controller_config *config,
-                                      cicp_hwport_mask_t new_hw_ports)
+                                      int ifindex)
 {
   shrub_if_config_t *current_interface = config->server_config_head;
   while ( current_interface != NULL ) {
-    if ( current_interface->hw_ports == new_hw_ports ) {
+    if ( current_interface->ifindex == ifindex ) {
       if ( config->debug_mode )
         ci_log("Info: shrub_controller found duplicate shrub_server "
-               "with hw_port %d", new_hw_ports);
+               "with ifindex %d", ifindex);
       current_interface->ref_count++;
       return current_interface->token_id;
     }
@@ -368,7 +377,10 @@ static int create_onload_config_socket(const char *socket_path, uintptr_t* confi
     goto cleanup_socket;
   }
 
-  rc = ef_shrub_socket_listen(*config_socket_fd, 5);
+  /* We have a connection per-interface per-client. Onload clients will use
+   * all interfaces by default, and it's reasonable that many apps are starting
+   * up at once, so we need a generous backlog. */
+  rc = ef_shrub_socket_listen(*config_socket_fd, 2048);
   if ( rc < 0 ) {
     ci_log("Error: shrub_controller onload socket listen failed");
     goto cleanup_socket;
@@ -394,7 +406,7 @@ static int process_create_command(shrub_controller_config *config,
                                   cicp_hwport_mask_t hw_port, int ifindex,
                                   uint32_t buffer_count, uintptr_t client_fd)
 {
-  int rc = search_for_existing_server(config, hw_port);
+  int rc = search_for_existing_server(config, ifindex);
 
   /* Either rc is -1 and the cplane can't recognise the intf or we have a
      pre-existing shrub_token/server */
@@ -853,13 +865,29 @@ static void controller_cplane_disconnect(shrub_controller_config *config)
 int main(int argc, char *argv[])
 {
   int rc = 0;
+  bool daemonise = false;
+  bool log_to_kern = false;
+  struct stat stat;
   int option;
   shrub_controller_config config = {0};
   config.config_socket_fd = INVALID_SOCKET_FD;
   config.interface_token = 1;
   config.controller_id = 0;
 
-  while ( (option = getopt(argc, argv, "dc:")) != -1 ) {
+  /* Set sutable prefix */
+  ci_server_set_log_prefix(&shrub_log_prefix, SERVER_BIN);
+
+  /* Ensure that early errors are not lost */
+  if( fstat(STDOUT_FILENO, &stat) != 0 ) {
+    int fd = open(DEV_KMSG, O_WRONLY);
+    if( fd != STDERR_FILENO ) {
+      dup2(fd, STDERR_FILENO);
+      /* Do not check the return code from dup2, as cannot log errors anyway.
+       * Maybe daemonise() will have more luck, let it check for problems. */
+    }
+  }
+
+  while ( (option = getopt(argc, argv, "dc:DK")) != -1 ) {
     switch (option)
     {
     case 'd':
@@ -869,11 +897,21 @@ int main(int argc, char *argv[])
     case 'c':
       config.controller_id = atoi(optarg);
       break;
+    case 'D':
+      daemonise = true;
+      break;
+    case 'K':
+      log_to_kern = true;
+      break;
     default:
       usage();
       return EXIT_FAILURE;
     }
   }
+
+  if( daemonise )
+    ci_server_daemonise(log_to_kern, &shrub_log_prefix, SERVER_NAME,
+                        SERVER_BIN);
 
   controller_init_signals();
   rc = controller_init_paths(&config);

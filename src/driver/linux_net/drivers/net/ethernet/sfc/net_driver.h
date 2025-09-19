@@ -92,7 +92,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.1.1.1005"
+#define EFX_DRIVER_VERSION	"6.1.1.1009"
 #endif
 
 #ifdef DEBUG
@@ -1585,6 +1585,7 @@ struct efx_mae;
  *	and must be released by caller after statistics processing/copying
  *	if required.
  * @n_rx_noskb_drops: Count of RX packets dropped due to failure to allocate an skb
+ * @max_evq_over: The maximum EVQ oversubscription found
  *
  * This is stored in the private area of the &struct net_device.
  */
@@ -1919,6 +1920,7 @@ struct efx_nic {
 	 */
 	struct mutex debugfs_symlink_mutex;
 #endif
+	unsigned int max_evq_over;
 };
 
 #ifdef EFX_NOT_UPSTREAM

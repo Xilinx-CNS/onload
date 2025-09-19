@@ -217,6 +217,8 @@ int ef_vi_init(struct ef_vi* vi, int arch, int variant, int revision,
 	       unsigned ef_vi_flags, unsigned char nic_flags,
 	       ef_vi_state* state)
 {
+  int rc;
+
   memset(vi, 0, sizeof(*vi));
   /* vi->vi_qs_n = 0; */
   /* vi->inited = 0; */
@@ -236,20 +238,23 @@ int ef_vi_init(struct ef_vi* vi, int arch, int variant, int revision,
                      !(ef_vi_flags & EF_VI_RX_PACKED_STREAM);
   switch( arch ) {
   case EF_VI_ARCH_EF10:
-    ef10_vi_init(vi);
+    rc = ef10_vi_init(vi);
     break;
   case EF_VI_ARCH_EFCT:
   case EF_VI_ARCH_EF10CT:
-    efct_vi_init(vi);
+    rc = efct_vi_init(vi);
     break;
   case EF_VI_ARCH_AF_XDP:
-    efxdp_vi_init(vi);
+    rc = efxdp_vi_init(vi);
     break;
   default:
     return -EINVAL;
   }
-  vi->inited |= EF_VI_INITED_NIC;
-  return 0;
+
+  if( rc == 0 )
+    vi->inited |= EF_VI_INITED_NIC;
+
+  return rc;
 }
 
 

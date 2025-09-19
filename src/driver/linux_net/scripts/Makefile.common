@@ -23,25 +23,25 @@ ifdef KERNELRELEASE
 #
 ifndef EFX_UPSTREAM
 # Compiler flags
-EXTRA_CFLAGS += -Wall -Wno-deprecated-declarations -DEFX_USE_KCOMPAT=1
-EXTRA_CFLAGS += -I$(TOPDIR)/include
+ccflags-y += -Wall -Wno-deprecated-declarations -DEFX_USE_KCOMPAT=1
+ccflags-y += -I$(TOPDIR)/include
 ifdef EFX_FOR_UPSTREAM
-EXTRA_CFLAGS += -include config.h
+ccflags-y += -include config.h
 else
-EXTRA_CFLAGS += -DEFX_NOT_UPSTREAM=1
+ccflags-y += -DEFX_NOT_UPSTREAM=1
 endif
 ifdef EFX_NOT_EXPORTED
-EXTRA_CFLAGS += -DEFX_NOT_EXPORTED
+ccflags-y += -DEFX_NOT_EXPORTED
 endif # EFX_NOT_EXPORTED
 ifdef EFX_C_MODEL
-EXTRA_CFLAGS += -DEFX_C_MODEL
+ccflags-y += -DEFX_C_MODEL
 endif
 ifndef NOWERROR
-EXTRA_CFLAGS += -Werror
+ccflags-y += -Werror
 endif # NOWERROR
 # Debugging-enabled builds
 ifndef NDEBUG
-EXTRA_CFLAGS += -DDEBUG -g
+ccflags-y += -DDEBUG -g
 UBSAN_SANITIZE := y
 endif
 

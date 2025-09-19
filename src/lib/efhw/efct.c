@@ -9,6 +9,7 @@
 #include <ci/efhw/nic.h>
 #include <ci/efhw/efct.h>
 #include <ci/efhw/efct_filters.h>
+#include <ci/efhw/efct_wakeup.h>
 #include <ci/efhw/eventq.h>
 #include <ci/efhw/checks.h>
 #include <ci/efhw/mc_driver_pcol.h>
@@ -275,7 +276,8 @@ efct_nic_shared_rxq_request_wakeup(struct efhw_nic *nic,
                                    unsigned sbseq, unsigned pktix,
                                    bool allow_recursion)
 {
-  return efct_request_wakeup(nic->arch_extra, rxq, sbseq, pktix,
+  struct efhw_nic_efct* efct = nic->arch_extra;
+  return efct_request_wakeup(nic, &efct->rxq[rxq->qid].apps, rxq, sbseq, pktix,
                              allow_recursion);
 }
 
@@ -446,7 +448,6 @@ efct_nic_supported_filter_flags(struct efhw_nic *nic)
   struct xlnx_efct_device* edev;
   struct xlnx_efct_client* cli;
   int rc;
-  int num_matches;
   size_t outlen_actual;
   EFHW_MCDI_DECLARE_BUF(in, MC_CMD_GET_PARSER_DISP_INFO_IN_LEN);
   EFHW_MCDI_DECLARE_BUF(out, MC_CMD_GET_PARSER_DISP_INFO_OUT_LENMAX);
@@ -475,10 +476,12 @@ efct_nic_supported_filter_flags(struct efhw_nic *nic)
     EFHW_ERR("%s: failed, expected response min len %d, got %zd", __FUNCTION__,
              MC_CMD_GET_PARSER_DISP_INFO_OUT_LENMIN, outlen_actual);
 
-  num_matches = EFHW_MCDI_VAR_ARRAY_LEN(outlen_actual,
-                                   GET_PARSER_DISP_INFO_OUT_SUPPORTED_MATCHES);
+  EFHW_ASSERT(EFHW_MCDI_VAR_ARRAY_LEN(outlen_actual,
+                GET_PARSER_DISP_INFO_OUT_SUPPORTED_MATCHES) ==
+              EFHW_MCDI_DWORD(out,
+                GET_PARSER_DISP_INFO_OUT_NUM_SUPPORTED_MATCHES));
 
-  return mcdi_parser_info_to_filter_flags(out, num_matches);
+  return mcdi_parser_info_to_filter_flags(out);
 }
 
 static int
@@ -515,10 +518,7 @@ efct_nic_release_hardware(struct efhw_nic* nic)
 {
 #ifndef NDEBUG
   struct efhw_nic_efct* efct = nic->arch_extra;
-
-#define ACTION_ASSERT_HASH_TABLE_EMPTY(F) \
-    EFHW_ASSERT(efct->filter_state.filters.F##_n == 0);
-  FOR_EACH_FILTER_CLASS(ACTION_ASSERT_HASH_TABLE_EMPTY)
+  efct_filter_assert_all_filters_gone(efct->filter_state);
 #endif
 }
 
@@ -1004,9 +1004,8 @@ int filter_insert_op(const struct efct_filter_insert_in *in,
 }
 
 static int
-efct_nic_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
-                       int *rxq, unsigned pd_excl_token,
-                       const struct cpumask *mask, unsigned flags)
+efct_nic_filter_insert(struct efhw_nic *nic,
+                       struct efhw_filter_params *efhw_params)
 {
   struct device *dev;
   struct xlnx_efct_device* edev;
@@ -1014,6 +1013,14 @@ efct_nic_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
   struct efhw_nic_efct *efct = nic->arch_extra;
   struct filter_insert_params params;
   struct ethtool_rx_flow_spec hw_filter;
+  unsigned flags = efhw_params->flags;
+  struct efct_filter_params efct_params = {
+    .rxq = efhw_params->rxq,
+    .pd_excl_token = efhw_params->exclusive_rxq_token,
+    .insert_op = filter_insert_op,
+    .insert_data = &params,
+    .filter_flags = nic->filter_flags,
+  };
   int rc;
 
   if( flags & EFHW_FILTER_F_REPLACE )
@@ -1022,20 +1029,20 @@ efct_nic_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
   /* rxq_n is based on design param caps, and is used to size various data
    * structs. There may turn out not to actually be the full range of queues
    * available, but we can safely handle queues in that range. */
-  if( *rxq >= (int)efct->rxq_n )
+  if( *efhw_params->rxq >= (int)efct->rxq_n )
     return -EINVAL;
 
   /* Get the straight translation to ethtool spec of the requested filter.
    * This allows us to make any necessary checks on the actually requested
    * filter before we furtle it later on. */
-  rc = efx_spec_to_ethtool_flow(spec, &hw_filter);
+  rc = efx_spec_to_ethtool_flow(efhw_params->spec, &hw_filter);
   if( rc < 0 )
     return rc;
 
   params.nic = nic;
   params.efct_params = (struct xlnx_efct_filter_params) {
     .spec = &hw_filter,
-    .mask = mask ? mask : cpu_all_mask,
+    .mask = efhw_params->mask ? efhw_params->mask : cpu_all_mask,
   };
   if( flags & EFHW_FILTER_F_ANY_RXQ )
     params.efct_params.flags |= XLNX_EFCT_FILTER_F_ANYQUEUE_LOOSE;
@@ -1079,13 +1086,14 @@ efct_nic_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
     flags |= EFHW_FILTER_F_USE_SW;
   }
 
-  rc = efct_filter_insert(&efct->filter_state, spec, &hw_filter, rxq,
-                          pd_excl_token, flags, filter_insert_op, &params,
-                          nic->filter_flags);
+  efct_params.flags = flags;
+  rc = efct_filter_insert(efct->filter_state, efhw_params->spec, &hw_filter,
+                          &efct_params);
 
   /* If we are returning successfully having requested an exclusive queue, that
    * queue should not be shared with the net driver. */
-  EFHW_ASSERT((rc < 0) || !(flags & EFHW_FILTER_F_EXCL_RXQ) || (*rxq > 0));
+  EFHW_ASSERT((rc < 0) || !(flags & EFHW_FILTER_F_EXCL_RXQ) ||
+              (*efhw_params->rxq > 0));
 
   return rc;
 }
@@ -1098,9 +1106,10 @@ efct_nic_filter_remove(struct efhw_nic *nic, int filter_id)
   struct xlnx_efct_client* cli;
   struct efhw_nic_efct *efct = nic->arch_extra;
   uint64_t drv_id;
+  unsigned flags;
   int rc;
-  bool remove_drv = efct_filter_remove(&efct->filter_state, filter_id,
-                                       &drv_id);
+  bool remove_drv = efct_filter_remove(efct->filter_state, filter_id,
+                                       &drv_id, &flags);
 
   if( remove_drv ) {
     EFCT_PRE(dev, edev, cli, nic, rc);
@@ -1114,21 +1123,21 @@ efct_nic_filter_query(struct efhw_nic *nic, int filter_id,
                   struct efhw_filter_info *info)
 {
   struct efhw_nic_efct *efct = nic->arch_extra;
-  return efct_filter_query(&efct->filter_state, filter_id, info);
+  return efct_filter_query(efct->filter_state, filter_id, info);
 }
 
 static int
 efct_nic_multicast_block(struct efhw_nic *nic, bool block)
 {
   struct efhw_nic_efct *efct = nic->arch_extra;
-  return efct_multicast_block(&efct->filter_state, block);
+  return efct_multicast_block(efct->filter_state, block);
 }
 
 static int
 efct_nic_unicast_block(struct efhw_nic *nic, bool block)
 {
   struct efhw_nic_efct *efct = nic->arch_extra;
-  return efct_unicast_block(&efct->filter_state, block);
+  return efct_unicast_block(efct->filter_state, block);
 }
 
 

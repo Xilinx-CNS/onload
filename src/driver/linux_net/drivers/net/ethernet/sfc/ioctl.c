@@ -252,6 +252,11 @@ efx_ioctl_dump(struct efx_nic *efx, union efx_ioctl_data __user *useraddr)
 
 /*****************************************************************************/
 
+#ifndef netif_err_once
+#define netif_err_once(priv, type, dev, fmt, args...) \
+	netif_level(err_once, priv, type, dev, fmt, ##args)
+#endif
+
 int efx_private_ioctl(struct efx_nic *efx, u16 cmd,
 		      union efx_ioctl_data __user *user_data)
 {
@@ -303,6 +308,19 @@ int efx_private_ioctl(struct efx_nic *efx, u16 cmd,
 	case EFX_DUMP:
 		return efx_ioctl_dump(efx, user_data);
 #endif
+	case EFX_TS_INIT:
+	case EFX_TS_SETTIME:
+	case EFX_TS_ADJTIME:
+	case EFX_TS_GET_PPS:
+	case EFX_TS_ENABLE_HW_PPS:
+	case EFX_GET_TS_CONFIG:
+		/* Obsolete private ioctls that now have upstream
+		 * equivalents
+		 */
+		netif_err_once(efx, drv, efx->net_dev,
+			       "obsolete private timestamping ioctl cmd %x\n",
+			       cmd);
+		return -EOPNOTSUPP;
 	default:
 		netif_err(efx, drv, efx->net_dev,
 			  "unknown private ioctl cmd %x\n", cmd);

@@ -46,7 +46,8 @@ unsigned ooft_hwport_type_to_flags(enum ooft_hwport_type type)
   case OOFT_HWPORT_EF10_LL:
     return OOF_HWPORT_FLAG_MCAST_REPLICATE;
   case OOFT_HWPORT_EF10CT:
-    return OOF_HWPORT_FLAG_MCAST_REPLICATE | OOF_HWPORT_FLAG_VLAN_FILTERS;
+    return OOF_HWPORT_FLAG_MCAST_REPLICATE | OOF_HWPORT_FLAG_VLAN_FILTERS |
+           OOF_HWPORT_FLAG_RX_SHARED;
   case OOFT_HWPORT_AFXDP:
     return OOF_HWPORT_FLAG_NO_5TUPLE;
   default:

@@ -4,7 +4,7 @@
 /* EFCT buffer management using user-allocated buffers */
 
 #include "ef_vi_internal.h"
-#include "shrub_client.h"
+#include <etherfabric/shrub_client.h>
 #include "logging.h"
 
 /* TODO move CI_EFCT_MAX_SUPERBUFS somewhere more sensible, or remove
@@ -338,7 +338,8 @@ static int efct_ubufs_attach(ef_vi* vi,
                              int qid,
                              int fd,
                              unsigned n_superbufs,
-                             bool shared_mode)
+                             bool shared_mode,
+                             bool interrupt_mode)
 {
   int ix, rc;
   struct efct_ubufs* ubufs = get_ubufs(vi);
@@ -352,7 +353,8 @@ static int efct_ubufs_attach(ef_vi* vi,
     return ix;
   rxq = &ubufs->q[ix];
 
-  rc = efct_ubufs_init_rxq_resource(vi, qid, n_superbufs, &rxq->rxq_id);
+  rc = efct_ubufs_init_rxq_resource(vi, qid, n_superbufs, interrupt_mode,
+                                    &rxq->rxq_id);
   if( rc < 0 ) {
     LOGVV(ef_log("%s: efct_ubufs_init_rxq_resource rxq %d", __FUNCTION__, rc));
     return rc;
@@ -504,7 +506,7 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
   ubufs->pd = pd;
   ubufs->pd_dh = pd_dh;
   ubufs->is_shrub_token_set = false;
-  ubufs->shrub_controller_id = -1;
+  ubufs->shrub_controller_id = EF_SHRUB_NO_SHRUB;
   ubufs->shrub_server_socket_id = -1;
 
   ubufs->ops.free = efct_ubufs_free;

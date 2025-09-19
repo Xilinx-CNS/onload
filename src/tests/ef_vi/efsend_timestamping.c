@@ -95,10 +95,7 @@ int main(int argc, char* argv[])
   int i;
   void* p;
   ef_addr dma_buf_addr;
-  /* Use Express datapath as default for X4 interfaces. For NICs which
-   * don't have multiple datapaths, parse_interface_with_flags() (called
-   * by parse_opts() ) will clear this from pd_flags */
-  enum ef_pd_flags pd_flags = EF_PD_EXPRESS;
+  enum ef_pd_flags pd_flags = EF_PD_DEFAULT;
   /* Set flag to allow tx timestamping */
   int vi_flags = EF_VI_FLAGS_DEFAULT | EF_VI_TX_TIMESTAMPS;
   unsigned long val;

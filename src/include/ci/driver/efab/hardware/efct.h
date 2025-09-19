@@ -213,7 +213,7 @@
 #define EFCT_RX_EVENT_ROLLOVER_LBN 57
 #define EFCT_RX_EVENT_ROLLOVER_WIDTH 1
 
-#define EFCT_RX_EVENT_FLOW_LOOKUP_LBN 56
+#define EFCT_RX_EVENT_FLOW_LOOKUP_LBN 58
 #define EFCT_RX_EVENT_FLOW_LOOKUP_WIDTH 1
 
 
@@ -232,6 +232,8 @@
 /* size of each packet's space within a buffer (including metadata)
  * In principle, this could be set to other values; but we don't support that */
 #define EFCT_PKT_STRIDE 2048
+
+#define EFCT_RX_SUPERBUF_PKTS (EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE)
 
 /* Interrupt priming */
 #define ERF_HZ_READ_IDX_LBN 16

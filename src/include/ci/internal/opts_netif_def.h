@@ -788,7 +788,10 @@ CI_CFG_OPT("EF_RXQ_SIZE", rxq_size, ci_uint16,
 "or 4096.\n"
 
 "A larger ring size can absorb larger packet bursts without drops, but may "
-"reduce efficiency because the working set size is increased.",
+"reduce efficiency because the working set size is increased.\n"
+
+"If the value is lower than is supported by the hardware this will be rounded "
+"up. Set EF_LOG to include more_config_warnings to log if this occurs.",
            , , 512, 0, 32768, bincount)
 
 CI_CFG_OPT("EF_TXQ_SIZE", txq_size, ci_uint16,
@@ -1777,3 +1780,7 @@ CI_CFG_OPT("EF_SHRUB_BUFFER_COUNT", shrub_buffer_count, ci_uint32,
 "a shrub controller. ",
            , , EF_SHRUB_DEFAULT_BUFFER_COUNT, EF_SHRUB_DEFAULT_BUFFER_COUNT,
            100000, count)
+
+CI_CFG_OPT("EF_SHRUB_DEBUG", shrub_debug, ci_uint32,
+"Output debug logging from shrub controller.",
+           1, , 0, 0, 1, yesno)

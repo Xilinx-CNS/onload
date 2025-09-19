@@ -128,6 +128,12 @@ ifndef CXXFLAGS
   endif
 endif
 
+# We only need to include this in the user-build as the kernel directly uses
+# the assembly rather than compiler intrinsics.
+ifeq ($(TRANSPORT_CONFIG_OPT_HDR), ci/internal/transport_config_opt_cxl.h)
+MMAKE_CFLAGS += -mmovdir64b
+endif
+
 ifdef NDEBUG
   MMAKE_CFLAGS   += -fomit-frame-pointer
   MMAKE_CPPFLAGS += -DNDEBUG

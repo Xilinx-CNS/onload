@@ -55,7 +55,10 @@ static inline void efrm_resource_init(struct efrm_resource *rs,
 extern void efrm_nic_enable_post_reset(struct efhw_nic* nic);
 extern int efrm_nic_post_reset(struct efhw_nic *nic);
 extern int efrm_nic_reset_suspend(struct efhw_nic *nic);
-#define EFRM_FLUSH_QUEUES_F_NOHW 1
+#define EFRM_FLUSH_QUEUES_F_NONE 0
+/* The no hardware flag indicates that only the software state needs to be
+ * updated, which will be the case for resets or the NIC being unplugged. */
+#define EFRM_FLUSH_QUEUES_F_NO_HW 1
 #define EFRM_FLUSH_QUEUES_F_INJECT_EV 2
 extern void efrm_nic_flush_all_queues(struct efhw_nic *nic, int flags);
 #endif

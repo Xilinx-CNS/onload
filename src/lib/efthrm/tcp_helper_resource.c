@@ -949,13 +949,33 @@ int tcp_helper_vi_hw_drop_filter_supported(tcp_helper_resource_t* trs,
     return -1;
 }
 
+
+static int tcp_helper_select_rxq(tcp_helper_resource_t *trs, int intf_i,
+                                 ef_vi *vi, bool want_shrub)
+{
+  int i;
+  int rxq = -1;
+
+  for( i = 0; i < EF_VI_MAX_EFCT_RXQS; i++ ) {
+    if( (*vi->efct_rxqs.active_qs & (1ull << i)) &&
+        (!!trs->nic[intf_i].thn_shrub_queues[i] == !!want_shrub) ) {
+      rxq = efct_get_rxq_state(vi, i)->qid;
+      break;
+    }
+  }
+
+  return rxq;
+}
+
+
 void tcp_helper_get_filter_params(tcp_helper_resource_t* trs, int hwport,
-                                  int* vi_id, int* rxq, unsigned *flags,
-                                  unsigned *exclusive_rxq_token)
+                                  bool mcast4,
+                                  struct tcp_helper_filter_params *params)
 {
   int intf_i;
   struct efrm_pd *pd;
   struct efhw_nic* nic;
+  bool want_shrub = (NI_OPTS_TRS(trs).shrub_controller_id >= 0) && mcast4;
 
   ci_assert_lt((unsigned) hwport, CI_CFG_MAX_HWPORTS);
 
@@ -972,25 +992,24 @@ void tcp_helper_get_filter_params(tcp_helper_resource_t* trs, int hwport,
   if( (intf_i = trs->netif.hwport_to_intf_i[hwport]) >= 0 ) {
     ef_vi* vi = &trs->netif.nic_hw[intf_i].vi;
     nic = efrm_client_get_nic(trs->nic[intf_i].thn_oo_nic->efrm_client);
-    *vi_id = EFAB_VI_RESOURCE_INSTANCE(tcp_helper_vi(trs, intf_i));
+    *params->vi_id = EFAB_VI_RESOURCE_INSTANCE(tcp_helper_vi(trs, intf_i));
     pd = efrm_vi_get_pd(tcp_helper_vi(trs, intf_i));
-    if( NI_OPTS_TRS(trs).llct_test_shrub ||
-        (nic->flags & NIC_FLAG_RX_KERNEL_SHARED) )
-      *exclusive_rxq_token = efrm_pd_shared_rxq_token_get(pd);
+    if( want_shrub || (nic->flags & NIC_FLAG_RX_KERNEL_SHARED) )
+      *params->exclusive_rxq_token = efrm_pd_shared_rxq_token_get(pd);
     else
-      *exclusive_rxq_token = efrm_pd_exclusive_rxq_token_get(pd);
+      *params->exclusive_rxq_token = efrm_pd_exclusive_rxq_token_get(pd);
     if( NI_OPTS_TRS(trs).shared_rxq_num >= 0 ) {
-      *rxq = NI_OPTS_TRS(trs).shared_rxq_num;
-      *flags |= EFHW_FILTER_F_PREF_RXQ;
+      *params->rxq = NI_OPTS_TRS(trs).shared_rxq_num;
+      *params->flags |= EFHW_FILTER_F_PREF_RXQ;
     }
     else if( vi->efct_rxqs.active_qs ) {
-      if( *vi->efct_rxqs.active_qs & 1 ) {
-        *rxq = efct_get_rxq_state(vi, 0)->qid;
-        *flags |= EFHW_FILTER_F_PREF_RXQ;
-      }
-      else {
-        *flags |= EFHW_FILTER_F_ANY_RXQ;
-      }
+      *params->rxq = tcp_helper_select_rxq(trs, intf_i, vi, want_shrub);
+      if( *params->rxq >= 0 )
+        *params->flags |= EFHW_FILTER_F_PREF_RXQ;
+      else
+        *params->flags |= EFHW_FILTER_F_ANY_RXQ;
+      OO_DEBUG_IPF(ci_log("%s: intf_i:%d rxq:%d flags:%x shrub:%d", __func__,
+                          intf_i, *params->rxq, *params->flags, want_shrub));
     }
   }
 }
@@ -1041,7 +1060,7 @@ static int tcp_helper_rxq_map(tcp_helper_resource_t* trs, int intf_i, int qix,
 
 int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
                                const struct efx_filter_spec* spec, int rxq,
-                               bool replace)
+                               unsigned token)
 {
   int intf_i;
   struct efhw_nic* nic;
@@ -1053,6 +1072,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
   nic = efrm_client_get_nic(trs->nic[intf_i].thn_oo_nic->efrm_client);
   if( efhw_nic_max_shared_rxqs(nic) ) {
     struct efrm_vi* vi_rs = tcp_helper_vi(trs, intf_i);
+    struct efrm_pd* pd = efrm_vi_get_pd(tcp_helper_vi(trs, intf_i));
     ci_netif_state_nic_t* ni_nic = &trs->netif.state->nic[intf_i];
     ef_vi* vi = ci_netif_vi(&trs->netif, intf_i);
     int qix;
@@ -1060,10 +1080,9 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
     int hugepages = 0;
     int superbufs;
 
-    /* FIXME ON-16391 we need some way to determine which queues need shrub connections.
-     * For testing purposes, use the EF_LLCT_TEST_SHRUB option. */
+    /* FIXME ON-16391 avoid the arch check here */
     bool shrub = vi->nic_type.arch == EF_VI_ARCH_EF10CT &&
-                 NI_OPTS_TRS(trs).llct_test_shrub;
+                 (token == efrm_pd_shared_rxq_token_get(pd));
     if( ! shrub )
       hugepages = max(1,
                       DIV_ROUND_UP(NI_OPTS_TRS(trs).rxq_size * EFCT_PKT_STRIDE,
@@ -1081,13 +1100,34 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
     if( qix == -EALREADY )
       return 0;
 
+    /* If we are using shrub for shared rxqs, then connect to the server before
+     * creating the efct_rxq resource (and thus binding to the hw rxq). This is
+     * done so that the shrub controller will be the first one to bind to the
+     * queue and so decide which evq it will use. */
+    if (shrub) {
+      LOG_NC(ci_log("%s: using shrub for queue %d", __func__, rxq));
+      rc = efct_ubufs_shared_attach_internal(vi, qix, rxq,
+                                             vi->efct_rxqs.q[qix].superbufs);
+      if( rc < 0 ) {
+        if( rc != -EINTR )
+          LOG_E(ci_log("%s: ERROR: efct_ubufs_shared_attach_internal failed (%d)",
+                        __func__, rc));
+        return rc;
+      }
+      /* It doesn't matter if we set this now and then fail later, this value
+       * is only valid to read for queues we know are already attached. */
+      trs->nic[intf_i].thn_shrub_queues[qix] = true;
+    }
+
     rc = efrm_rxq_alloc(vi_rs, rxq,
                         nic->flags & NIC_FLAG_RX_KERNEL_SHARED ? qix : -1,
                         true, true, hugepages, trs->trs_efct_alloc,
                         &trs->nic[intf_i].thn_efct_rxq[qix]);
     if( rc < 0 ) {
       if( rc != -EINTR )
-        ci_log("%s: ERROR: efrm_rxq_alloc failed (%d)", __func__, rc);
+        LOG_E(ci_log("%s: ERROR: efrm_rxq_alloc failed (%d)", __func__, rc));
+      if (shrub)
+        vi->efct_rxqs.ops->detach(vi, qix);
       return rc;
     }
 
@@ -1112,17 +1152,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
     }
 #endif
 
-    if( shrub ) {
-      ci_log("%s: using shrub for queue %d", __func__, rxq);
-      rc = efct_ubufs_shared_attach_internal(vi, qix, rxq, vi->efct_rxqs.q[qix].superbufs);
-      if( rc < 0 ) {
-        if( rc != -EINTR )
-          ci_log("%s: ERROR: efct_ubufs_shared_attach_internal failed (%d)", __func__, rc);
-        efrm_rxq_release(trs->nic[intf_i].thn_efct_rxq[qix]);
-        return rc;
-      }
-    }
-    else if( vi->nic_type.arch == EF_VI_ARCH_EF10CT ) {
+    if (vi->nic_type.arch == EF_VI_ARCH_EF10CT && !shrub) {
       int pg, sb;
       const int pg_per_sb = EFCT_RX_SUPERBUF_BYTES / EFHW_NIC_PAGE_SIZE;
       ef_addr* dma_addrs;
@@ -1132,7 +1162,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
                               vi->efct_rxqs.q[qix].superbufs,
                               &dma_addrs);
       if( rc < 0 ) {
-        ci_log("%s: ERROR: tcp_helper_rxq_map failed (%d)", __func__, rc);
+        LOG_E(ci_log("%s: ERROR: tcp_helper_rxq_map failed (%d)", __func__, rc));
         efrm_rxq_release(trs->nic[intf_i].thn_efct_rxq[qix]);
         return rc;
       }
@@ -1144,7 +1174,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
 
       efct_ubufs_local_attach_internal(vi, qix, rxq, superbufs);
     }
-    else {
+    else if (vi->nic_type.arch == EF_VI_ARCH_EFCT) {
       efct_vi_start_rxq(vi, qix, rxq);
     }
 
@@ -1913,6 +1943,8 @@ static int allocate_vis(tcp_helper_resource_t* trs,
            sizeof(trs->nic[intf_i].thn_efct_rxq));
     memset(trs->nic[intf_i].thn_efct_iobs, 0,
            sizeof(trs->nic[intf_i].thn_efct_iobs));
+    memset(trs->nic[intf_i].thn_shrub_queues, 0,
+           sizeof(trs->nic[intf_i].thn_shrub_queues));
   }
 
   /* This loop does the work of allocating a vi, using the information built
@@ -2435,7 +2467,7 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
       efrm_vi_n_q_entries(NI_OPTS(ni).txq_size, nic->q_sizes[EFHW_TXQ]) : 0;
 
     if( NI_OPTS(ni).rxq_size < vi_rxq_size )
-      NI_LOG(ni, CONFIG_WARNINGS,
+      NI_LOG(ni, MORE_CONFIG_WARNINGS,
              "WARNING: EF_RXQ_SIZE=%d rounded up to %d for dev %s",
              NI_OPTS(ni).rxq_size, vi_rxq_size, nic->net_dev->name);
     if( NI_OPTS(ni).txq_size < vi_txq_size )

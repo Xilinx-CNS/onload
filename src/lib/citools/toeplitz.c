@@ -98,7 +98,7 @@ ci_uint32 ci_toeplitz_hash_ul(const ci_uint8 *key, const ci_uint8 *sse_key,
   static int pclmul_support = -1;
 
   if(CI_UNLIKELY( pclmul_support < 0 ))
-    pclmul_support = ci_cpu_has_feature("pclmul");
+    pclmul_support = ci_cpu_has_feature(CI_CPU_FEATURE_PCLMULQDQ);
 
   if( pclmul_support ) {
 #if defined(CI_CFG_IPV6) && CI_CFG_IPV6

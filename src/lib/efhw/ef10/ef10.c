@@ -299,7 +299,7 @@ static int _ef10_nic_check_35388_workaround(struct efhw_nic *nic)
 
 void
 ef10_nic_check_supported_filters(struct efhw_nic *nic) {
-  int rc, num_matches;
+  int rc;
   size_t out_size;
 
   EFHW_MCDI_DECLARE_BUF(in, MC_CMD_GET_PARSER_DISP_INFO_IN_LEN);
@@ -318,10 +318,12 @@ ef10_nic_check_supported_filters(struct efhw_nic *nic) {
     EFHW_ERR("%s: failed, expected response min len %d, got %d", __FUNCTION__,
              MC_CMD_GET_PARSER_DISP_INFO_OUT_LENMIN, (int)out_size);
 
-  num_matches = EFHW_MCDI_VAR_ARRAY_LEN(out_size,
-                                   GET_PARSER_DISP_INFO_OUT_SUPPORTED_MATCHES);
+  EFHW_ASSERT(EFHW_MCDI_VAR_ARRAY_LEN(out_size,
+                GET_PARSER_DISP_INFO_OUT_SUPPORTED_MATCHES) ==
+              EFHW_MCDI_DWORD(out,
+                GET_PARSER_DISP_INFO_OUT_NUM_SUPPORTED_MATCHES));
 
-  nic->filter_flags |= mcdi_parser_info_to_filter_flags(out, num_matches);
+  nic->filter_flags |= mcdi_parser_info_to_filter_flags(out);
 
   /* If we have the hardware mismatch filters we can turn them into all filters
    * by blocking kernel traffic, so we can claim the all equivalents too */
@@ -378,20 +380,16 @@ static int ef10_nic_mac_spoofing_privilege(struct efhw_nic *nic)
 
 
 static int _ef10_nic_check_capabilities(struct efhw_nic *nic,
-                                        uint64_t* capability_flags,
+                                        uint64_t* nic_capability_flags,
                                         const char* caller)
 {
   size_t out_size = 0;
-  size_t ver_out_size;
+  uint64_t capability_flags;
   unsigned flags;
-  char ver_buf[32];
-  const __le16 *ver_words;
   int rc;
 
-  EFHW_MCDI_DECLARE_BUF(ver_out, MC_CMD_GET_VERSION_OUT_LEN);
-  EFHW_MCDI_DECLARE_BUF(in, MC_CMD_GET_CAPABILITIES_V2_IN_LEN);
-  EFHW_MCDI_DECLARE_BUF(out, MC_CMD_GET_CAPABILITIES_V10_OUT_LEN);
-  EFHW_MCDI_INITIALISE_BUF(ver_out);
+  EFHW_MCDI_DECLARE_BUF(in, MC_CMD_GET_CAPABILITIES_V13_IN_LEN);
+  EFHW_MCDI_DECLARE_BUF(out, MC_CMD_GET_CAPABILITIES_V13_OUT_LEN);
   EFHW_MCDI_INITIALISE_BUF(in);
   EFHW_MCDI_INITIALISE_BUF(out);
 
@@ -401,89 +399,36 @@ static int _ef10_nic_check_capabilities(struct efhw_nic *nic,
   nic->q_sizes[EFHW_TXQ] = 512 | 1024 | 2048;
   nic->q_sizes[EFHW_RXQ] = 512 | 1024 | 2048 | 4096;
 
+  /* Older FW ignores the extra in parameter, but such FW only supports a
+   * single datapath anyway, so we still get what we want. */
+  EFHW_MCDI_SET_DWORD(in, GET_CAPABILITIES_V13_IN_DATAPATH_TYPE,
+                      MC_CMD_GET_CAPABILITIES_V13_IN_FF_PATH);
   rc = ef10_mcdi_rpc(nic, MC_CMD_GET_CAPABILITIES, sizeof(in), sizeof(out),
                      &out_size, in, out);
   MCDI_CHECK(MC_CMD_GET_CAPABILITIES, rc, out_size, 0);
   if (rc != 0)
     return rc;
-  flags = EFHW_MCDI_DWORD(out, GET_CAPABILITIES_V3_OUT_FLAGS1);
-  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_PREFIX_LEN_14_LBN))
-    *capability_flags |= NIC_FLAG_14BYTE_PREFIX;
-  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_TX_MCAST_UDP_LOOPBACK_LBN))
-    *capability_flags |= NIC_FLAG_MCAST_LOOP_HW;
-  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_PACKED_STREAM_LBN)) {
-    rc = ef10_mcdi_rpc(nic, MC_CMD_GET_VERSION, 0, sizeof(ver_out),
-                       &ver_out_size, NULL, ver_out);
-    if (rc == 0 && ver_out_size == MC_CMD_GET_VERSION_OUT_LEN) {
-      ver_words = (__le16*)EFHW_MCDI_PTR(ver_out, GET_VERSION_OUT_VERSION);
-      snprintf(ver_buf, 32, "%u.%u.%u.%u",
-      le16_to_cpu(ver_words[0]),
-      le16_to_cpu(ver_words[1]),
-      le16_to_cpu(ver_words[2]),
-      le16_to_cpu(ver_words[3]));
-      if (!strcmp(ver_buf, "4.1.1.1022"))
-        EFHW_ERR("%s: Error: Due to a known firmware bug, packed stream mode "
-                 "is disabled on version %s.  Please upgrade firmware to use "
-                 "packed stream.", __FUNCTION__, ver_buf);
-      else
-        *capability_flags |= NIC_FLAG_PACKED_STREAM;
-    }
-    else {
-      *capability_flags |= NIC_FLAG_PACKED_STREAM;
-    }
-  }
-  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_RSS_LIMITED_LBN))
-    *capability_flags |= NIC_FLAG_RX_RSS_LIMITED;
-  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_PACKED_STREAM_VAR_BUFFERS_LBN))
-    *capability_flags |= NIC_FLAG_VAR_PACKED_STREAM;
-  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_ADDITIONAL_RSS_MODES_LBN))
-    *capability_flags |= NIC_FLAG_ADDITIONAL_RSS_MODES;
-  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_TIMESTAMP_LBN))
-    *capability_flags |= NIC_FLAG_HW_RX_TIMESTAMPING;
-  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_TX_TIMESTAMP_LBN))
-    *capability_flags |= NIC_FLAG_HW_TX_TIMESTAMPING;
-  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_MCAST_FILTER_CHAINING_LBN))
-    *capability_flags |= NIC_FLAG_MULTICAST_FILTER_CHAINING;
-  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_PREFIX_LEN_0_LBN))
-    *capability_flags |= NIC_FLAG_ZERO_RX_PREFIX;
-  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_BATCHING_LBN))
-    *capability_flags |= NIC_FLAG_RX_MERGE;
-  if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_FORCE_EVENT_MERGING_LBN))
-    *capability_flags |= NIC_FLAG_RX_FORCE_EVENT_MERGING;
+
+  /* Get the set of flags where there's a simple one to one mapping with nic
+   * flags. */
+  capability_flags = mcdi_capability_info_to_nic_flags(out, out_size);
 
   /* If MAC filters are policed then check we've got the right privileges
    * before saying we can do MAC spoofing.
    */
+  flags = EFHW_MCDI_DWORD(out, GET_CAPABILITIES_V3_OUT_FLAGS1);
   if (flags & (1u <<
                MC_CMD_GET_CAPABILITIES_V3_OUT_TX_MAC_SECURITY_FILTERING_LBN)) {
     if( ef10_nic_mac_spoofing_privilege(nic) == 1 )
-      *capability_flags |= NIC_FLAG_MAC_SPOOFING;
+      capability_flags |= NIC_FLAG_MAC_SPOOFING;
   }
   else {
-    *capability_flags |= NIC_FLAG_MAC_SPOOFING;
+    capability_flags |= NIC_FLAG_MAC_SPOOFING;
   }
 
-
-  if (out_size >= MC_CMD_GET_CAPABILITIES_V2_OUT_LEN) {
+  if( capability_flags & NIC_FLAG_PIO ) {
     nic->pio_num = EFHW_MCDI_WORD(out, GET_CAPABILITIES_V3_OUT_NUM_PIO_BUFFS);
     nic->pio_size = EFHW_MCDI_WORD(out, GET_CAPABILITIES_V3_OUT_SIZE_PIO_BUFF);
-    if( nic->pio_num > 0 )
-      *capability_flags |= NIC_FLAG_PIO;
-    flags = EFHW_MCDI_DWORD(out, GET_CAPABILITIES_V3_OUT_FLAGS2);
-    if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_TX_VFIFO_ULL_MODE_LBN))
-      *capability_flags |= NIC_FLAG_TX_ALTERNATIVES;
-    if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_INIT_EVQ_V2_LBN))
-      *capability_flags |= NIC_FLAG_EVQ_V2;
-    if (flags & (1u << MC_CMD_GET_CAPABILITIES_V2_OUT_CTPIO_LBN))
-      *capability_flags |= NIC_FLAG_TX_CTPIO;
-    if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_EVENT_CUT_THROUGH_LBN))
-      *capability_flags |= NIC_FLAG_EVENT_CUT_THROUGH;
-    if (flags & (1u << MC_CMD_GET_CAPABILITIES_V3_OUT_RX_CUT_THROUGH_LBN))
-      *capability_flags |= NIC_FLAG_RX_CUT_THROUGH;
-  }
-  else {
-    EFHW_ERR("%s: ERROR: Unexpectedly failed to read NIC capabilities",
-             __FUNCTION__);
   }
 
   if (out_size >= MC_CMD_GET_CAPABILITIES_V3_OUT_LEN) {
@@ -519,6 +464,8 @@ static int _ef10_nic_check_capabilities(struct efhw_nic *nic,
     nic->q_sizes[EFHW_TXQ] = q_sizes;
     nic->q_sizes[EFHW_RXQ] = q_sizes;
   }
+
+  *nic_capability_flags |= capability_flags;
 
   return rc;
 }
@@ -2369,9 +2316,7 @@ ef10_rss_free(struct efhw_nic *nic, u32 rss_context)
 
 
 static int
-ef10_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
-                   int *rxq, unsigned pd_excl_token,
-                   const struct cpumask *mask, unsigned flags)
+ef10_filter_insert(struct efhw_nic *nic, struct efhw_filter_params *params)
 {
   int rc;
   struct device *dev;
@@ -2379,8 +2324,8 @@ ef10_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
   struct efx_auxdev_client *cli;
 
   AUX_PRE(dev, auxdev, cli, nic, rc);
-  rc = auxdev->onload_ops->filter_insert(cli, spec,
-                                  (flags & EFHW_FILTER_F_REPLACE) != 0);
+  rc = auxdev->onload_ops->filter_insert(cli, params->spec,
+                                (params->flags & EFHW_FILTER_F_REPLACE) != 0);
   AUX_POST(dev, auxdev, cli, nic, rc);
 
   return rc;
@@ -2410,22 +2355,24 @@ ef10_filter_remove(struct efhw_nic *nic, int filter_id)
 
 static int
 ef10_filter_redirect(struct efhw_nic *nic, int filter_id,
-                     struct efx_filter_spec *spec)
+                     struct efhw_filter_params *params)
 {
   int rc;
   struct device *dev;
   struct efx_auxdev *auxdev;
   struct efx_auxdev_client *cli;
-  int stack_id = spec->flags & EFX_FILTER_FLAG_STACK_ID ?  spec->stack_id : 0;
+  int stack_id = params->spec->flags & EFX_FILTER_FLAG_STACK_ID ?
+                 params->spec->stack_id : 0;
   /* If the RSS flag is not set we can pass NULL to indicate that we don't
    * want a context, otherwise use the value from the spec. */
-  unsigned *rss_context = (spec->flags & EFX_FILTER_FLAG_RX_RSS ) ?
-                           &spec->rss_context : NULL;
+  unsigned *rss_context = (params->spec->flags & EFX_FILTER_FLAG_RX_RSS ) ?
+                           &params->spec->rss_context : NULL;
 
 
   AUX_PRE(dev, auxdev, cli, nic, rc);
-  rc = auxdev->onload_ops->filter_redirect(cli, filter_id, spec->dmaq_id,
-                                    rss_context, stack_id);
+  rc = auxdev->onload_ops->filter_redirect(cli, filter_id,
+                                           params->spec->dmaq_id, rss_context,
+                                           stack_id);
   AUX_POST(dev, auxdev, cli, nic, rc);
 
   return rc;

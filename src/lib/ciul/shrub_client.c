@@ -2,7 +2,7 @@
 /* X-SPDX-Copyright-Text: (c) Copyright 2023 Advanced Micro Devices, Inc. */
 
 #include "ef_vi_internal.h"
-#include "shrub_client.h"
+#include <etherfabric/shrub_client.h>
 #include <etherfabric/internal/shrub_socket.h>
 
 /* Accessors for mapped memory */
@@ -88,6 +88,8 @@ void client_munmap(uint64_t* mappings, uintptr_t* files,
   for( i = 0; i < EF_SHRUB_FD_COUNT; ++i ) {
     if( mappings[i] != 0 )
       ef_shrub_socket_munmap(mappings[i], map_size(metrics, i), i);
+    /* Zero out memory so it doesn't get double freed */
+    mappings[i] = 0;
     ef_shrub_socket_close_file(files[i]);
   }
 }

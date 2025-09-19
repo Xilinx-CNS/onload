@@ -5,6 +5,7 @@
 #include <ci/driver/ci_ef10ct.h>
 #include <ci/efhw/nic.h>
 #include <ci/efhw/ef10ct.h>
+#include <ci/efhw/eventq_macros.h>
 #include <ci/efhw/efct_filters.h>
 #include <ci/efhw/iopage.h>
 #include <lib/efhw/aux.h>
@@ -15,6 +16,46 @@
 
 #if CI_HAVE_EF10CT
 
+static int ef10ct_nic_shared_evq_enable(struct efhw_nic *nic, int shared_ix)
+{
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  struct ef10ct_shared_kernel_evq *shared_evq = &ef10ct->shared[shared_ix];
+  struct efhw_evq_params params = {};
+  int rc, evq_num;
+
+  evq_num = ef10ct_get_queue_num(shared_evq->evq_id);
+
+  params.evq = evq_num;
+  params.n_pages = 1 << shared_evq->page_order;
+  params.evq_size = (params.n_pages << PAGE_SHIFT) / sizeof(efhw_event_t);
+  params.dma_addrs = shared_evq->iopages.dma_addrs;
+  params.virt_base = shared_evq->iopages.ptr;
+  params.wakeup_channel = shared_evq->channel;
+  /* Do we care about flags? */
+
+  rc = efhw_nic_event_queue_enable(nic, &params);
+  if( rc < 0 )
+    return rc;
+
+  /* After our EVQ is enabled, the NIC can start delivering events to it, so we
+   * want to be woken up when this happens. */
+  efhw_nic_wakeup_request(nic, NULL, evq_num, 0);
+
+  return 0;
+}
+
+static void ef10ct_nic_shared_evq_disable(struct efhw_nic *nic, int shared_ix)
+{
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  struct ef10ct_shared_kernel_evq *shared_evq = &ef10ct->shared[shared_ix];
+  int evq_num = ef10ct_get_queue_num(shared_evq->evq_id);
+  /* We don't use any flags that would enable time sync events on the shared
+   * event queues. */
+  int time_sync_events_enabled = 0;
+
+  efhw_nic_event_queue_disable(nic, evq_num, time_sync_events_enabled);
+}
+
 static void ef10ct_reset_suspend(struct efx_auxdev_client * client,
                                  struct efhw_nic *nic)
 {
@@ -22,6 +63,22 @@ static void ef10ct_reset_suspend(struct efx_auxdev_client * client,
 
   efrm_nic_reset_suspend(nic);
   ci_atomic32_or(&nic->resetting, NIC_RESETTING_FLAG_RESET);
+}
+
+
+static int ef10ct_retrieve_design_params(struct efx_auxdev_client *client,
+                                         struct efhw_nic_ef10ct *ef10ct)
+{
+  union efx_auxiliary_param_value val;
+  int rc;
+
+  val.design_params = &ef10ct->efx_design_params;
+  rc = ef10ct->edev->llct_ops->base_ops->get_param(client, EFX_DESIGN_PARAM,
+                                                   &val);
+  if( rc < 0 )
+    return rc;
+
+  return 0;
 }
 
 
@@ -127,14 +184,18 @@ static int ef10ct_resource_init(struct efx_auxdev *edev,
   int rc;
   int i;
 
-  val.design_params = &ef10ct->efx_design_params;
-  rc = edev->llct_ops->base_ops->get_param(client, EFX_DESIGN_PARAM, &val);
+  rc = ef10ct_retrieve_design_params(client, ef10ct);
   if( rc < 0 )
     return rc;
 
-  rc = efct_filter_state_init(&ef10ct->filter_state,
+  ef10ct->filter_state = efct_filter_state_init(
                               ef10ct->efx_design_params.num_filters,
                               ef10ct->efx_design_params.rx_queues);
+  if( IS_ERR(ef10ct->filter_state) ) {
+    rc = PTR_ERR(ef10ct->filter_state);
+    ef10ct->filter_state = NULL;
+    goto fail;
+  }
 
   res_dim->efhw_ops = &ef10ct_char_functional_units;
 
@@ -142,15 +203,17 @@ static int ef10ct_resource_init(struct efx_auxdev *edev,
   ef10ct->evq = vzalloc(sizeof(*ef10ct->evq) * ef10ct->evq_n);
   if( ! ef10ct->evq ) {
     rc = -ENOMEM;
-    goto fail;
+    goto fail0;
   }
 
   res_dim->vi_min = 0;
   res_dim->vi_lim = EF10CT_EVQ_DUMMY_MAX;
   res_dim->mem_bar = VI_RES_MEM_BAR_UNDEFINED;
 
-  for( i = 0; i < ef10ct->evq_n; i++ )
-    ef10ct->evq[i].txq = EF10CT_EVQ_NO_TXQ;
+  for( i = 0; i < ef10ct->evq_n; i++ ) {
+    ef10ct->evq[i].queue_num = EF10CT_QUEUE_NUM_NO_QUEUE;
+    ef10ct->evq[i].txq_num = EF10CT_QUEUE_NUM_NO_QUEUE;
+  }
 
   ef10ct->rxq_n = ef10ct->efx_design_params.rx_queues;
   ef10ct->rxq = vzalloc(sizeof(*ef10ct->rxq) * ef10ct->rxq_n);
@@ -159,7 +222,7 @@ static int ef10ct_resource_init(struct efx_auxdev *edev,
     goto fail1;
   }
   for( i = 0; i < ef10ct->rxq_n; i++ ) {
-    ef10ct->rxq[i].evq = -1;
+    ef10ct->rxq[i].evq_id = EF10CT_QUEUE_NUM_NO_QUEUE;
     mutex_init(&ef10ct->rxq[i].bind_lock);
   }
 
@@ -178,7 +241,9 @@ static int ef10ct_resource_init(struct efx_auxdev *edev,
 
   /* Shared evqs for rx vis. Need at least one for suppressed events */
   /* TODO ON-16670 determine how many more to add for interrupt affinity */
-  ef10ct->shared_n = 1;
+  /* Add a second shared evq, so that shared rxq which want interrupts can
+   * attach to. */
+  ef10ct->shared_n = 1 + 1;
   ef10ct->shared = vzalloc(sizeof(*ef10ct->shared) * ef10ct->shared_n);
   if( ! ef10ct->shared ) {
     rc = -ENOMEM;
@@ -193,8 +258,9 @@ fail2:
   vfree(ef10ct->rxq);
 fail1:
   vfree(ef10ct->evq);
+fail0:
+  efct_filter_state_free(ef10ct->filter_state);
 fail:
-  efct_filter_state_free(&ef10ct->filter_state);
   return rc;
 }
 
@@ -221,7 +287,7 @@ static void ef10ct_vi_allocator_dtor(struct efhw_nic_ef10ct *nic)
   efhw_stack_allocator_dtor(&nic->vi_allocator.rx);
 }
 
-static irqreturn_t ef10ct_irq_handler(int irq, void *dev)
+static irqreturn_t ef10ct_flush_irq_handler(int irq, void *dev)
 {
   struct ef10ct_shared_kernel_evq *shared_evq = dev;
   struct efhw_nic_ef10ct_evq *evq = shared_evq->evq;
@@ -234,13 +300,27 @@ static irqreturn_t ef10ct_irq_handler(int irq, void *dev)
   return IRQ_HANDLED;
 }
 
-static int ef10ct_init_shared_irq(struct ef10ct_shared_kernel_evq *evq)
+static irqreturn_t ef10ct_event_irq_handler(int irq, void *dev)
+{
+  struct ef10ct_shared_kernel_evq *shared_evq = dev;
+  struct efhw_nic_ef10ct_evq *evq = shared_evq->evq;
+
+  if (shared_evq->irq != irq)
+    return IRQ_NONE;
+
+  schedule_delayed_work(&evq->handle_event, 0);
+
+  return IRQ_HANDLED;
+}
+
+static int ef10ct_init_shared_irq(struct ef10ct_shared_kernel_evq *evq,
+                                  irq_handler_t handler)
 {
   /* FIXME ON-16187: Better interrupt naming */
   snprintf(evq->name, sizeof(evq->name), "ef10ct-%d",
            ef10ct_get_queue_num(evq->evq_id));
 
-  return request_irq(evq->irq, ef10ct_irq_handler, 0, evq->name, evq);
+  return request_irq(evq->irq, handler, 0, evq->name, evq);
 }
 
 static void ef10ct_fini_shared_irq(struct ef10ct_shared_kernel_evq *evq)
@@ -248,14 +328,15 @@ static void ef10ct_fini_shared_irq(struct ef10ct_shared_kernel_evq *evq)
   free_irq(evq->irq, evq);
 }
 
-static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid)
+static int ef10ct_nic_create_shared_evq(struct efhw_nic *nic, int shared_ix,
+                                        bool events)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct efhw_nic_ef10ct_evq *ef10ct_evq;
   uint page_order = 0; /* TODO: What should the size be? */
-  struct efhw_evq_params params = {};
   int evq_id, rc, evq_num;
-  struct ef10ct_shared_kernel_evq *shared_evq = &ef10ct->shared[qid];
+  struct ef10ct_shared_kernel_evq *shared_evq = &ef10ct->shared[shared_ix];
+  irq_handler_t handler;
 
   evq_id = ef10ct_alloc_evq(nic);
   if(evq_id < 0) {
@@ -274,27 +355,23 @@ static int ef10ct_nic_init_shared_evq(struct efhw_nic *nic, int qid)
   shared_evq->evq_id = evq_id;
   shared_evq->evq = &ef10ct->evq[evq_num];
 
-  rc = ef10ct_init_shared_irq(shared_evq);
+  handler = events ? ef10ct_event_irq_handler : ef10ct_flush_irq_handler;
+
+  rc = ef10ct_init_shared_irq(shared_evq, handler);
   if (rc < 0)
     goto fail_init_irq;
 
+  shared_evq->page_order = page_order;
   rc = efhw_iopages_alloc(nic, &shared_evq->iopages, page_order, 1, 0);
   if( rc )
     goto fail_iopages_alloc;
 
-  params.evq = evq_num;
-  params.n_pages = 1 << page_order;
-  params.evq_size = (params.n_pages << PAGE_SHIFT) / sizeof(efhw_event_t);
-  params.dma_addrs = shared_evq->iopages.dma_addrs;
-  params.virt_base = shared_evq->iopages.ptr;
-  params.wakeup_channel = shared_evq->channel;
-  /* Do we care about flags? */
+  memset(shared_evq->iopages.ptr, EFHW_CLEAR_EVENT_VALUE,
+         shared_evq->iopages.n_pages << PAGE_SHIFT);
 
-  rc = efhw_nic_event_queue_enable(nic, &params);
+  rc = ef10ct_nic_shared_evq_enable(nic, shared_ix);
   if( rc < 0 )
     goto fail_evq_enable;
-
-  efhw_nic_wakeup_request(nic, NULL, evq_num, 0);
 
   return 0;
 
@@ -310,19 +387,16 @@ fail_alloc_evq:
   return rc;
 }
 
-static void ef10ct_nic_free_shared_evq(struct efhw_nic *nic, int qid)
+static void ef10ct_nic_free_shared_evq(struct efhw_nic *nic, int shared_ix)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct ef10ct_shared_kernel_evq *shared_evq;
 
-  EFHW_ASSERT(qid >= 0);
-  EFHW_ASSERT(qid < ef10ct->shared_n);
-  shared_evq = &ef10ct->shared[qid];
+  EFHW_ASSERT(shared_ix >= 0);
+  EFHW_ASSERT(shared_ix < ef10ct->shared_n);
+  shared_evq = &ef10ct->shared[shared_ix];
 
-  /* Neither client_id nor time_sync_events_enabled are used for ef10ct */
-  efhw_nic_event_queue_disable(nic, ef10ct_get_queue_num(shared_evq->evq_id),
-                               0);
-
+  ef10ct_nic_shared_evq_disable(nic, shared_ix);
   ef10ct_free_evq(nic, shared_evq->evq_id);
   efhw_iopages_free(nic, &shared_evq->iopages);
   ef10ct_fini_shared_irq(shared_evq);
@@ -399,7 +473,10 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
 
   /* Init shared evqs for use with rx vis. */
   for( i = 0; i < ef10ct->shared_n; i++ ) {
-    rc = ef10ct_nic_init_shared_evq(nic, i);
+    /* TODO ON-16670 How to choose which evqs get interrupts. Currently the
+     * first shared evq on each interface will not be used for rx events, and
+     * any subsequent ones can be. */
+    rc = ef10ct_nic_create_shared_evq(nic, i, i != 0);
     if( rc < 0 ) {
       shared_n = i;
       goto fail4;
@@ -476,7 +553,7 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
   efrm_notify_nic_remove(nic);
 
   /* flush all outstanding dma queues */
-  efrm_nic_flush_all_queues(nic, 0);
+  efrm_nic_flush_all_queues(nic, EFRM_FLUSH_QUEUES_F_NONE);
 
   /* Disable/free all shared evqs. We do this even in the case that the NIC
    * is being reset, as some of the resources here are host side, such as
@@ -512,7 +589,7 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
    * the rest. */
   edev->llct_ops->base_ops->close(client);
 
-  efct_filter_state_free(&ef10ct->filter_state);
+  efct_filter_state_free(ef10ct->filter_state);
 
   /* iounmap the superbuf post registers */
   for (i = 0; i < ef10ct->rxq_n; i++)

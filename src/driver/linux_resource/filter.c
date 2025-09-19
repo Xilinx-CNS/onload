@@ -2110,13 +2110,20 @@ int efrm_filter_insert(struct efrm_client *client,
 {
 	struct efhw_nic *efhw_nic = efrm_client_get_nic(client);
 	struct net_device* net_dev;
+	struct efhw_filter_params params = {
+		.spec = spec,
+		.rxq = rxq,
+		.exclusive_rxq_token = pd_excl_owner,
+		.mask = mask,
+		.flags = flags,
+        };
 	int rc = 0;
 
 #if CI_CFG_IPV6
 	/* FIXME: add IPv6 support to firewall rules (bug 85208) */
 	if ( (spec->match_flags & EFX_FILTER_MATCH_ETHER_TYPE) &&
 	     (spec->ether_type == htons(ETH_P_IPV6)) ) {
-		return efhw_nic_filter_insert( efhw_nic, spec, rxq, pd_excl_owner, mask, flags );
+		return efhw_nic_filter_insert(efhw_nic, &params);
 	}
 #endif
 
@@ -2132,7 +2139,7 @@ int efrm_filter_insert(struct efrm_client *client,
 		}
 		dev_put(net_dev);
 		if ( rc >= 0 )
-			rc = efhw_nic_filter_insert( efhw_nic, spec, rxq, pd_excl_owner, mask, flags );
+			rc = efhw_nic_filter_insert(efhw_nic, &params);
 	}
 	else {
 		rc = -ENODEV;
@@ -2151,10 +2158,19 @@ EXPORT_SYMBOL(efrm_filter_remove);
 
 
 int efrm_filter_redirect(struct efrm_client *client, int filter_id,
-			 struct efx_filter_spec *spec)
+			 struct efx_filter_spec *spec, int *rxq,
+                         unsigned token, const struct cpumask *mask,
+                         unsigned flags)
 {
 	struct efhw_nic *efhw_nic = efrm_client_get_nic(client);
-	return efhw_nic_filter_redirect(efhw_nic, filter_id, spec);
+	struct efhw_filter_params params = {
+		.spec = spec,
+		.rxq = rxq,
+		.exclusive_rxq_token = token,
+		.mask = mask,
+		.flags = flags,
+        };
+	return efhw_nic_filter_redirect(efhw_nic, filter_id, &params);
 }
 EXPORT_SYMBOL(efrm_filter_redirect);
 

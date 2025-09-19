@@ -26,6 +26,7 @@ NET_OPT=
 CHAR_OPT=
 LOAD_CONFIG=false
 PROBE_CP_SERVER_PATH=true
+PROBE_SHRUB_CONTROLLER_PATH=true
 LINUX_NET="sfc"
 USER_NET="xilinx_efct"
 WANT_NET=true
@@ -162,6 +163,12 @@ get_cp_server_path() {
   echo "${EF_BUILDTREE_UL}/tools/cplane/onload_cp_server"
 }
 
+get_shrub_controller_path() {
+  # The path defaults to /sbin/shrub_controller, so we need to fix this up when
+  # loading from a developer build.
+  echo "${EF_BUILDTREE_UL}/tools/shrub_controller/shrub_controller"
+}
+
 
 ######################################################################
 
@@ -209,6 +216,10 @@ doonload () {
   if nm $DIR/onload.ko |grep -q -w cplane_track_xdp; then
     O_MOD_ARGS="cplane_track_xdp=yes ${O_MOD_ARGS}"
   fi
+
+  $PROBE_SHRUB_CONTROLLER_PATH && \
+    O_MOD_ARGS="shrub_controller_path=$(get_shrub_controller_path) ${O_MOD_ARGS}"
+
   loadmod onload $O_MOD_ARGS
   $LOAD_CONFIG && doonloadconfig
 }

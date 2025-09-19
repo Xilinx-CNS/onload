@@ -14,6 +14,7 @@
 
 #include "linux_resource_internal.h"
 #include "debugfs.h"
+#include "efct_filters_internal.h"
 
 
 #ifdef CONFIG_DEBUG_FS
@@ -79,7 +80,7 @@ static int
 efct_debugfs_read_efct_filter_state(struct seq_file *file, const void *data)
 {
   const struct efhw_nic_efct *efct = data;
-  const struct efct_filter_state *fs = &efct->filter_state;
+  const struct efct_filter_state *fs = efct->filter_state;
 
   return efct_debugfs_read_filter_state(file, efct->rxq_n, fs);
 }
@@ -88,7 +89,7 @@ static int
 efct_debugfs_read_ef10ct_filter_state(struct seq_file *file, const void *data)
 {
   const struct efhw_nic_ef10ct *ef10ct = data;
-  const struct efct_filter_state *fs = &ef10ct->filter_state;
+  const struct efct_filter_state *fs = ef10ct->filter_state;
 
   return efct_debugfs_read_filter_state(file, ef10ct->rxq_n, fs);
 }

@@ -74,13 +74,13 @@ jobs:
     steps:
 
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         sparse-checkout: |
           scripts/onload-user.Dockerfile
 
     - name: Get mkdist tarball
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v5
       with:
         name: ${{ needs.mkdist-caller.outputs.dir }}
 
@@ -148,7 +148,7 @@ jobs:
     steps:
 
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         sparse-checkout: |
           scripts/onload-user.Dockerfile

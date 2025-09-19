@@ -902,7 +902,7 @@ static void ef10_vi_initialise_ops(ef_vi* vi)
 }
 
 
-void ef10_vi_init(ef_vi* vi)
+int ef10_vi_init(ef_vi* vi)
 {
   /* XXX: bug31845: need to push a descriptor to enable checksum
    * offload to be similar to seina.  According to comment3 on
@@ -930,6 +930,8 @@ void ef10_vi_init(ef_vi* vi)
   /* EF10 doesn't use phase bits in event queues */
   vi->evq_phase_bits = 0;
   ef10_vi_initialise_ops(vi);
+
+  return 0;
 }
 
 

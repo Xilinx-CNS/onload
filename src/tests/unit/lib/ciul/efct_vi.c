@@ -216,7 +216,9 @@ static void efct_mock_free(ef_vi* vi, int qid, int sbid)
     STATE_CHECK(ops, free_sbid, ops->rxqs->q[qid].shared_sbid_to_free);
 }
 
-static int efct_mock_attach(ef_vi* vi, int qid, int buf_fd, unsigned n_superbufs, bool shared_mode)
+static int efct_mock_attach(ef_vi* vi, int qid, int buf_fd,
+                            unsigned n_superbufs, bool shared_mode,
+                            bool interrupt_mode)
 {
   struct efct_mock_ops* ops = mock_ops(vi);
 
@@ -285,7 +287,7 @@ static struct efct_test* efct_test_init_test(int q_max, int arch, int nic_flags)
   vi->ep_state = &t->ep_state;
   vi->nic_type.arch = arch;
   vi->nic_type.nic_flags = nic_flags;
-  efct_vi_init(vi);
+  assert(efct_vi_init(vi) == 0);
 
   mock_ops->rxqs = &t->mock_rxqs;
   mock_ops->ops.available = efct_mock_available;
@@ -344,6 +346,7 @@ efct_test_init_tx_default(int q_max, int evq_size, int txq_size, int arch,
                           int nic_flags)
 {
   struct efct_test* t = efct_test_init_test(q_max, arch, nic_flags);
+  const int aperture_size = 4096;
 
   assert(EF_VI_IS_POW2(evq_size));
   t->vi->evq_mask = evq_size * 8 - 1;
@@ -362,8 +365,10 @@ efct_test_init_tx_default(int q_max, int evq_size, int txq_size, int arch,
   assert(t->vi->vi_txq.ids);
   t->vi->tx_push_thresh = 0;
 
-  t->vi->vi_txq.efct_aperture_mask = (4096 - 1) >> 3;
-  t->vi->vi_ctpio_mmap_ptr = calloc(4096, sizeof(uint8_t));
+  t->vi->vi_txq.efct_aperture_mask =
+    efct_tx_scale_offset_bytes(aperture_size - 1);
+  assert(posix_memalign((void**)&t->vi->vi_ctpio_mmap_ptr, EF_VI_DMA_ALIGN,
+                        aperture_size * sizeof(uint8_t)) == 0);
   assert(t->vi->vi_ctpio_mmap_ptr != NULL);
 
   STATE_STASH(t->vi);

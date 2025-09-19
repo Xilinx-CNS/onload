@@ -89,6 +89,18 @@ void oof_onload_hwport_removed(efab_tcp_driver_t* drv, int hwport)
 }
 
 
+static void oof_onload_hwport_up(unsigned *property, int hwport,
+                                 bool new_support)
+{
+  /* Clear old value */
+  *property &= ~(1 << hwport);
+
+  /* Set new value */
+  if( new_support )
+    *property |= 1 << hwport;
+}
+
+
 void oof_onload_hwport_up_down(efab_tcp_driver_t* drv, int hwport, int up,
                                unsigned flags, int sync)
 {
@@ -99,19 +111,18 @@ void oof_onload_hwport_up_down(efab_tcp_driver_t* drv, int hwport, int up,
   mutex_lock(&manager->ofnm_lock);
 
   if( up ) {
-    /* Reset hwport capabilities when bringing it up */
-    manager->ofnm_hwports_mcast_replicate_capable &= ~(1 << hwport);
-    manager->ofnm_hwports_vlan_filters &= ~(1 << hwport);
-
     /* Now mark it up and set capabilities based on new information */
     manager->ofnm_hwports_up |= 1 << hwport;
     manager->ofnm_hwports_down &= ~(1 << hwport);
-    if( flags & OOF_HWPORT_FLAG_MCAST_REPLICATE )
-      manager->ofnm_hwports_mcast_replicate_capable |= 1 << hwport;
-    if( flags & OOF_HWPORT_FLAG_VLAN_FILTERS )
-      manager->ofnm_hwports_vlan_filters |= 1 << hwport;
-    if( flags & OOF_HWPORT_FLAG_NO_5TUPLE )
-      manager->ofnm_hwports_no5tuple |= 1 << hwport;
+
+    oof_onload_hwport_up(&manager->ofnm_hwports_mcast_replicate_capable,
+                         hwport, flags & OOF_HWPORT_FLAG_MCAST_REPLICATE);
+    oof_onload_hwport_up(&manager->ofnm_hwports_vlan_filters, hwport,
+                         flags & OOF_HWPORT_FLAG_VLAN_FILTERS);
+    oof_onload_hwport_up(&manager->ofnm_hwports_no5tuple, hwport,
+                         flags & OOF_HWPORT_FLAG_NO_5TUPLE);
+    oof_onload_hwport_up(&manager->ofnm_hwports_rx_shared, hwport,
+                         flags & OOF_HWPORT_FLAG_RX_SHARED);
   }
   else {
     manager->ofnm_hwports_up &= ~(1 << hwport);
@@ -288,6 +299,8 @@ oof_onload_init_hwport_state_locked(struct oo_filter_ns_manager* manager,
       flags |= OOF_HWPORT_FLAG_VLAN_FILTERS;
     if( manager->ofnm_hwports_no5tuple & (1 << i) )
       flags |= OOF_HWPORT_FLAG_NO_5TUPLE;
+    if( manager->ofnm_hwports_rx_shared & (1 << i) )
+      flags |= OOF_HWPORT_FLAG_RX_SHARED;
 
     if( manager->ofnm_hwports_up & (1 << i) ) {
       oof_hwport_up_down(fns->ofn_filter_manager, i, 1, flags, 1);

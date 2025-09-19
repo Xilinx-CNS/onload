@@ -17,6 +17,7 @@
  */
 
 #include "efsend_common.h"
+#include <signal.h>
 
 #include <etherfabric/pd.h>
 #include <etherfabric/memreg.h>
@@ -44,7 +45,7 @@ static int parse_opts(int argc, char* argv[], enum ef_pd_flags *pd_flags_out,
 
 static int                cfg_local_port = LOCAL_PORT;
 static int                cfg_payload_len = DEFAULT_PAYLOAD_SIZE;
-static int                cfg_iter = 10;
+static uint64_t           cfg_iter = 10;
 static int                cfg_usleep = 0;
 static int                cfg_loopback = 0;
 static int                cfg_disable_tx_push;
@@ -52,9 +53,10 @@ static int                cfg_use_vf;
 static int                cfg_max_batch = 8192;
 static int                cfg_vlan = -1;
 static bool               cfg_ctpio = false;
-static int                n_sent;
-static int                n_pushed;
+static uint64_t           n_sent;
+static uint64_t           n_pushed;
 static int                ifindex;
+static bool               abort_test = false;
 
 static void handle_completions(ef_vi *vi)
 {
@@ -70,7 +72,7 @@ static void handle_completions(ef_vi *vi)
         /* One TX event can signal completion of multiple TXs */
         n_unbundled = ef_vi_transmit_unbundle(vi, &evs[i], ids);
         for ( j = 0; j < n_unbundled; ++j )
-          TEST(ids[j] == n_sent + j);
+          TEST(ids[j] == (uint16_t)(n_sent + j));
         n_sent += n_unbundled;
         break;
       default:
@@ -81,12 +83,17 @@ static void handle_completions(ef_vi *vi)
   /* No events yet is entirely acceptable */
 }
 
+static uint16_t pkt_num_to_dma_id(uint64_t pkt_num) {
+    return (uint16_t)pkt_num;
+}
+
 static
-int send_more_packets_ctpio(int desired, ef_vi* vi, const void* host_buf_addr,
+int send_more_packets_ctpio(uint64_t desired, ef_vi* vi,
+                            const void* host_buf_addr,
                             ef_addr dma_buf_addr, int tx_frame_len)
 {
   int i;
-  int to_send = CI_MIN(cfg_max_batch, desired);
+  uint64_t to_send = CI_MIN(cfg_max_batch, desired);
   int space = ef_vi_transmit_space_bytes(vi);
 
   to_send = CI_MIN(to_send, space / tx_frame_len);
@@ -98,7 +105,7 @@ int send_more_packets_ctpio(int desired, ef_vi* vi, const void* host_buf_addr,
                          EF_VI_CTPIO_CT_THRESHOLD_SNF);
     /* Also post a fallback */
     int rc = ef_vi_transmit_ctpio_fallback(vi, dma_buf_addr, tx_frame_len,
-                                           n_pushed + i);
+                                           pkt_num_to_dma_id(n_pushed + i));
     if( rc == -EAGAIN )
       break;
     TRY(rc);
@@ -108,17 +115,21 @@ int send_more_packets_ctpio(int desired, ef_vi* vi, const void* host_buf_addr,
 }
 
 static
-int send_more_packets_dma(int desired, ef_vi* vi, const void* host_buf_addr,
+int send_more_packets_dma(uint64_t desired, ef_vi* vi, const void* host_buf_addr,
                           ef_addr dma_buf_addr, int tx_frame_len)
 {
   int i;
-  int to_send = cfg_max_batch < desired ? cfg_max_batch : desired;
+  uint64_t to_send = cfg_max_batch < desired ? cfg_max_batch : desired;
+
+  if( to_send < 0 )
+    to_send = cfg_max_batch;
 
   /* This is sending the same packet buffer over and over again.
    * a real application would usually send new data. */
   for( i = 0; i < to_send; ++i ) {
+    /* use 16-bit dma_id to avoid the invalid 0xffffffff value */
     int rc = ef_vi_transmit_init(vi, dma_buf_addr, tx_frame_len,
-                                 n_pushed + i);
+                                 pkt_num_to_dma_id(n_pushed + i));
     if( rc == -EAGAIN )
       break;
     TRY(rc);
@@ -132,6 +143,11 @@ int send_more_packets_dma(int desired, ef_vi* vi, const void* host_buf_addr,
   return i;
 }
 
+static void abort_signal(int signum, siginfo_t *p_siginfo, void *p_context)
+{
+  abort_test = true;
+}
+
 int main(int argc, char* argv[])
 {
   ef_vi vi;
@@ -140,20 +156,19 @@ int main(int argc, char* argv[])
   ef_memreg mr;
   void* p;
   ef_addr dma_buf_addr;
-  /* Use Express datapath as default for X4 interfaces. For NICs which
-   * don't have multiple datapaths, parse_interface_with_flags() (called
-   * by parse_opts() ) will clear this from pd_flags */
-  enum ef_pd_flags pd_flags = EF_PD_EXPRESS;
+  enum ef_pd_flags pd_flags = EF_PD_DEFAULT;
   enum ef_vi_flags vi_flags = EF_VI_FLAGS_DEFAULT;
   unsigned long min_page_size, ctpio_only;
   size_t alloc_size;
   int tx_frame_len;
-  int (*send_more_packets)(int, ef_vi*, const void*, ef_addr, int);
+  int (*send_more_packets)(uint64_t, ef_vi*, const void*, ef_addr, int);
   struct timespec start_ts;
   struct timespec end_ts;
   long   delta_ms;
   double pkt_rate_mpps;
   double bw_mbps;
+
+  struct sigaction sigact;
 
   /* open EF_VI driver handle */
   TRY(ef_driver_open(&dh));
@@ -216,10 +231,14 @@ int main(int argc, char* argv[])
   else
     send_more_packets = send_more_packets_dma;
 
+  sigact.sa_sigaction = abort_signal;
+  sigact.sa_flags = SA_SIGINFO;
+  sigaction(SIGINT, &sigact, 0);
+
   clock_gettime(CLOCK_MONOTONIC, &start_ts);
 
   /* Continue until all sends are complete */
-  while( n_sent < cfg_iter ) {
+  while( (n_sent < cfg_iter) && !abort_test ) {
     /* Try to push up to the requested iterations, likely fewer get sent */
     n_pushed += send_more_packets(cfg_iter - n_pushed, &vi, p,
                                   dma_buf_addr, tx_frame_len);
@@ -228,19 +247,21 @@ int main(int argc, char* argv[])
     if( cfg_usleep )
       usleep(cfg_usleep);
   }
-  TEST(n_pushed == cfg_iter);
+
+  if( !abort_test )
+    TEST(n_pushed == cfg_iter);
 
   clock_gettime(CLOCK_MONOTONIC, &end_ts);
 
   delta_ms = (end_ts.tv_sec - start_ts.tv_sec) * 1000;
   delta_ms += (end_ts.tv_nsec - start_ts.tv_nsec) / 1e6;
 
-  printf("Sent %d packets\n", cfg_iter);
+  printf("Sent %ld packets\n", n_pushed);
 
   if( delta_ms == 0 ) {
     printf("Time: 0.000 seconds\n");
   } else {
-    pkt_rate_mpps = cfg_iter / (delta_ms * 1.0e3);
+    pkt_rate_mpps = n_pushed / (delta_ms * 1.0e3);
     bw_mbps = pkt_rate_mpps * tx_frame_len * 8;
 
     printf("Time: %ld.%03ld seconds\n", delta_ms / 1000, delta_ms % 1000);
@@ -257,7 +278,9 @@ void usage(void)
 {
   common_usage();
 
+  fprintf(stderr, "  -n                  - number of packets to send (negative = unlimited)\n");
   fprintf(stderr, "  -b                  - enable loopback on the VI\n");
+  fprintf(stderr, "  -p                  - enable physical address mode\n");
   fprintf(stderr, "  -t                  - disable tx push (on by default)\n");
   fprintf(stderr, "  -B                  - maximum send batch size\n");
   fprintf(stderr, "  -s                  - microseconds to sleep between batches\n");
@@ -277,10 +300,10 @@ static int parse_opts(int argc, char *argv[], enum ef_pd_flags *pd_flags_out,
 {
   int c;
 
-  while((c = getopt(argc, argv, "n:m:s:B:l:V:btvxc")) != -1)
+  while((c = getopt(argc, argv, "n:m:s:B:l:V:bptvxc")) != -1)
     switch( c ) {
     case 'n':
-      cfg_iter = atoi(optarg);
+      cfg_iter = (uint64_t)atoll(optarg);
       break;
     case 'm':
       cfg_payload_len = atoi(optarg);
@@ -299,6 +322,9 @@ static int parse_opts(int argc, char *argv[], enum ef_pd_flags *pd_flags_out,
       break;
     case 'b':
       cfg_loopback = 1;
+      break;
+    case 'p':
+      *pd_flags_out |= EF_PD_PHYS_MODE;
       break;
     case 't':
       cfg_disable_tx_push = 1;

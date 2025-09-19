@@ -229,6 +229,8 @@ static void oo_hwport_up(struct oo_nic* onic, int up)
   if( !(efhw_nic->filter_flags & NIC_FILTER_FLAG_RX_TYPE_IP_FULL) &&
       !(efhw_nic->filter_flags & NIC_FILTER_FLAG_IP_FULL_SW) )
     flags |= OOF_HWPORT_FLAG_NO_5TUPLE;
+  if( efhw_nic->flags & NIC_FLAG_RX_SHARED )
+    flags |= OOF_HWPORT_FLAG_RX_SHARED;
 
   oof_onload_hwport_up_down(&efab_tcp_driver, oo_nic_hwport(onic), up,
                             flags, 0);

@@ -220,7 +220,7 @@ static void ef10_reset_resume(struct efx_auxdev_client * client,
 
   /* Remove record on queue initialization from before a reset
    * No hardware operation will be performed */
-  efrm_nic_flush_all_queues(nic, EFRM_FLUSH_QUEUES_F_NOHW |
+  efrm_nic_flush_all_queues(nic, EFRM_FLUSH_QUEUES_F_NO_HW |
                                  EFRM_FLUSH_QUEUES_F_INJECT_EV);
 
   nic->resetting = 0;
@@ -421,7 +421,7 @@ void ef10_remove(struct auxiliary_device *auxdev)
   efrm_notify_nic_remove(nic);
 
   /* flush all outstanding dma queues */
-  efrm_nic_flush_all_queues(nic, 0);
+  efrm_nic_flush_all_queues(nic, EFRM_FLUSH_QUEUES_F_NONE);
 
   lnic->drv_device = NULL;
 

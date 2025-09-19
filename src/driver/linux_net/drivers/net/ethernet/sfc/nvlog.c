@@ -242,7 +242,7 @@ out:
 }
 
 int efx_nvlog_do(struct efx_nic *efx, struct efx_nvlog_data *nvlog_data,
-		 u32 type, bool read, bool clear)
+		 u32 type, unsigned int flags)
 {
 	int rc;
 	size_t size, erase_size, write_size;
@@ -254,7 +254,7 @@ int efx_nvlog_do(struct efx_nic *efx, struct efx_nvlog_data *nvlog_data,
 	if (rc)
 		return rc;
 
-	if (read) {
+	if (flags & EFX_NVLOG_F_READ) {
 		/* Get nvlog */
 		rc = efx_nvlog_read(efx, nvlog_data, type, size);
 		if (rc)
@@ -265,7 +265,7 @@ int efx_nvlog_do(struct efx_nic *efx, struct efx_nvlog_data *nvlog_data,
 			return rc;
 	}
 
-	if (clear)
+	if (flags & EFX_NVLOG_F_CLEAR)
 		rc = efx_nvlog_erase(efx, type, size, erase_size);
 	return rc;
 }

@@ -62,8 +62,10 @@ extern int  efrm_filter_insert(struct efrm_client *,
 				   unsigned pd_excl_token, const struct cpumask *mask,
 				   unsigned flags);
 extern void efrm_filter_remove(struct efrm_client *, int filter_id);
-extern int efrm_filter_redirect(struct efrm_client *,
-				int filter_id, struct efx_filter_spec *spec);
+extern int efrm_filter_redirect(struct efrm_client *, int filter_id,
+				struct efx_filter_spec *spec, int *rxq,
+				unsigned pd_excl_token,
+				const struct cpumask *mask, unsigned flags);
 extern int efrm_filter_query(struct efrm_client *, int filter_id, int *rxq,
                              int *hw_id, int* flags);
 extern int efrm_filter_block_kernel(struct efrm_client *client, int flags,

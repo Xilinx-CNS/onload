@@ -206,7 +206,7 @@
 /* ******************************************************************** 
  */
 
-extern void ef10_vi_init(ef_vi*) EF_VI_HF;
+extern int ef10_vi_init(ef_vi*) EF_VI_HF;
 
 extern void ef10_ef_eventq_prime(ef_vi*);
 extern void ef10_ef_eventq_prime_bug35388_workaround(ef_vi*);
@@ -231,16 +231,16 @@ extern void ef100_ef_eventq_timer_run(ef_vi*, unsigned v);
 extern void ef100_ef_eventq_timer_clear(ef_vi*);
 extern void ef100_ef_eventq_timer_zero(ef_vi*);
 
-extern void efxdp_vi_init(ef_vi*) EF_VI_HF;
+extern int efxdp_vi_init(ef_vi*) EF_VI_HF;
 extern long efxdp_vi_mmap_bytes(ef_vi*);
 
-extern void efct_vi_init(ef_vi*) EF_VI_HF;
+extern int efct_vi_init(ef_vi*) EF_VI_HF;
 extern int efct_kbufs_init(ef_vi*) EF_VI_HF;
 extern int efct_ubufs_init(ef_vi*, ef_pd*, ef_driver_handle) EF_VI_HF;
 extern void* efct_ubufs_alloc_mem(size_t) EF_VI_HF;
 extern void efct_ubufs_free_mem(void*) EF_VI_HF;
 extern void efct_ubufs_post_kernel(ef_vi*, int, int, bool) EF_VI_HF;
-extern int efct_ubufs_init_rxq_resource(ef_vi*, int, unsigned,
+extern int efct_ubufs_init_rxq_resource(ef_vi*, int, unsigned, bool,
                                         efch_resource_id_t*) EF_VI_HF;
 extern void efct_ubufs_free_resource(ef_vi*, efch_resource_id_t) EF_VI_HF;
 extern int efct_ubufs_init_rxq_buffers(ef_vi* vi, int ix, int fd,
@@ -318,5 +318,15 @@ extern int
 ef_shrub_client_refresh_mappings(const struct ef_shrub_client* client,
                                  uint64_t user_superbuf,
                                  uint64_t* user_mappings);
+
+typedef uint64_t efct_tx_aperture_t;
+ci_inline uint64_t efct_tx_scale_offset_bytes(uint64_t offset_bytes)
+{
+  /* When transmitting with efct, we track the offset in the aperture as the
+   * number of writes performed to the aperture multiplied by the size of the
+   * aperture. As such, we should scale any offset in bytes by the size of
+   * the aperture's type. */
+  return offset_bytes / sizeof(efct_tx_aperture_t);
+}
 
 #endif  /* __CI_EF_VI_INTERNAL_H__ */

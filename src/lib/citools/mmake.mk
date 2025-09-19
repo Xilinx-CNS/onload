@@ -11,7 +11,6 @@ LIB_SRCS	:= \
 		crc16.c \
 		crc32.c \
 		toeplitz.c \
-		cpu_features.c \
 		dllist.c \
 		eth_addr.c \
 		fail.c \
@@ -47,6 +46,7 @@ LIB_SRCS	+= drv_log_fn.c memleak_debug.c
 else
 LIB_SRCS	+= get_cpu_khz.c log_fn.c log_file.c
 LIB_SRCS	+= glibc_version.c
+LIB_SRCS	+= onload_server.c
 endif
 
 
@@ -58,9 +58,6 @@ LIB_OBJS	 := $(LIB_SRCS:%.c=$(MMAKE_OBJ_PREFIX)%.o)
 ifeq (${PLATFORM},gnu_x86_64)
 MMAKE_CFLAGS	+= -mpclmul -msse4.1
 endif
-
-# Only needed for i386 
-LIB_OBJS	+=  ci_tools_cas64u.o
 
 all: $(TARGET)
 

@@ -1345,6 +1345,9 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
   if( (s = getenv("EF_SHRUB_BUFFER_COUNT")) )
     opts->shrub_buffer_count = atoi(s);
 
+  if( (s = getenv("EF_SHRUB_DEBUG")) )
+    opts->shrub_debug = atoi(s);
+
 }
 
 
@@ -2027,6 +2030,7 @@ static int spawn_shrub_controller(ci_netif* ni)
   ci_assert(NI_OPTS(ni).shrub_controller_id >= 0);
 
   shrub_args.controller_id = NI_OPTS(ni).shrub_controller_id;
+  shrub_args.debug = NI_OPTS(ni).shrub_debug;
   return oo_resource_op(fp, OO_IOC_SHRUB_SPAWN_SERVER, &shrub_args);
 }
 
@@ -2043,6 +2047,20 @@ static int set_shrub_sockets(ci_netif* ni, int shrub_socket_id, uint32_t intf_i)
   return oo_resource_op(fp, OO_IOC_SHRUB_SET_SOCKETS, &shrub_args);
 }
 
+static int set_shrub_token(ci_netif *ni, int shrub_socket_id, uint32_t intf)
+{
+  ci_fd_t fp = ci_netif_get_driver_handle(ni);
+  shrub_socket_ioctl_data_t shrub_args = {0};
+
+  ci_assert(NI_OPTS(ni).shrub_controller_id >= 0);
+  ci_assert(shrub_socket_id >= 0);
+
+  shrub_args.controller_id = NI_OPTS(ni).shrub_controller_id;
+  shrub_args.intf_i = intf;
+  shrub_args.shrub_socket_id = shrub_socket_id;
+  return oo_resource_op(fp, OO_IOC_SHRUB_SET_TOKEN, &shrub_args);
+}
+
 int oo_send_shrub_request(int controller_id,
                           shrub_controller_request_t *request) {
   int rc;
@@ -2050,25 +2068,25 @@ int oo_send_shrub_request(int controller_id,
   int client_fd;
   struct sockaddr_un addr;
   char socket_path[EF_SHRUB_NEGOTIATION_SOCKET_LEN];
+  socklen_t addr_len;
 
   ci_assert(controller_id >= 0);
 
-  rc = snprintf(socket_path, sizeof(socket_path), EF_SHRUB_CONTROLLER_PATH_FORMAT
-                "%s", EF_SHRUB_SOCK_DIR_PATH, controller_id,
-                EF_SHRUB_NEGOTIATION_SOCKET);
+  rc = snprintf(socket_path, sizeof(socket_path),
+                EF_SHRUB_CONTROLLER_PATH_FORMAT "%s", EF_SHRUB_SOCK_DIR_PATH,
+                controller_id, EF_SHRUB_NEGOTIATION_SOCKET);
   if ( rc < 0 || rc >= sizeof(socket_path) )
     return -EINVAL;
+
+  rc = ci_init_unix_addr(socket_path, &addr, &addr_len);
+  if( rc < 0 )
+    return rc;
 
   client_fd = ci_sys_socket(AF_UNIX, SOCK_SEQPACKET, 0);
   if ( client_fd == -1 )
     return -errno;
 
-  memset(&addr, 0, sizeof(addr));
-  addr.sun_family = AF_UNIX;
-  strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
-  addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
-
-  rc = ci_sys_connect(client_fd, (struct sockaddr *)&addr, sizeof(addr));
+  rc = ci_sys_connect(client_fd, (struct sockaddr *)&addr, addr_len);
   if ( rc < 0 ) {
     rc = -errno;
     goto clean_exit;
@@ -2097,20 +2115,47 @@ clean_exit:
 static int oo_init_shrub(ci_netif* ni, ef_vi* vi, ci_hwport_id_t hw_port, int nic_i) {
   int rc = 0;
   int shrub_socket_id = -1;
+  int i;
 #ifndef __KERNEL__
   if ( NI_OPTS(ni).shrub_controller_id >= 0 ) {
-      rc = spawn_shrub_controller(ni);
-      if( rc < 0 )
-        return rc;
-
+      /* Try requesting first, as there might be an existing shrub controller.
+       * There's no reliable way to detect whether there's a listening
+       * controller already, so we try and connect, and if we fail, try
+       * spawning one at that point. */
       shrub_socket_id = shrub_adapter_send_hwport(
         oo_send_shrub_request,
         NI_OPTS(ni).shrub_controller_id,
         hw_port,
         NI_OPTS(ni).shrub_buffer_count
       );
+
+      /* No listening socket, try spawning */
+      if( (shrub_socket_id == -ECONNREFUSED) ||
+          (shrub_socket_id == -ENOENT) ) {
+        LOG_NC(ci_log("%s: send to shrub failed, trying spawn", __func__));
+        rc = spawn_shrub_controller(ni);
+        if( rc < 0 )
+          return rc;
+
+        /* Now retry */
+        for( i = 0; i < 200; i++ ) {
+          shrub_socket_id = shrub_adapter_send_hwport(oo_send_shrub_request,
+                                              NI_OPTS(ni).shrub_controller_id,
+                                              hw_port,
+                                              NI_OPTS(ni).shrub_buffer_count);
+          if( (shrub_socket_id >= 0) ||
+              ((shrub_socket_id != -ECONNREFUSED) &&
+               (shrub_socket_id != -ENOENT)) )
+            break;
+          usleep(1000 * 10); /* 10ms */
+        }
+      }
+
+      /* Failure at this point is now fatal */
       if ( shrub_socket_id < 0 ) {
         rc = shrub_socket_id;
+        LOG_U(ci_log("%s: retry of send after spawn failed (rc %d), giving up",
+                     __func__, rc));
         return rc;
       }
 
@@ -2119,6 +2164,13 @@ static int oo_init_shrub(ci_netif* ni, ef_vi* vi, ci_hwport_id_t hw_port, int ni
         return rc;
 
       efct_ubufs_set_shared(vi, NI_OPTS(ni).shrub_controller_id, rc);
+
+      rc = set_shrub_token(ni, shrub_socket_id, nic_i);
+      if (rc < 0)
+        return rc;
+
+      /* Nothing needs to be done with the userland vi, as filter insertion
+       * only takes place in the kernel. */
     }
 #endif
   return rc;
@@ -2207,7 +2259,6 @@ static void cleanup_ef_vi(ef_vi* vi)
     if ( vi->nic_type.arch == EFHW_ARCH_EF10CT ) {
       unmap_efct_ubuf_rxq_io_windows(vi);
     }
-    vi->efct_rxqs.ops->cleanup(vi);
   }
 }
 

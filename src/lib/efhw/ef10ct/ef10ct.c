@@ -17,6 +17,7 @@
 
 #include <ci/efhw/efct.h>
 #include <ci/efhw/efct_filters.h>
+#include <ci/efhw/efct_wakeup.h>
 #include <ci/efhw/ef10ct.h>
 #include <ci/efhw/mc_driver_pcol.h>
 
@@ -26,7 +27,6 @@
 #include "etherfabric/internal/internal.h"
 
 #include "../aux.h"
-#include "../ef10ct.h"
 #include "../sw_buffer_table.h"
 #include "../mcdi_common.h"
 #include "../ethtool_flow.h"
@@ -102,19 +102,18 @@ static uint64_t
 ef10ct_nic_supported_filter_flags(struct efhw_nic *nic)
 {
   int rc;
-  int num_matches;
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   EFHW_MCDI_DECLARE_BUF(in, MC_CMD_GET_PARSER_DISP_INFO_IN_LEN);
-  EFHW_MCDI_DECLARE_BUF(out, MC_CMD_GET_PARSER_DISP_INFO_OUT_LENMAX);
   struct efx_auxdev_rpc rpc = {
     .cmd = MC_CMD_GET_PARSER_DISP_INFO,
     .inlen = sizeof(in),
     .inbuf = (void *)in,
-    .outlen = sizeof(out),
-    .outbuf = (void *)out,
+    .outlen = sizeof(ef10ct->supported_filter_matches),
+    .outbuf = (void *)ef10ct->supported_filter_matches,
   };
 
   EFHW_MCDI_INITIALISE_BUF(in);
-  EFHW_MCDI_INITIALISE_BUF(out);
+  EFHW_MCDI_INITIALISE_BUF(ef10ct->supported_filter_matches);
 
   EFHW_MCDI_SET_DWORD(in, GET_PARSER_DISP_INFO_IN_OP,
                  MC_CMD_GET_PARSER_DISP_INFO_IN_OP_GET_SUPPORTED_LL_RX_MATCHES);
@@ -131,10 +130,12 @@ ef10ct_nic_supported_filter_flags(struct efhw_nic *nic)
     return 0;
   }
 
-  num_matches = EFHW_MCDI_VAR_ARRAY_LEN(rpc.outlen_actual,
-                                    GET_PARSER_DISP_INFO_OUT_SUPPORTED_MATCHES);
+  EFHW_ASSERT(EFHW_MCDI_VAR_ARRAY_LEN(rpc.outlen_actual,
+                GET_PARSER_DISP_INFO_OUT_SUPPORTED_MATCHES) ==
+              EFHW_MCDI_DWORD(ef10ct->supported_filter_matches,
+                GET_PARSER_DISP_INFO_OUT_NUM_SUPPORTED_MATCHES));
 
-  return mcdi_parser_info_to_filter_flags(out, num_matches);
+  return mcdi_parser_info_to_filter_flags(ef10ct->supported_filter_matches);
 }
 
 
@@ -179,7 +180,7 @@ ef10ct_nic_release_hardware(struct efhw_nic *nic)
  *
  *--------------------------------------------------------------------*/
 
-static void ef10ct_free_rxq(struct efhw_nic *nic, int qid)
+void ef10ct_free_rxq(struct efhw_nic *nic, int rxq_id)
 {
   int rc = 0;
   int rxq_num;
@@ -188,14 +189,14 @@ static void ef10ct_free_rxq(struct efhw_nic *nic, int qid)
   struct efx_auxdev_client* cli;
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
 
-  EFHW_TRACE("%s: qid %x", __func__, qid);
+  EFHW_TRACE("%s: rxq_id %x", __func__, rxq_id);
 
-  rxq_num = ef10ct_get_queue_num(qid);
+  rxq_num = ef10ct_get_queue_num(rxq_id);
   EFHW_ASSERT(mutex_is_locked(&ef10ct->rxq[rxq_num].bind_lock));
   EFHW_ASSERT(ef10ct->rxq[rxq_num].state == EF10CT_RXQ_STATE_FREEING);
 
   AUX_PRE(dev, edev, cli, nic, rc);
-  edev->llct_ops->rxq_free(cli, qid);
+  edev->llct_ops->rxq_free(cli, rxq_id);
   AUX_POST(dev, edev, cli, nic, rc);
 
   ef10ct->rxq[rxq_num].state = EF10CT_RXQ_STATE_FREE;
@@ -213,6 +214,25 @@ static int ef10ct_is_shared_evq(struct efhw_nic *nic, int evq_num)
   return false;
 }
 
+static struct ef10ct_shared_kernel_evq *
+ef10ct_get_shared_evq(struct efhw_nic *nic, int evq_num)
+{
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  int i;
+
+  for (i = 0; i < ef10ct->shared_n; i++)
+    if (ef10ct_get_queue_num(ef10ct->shared[i].evq_id) == evq_num)
+      return &ef10ct->shared[i];
+
+  return NULL;
+}
+
+/* NOTE: This is just a dumb function that scans through the entire event queue
+ * until it finds a flush event then returns. The proper way to handle the event
+ * queue is in `ef10ct_poll_evq` but that requires that `evq->next` (which acts
+ * as the evqptr) is updated prior to the flush being requested. Currently for
+ * queues managed by onload (txqs and exclusive rxqs) we have no mechanism to
+ * update `evq->next`, and so we fall back to using this function. */
 static int ef10ct_check_for_flushes_common(struct efhw_nic_ef10ct_evq *evq)
 {
   unsigned offset = evq->next;
@@ -278,21 +298,137 @@ static void ef10ct_check_for_flushes_polled(struct work_struct *work)
 
   rc = ef10ct_check_for_flushes_common(evq);
   if (rc == -EAGAIN) {
-    EFHW_ERR("%s: WARNING: No flush found, scheduling delayed work",
-             __FUNCTION__);
+    EFHW_TRACE("%s: WARNING: No flush found, scheduling delayed work",
+               __FUNCTION__);
     schedule_delayed_work(&evq->check_flushes_polled, 100);
   }
+}
+
+static int ef10ct_have_event(ci_qword_t *event, struct efhw_nic_ef10ct_evq *evq)
+{
+  int expect_phase = (evq->next & evq->capacity) != 0;
+  int actual_phase = CI_QWORD_FIELD(*event, EFCT_EVENT_PHASE);
+
+  return expect_phase == actual_phase;
+}
+
+#define MSB(type, val) ((8 * sizeof(type) - 1) - __builtin_clz(val))
+
+static int ef10ct_poll_evq(struct efhw_nic_ef10ct_evq *evq,
+                           bool *found_flush_out)
+{
+  ci_qword_t *event = &evq->base[evq->next & (evq->capacity - 1)];
+  struct efhw_nic_ef10ct *ef10ct;
+  int q_id;
+  int i = 0;
+  /* Flush complete events only reserve 8 bits for a queue id. This means that
+   * in order to free a valid queue handle, we will have to insert the queue
+   * type in the upper 8 bits of the handle. */
+  uint32_t queue_handle;
+  DECLARE_BITMAP(rxqs_with_events, 256) = {0};
+  size_t q_num;
+
+  while(ef10ct_have_event(event, evq) && i < evq->capacity) {
+    evq->next++;
+    if(CI_QWORD_FIELD(*event, EFCT_EVENT_TYPE) == EFCT_EVENT_TYPE_CONTROL &&
+       CI_QWORD_FIELD(*event, EFCT_CTRL_SUBTYPE) == EFCT_CTRL_EV_FLUSH) {
+      *found_flush_out = true;
+      q_id = CI_QWORD_FIELD(*event, EFCT_FLUSH_QUEUE_ID);
+      if(CI_QWORD_FIELD(*event, EFCT_FLUSH_TYPE) == EFCT_FLUSH_TYPE_TX) {
+        queue_handle = ef10ct_reconstruct_queue_handle(q_id,
+                                                  EF10CT_QUEUE_HANDLE_TYPE_TXQ);
+        efhw_handle_txdmaq_flushed(evq->nic, queue_handle);
+      } else /* EFCT_FLUSH_TYPE_RX */ {
+        queue_handle = ef10ct_reconstruct_queue_handle(q_id,
+                                                  EF10CT_QUEUE_HANDLE_TYPE_RXQ);
+        if (!ef10ct_is_shared_evq(evq->nic, evq->queue_num))
+          efhw_handle_efct_rxq_flushed(evq->nic, q_id);
+        ef10ct = evq->nic->arch_extra;
+        mutex_lock(&ef10ct->rxq[q_id].bind_lock);
+        ef10ct_free_rxq(evq->nic, queue_handle);
+        mutex_unlock(&ef10ct->rxq[q_id].bind_lock);
+      }
+      break;
+    }
+    else if (CI_QWORD_FIELD(*event, EFCT_EVENT_TYPE) == EFCT_EVENT_TYPE_RX &&
+             CI_QWORD_FIELD(*event, EFCT_RX_EVENT_FLOW_LOOKUP) == 1) {
+      struct efhw_nic_ef10ct_rxq *rxq;
+      uint32_t num_pkts;
+      uint32_t rxq_num;
+
+      rxq_num = CI_QWORD_FIELD(*event, EFCT_RX_EVENT_LABEL);
+      ef10ct = evq->nic->arch_extra;
+      rxq = &ef10ct->rxq[rxq_num];
+
+      __set_bit(rxq_num, rxqs_with_events);
+
+      if (CI_QWORD_FIELD(*event, EFCT_RX_EVENT_ROLLOVER)) {
+        rxq->pktix += EFCT_RX_SUPERBUF_PKTS;
+        rxq->pktix &= ~(EFCT_RX_SUPERBUF_PKTS - 1);
+        break;
+      }
+
+      num_pkts = CI_QWORD_FIELD(*event, EFCT_RX_EVENT_NUM_PACKETS);
+      rxq->pktix += num_pkts;
+
+    }
+
+    event = &evq->base[evq->next & (evq->capacity - 1)];
+    i++;
+  }
+
+  for_each_set_bit(q_num, rxqs_with_events, 256) {
+    struct efhw_nic_ef10ct_rxq *rxq;
+
+    ef10ct = evq->nic->arch_extra;
+
+    rxq = &ef10ct->rxq[q_num];
+
+    efct_handle_wakeup(evq->nic, &rxq->apps,
+                       rxq->pktix >> MSB(int, EFCT_RX_SUPERBUF_PKTS),
+                       rxq->pktix & (EFCT_RX_SUPERBUF_PKTS - 1),
+                       /* TODO ON-13849 - Proper budgeting */ 1024);
+  }
+
+  return 0;
 }
 
 static void ef10ct_check_for_flushes_irq(struct work_struct *work)
 {
   struct efhw_nic_ef10ct_evq *evq;
+  bool found_flush = false;
+  int next;
 
   evq = container_of(work, struct efhw_nic_ef10ct_evq,
                      check_flushes_irq.work);
 
-  ef10ct_check_for_flushes_common(evq);
-  efhw_nic_wakeup_request(evq->nic, NULL, evq->queue_num, evq->next);
+  if( atomic_read(&evq->queues_flushing) < 0 )
+    return;
+
+  ef10ct_poll_evq(evq, &found_flush);
+
+  /* We always re-prime here. In theory we could keep track of how many queues
+   * have flushes outstanding, and re-prime here only if there are outstanding
+   * flushes, and also prime each time we fini an attached RXQ. However, it's
+   * simplest to handle this by just keeping primed. If there are no events we
+   * just won't get any interrupts. */
+  next = evq->next & (evq->capacity - 1);
+  efhw_nic_wakeup_request(evq->nic, NULL, evq->queue_num, next);
+}
+
+static void ef10ct_handle_evq_event(struct work_struct *work)
+{
+  struct efhw_nic_ef10ct_evq *evq;
+  bool found_flush = false;
+  int next;
+
+  evq = container_of(work, struct efhw_nic_ef10ct_evq,
+                     handle_event.work);
+
+  ef10ct_poll_evq(evq, &found_flush);
+
+  next = evq->next & (evq->capacity - 1);
+  efhw_nic_wakeup_request(evq->nic, NULL, evq->queue_num, next);
 }
 
 static int ef10ct_irq_alloc(struct efhw_nic *nic, uint32_t *channel,
@@ -677,6 +813,8 @@ ef10ct_nic_event_queue_enable(struct efhw_nic *nic,
                       ef10ct_check_for_flushes_polled);
     INIT_DELAYED_WORK(&ef10ct_evq->check_flushes_irq,
                       ef10ct_check_for_flushes_irq);
+    INIT_DELAYED_WORK(&ef10ct_evq->handle_event,
+                      ef10ct_handle_evq_event);
   }
 
   return rc;
@@ -711,6 +849,7 @@ ef10ct_nic_event_queue_disable(struct efhw_nic *nic,
   atomic_set(&ef10ct_evq->queues_flushing, -1);
   cancel_delayed_work_sync(&ef10ct_evq->check_flushes_polled);
   cancel_delayed_work_sync(&ef10ct_evq->check_flushes_irq);
+  cancel_delayed_work_sync(&ef10ct_evq->handle_event);
 
   EFHW_MCDI_INITIALISE_BUF(in);
   EFHW_MCDI_SET_DWORD(in, FINI_EVQ_IN_INSTANCE, evq_id);
@@ -730,11 +869,27 @@ ef10ct_nic_wakeup_request(struct efhw_nic *nic, volatile void __iomem* io_page,
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   ci_dword_t dwrptr;
 
-  /* If we are using a dummy evq then return early. Posting an out of range evq
-   * value will lead to firmware crashes. wakeups for rxqs using a dummy evq
-   * should be handled via efhw_nic_shared_rxq_request_wakeup. */
-  if (vi_id >= ef10ct->evq_n)
-    return;
+  if (vi_id >= ef10ct->evq_n) {
+    struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+    struct ef10ct_shared_kernel_evq *shared_evq;
+    struct efhw_nic_ef10ct_evq *evq;
+
+    shared_evq = ef10ct_get_shared_evq(nic, vi_id);
+
+    /* If we are using a dummy evq AND the shared evq isn't mean to be used with
+     * rx event then leave early. */
+    /* TODO ON-16670 Properly determine which shared evqs have rx event
+     * suppression */
+    if (shared_evq == NULL || shared_evq == &ef10ct->shared[0]) {
+      return;
+    }
+
+    evq = shared_evq->evq;
+    /* Now that we have the actual evq that we want to prime, update the params
+     * to the appropriate values. */
+    vi_id = evq->queue_num;
+    rptr = evq->next & (evq->capacity - 1);
+  }
 
   __DWCHCK(ERF_HZ_READ_IDX);
   __RANGECHCK(rptr, ERF_HZ_READ_IDX_WIDTH);
@@ -761,7 +916,7 @@ int ef10ct_alloc_evq(struct efhw_nic *nic)
   return evq;
 }
 
-void ef10ct_free_evq(struct efhw_nic *nic, int evq)
+void ef10ct_free_evq(struct efhw_nic *nic, int evq_id)
 {
   struct efx_auxdev_client* cli;
   struct efx_auxdev* edev;
@@ -769,7 +924,7 @@ void ef10ct_free_evq(struct efhw_nic *nic, int evq)
   int rc = 0;
 
   AUX_PRE(dev, edev, cli, nic, rc);
-  edev->llct_ops->channel_free(cli, evq);
+  edev->llct_ops->channel_free(cli, evq_id);
   AUX_POST(dev, edev, cli, nic, rc);
 
   /* Failure here will only occur in the case that the NIC is unavailable.
@@ -777,7 +932,7 @@ void ef10ct_free_evq(struct efhw_nic *nic, int evq)
    * the upper layers will not restore it if the NIC comes back. */
 }
 
-static int ef10ct_alloc_txq(struct efhw_nic *nic)
+int ef10ct_alloc_txq(struct efhw_nic *nic)
 {
   struct efx_auxdev_client* cli;
   struct efx_auxdev* edev;
@@ -791,7 +946,7 @@ static int ef10ct_alloc_txq(struct efhw_nic *nic)
   return txq;
 }
 
-static void ef10ct_free_txq(struct efhw_nic *nic, int txq)
+void ef10ct_free_txq(struct efhw_nic *nic, int txq_id)
 {
   struct efx_auxdev_client* cli;
   struct efx_auxdev* edev;
@@ -799,11 +954,11 @@ static void ef10ct_free_txq(struct efhw_nic *nic, int txq)
   int rc = 0;
 
   AUX_PRE(dev, edev, cli, nic, rc);
-  edev->llct_ops->txq_free(cli, txq);
+  edev->llct_ops->txq_free(cli, txq_id);
   AUX_POST(dev, edev, cli, nic, rc);
 }
 
-static int ef10ct_alloc_rxq(struct efhw_nic *nic)
+int ef10ct_alloc_rxq(struct efhw_nic *nic)
 {
   struct efx_auxdev_client* cli;
   struct efx_auxdev* edev;
@@ -837,7 +992,7 @@ static int ef10ct_vi_alloc_hw(struct efhw_nic *nic,
   }
 
   evq_num = ef10ct_get_queue_num(evq_rc);
-  EFHW_ASSERT(ef10ct->evq[evq_num].txq == EF10CT_EVQ_NO_TXQ);
+  EFHW_ASSERT(ef10ct->evq[evq_num].txq_num == EF10CT_QUEUE_NUM_NO_QUEUE);
 
   if( evc->want_txq) {
     txq_rc = ef10ct_alloc_txq(nic);
@@ -847,7 +1002,7 @@ static int ef10ct_vi_alloc_hw(struct efhw_nic *nic,
       evq_rc = txq_rc;
     }
     else {
-      ef10ct->evq[evq_num].txq = txq_rc;
+      ef10ct->evq[evq_num].txq_num = ef10ct_get_queue_num(txq_rc);
     }
   }
 
@@ -900,7 +1055,7 @@ static int ef10ct_vi_alloc(struct efhw_nic *nic,
 static void ef10ct_vi_free_hw(struct efhw_nic *nic, int evq_num)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
-  int txq = ef10ct->evq[evq_num].txq;
+  int txq_num = ef10ct->evq[evq_num].txq_num;
   int evq_id;
 
   evq_id = ef10ct_reconstruct_queue_handle(evq_num,
@@ -910,11 +1065,13 @@ static void ef10ct_vi_free_hw(struct efhw_nic *nic, int evq_num)
 
   ef10ct_free_evq(nic, evq_id);
 
-  if( txq != EF10CT_EVQ_NO_TXQ) {
-    ef10ct_free_txq(nic, txq);
+  if( txq_num != EF10CT_QUEUE_NUM_NO_QUEUE ) {
+    int txq_id = ef10ct_reconstruct_queue_handle(txq_num,
+                                                 EF10CT_QUEUE_HANDLE_TYPE_TXQ);
+    ef10ct_free_txq(nic, txq_id);
   }
 
-  ef10ct->evq[evq_num].txq = EF10CT_EVQ_NO_TXQ;
+  ef10ct->evq[evq_num].txq_num = EF10CT_QUEUE_NUM_NO_QUEUE;
 }
 
 static void ef10ct_vi_free_sw(struct efhw_nic *nic, int evq_num)
@@ -958,23 +1115,26 @@ ef10ct_dmaq_tx_q_init(struct efhw_nic *nic,
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct efhw_nic_ef10ct_evq *ef10ct_evq;
   struct efx_auxdev_rpc rpc;
-  int evq_id, evq_num;
+  int evq_id, evq_num, txq_id, txq_num;
   int rc;
 
   evq_num = txq_params->evq;
   evq_id = ef10ct_reconstruct_queue_handle(evq_num,
                                            EF10CT_QUEUE_HANDLE_TYPE_EVQ);
   ef10ct_evq = &ef10ct->evq[evq_num];
-  EFHW_TRACE("%s: txq 0x%x evq 0x%x", __func__, ef10ct_evq->txq, evq_id);
+  txq_num = ef10ct_evq->txq_num;
+  txq_id = ef10ct_reconstruct_queue_handle(txq_num,
+                                           EF10CT_QUEUE_HANDLE_TYPE_TXQ);
+  EFHW_TRACE("%s: txq 0x%x evq 0x%x", __func__, txq_id, evq_id);
 
   EFHW_ASSERT(evq_num < ef10ct->evq_n);
-  EFHW_ASSERT(ef10ct_evq->txq != EFCT_EVQ_NO_TXQ);
+  EFHW_ASSERT(txq_num != EF10CT_QUEUE_NUM_NO_QUEUE);
 
   EFHW_MCDI_INITIALISE_BUF(in);
 
   EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_TARGET_EVQ, evq_id);
   EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_LABEL, txq_params->tag);
-  EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_INSTANCE, ef10ct_evq->txq);
+  EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_INSTANCE, txq_id);
   EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_PORT_ID, EVB_PORT_ID_ASSIGNED);
   /* FIXME ON-15570 - This value should match vi->vi_txq.ct_fifo_bytes +
    * EFCT_TX_ALIGNMENT + EFCT_TX_HEADER_BYTES */
@@ -994,7 +1154,7 @@ ef10ct_dmaq_tx_q_init(struct efhw_nic *nic,
 
   rc = ef10ct_fw_rpc(nic, &rpc);
   if( rc == 0 )
-    txq_params->qid_out = ef10ct_evq->txq;
+    txq_params->qid_out = txq_id;
 
   return rc;
 }
@@ -1083,7 +1243,7 @@ static int ef10ct_fini_rxq(struct efhw_nic *nic, int rxq_num)
 
   rc = ef10ct_fw_rpc(nic, &rpc);
 
-  evq_id = ef10ct->rxq[rxq_num].evq;
+  evq_id = ef10ct->rxq[rxq_num].evq_id;
   ef10ct_evq = &ef10ct->evq[ef10ct_get_queue_num(evq_id)];
 
   atomic_inc(&ef10ct_evq->queues_flushing);
@@ -1125,9 +1285,18 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
   }
 
   if( ef10ct->rxq[rxq_num].ref_count > 0 ) {
+    int evq_num;
+
     /* Already bound, so should have an associated evq */
-    EFHW_ASSERT(ef10ct->rxq[rxq_num].evq >= 0);
+    EFHW_ASSERT(ef10ct->rxq[rxq_num].evq_id >= 0);
     EFHW_ASSERT(ef10ct->rxq[rxq_num].state == EF10CT_RXQ_STATE_INITIALISED);
+
+    /* Get whether the rxq we are binding to is using a shared evq or not. */
+    evq_num = ef10ct_get_queue_num(ef10ct->rxq[rxq_num].evq_id);
+    real_evq = !ef10ct_is_shared_evq(nic, evq_num);
+
+    efct_app_list_push(&ef10ct->rxq[rxq_num].apps.live_apps, params->rxq);
+
     goto out_good;
   }
 
@@ -1139,16 +1308,20 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
 
   /* Choose which evq to bind this rxq to. */
   if( !real_evq ) {
-    /* FIXME ON-16187 the evq used here is not mapped to userspace, so isn't part
-     * of the higher level resource management. We need to decide which shared
-     * evq to attach to - one with rx event suppression, or not.
-     * Currently we only support using a single shared queue. In order to
-     * support interrupt driven onload for all rxqs we'll have to choose an
-     * appropriate evq. */
-    EFHW_ASSERT(ef10ct->shared_n >= 1 );
-    evq = ef10ct->shared[0].evq_id;
-    EFHW_TRACE("%s: Using shared evq 0x%x", __func__, evq);
-    suppress_events = true;
+    if (params->interrupt_req) {
+      /* FIXME ON-16187: Choose a sensible shared evq*/
+      EFHW_ASSERT(ef10ct->shared_n >= 2);
+      evq = ef10ct->shared[1].evq_id;
+      EFHW_TRACE("%s: Using shared evq 0x%x WITH rx EVENTS", __func__, evq);
+      suppress_events = false;
+
+      efct_app_list_push(&ef10ct->rxq[rxq_num].apps.live_apps, params->rxq);
+    } else {
+      EFHW_ASSERT(ef10ct->shared_n >= 1 );
+      evq = ef10ct->shared[0].evq_id;
+      EFHW_TRACE("%s: Using shared evq 0x%x", __func__, evq);
+      suppress_events = true;
+    }
   }
   else {
     evq = ef10ct_reconstruct_queue_handle(params->wakeup_instance,
@@ -1236,8 +1409,8 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
     ef10ct->rxq[rxq_num].n_buffer_pages = 0;
   }
 
-  EFHW_ASSERT(ef10ct->rxq[rxq_num].evq == -1);
-  ef10ct->rxq[rxq_num].evq = evq;
+  EFHW_ASSERT(ef10ct->rxq[rxq_num].evq_id == -1);
+  ef10ct->rxq[rxq_num].evq_id = evq;
 
   EFHW_ASSERT(ef10ct->rxq[rxq_num].state == EF10CT_RXQ_STATE_ALLOCATED);
   ef10ct->rxq[rxq_num].state = EF10CT_RXQ_STATE_INITIALISED;
@@ -1246,9 +1419,8 @@ out_good:
   ef10ct->rxq[rxq_num].ref_count++;
   params->rxq->qid = rxq_num;
   params->rxq->shared_evq = !real_evq;
-  /* We rely upon this assumption to determine if an efct RXQ generates events
-   * and thus know whether RX accounting is required to avoid EVQ overflow. */
-  EFHW_ASSERT(params->rxq->shared_evq == suppress_events);
+  params->rxq->wake_at_seqno = EFCT_INVALID_PKT_SEQNO;
+  params->rxq->wakeup_instance = params->wakeup_instance;
 out_locked:
   mutex_unlock(&ef10ct->rxq[rxq_num].bind_lock);
   return rc;
@@ -1259,6 +1431,7 @@ ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
                          efhw_efct_rxq_free_func_t *freer)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  struct efhw_efct_rxq **prev_app;
   int rxq_num = rxq->qid;
   int rc;
 
@@ -1267,6 +1440,15 @@ ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
   freer(rxq);
 
   mutex_lock(&ef10ct->rxq[rxq_num].bind_lock);
+  for (prev_app = &ef10ct->rxq[rxq_num].apps.live_apps; *prev_app;
+       prev_app = &(*prev_app)->next) {
+    if (*prev_app == rxq) {
+      *prev_app = rxq->next;
+      break;
+    }
+  }
+  rxq->next = NULL;
+
   EFHW_ASSERT(ef10ct->rxq[rxq_num].ref_count > 0);
   ef10ct->rxq[rxq_num].ref_count--;
 
@@ -1275,7 +1457,16 @@ ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
     return;
   }
 
-  EFHW_ASSERT(ef10ct->rxq[rxq_num].state == EF10CT_RXQ_STATE_INITIALISED);
+  /* We might think that we were using this queue, but failed to reallocate it
+   * after the NIC was reset. In this case, lets exit early. */
+  if( ef10ct->rxq[rxq_num].state == EF10CT_RXQ_STATE_FREEING ||
+      ef10ct->rxq[rxq_num].state == EF10CT_RXQ_STATE_FREE ) {
+    mutex_unlock(&ef10ct->rxq[rxq_num].bind_lock);
+    return;
+  }
+
+  EFHW_ASSERT(ef10ct->rxq[rxq_num].state == EF10CT_RXQ_STATE_INITIALISED ||
+              ef10ct->rxq[rxq_num].state == EF10CT_RXQ_STATE_ALLOCATED);
   ef10ct->rxq[rxq_num].state = EF10CT_RXQ_STATE_FREEING;
 
   if( ef10ct->rxq[rxq_num].buffer_pages != NULL ) {
@@ -1293,8 +1484,11 @@ ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
   }
 
   iounmap(ef10ct->rxq[rxq_num].post_buffer_addr);
-  ef10ct->rxq[rxq_num].evq = -1;
+  ef10ct->rxq[rxq_num].evq_id = -1;
   ef10ct->rxq[rxq_num].post_buffer_addr = NULL;
+
+  memset(&ef10ct->rxq[rxq_num].apps, 0, sizeof(ef10ct->rxq[rxq_num].apps));
+  ef10ct->rxq[rxq_num].pktix = 0;
 
   mutex_unlock(&ef10ct->rxq[rxq_num].bind_lock);
 }
@@ -1344,6 +1538,18 @@ ef10ct_nic_shared_rxq_refresh_kernel(struct efhw_nic *nic, int hwqid,
   }
 
   return 0;
+}
+
+static int
+ef10ct_nic_shared_rxq_request_wakeup(struct efhw_nic *nic,
+                                     struct efhw_efct_rxq *rxq,
+                                     unsigned sbseq, unsigned pktix,
+                                     bool allow_recursion)
+{
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+
+  return efct_request_wakeup(nic, &ef10ct->rxq[rxq->qid].apps, rxq,
+                             sbseq, pktix, allow_recursion);
 }
 
 static int
@@ -1543,13 +1749,31 @@ static int select_rxq(struct filter_insert_params *params, uint64_t rxq_in,
 }
 
 
-static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in_data,
-                                  struct efct_filter_insert_out *out_data)
+static void ef10ct_populate_mcdi_common(ci_dword_t *buf, int op, int rxq)
+{
+  EFHW_ASSERT((op == MC_CMD_FILTER_OP_IN_OP_INSERT) ||
+              (op == MC_CMD_FILTER_OP_IN_OP_SUBSCRIBE) ||
+              (op == MC_CMD_FILTER_OP_IN_OP_REPLACE));
+  EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_OP, op);
+  EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_PORT_ID, EVB_PORT_ID_ASSIGNED);
+  EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_RX_DEST,
+                      MC_CMD_FILTER_OP_IN_RX_DEST_HOST);
+  EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_RX_QUEUE, rxq);
+  EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_RX_MODE,
+                      MC_CMD_FILTER_OP_IN_RX_MODE_SIMPLE);
+  EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_TX_DEST,
+                      MC_CMD_FILTER_OP_IN_TX_DEST_DEFAULT);
+}
+
+
+static int ef10ct_filter_op(const struct efct_filter_insert_in *in_data,
+                            struct efct_filter_insert_out *out_data,
+                            int op)
 {
   struct filter_insert_params *params = (struct filter_insert_params*)
                                         in_data->drv_opaque;
   struct efhw_nic_ef10ct_rxq *ef10ct_rxq;
-  struct efhw_nic_ef10ct *ef10ct;
+  struct efhw_nic_ef10ct *ef10ct = params->nic->arch_extra;
   int allocated = 0;
   int rxq_num;
   int rxq;
@@ -1564,7 +1788,21 @@ static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in_data,
     .outbuf = (u32*)&out,
     .outlen = MC_CMD_FILTER_OP_OUT_LEN,
   };
-  rxq_num = select_rxq(params, in_data->filter->ring_cookie, &allocated);
+
+  EFHW_MCDI_INITIALISE_BUF(in);
+  EFHW_MCDI_INITIALISE_BUF(out);
+  rc = efct_filter_id_to_mcdi_match_fields(ef10ct->filter_state, in,
+                                           in_data->filter_id);
+  if( rc < 0 )
+    return rc;
+
+  /* If it's something we don't support check now, to allow us to return a
+   * specific error and avoid the MCDI. */
+  if( !check_supported_filter(ef10ct->supported_filter_matches,
+                              EFHW_MCDI_DWORD(in, FILTER_OP_IN_MATCH_FIELDS)) )
+    return -EPROTONOSUPPORT;
+
+  rxq_num = select_rxq(params, in_data->rxq, &allocated);
   if( rxq_num < 0 )
     return rxq_num;
 
@@ -1576,7 +1814,6 @@ static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in_data,
   EFHW_ASSERT(rxq_num < 256);
   rxq = ef10ct_reconstruct_queue_handle(rxq_num, EF10CT_QUEUE_HANDLE_TYPE_RXQ);
 
-  ef10ct = params->nic->arch_extra;
   ef10ct_rxq = &ef10ct->rxq[rxq_num];
   /* If we are attaching to an existing queue, check the state of it before
    * performing an op. */
@@ -1602,10 +1839,13 @@ static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in_data,
     mutex_unlock(&ef10ct_rxq->bind_lock);
   }
 
-  EFHW_MCDI_INITIALISE_BUF(in);
-  EFHW_MCDI_INITIALISE_BUF(out);
-  ethtool_flow_to_mcdi_op(in, rxq, in_data->filter);
-
+  /* Populate the rest of the MCDI cmd now */
+  ef10ct_populate_mcdi_common(in, op, rxq);
+  if( op == MC_CMD_FILTER_OP_IN_OP_REPLACE ) {
+    EFHW_MCDI_SET_DWORD(in, FILTER_OP_IN_HANDLE_LO,
+                        in_data->drv_id & 0xffffffff);
+    EFHW_MCDI_SET_DWORD(in, FILTER_OP_IN_HANDLE_HI, in_data->drv_id >> 32);
+  }
   rc = ef10ct_fw_rpc(params->nic, &rpc);
 
   if( rc == 0 ) {
@@ -1632,30 +1872,103 @@ static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in_data,
 }
 
 
+static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in,
+                                   struct efct_filter_insert_out *out)
+{
+  struct filter_insert_params *params = (struct filter_insert_params*)
+                                        in->drv_opaque;
+  bool multi = params->flags & EFHW_FILTER_F_MULTI;
+  uint32_t base_flow_type;
+
+  /* Bail out early with a known error for IPv6 filters. We have a more
+   * specific test later based on declared FW support once we've translated
+   * the filter, but MCDI doesn't explicitly differentiate between IPv4 and
+   * IPv6, so we need to do check this separately. */
+  base_flow_type = (in->filter->flow_type & ~(FLOW_EXT | FLOW_MAC_EXT));
+  if( base_flow_type == TCP_V6_FLOW || base_flow_type == UDP_V6_FLOW )
+    return -EPROTONOSUPPORT;
+
+  return ef10ct_filter_op(in, out, multi ? MC_CMD_FILTER_OP_IN_OP_SUBSCRIBE :
+                                           MC_CMD_FILTER_OP_IN_OP_INSERT);
+}
+
+
+static int ef10ct_filter_redirect_op(const struct efct_filter_insert_in *in,
+                                     struct efct_filter_insert_out *out)
+{
+  return ef10ct_filter_op(in, out, MC_CMD_FILTER_OP_IN_OP_REPLACE);
+}
+
+
+/* Decide whether a filter should be exclusive or else should allow
+ * delivery to additional recipients.  Currently we decide that
+ * filters for specific local unicast MAC and IP addresses are
+ * exclusive.
+ *
+ * This matches the sfc net driver behaviour.
+ */
+static bool ef10ct_mcdi_filter_is_exclusive(const struct efx_filter_spec *spec)
+{
+  /* special case ether type and ip proto filters for onload */
+  if( spec->match_flags == EFX_FILTER_MATCH_ETHER_TYPE ||
+      spec->match_flags == EFX_FILTER_MATCH_IP_PROTO ||
+      spec->match_flags == (EFX_FILTER_MATCH_ETHER_TYPE |
+                            EFX_FILTER_MATCH_IP_PROTO) )
+    return true;
+
+  if( spec->match_flags & EFX_FILTER_MATCH_LOC_MAC &&
+      !is_multicast_ether_addr(spec->loc_mac) )
+    return true;
+
+  if( (spec->match_flags & (EFX_FILTER_MATCH_ETHER_TYPE |
+                            EFX_FILTER_MATCH_LOC_HOST)) ==
+      (EFX_FILTER_MATCH_ETHER_TYPE | EFX_FILTER_MATCH_LOC_HOST) ) {
+    if( spec->ether_type == htons(ETH_P_IP) &&
+        !(ipv4_is_multicast(spec->loc_host[0]) ||
+        ipv4_is_lbcast(spec->loc_host[0])) )
+      return true;
+    if (spec->ether_type == htons(ETH_P_IPV6) &&
+        ((const u8 *)spec->loc_host)[0] != 0xff )
+      return true;
+  }
+
+  return false;
+}
+
 static int
-ef10ct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
-                     int *rxq, unsigned pd_excl_token,
-                     const struct cpumask *mask, unsigned flags)
+ef10ct_filter_insert(struct efhw_nic *nic,
+                     struct efhw_filter_params *efhw_params)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct ethtool_rx_flow_spec hw_filter;
+  unsigned flags = efhw_params->flags;
   struct filter_insert_params params = {
     .nic = nic,
-    .mask = mask,
-    .flags = flags,
+    .mask = efhw_params->mask,
+  };
+  struct efct_filter_params efct_params = {
+    .rxq = efhw_params->rxq,
+    .pd_excl_token = efhw_params->exclusive_rxq_token,
+    .insert_op = ef10ct_filter_insert_op,
+    .insert_data = &params,
+    .filter_flags = nic->filter_flags,
   };
   int rc;
 
-
-  rc = efx_spec_to_ethtool_flow(spec, &hw_filter);
+  rc = efx_spec_to_ethtool_flow(efhw_params->spec, &hw_filter);
   if( rc < 0 )
     return rc;
 
+  if( !ef10ct_mcdi_filter_is_exclusive(efhw_params->spec) )
+    flags |= EFHW_FILTER_F_MULTI;
+
   /* There's no special RXQ 0 here, so don't allow fallback to SW filter */
   flags |= EFHW_FILTER_F_USE_HW;
-  return efct_filter_insert(&ef10ct->filter_state, spec, &hw_filter, rxq,
-                            pd_excl_token, flags, ef10ct_filter_insert_op,
-                            &params, nic->filter_flags);
+
+  params.flags = flags;
+  efct_params.flags = flags;
+  return efct_filter_insert(ef10ct->filter_state, efhw_params->spec,
+                            &hw_filter, &efct_params);
 }
 
 
@@ -1674,12 +1987,17 @@ ef10ct_filter_remove(struct efhw_nic *nic, int filter_id)
   };
   bool remove_drv;
   uint64_t drv_id;
+  unsigned flags;
   int rc;
 
-  remove_drv = efct_filter_remove(&ef10ct->filter_state, filter_id, &drv_id);
+  remove_drv = efct_filter_remove(ef10ct->filter_state, filter_id, &drv_id,
+                                  &flags);
 
   if( remove_drv ) {
-    EFHW_MCDI_SET_DWORD(in, FILTER_OP_IN_OP, MC_CMD_FILTER_OP_IN_OP_REMOVE);
+    bool multi = flags & EFHW_FILTER_F_MULTI;
+    EFHW_MCDI_SET_DWORD(in, FILTER_OP_IN_OP, multi ?
+                        MC_CMD_FILTER_OP_IN_OP_UNSUBSCRIBE :
+                        MC_CMD_FILTER_OP_IN_OP_REMOVE);
     EFHW_MCDI_SET_DWORD(in, FILTER_OP_IN_HANDLE_LO, drv_id);
     EFHW_MCDI_SET_DWORD(in, FILTER_OP_IN_HANDLE_HI, drv_id >> 32);
 
@@ -1693,9 +2011,24 @@ ef10ct_filter_remove(struct efhw_nic *nic, int filter_id)
 
 static int
 ef10ct_filter_redirect(struct efhw_nic *nic, int filter_id,
-                       struct efx_filter_spec *spec)
+                       struct efhw_filter_params *efhw_params)
 {
-  return -ENOSYS;
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  struct filter_insert_params params = {
+    .nic = nic,
+    .mask = efhw_params->mask,
+    .flags = efhw_params->flags | EFHW_FILTER_F_USE_HW,
+  };
+  struct efct_filter_params efct_params = {
+    .rxq = efhw_params->rxq,
+    .pd_excl_token = efhw_params->exclusive_rxq_token,
+    .flags = params.flags,
+    .insert_op = ef10ct_filter_redirect_op,
+    .insert_data = &params,
+    .filter_flags = nic->filter_flags,
+  };
+
+  return efct_filter_redirect(ef10ct->filter_state, filter_id, &efct_params);
 }
 
 
@@ -1705,7 +2038,7 @@ ef10ct_filter_query(struct efhw_nic *nic, int filter_id,
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
 
-  return efct_filter_query(&ef10ct->filter_state, filter_id, info);
+  return efct_filter_query(ef10ct->filter_state, filter_id, info);
 }
 
 
@@ -1933,6 +2266,7 @@ struct efhw_func_ops ef10ct_char_functional_units = {
   .buffer_table_orders = ef10ct_nic_buffer_table_orders,
   .buffer_table_orders_num = CI_ARRAY_SIZE(ef10ct_nic_buffer_table_orders),
   .buffer_table_alloc = efhw_sw_bt_alloc,
+  .buffer_table_realloc = efhw_sw_bt_realloc,
   .buffer_table_free = efhw_sw_bt_free,
   .buffer_table_set = efhw_sw_bt_set,
   .buffer_table_clear = efhw_sw_bt_clear,
@@ -1954,6 +2288,7 @@ struct efhw_func_ops ef10ct_char_functional_units = {
   .shared_rxq_unbind = ef10ct_shared_rxq_unbind,
   .shared_rxq_refresh = ef10ct_nic_shared_rxq_refresh,
   .shared_rxq_refresh_kernel = ef10ct_nic_shared_rxq_refresh_kernel,
+  .shared_rxq_request_wakeup = ef10ct_nic_shared_rxq_request_wakeup,
   .irq_alloc = ef10ct_irq_alloc,
   .irq_free = ef10ct_irq_free,
   .set_vi_tlp_processing = ef10ct_mcdi_cmd_set_vi_tlp_processing,

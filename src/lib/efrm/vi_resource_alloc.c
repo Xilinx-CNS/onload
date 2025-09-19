@@ -1190,15 +1190,13 @@ __efrm_vi_resource_free(struct efrm_vi *virs)
 }
 
 
-/* flags parameter indicates only sw state needs to be updated
- * e.g. after impolite unplug we assume all queues are gone */
 void efrm_nic_flush_all_queues(struct efhw_nic *nic, int flags)
 {
 	int type;
 	struct efrm_nic *efrm_nic = efrm_nic_from_efhw_nic(nic);
 
 	mutex_lock(&efrm_nic->dmaq_state.lock);
-	if (!(flags & EFRM_FLUSH_QUEUES_F_NOHW))
+	if (!(flags & EFRM_FLUSH_QUEUES_F_NO_HW))
 		efrm_nic->dmaq_state.unplugging = 1;
 	EFRM_TRACE(" Flushing all queues for nic %d flags %x", nic->index, flags);
 	for (type = 0; type < EFHW_N_Q_TYPES; ++type) {
@@ -1218,7 +1216,7 @@ void efrm_nic_flush_all_queues(struct efhw_nic *nic, int flags)
 					EFRM_ERR(" nic %d 0x%x ef_vi reset not supported (%d)",
 					         nic->index, virs->rs.rs_instance, rc);
 			}
-			if (flags & EFRM_FLUSH_QUEUES_F_NOHW)
+			if (flags & EFRM_FLUSH_QUEUES_F_NO_HW)
 				continue;
 			efrm_atomic_or(efrm_vi_shut_down_flag(type), &virs->shut_down_flags);
 			rc = __efrm_vi_q_flush(virs->rs.rs_client->nic,

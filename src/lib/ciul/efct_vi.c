@@ -10,7 +10,24 @@
 #include <ci/efhw/common.h>
 #include <ci/tools/byteorder.h>
 #include <ci/tools/sysdep.h>
+#include <ci/tools/cpu_features.h>
+#include <ci/internal/transport_config_opt.h>
 
+#if CI_CFG_CXL
+#ifndef __KERNEL__
+#ifndef CI_HAVE_X86INTRIN
+#error "CXL support requires x86intrin.h for movdir64b"
+#endif /* CI_HAVE_X64INTRIN */
+#include <x86intrin.h>
+/* The kernel has a helper for movdir64b (via linux/mman.h) since v5.10. We
+ * match the kernel function's name rather than the underscored intrinsic. */
+#define movdir64b _movdir64b
+#endif /* __KERNEL__ */
+#define EFCT_TX_CHUNK_SIZE (EF_VI_CACHE_LINE_SIZE)
+#else /* CI_CFG_CXL */
+#define EFCT_TX_CHUNK_SIZE (sizeof(efct_tx_aperture_t))
+#endif /* CI_CFG_CXL */
+#define EFCT_TX_TAIL_SIZE (EFCT_TX_CHUNK_SIZE / (sizeof(efct_tx_aperture_t)))
 
 #define EF_VI_EVENT_OFFSET(q, i)                                \
   (((q)->ep_state->evq.evq_ptr + (i) * sizeof(ef_vi_qword)) &   \
@@ -234,15 +251,15 @@ static bool efct_rx_check_event(const ef_vi* vi)
 struct efct_tx_state
 {
   /* base address of the aperture */
-  volatile uint64_t* aperture;
-  /* up to 7 bytes left over after writing a block in 64-bit chunks */
-  uint64_t tail;
+  volatile efct_tx_aperture_t* aperture;
   /* number of left over bytes in 'tail' */
   unsigned tail_len;
   /* number of 64-bit words from start of aperture */
   uint64_t offset;
   /* mask to keep offset within the aperture range */
   uint64_t mask;
+  /* left over bytes after writing a block */
+  efct_tx_aperture_t tail[EFCT_TX_TAIL_SIZE] EF_VI_ALIGN(EF_VI_DMA_ALIGN);
 };
 
 /* generic tx header */
@@ -292,49 +309,94 @@ ci_inline bool efct_tx_check(ef_vi* vi, int len)
 ci_inline void efct_tx_init(ef_vi* vi, struct efct_tx_state* tx)
 {
   unsigned offset = vi->ep_state->txq.ct_added;
+  int i;
   BUG_ON(offset % EFCT_TX_ALIGNMENT != 0);
   tx->aperture = (void*) vi->vi_ctpio_mmap_ptr;
-  tx->tail = 0;
   tx->tail_len = 0;
-  tx->offset = offset >> 3;
+  tx->offset = efct_tx_scale_offset_bytes(offset);
   tx->mask = vi->vi_txq.efct_aperture_mask;
+  for( i = 0; i < EFCT_TX_TAIL_SIZE; i++)
+    tx->tail[i] = 0;
 }
 
 /* store a left-over byte from the start or end of a block */
 ci_inline void efct_tx_tail_byte(struct efct_tx_state* tx, uint8_t byte)
 {
-  BUG_ON(tx->tail_len >= 8);
-  tx->tail = (tx->tail << 8) | byte;
+  const int idx = tx->tail_len / sizeof(tx->tail[0]);
+  BUG_ON(tx->tail_len >= sizeof(tx->tail));
+  tx->tail[idx] = (tx->tail[idx] << 8) | byte;
   tx->tail_len++;
 }
 
 /* write a 64-bit word to the CTPIO aperture, dealing with wrapping */
-ci_inline void efct_tx_word(struct efct_tx_state* tx, uint64_t value)
+ci_inline void efct_tx_word(struct efct_tx_state* tx,
+                            const efct_tx_aperture_t* src)
 {
-  tx->aperture[tx->offset++ & tx->mask] = value;
+  tx->aperture[tx->offset++ & tx->mask] = *src;
+}
+
+#if CI_CFG_CXL
+/* write an entire cacheline to the CTPIO aperture */
+ci_inline void efct_tx_cacheline(struct efct_tx_state* tx, const void* src)
+{
+  void* dst = (void*)&tx->aperture[tx->offset & tx->mask];
+  const uint64_t tx_offset_inc =
+    efct_tx_scale_offset_bytes(EF_VI_CACHE_LINE_SIZE);
+  /* The aperture offset increases by the same amount every time, and we must
+   * be certain that we can't end up writing past the end of our aperture. As
+   * such, it must be true that the aperture is divisible by the amount we
+   * increase the offset by for each write with no remainder. */
+  BUG_ON((tx->mask + 1) % tx_offset_inc != 0);
+  BUG_ON(EF_VI_CACHE_LINE_SIZE != 64);
+  movdir64b(dst, src);
+  tx->offset += tx_offset_inc;
+}
+#endif
+
+/* write a chunk to the CTPIO aperture */
+ci_inline void efct_tx_chunk(struct efct_tx_state* tx, const void* src)
+{
+#if ! CI_CFG_CXL
+  efct_tx_word(tx, src);
+#else
+  efct_tx_cacheline(tx, src);
+#endif
+}
+
+/* write the tail to the CTPIO aperture */
+ci_inline void efct_tx_tail(struct efct_tx_state* tx)
+{
+  int i;
+
+  for( i = 0; i < EFCT_TX_TAIL_SIZE; i++ )
+    tx->tail[i] = CI_BSWAP_BE64(tx->tail[i]);
+
+  efct_tx_chunk(tx, tx->tail);
+
+  for( i = 0; i < EFCT_TX_TAIL_SIZE; i++ )
+    tx->tail[i] = 0;
+  tx->tail_len = 0;
 }
 
 /* write a block of bytes to the CTPIO aperture, dealing with wrapping and leftovers */
 ci_inline void efct_tx_block(struct efct_tx_state* __restrict__ tx, char* base, int len)
 {
   if( tx->tail_len != 0 ) {
-    while( len > 0 && tx->tail_len < 8 ) {
+    while( len > 0 && tx->tail_len < EFCT_TX_CHUNK_SIZE ) {
       efct_tx_tail_byte(tx, *base);
       base++;
       len--;
     }
 
-    if( tx->tail_len == 8 ) {
-      efct_tx_word(tx, CI_BSWAP_BE64(tx->tail));
-      tx->tail = 0;
-      tx->tail_len = 0;
+    if( tx->tail_len == EFCT_TX_CHUNK_SIZE ) {
+      efct_tx_tail(tx);
     }
   }
 
-  while( len >= 8 ) {
-    efct_tx_word(tx, *(uint64_t*)base);
-    base += 8;
-    len -= 8;
+  while( len >= EFCT_TX_CHUNK_SIZE ) {
+    efct_tx_chunk(tx, base);
+    base += EFCT_TX_CHUNK_SIZE;
+    len -= EFCT_TX_CHUNK_SIZE;
   }
 
   while( len > 0 ) {
@@ -353,11 +415,11 @@ ci_inline void efct_tx_complete(ef_vi* vi, struct efct_tx_state* tx, uint32_t dm
   int i = qs->added & q->mask;
 
   if( tx->tail_len != 0 ) {
-    tx->tail <<= (8 - tx->tail_len) * 8;
-    efct_tx_word(tx, CI_BSWAP_BE64(tx->tail));
+    tx->tail[tx->tail_len / sizeof(tx->tail[0])] <<= (8 - tx->tail_len) * 8;
+    efct_tx_tail(tx);
   }
-  while( tx->offset % (EFCT_TX_ALIGNMENT >> 3) != 0 )
-    efct_tx_word(tx, 0);
+  while( tx->offset % efct_tx_scale_offset_bytes(EFCT_TX_ALIGNMENT) != 0 )
+    efct_tx_chunk(tx, tx->tail);
 
   /* Force the write-combined traffic to be flushed to PCIe, to limit the
    * maximum possible reordering the NIC will see to one packet. Benchmarks
@@ -502,12 +564,14 @@ static int efct_ef_vi_transmit(ef_vi* vi, ef_addr base, int len,
 {
   /* TODO need to avoid calling this with CTPIO fallback buffers */
   struct efct_tx_state tx;
+  uint64_t header;
 
   if( ! efct_tx_check(vi, len) )
     return -EAGAIN;
 
   efct_tx_init(vi, &tx);
-  efct_tx_word(&tx, efct_tx_pkt_header(vi, len, EFCT_TX_CT_DISABLE));
+  header = efct_tx_pkt_header(vi, len, EFCT_TX_CT_DISABLE);
+  efct_tx_block(&tx, (void*)&header, sizeof(header));
   efct_tx_block(&tx, (void*)(uintptr_t)base, len);
   efct_tx_complete(vi, &tx, dma_id, len);
 
@@ -518,6 +582,7 @@ static int efct_ef_vi_transmitv(ef_vi* vi, const ef_iovec* iov, int iov_len,
                                 ef_request_id dma_id)
 {
   struct efct_tx_state tx;
+  uint64_t header;
   int len = 0, i;
 
   efct_tx_init(vi, &tx);
@@ -528,7 +593,8 @@ static int efct_ef_vi_transmitv(ef_vi* vi, const ef_iovec* iov, int iov_len,
   if( ! efct_tx_check(vi, len) )
     return -EAGAIN;
 
-  efct_tx_word(&tx, efct_tx_pkt_header(vi, len, EFCT_TX_CT_DISABLE));
+  header = efct_tx_pkt_header(vi, len, EFCT_TX_CT_DISABLE);
+  efct_tx_block(&tx, (void*)&header, sizeof(header));
 
   for( i = 0; i < iov_len; ++i )
     efct_tx_block(&tx, (void*)(uintptr_t)iov[i].iov_base, iov[i].iov_len);
@@ -603,6 +669,7 @@ static void efct_ef_vi_transmitv_ctpio(ef_vi* vi, size_t len,
 {
   struct efct_tx_state tx;
   unsigned threshold_extra;
+  uint64_t header;
   int i;
   uint32_t dma_id;
 
@@ -625,7 +692,8 @@ static void efct_ef_vi_transmitv_ctpio(ef_vi* vi, size_t len,
     threshold = (threshold + threshold_extra) / EFCT_TX_ALIGNMENT;
 
   threshold = CI_MAX((unsigned)vi->vi_txq.ct_thresh_min, threshold);
-  efct_tx_word(&tx, efct_tx_pkt_header(vi, len, threshold));
+  header = efct_tx_pkt_header(vi, len, threshold);
+  efct_tx_block(&tx, (void*)&header, sizeof(header));
 
   for( i = 0; i < iovcnt; ++i )
     efct_tx_block(&tx, iov[i].iov_base, iov[i].iov_len);
@@ -1327,15 +1395,18 @@ efct_design_parameters(struct ef_vi* vi, struct efab_nic_design_parameters* dp)
   }
 
   /* When writing to the aperture we use a bitmask to keep within range. This
-   * requires the size a power of two, and we shift by 3 because we write
-   * a uint64_t (8 bytes) at a time.
+   * requires the size be a power of two. The value is also scaled down in line
+   * with the scaling applied to the offset, which must still satisfy this
+   * power of two condition.
    */
   if( ! EF_VI_IS_POW2(GET(tx_aperture_bytes)) ) {
     LOG(ef_log("%s: unsupported tx_aperture_bytes, %ld not a power of 2",
                __FUNCTION__, (long)GET(tx_aperture_bytes)));
     return -EOPNOTSUPP;
   }
-  vi->vi_txq.efct_aperture_mask = (GET(tx_aperture_bytes) - 1) >> 3;
+  vi->vi_txq.efct_aperture_mask =
+    efct_tx_scale_offset_bytes(GET(tx_aperture_bytes) - 1);
+  BUG_ON(!EF_VI_IS_POW2(vi->vi_txq.efct_aperture_mask + 1));
 
   /* FIXME ON-15570: We need proper handling of configurable size ctpio windows */
   /* On EF10CT nics the size of the memory backing the CTPIO window is
@@ -1401,7 +1472,7 @@ static int efct_post_filter_add(struct ef_vi* vi,
   EF_VI_ASSERT(rxq >= 0);
   n_superbufs = CI_ROUND_UP((vi->vi_rxq.mask + 1) * EFCT_PKT_STRIDE,
                             EFCT_RX_SUPERBUF_BYTES) / EFCT_RX_SUPERBUF_BYTES;
-  rc = vi->efct_rxqs.ops->attach(vi, rxq, -1, n_superbufs, shared_mode);
+  rc = vi->efct_rxqs.ops->attach(vi, rxq, -1, n_superbufs, shared_mode, false);
   if( rc == -EALREADY )
     rc = 0;
   return rc;
@@ -1763,10 +1834,17 @@ static void efct_vi_initialise_ops(ef_vi* vi)
   vi->ops.receive_poll = efct_ef_receive_poll;
 }
 
-void efct_vi_init(ef_vi* vi)
+int efct_vi_init(ef_vi* vi)
 {
   int i;
   EF_VI_ASSERT( vi->nic_type.nic_flags & EFHW_VI_NIC_CTPIO_ONLY );
+
+#if CI_CFG_CXL
+  if( ! ci_cpu_has_feature(CI_CPU_FEATURE_MOVDIR64B) ) {
+    ef_log("This build of onload uses the movdir64b instruction, but it appears this CPU doesn't support this instruction. Try building without CI_CFG_CXL.");
+    return -EOPNOTSUPP;
+  }
+#endif
 
   efct_vi_initialise_ops(vi);
   vi->evq_phase_bits = 1;
@@ -1786,5 +1864,7 @@ void efct_vi_init(ef_vi* vi)
     ef_vi_efct_rxq* q = &vi->efct_rxqs.q[i];
     q->live.superbuf_pkts = &q->config_generation;
   }
+
+  return 0;
 }
 

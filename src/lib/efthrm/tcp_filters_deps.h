@@ -15,6 +15,7 @@
 #include "oo_hw_filter.h"
 #include <ci/driver/driverlink_api.h>
 #include <onload/nic.h>
+#include <linux/in.h>
 
 #endif /* __TCP_FILTERS_DEPS_H__ */
 

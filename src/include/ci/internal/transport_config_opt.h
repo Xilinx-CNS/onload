@@ -573,6 +573,17 @@
 #define CI_HAVE_BPF_NATIVE 0
 #endif
 #endif
+
+/* We don't support CXL by default */
+#define CI_CFG_CXL 0
+
+
+/*****************************************************************************
+ * New options should be added above here, otherwise they will overwrite the *
+ * values set in the build profile below!                                    *
+ *****************************************************************************/
+
+
 /* Include "extra" transport_config_opt to allow build-time profiles */
 #include TRANSPORT_CONFIG_OPT_HDR
 

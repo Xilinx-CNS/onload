@@ -60,11 +60,6 @@ int efx_spec_to_ethtool_flow(const struct efx_filter_spec *src,
        (EFX_FILTER_MATCH_REM_PORT | EFX_FILTER_MATCH_LOC_PORT)) ==
       EFX_FILTER_MATCH_REM_PORT )
     return -EPROTONOSUPPORT;
-  if( src->match_flags & EFX_FILTER_MATCH_ETHER_TYPE &&
-      src->ether_type != htons(ETH_P_IP) &&
-      src->ether_type != htons(ETH_P_IPV6) &&
-      src->ether_type != htons(ETH_P_ARP) )
-    return -EPROTONOSUPPORT;
 
   if( src->match_flags & EFX_FILTER_MATCH_IP_PROTO )
     proto = src->ip_proto;
@@ -239,7 +234,7 @@ static void set_masked_ipv6_addr(void *dst, const __be32 addr[static 4],
   memcpy(dst, masked_addr, sizeof(masked_addr));
 }
 
-void ethtool_flow_to_mcdi_op(ci_dword_t *buf, int rxq,
+void ethtool_flow_to_mcdi_op(ci_dword_t *buf, int rxq, int op,
                              const struct ethtool_rx_flow_spec *filter)
 {
   bool multicast = false;
@@ -410,8 +405,8 @@ void ethtool_flow_to_mcdi_op(ci_dword_t *buf, int rxq,
     if (filter->m_u.ether_spec.h_proto) {
       match_fields |= EFHW_MCDI_MATCH_FIELD_BIT(ETHER_TYPE);
       EFHW_MCDI_SET_WORD(buf, FILTER_OP_IN_ETHER_TYPE,
-                         htons(filter->h_u.ether_spec.h_proto &
-                               filter->m_u.ether_spec.h_proto) );
+                         filter->h_u.ether_spec.h_proto &
+                         filter->m_u.ether_spec.h_proto);
     }
     break;
   case SCTP_V4_FLOW:    /* SCTP over IPv4 */
@@ -456,7 +451,10 @@ void ethtool_flow_to_mcdi_op(ci_dword_t *buf, int rxq,
     EFHW_ASSERT(filter->m_ext.data[1] == 0);
   }
 
-  EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_OP, MC_CMD_FILTER_OP_IN_OP_INSERT);
+  EFHW_ASSERT((op == MC_CMD_FILTER_OP_IN_OP_INSERT) ||
+              (op == MC_CMD_FILTER_OP_IN_OP_SUBSCRIBE) ||
+              (op == MC_CMD_FILTER_OP_IN_OP_REPLACE));
+  EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_OP, op);
   EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_PORT_ID, EVB_PORT_ID_ASSIGNED);
   EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_MATCH_FIELDS, match_fields);
   EFHW_MCDI_SET_DWORD(buf, FILTER_OP_IN_RX_DEST,

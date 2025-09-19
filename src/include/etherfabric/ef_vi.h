@@ -908,7 +908,8 @@ typedef struct {
                  int qid,
                  int buf_fd,
                  unsigned n_superbufs,
-                 bool shared_mode);
+                 bool shared_mode,
+                 bool interrupt_mode);
   /** Detach a queue */
   void (*detach)(struct ef_vi*, int ix);
   /** Refresh the internal config; called if config_generation changes */

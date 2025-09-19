@@ -116,7 +116,7 @@ static void update_oldest_app_seq(struct xlnx_efct_device *edev,
    * to the sbufs it went past. */
   uint32_t min = q->sbufs.added;
   struct efhw_efct_rxq *app;
-  for( app = q->live_apps; app; app = app->next ) {
+  for( app = q->apps.live_apps; app; app = app->next ) {
     min = next_app_seq_min(app, q, min);
   }
 
@@ -132,7 +132,7 @@ static bool post_superbuf_to_apps(struct xlnx_efct_device *edev,
   bool is_successful_post = false;
   uint32_t min = q->sbufs.added;
 
-  for( app = q->live_apps; app; app = app->next ) {
+  for( app = q->apps.live_apps; app; app = app->next ) {
     /* post app to single buffer */
     is_successful_post |= post_superbuf_to_app(q, app);
     min = next_app_seq_min(app, q, min);
@@ -184,7 +184,7 @@ static void reap_superbufs_from_apps(struct xlnx_efct_device *edev,
 {
   struct efhw_efct_rxq **pprev;
 
-  for( pprev = &q->live_apps; *pprev; ) {
+  for( pprev = &q->apps.live_apps; *pprev; ) {
     struct efhw_efct_rxq *app = *pprev;
     if( app->krxq.destroy ) {
       int sbid;
@@ -248,8 +248,8 @@ static void activate_new_apps(struct efhw_nic_efct_rxq *q)
         last = app;
         q->apps_max_sbufs += app->krxq.max_allowed_superbufs;
       }
-      last->next = q->live_apps;
-      q->live_apps = new_apps;
+      last->next = q->apps.live_apps;
+      q->apps.live_apps = new_apps;
     }
   }
 }

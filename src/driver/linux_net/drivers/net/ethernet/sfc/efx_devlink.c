@@ -90,8 +90,8 @@ static void efx_devlink_info_board_cfg(struct efx_nic *efx,
 	}
 }
 
-#define EFX_VER_FLAG(_f)	\
-	(MC_CMD_GET_VERSION_V6_OUT_ ## _f ## _PRESENT_LBN)
+#define EFX_VER_PRESENT(_flags, _f) \
+	(_flags & BIT(MC_CMD_GET_VERSION_V6_OUT_ ## _f ## _PRESENT_LBN))
 
 static void efx_devlink_info_running_versions(struct efx_nic *efx,
 					      struct devlink_info_req *req)
@@ -144,27 +144,13 @@ static void efx_devlink_info_running_versions(struct efx_nic *efx,
 	/* Handle V2 additions */
 	flags = MCDI_DWORD(outbuf, GET_VERSION_V2_OUT_FLAGS);
 
-	if (flags & BIT(EFX_VER_FLAG(MCFW_EXT_INFO))) {
-		ver.str = MCDI_PTR(outbuf, GET_VERSION_V2_OUT_MCFW_BUILD_NAME);
-		offset += snprintf(&buf[offset],
-				   EFX_MAX_VERSION_INFO_LEN - offset,
-				   " %.*s",
-				   MC_CMD_GET_VERSION_V2_OUT_MCFW_BUILD_NAME_LEN,
-				   ver.str);
-	}
 	devlink_info_version_running_put(req,
 					 DEVLINK_INFO_VERSION_GENERIC_FW_MGMT,
 					 buf);
 
-	if (flags & BIT(EFX_VER_FLAG(BOARD_EXT_INFO))) {
-		snprintf(buf, EFX_MAX_VERSION_INFO_LEN, "%s",
-			 MCDI_PTR(outbuf, GET_VERSION_V2_OUT_BOARD_NAME));
-		devlink_info_version_fixed_put(req,
-					       DEVLINK_INFO_VERSION_GENERIC_BOARD_ID,
-					       buf);
-
+	if (EFX_VER_PRESENT(flags, BOARD_EXT_INFO)) {
 		/* Favour full board version if present (in V5 or later) */
-		if (~flags & BIT(EFX_VER_FLAG(BOARD_VERSION))) {
+		if (!EFX_VER_PRESENT(flags, BOARD_VERSION)) {
 			snprintf(buf, EFX_MAX_VERSION_INFO_LEN, "%u",
 				 MCDI_DWORD(outbuf,
 					    GET_VERSION_V2_OUT_BOARD_REVISION));
@@ -178,7 +164,7 @@ static void efx_devlink_info_running_versions(struct efx_nic *efx,
 			devlink_info_board_serial_number_put(req, ver.str);
 	}
 
-	if (flags & BIT(EFX_VER_FLAG(FPGA_EXT_INFO))) {
+	if (EFX_VER_PRESENT(flags, FPGA_EXT_INFO)) {
 		ver.dwords = (__le32 *)MCDI_PTR(outbuf,
 						GET_VERSION_V2_OUT_FPGA_VERSION);
 		offset = snprintf(buf, EFX_MAX_VERSION_INFO_LEN, "%u_%c%u",
@@ -196,7 +182,7 @@ static void efx_devlink_info_running_versions(struct efx_nic *efx,
 						 buf);
 	}
 
-	if (flags & BIT(EFX_VER_FLAG(CMC_EXT_INFO))) {
+	if (EFX_VER_PRESENT(flags, CMC_EXT_INFO)) {
 		ver.dwords = (__le32 *)MCDI_PTR(outbuf,
 						GET_VERSION_V2_OUT_CMCFW_VERSION);
 		offset = snprintf(buf, EFX_MAX_VERSION_INFO_LEN, "%u.%u.%u.%u",
@@ -218,7 +204,7 @@ static void efx_devlink_info_running_versions(struct efx_nic *efx,
 						 buf);
 	}
 
-	if (flags & BIT(EFX_VER_FLAG(MCFW_EXT_INFO))) {
+	if (EFX_VER_PRESENT(flags, MCFW_EXT_INFO)) {
 		ver.str = MCDI_PTR(outbuf, GET_VERSION_V2_OUT_MCFW_BUILD_ID);
 		snprintf(buf, EFX_MAX_VERSION_INFO_LEN, "%*phN",
 			 MC_CMD_GET_VERSION_V2_OUT_MCFW_BUILD_ID_LEN, ver.str);
@@ -227,7 +213,7 @@ static void efx_devlink_info_running_versions(struct efx_nic *efx,
 						 buf);
 	}
 
-	if (flags & BIT(EFX_VER_FLAG(SUCFW_EXT_INFO))) {
+	if (EFX_VER_PRESENT(flags, SUCFW_EXT_INFO)) {
 		ver.dwords = (__le32 *)MCDI_PTR(outbuf,
 						GET_VERSION_V2_OUT_SUCFW_VERSION);
 		tstamp = MCDI_QWORD(outbuf,
@@ -250,7 +236,7 @@ static void efx_devlink_info_running_versions(struct efx_nic *efx,
 		return;
 
 	/* Handle V3 additions */
-	if (flags & BIT(EFX_VER_FLAG(DATAPATH_HW_VERSION))) {
+	if (EFX_VER_PRESENT(flags, DATAPATH_HW_VERSION)) {
 		ver.dwords = (__le32 *)MCDI_PTR(outbuf,
 						GET_VERSION_V3_OUT_DATAPATH_HW_VERSION);
 
@@ -263,7 +249,7 @@ static void efx_devlink_info_running_versions(struct efx_nic *efx,
 						 buf);
 	}
 
-	if (flags & BIT(EFX_VER_FLAG(DATAPATH_FW_VERSION))) {
+	if (EFX_VER_PRESENT(flags, DATAPATH_FW_VERSION)) {
 		ver.dwords = (__le32 *)MCDI_PTR(outbuf,
 						GET_VERSION_V3_OUT_DATAPATH_FW_VERSION);
 
@@ -280,7 +266,7 @@ static void efx_devlink_info_running_versions(struct efx_nic *efx,
 		return;
 
 	/* Handle V4 additions */
-	if (flags & BIT(EFX_VER_FLAG(SOC_BOOT_VERSION))) {
+	if (EFX_VER_PRESENT(flags, SOC_BOOT_VERSION)) {
 		ver.dwords = (__le32 *)MCDI_PTR(outbuf,
 						GET_VERSION_V4_OUT_SOC_BOOT_VERSION);
 
@@ -294,7 +280,7 @@ static void efx_devlink_info_running_versions(struct efx_nic *efx,
 						 buf);
 	}
 
-	if (flags & BIT(EFX_VER_FLAG(SOC_UBOOT_VERSION))) {
+	if (EFX_VER_PRESENT(flags, SOC_UBOOT_VERSION)) {
 		ver.dwords = (__le32 *)MCDI_PTR(outbuf,
 						GET_VERSION_V4_OUT_SOC_UBOOT_VERSION);
 
@@ -308,7 +294,7 @@ static void efx_devlink_info_running_versions(struct efx_nic *efx,
 						 buf);
 	}
 
-	if (flags & BIT(EFX_VER_FLAG(SOC_MAIN_ROOTFS_VERSION))) {
+	if (EFX_VER_PRESENT(flags, SOC_MAIN_ROOTFS_VERSION)) {
 		ver.dwords = (__le32 *)MCDI_PTR(outbuf,
 						GET_VERSION_V4_OUT_SOC_MAIN_ROOTFS_VERSION);
 
@@ -322,7 +308,7 @@ static void efx_devlink_info_running_versions(struct efx_nic *efx,
 						 buf);
 	}
 
-	if (flags & BIT(EFX_VER_FLAG(SOC_RECOVERY_BUILDROOT_VERSION))) {
+	if (EFX_VER_PRESENT(flags, SOC_RECOVERY_BUILDROOT_VERSION)) {
 		ver.dwords = (__le32 *)MCDI_PTR(outbuf,
 						GET_VERSION_V4_OUT_SOC_RECOVERY_BUILDROOT_VERSION);
 
@@ -336,8 +322,8 @@ static void efx_devlink_info_running_versions(struct efx_nic *efx,
 						 buf);
 	}
 
-	if (flags & BIT(EFX_VER_FLAG(SUCFW_VERSION)) &&
-	    ~flags & BIT(EFX_VER_FLAG(SUCFW_EXT_INFO))) {
+	if (EFX_VER_PRESENT(flags, SUCFW_VERSION) &&
+	    !EFX_VER_PRESENT(flags, SUCFW_EXT_INFO)) {
 		ver.dwords = (__le32 *)MCDI_PTR(outbuf,
 						GET_VERSION_V4_OUT_SUCFW_VERSION);
 
@@ -356,7 +342,7 @@ static void efx_devlink_info_running_versions(struct efx_nic *efx,
 
 	/* Handle V5 additions */
 
-	if (flags & BIT(EFX_VER_FLAG(BOARD_VERSION))) {
+	if (EFX_VER_PRESENT(flags, BOARD_VERSION)) {
 		ver.dwords = (__le32 *)MCDI_PTR(outbuf,
 						GET_VERSION_V5_OUT_BOARD_VERSION);
 
@@ -370,7 +356,7 @@ static void efx_devlink_info_running_versions(struct efx_nic *efx,
 						 buf);
 	}
 
-	if (flags & BIT(EFX_VER_FLAG(BUNDLE_VERSION))) {
+	if (EFX_VER_PRESENT(flags, BUNDLE_VERSION)) {
 		ver.dwords = (__le32 *)MCDI_PTR(outbuf,
 						GET_VERSION_V5_OUT_BUNDLE_VERSION);
 
@@ -388,7 +374,7 @@ static void efx_devlink_info_running_versions(struct efx_nic *efx,
 		return;
 
 	/* Handle V6 additions */
-	if (flags & BIT(EFX_VER_FLAG(BOOTLOADER_VERSION))) {
+	if (EFX_VER_PRESENT(flags, BOOTLOADER_VERSION)) {
 		ver.dwords = (__le32 *)MCDI_PTR(outbuf,
 						GET_VERSION_V6_OUT_BOOTLOADER_VERSION);
 
@@ -402,7 +388,7 @@ static void efx_devlink_info_running_versions(struct efx_nic *efx,
 						 buf);
 	}
 
-	if (flags & BIT(EFX_VER_FLAG(EXPANSION_ROM_VERSION))) {
+	if (EFX_VER_PRESENT(flags, EXPANSION_ROM_VERSION)) {
 		ver.dwords = (__le32 *)MCDI_PTR(outbuf,
 						GET_VERSION_V6_OUT_EXPANSION_ROM_VERSION);
 
@@ -417,7 +403,7 @@ static void efx_devlink_info_running_versions(struct efx_nic *efx,
 	}
 }
 
-#undef EFX_VER_FLAG
+#undef EFX_VER_PRESENT
 
 static void efx_devlink_info_query_all(struct efx_nic *efx,
 				       struct devlink_info_req *req)
@@ -510,10 +496,18 @@ static int efx_devlink_flash_update(struct devlink *devlink,
 #endif
 }
 
+static const struct devlink_ops sfc_devlink_ops = {
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_OPS_SUPPORTED_FLASH_UPDATE_PARAMS)
+	.supported_flash_update_params	= 0,
+#endif
+	.flash_update			= efx_devlink_flash_update,
+	.info_get			= efx_devlink_info_get,
+};
+
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER)
 static int efx_devlink_reporter_log(struct devlink_health_reporter *reporter,
 				    struct devlink_fmsg *fmsg,
-				    u32 type, bool read, bool clear)
+				    u32 type, unsigned int flags)
 {
 	struct efx_devlink *devlink_private =
 		devlink_health_reporter_priv(reporter);
@@ -525,8 +519,8 @@ static int efx_devlink_reporter_log(struct devlink_health_reporter *reporter,
 	if (!nvlog_data)
 		return -ENOMEM;
 
-	if (read) {
-		rc = efx_nvlog_do(efx, nvlog_data, type, true, false);
+	if (flags & EFX_NVLOG_F_READ) {
+		rc = efx_nvlog_do(efx, nvlog_data, type, EFX_NVLOG_F_READ);
 		if (rc)
 			goto out_free;
 
@@ -538,8 +532,8 @@ static int efx_devlink_reporter_log(struct devlink_health_reporter *reporter,
 	/* if log output was requested then this is ready, so now safe
 	 * to clear flash
 	 */
-	if (clear)
-		rc = efx_nvlog_do(efx, nvlog_data, type, false, true);
+	if (flags & EFX_NVLOG_F_CLEAR)
+		rc = efx_nvlog_do(efx, nvlog_data, type, EFX_NVLOG_F_CLEAR);
 
  out_free:
 	kfree(nvlog_data->nvlog);
@@ -560,7 +554,7 @@ static int efx_devlink_reporter_nvlog_diagnose(struct devlink_health_reporter *r
 {
 	return efx_devlink_reporter_log(reporter, fmsg,
 					NVRAM_PARTITION_TYPE_LOG,
-					true, false);
+					EFX_NVLOG_F_READ);
 }
 
 static const struct devlink_health_reporter_ops sfc_devlink_nvlog_ops = {
@@ -578,7 +572,7 @@ static int efx_devlink_reporter_nvlog_clear_diagnose(struct devlink_health_repor
 {
 	return efx_devlink_reporter_log(reporter, fmsg,
 					NVRAM_PARTITION_TYPE_LOG,
-					true, true);
+					EFX_NVLOG_F_READ | EFX_NVLOG_F_CLEAR);
 }
 
 static const struct devlink_health_reporter_ops sfc_devlink_nvlog_clear_ops = {
@@ -596,7 +590,7 @@ static int efx_devlink_reporter_ramlog_diagnose(struct devlink_health_reporter *
 {
 	return efx_devlink_reporter_log(reporter, fmsg,
 					NVRAM_PARTITION_TYPE_RAM_LOG,
-					true, false);
+					EFX_NVLOG_F_READ);
 }
 
 static const struct devlink_health_reporter_ops sfc_devlink_ramlog_ops = {
@@ -614,7 +608,7 @@ static int efx_devlink_reporter_ramlog_clear_diagnose(struct devlink_health_repo
 {
 	return efx_devlink_reporter_log(reporter, fmsg,
 					NVRAM_PARTITION_TYPE_RAM_LOG,
-					true, true);
+					EFX_NVLOG_F_READ | EFX_NVLOG_F_CLEAR);
 }
 
 static const struct devlink_health_reporter_ops sfc_devlink_ramlog_clear_ops = {
@@ -689,14 +683,6 @@ static const struct devlink_health_reporter_ops sfc_devlink_nvcfg_stored_ops = {
 };
 
 #endif /* EFX_HAVE_DEVLINK_HEALTH */
-
-static const struct devlink_ops sfc_devlink_ops = {
-#ifdef EFX_HAVE_DEVLINK_OPS_SUPPORTED_FLASH_UPDATE_PARAMS
-	.supported_flash_update_params	= 0,
-#endif
-	.flash_update			= efx_devlink_flash_update,
-	.info_get			= efx_devlink_info_get,
-};
 
 void efx_fini_devlink(struct efx_nic *efx)
 {

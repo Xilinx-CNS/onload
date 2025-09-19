@@ -53,6 +53,7 @@ typedef uint32_t ef_shrub_buffer_id;
 #define EF_SHRUB_SHRUB_FORMAT "shrub-%d"
 #define EF_SHRUB_MAX_CONTROLLER 9999
 #define EF_SHRUB_MAX_SHRUB 9999
+#define EF_SHRUB_NO_SHRUB -1
 #define EF_SHRUB_MAX_DIGITS 4
 #define EF_SHRUB_CONTROLLER_LEN (sizeof("controller-") + EF_SHRUB_MAX_DIGITS)
 #define EF_SHRUB_SHRUB_LEN (sizeof("shrub-") + EF_SHRUB_MAX_DIGITS)

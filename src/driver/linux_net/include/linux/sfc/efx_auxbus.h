@@ -26,7 +26,7 @@
  * this is so when fields in &struct efx_auxdev are added to the end of the
  * struct.
  */
-#define EFX_AUX_ABI_VERSION_MINOR 0
+#define EFX_AUX_ABI_VERSION_MINOR 1
 #define EFX_AUX_ABI_VERSION ((EFX_AUX_ABI_VERSION_MAJOR << 16) | \
 			     EFX_AUX_ABI_VERSION_MINOR)
 #define EFX_AUX_ABI_VERSION_MAJOR_GET(ver) (ver >> 16)
@@ -350,6 +350,19 @@ struct efx_auxdev_ops {
 #endif
 };
 
+#ifdef EFX_NOT_UPSTREAM
+/**
+ * enum efx_filter_block_kernel_type - filter types
+ * @EFX_FILTER_BLOCK_KERNEL_UCAST: Unicast
+ * @EFX_FILTER_BLOCK_KERNEL_MCAST: Multicast
+ * @EFX_FILTER_BLOCK_KERNEL_MAX: Limit of enum values
+ */
+enum efx_filter_block_kernel_type {
+	EFX_FILTER_BLOCK_KERNEL_UCAST = 0,
+	EFX_FILTER_BLOCK_KERNEL_MCAST,
+	EFX_FILTER_BLOCK_KERNEL_MAX,
+};
+
 /**
  * struct efx_auxdev_onload_ops - Device operations on the full-featured
  *	device type.
@@ -369,8 +382,6 @@ struct efx_auxdev_onload_ops {
 				   struct ethtool_rxfh_param *ctx);
 	int (*remove_rxfh_context)(struct efx_auxdev_client *handle,
 				   struct ethtool_rxfh_param *ctx);
-
-#ifdef EFX_NOT_UPSTREAM
 	/** @filter_insert: Insert an RX filter. */
 	int (*filter_insert)(struct efx_auxdev_client *handle,
 			     const struct efx_filter_spec *spec,
@@ -418,6 +429,9 @@ struct efx_auxdev_onload_ops {
 	 * bits. On failure, return a negative rc.
 	 */
 	s64 (*vport_id_get)(struct efx_auxdev_client *handle, u16 port_id);
+	int (*filter_set_block)(struct efx_auxdev_client *handle,
+				enum efx_filter_block_kernel_type type,
+				bool should_block);
 #endif
 };
 

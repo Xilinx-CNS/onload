@@ -411,7 +411,7 @@ static void efxdp_ef_eventq_timer_zero(ef_vi* vi)
   // TODO
 }
 
-void efxdp_vi_init(ef_vi* vi)
+int efxdp_vi_init(ef_vi* vi)
 {
   EF_VI_BUILD_ASSERT(EFAB_AF_XDP_DESC_BYTES == sizeof(struct xdp_desc));
 
@@ -458,6 +458,8 @@ void efxdp_vi_init(ef_vi* vi)
   vi->rx_buffer_len = 2048;
   vi->rx_prefix_len = 0;
   vi->evq_phase_bits = 1; /* We set this flag for ef_eventq_has_event */
+
+  return 0;
 }
 
 long efxdp_vi_mmap_bytes(ef_vi* vi)
@@ -465,6 +467,6 @@ long efxdp_vi_mmap_bytes(ef_vi* vi)
   return xdp_offsets(vi)->mmap_bytes;
 }
 #else
-void efxdp_vi_init(ef_vi* vi) {}
+int efxdp_vi_init(ef_vi* vi) { return 0; }
 long efxdp_vi_mmap_bytes(ef_vi* vi) { return 0; }
 #endif

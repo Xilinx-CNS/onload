@@ -74,7 +74,7 @@ struct mock_connection
 };
 
 static int mock_attach(struct ef_vi* vi_, int qid_, int buf_fd,
-                       unsigned n_superbufs, bool shared)
+                       unsigned n_superbufs, bool shared, bool interrupt)
 {
   CHECK(vi_, ==, vi);
   CHECK(qid_, ==, qid);

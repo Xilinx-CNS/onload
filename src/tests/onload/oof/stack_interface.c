@@ -56,28 +56,21 @@ int tcp_helper_vi_hw_drop_filter_supported(tcp_helper_resource_t* trs,
 }
 
 void tcp_helper_get_filter_params(tcp_helper_resource_t* trs,
-                                  int hwport, int* vi_id, int* rxq,
-                                  unsigned *flags,
-                                  unsigned *exclusive_rxq_token)
+                                  int hwport, bool mcast,
+                                  struct tcp_helper_filter_params* params)
 {
-  *vi_id = tcp_helper_hwport_to_stack_id(trs, hwport);
+  *params->vi_id = tcp_helper_hwport_to_stack_id(trs, hwport);
   /* At the moment we don't support replicating the shared queue behaviour
    * so just pretend we always use a single exclusive queue matching our
    * stack_id. */
   if( oo_nics[hwport].oo_nic_flags & OO_NIC_LL )
-    *rxq = *vi_id;
+    *params->rxq = *params->vi_id;
 }
 
 int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
                                const struct efx_filter_spec* spec, int rxq,
-                               bool replace)
+                               unsigned token)
 {
   return 0;
 }
 
-int tcp_helper_cluster_post_filter_add(tcp_helper_cluster_t* thc, int hwport,
-                                       const struct efx_filter_spec* spec,
-                                       int rxq, bool replace)
-{
-  return 0;
-}

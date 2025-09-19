@@ -516,13 +516,25 @@ static int efx_auxbus_filter_get_block(struct efx_nic *efx,
 	return rc;
 }
 
-static int efx_auxbus_filter_set_block(struct efx_nic *efx,
+static int efx_auxbus_filter_set_block(struct efx_auxdev_client *handle,
 				       enum efx_filter_block_kernel_type type,
 				       bool should_block)
 {
+	struct efx_probe_data *pd;
+	struct efx_nic *efx;
 	int rc = 0;
 
-	if (!efx || type < 0 || type >= EFX_FILTER_BLOCK_KERNEL_MAX)
+	if (!handle)
+		return -EINVAL;
+	if (!client_supports_filters(handle))
+		return -EOPNOTSUPP;
+
+	pd = cdev_to_probe_data(handle);
+	if (!pd)
+		return -ENODEV;
+	efx = &pd->efx;
+
+	if (type < 0 || type >= EFX_FILTER_BLOCK_KERNEL_MAX)
 		return -EINVAL;
 
 	mutex_lock(&efx->block_kernel_mutex);
@@ -748,18 +760,10 @@ static int efx_auxbus_set_param(struct efx_auxdev_client *handle,
 				enum efx_auxiliary_param p,
 				union efx_auxiliary_param_value *arg)
 {
-	struct efx_probe_data *pd;
-	struct efx_nic *efx;
 	int rc = 0;
 
 	if (!handle || !arg)
 		return -EINVAL;
-
-	pd = cdev_to_probe_data(handle);
-	if (!pd)
-		return -ENODEV;
-
-	efx = &pd->efx;
 
 	switch (p) {
 	case EFX_NETDEV:
@@ -780,18 +784,12 @@ static int efx_auxbus_set_param(struct efx_auxdev_client *handle,
 		handle->driver_data = arg->driver_data;
 		break;
 	case EFX_PARAM_FILTER_BLOCK_KERNEL_UCAST:
-		if (!client_supports_filters(handle))
-			return -EOPNOTSUPP;
-
-		rc = efx_auxbus_filter_set_block(efx,
+		rc = efx_auxbus_filter_set_block(handle,
 						 EFX_FILTER_BLOCK_KERNEL_UCAST,
 						 arg->b);
 		break;
 	case EFX_PARAM_FILTER_BLOCK_KERNEL_MCAST:
-		if (!client_supports_filters(handle))
-			return -EOPNOTSUPP;
-
-		rc = efx_auxbus_filter_set_block(efx,
+		rc = efx_auxbus_filter_set_block(handle,
 						 EFX_FILTER_BLOCK_KERNEL_MCAST,
 						 arg->b);
 		break;
@@ -1037,6 +1035,7 @@ static const struct efx_auxdev_onload_ops aux_onload_devops = {
 	.vport_new = efx_auxbus_vport_new,
 	.vport_free = efx_auxbus_vport_free,
 	.vport_id_get = efx_auxbus_vport_id_get,
+	.filter_set_block = efx_auxbus_filter_set_block,
 };
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XARRAY)

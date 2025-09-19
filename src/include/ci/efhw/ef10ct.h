@@ -14,18 +14,20 @@
 
 extern struct efhw_func_ops ef10ct_char_functional_units;
 
+#define EF10CT_QUEUE_NUM_NO_QUEUE -1
+
 #define EF10CT_EVQ_DUMMY_MAX 1024
-#define EF10CT_EVQ_NO_TXQ -1
 struct efhw_nic_ef10ct_evq {
   struct efhw_nic *nic;
   atomic_t queues_flushing;
   struct delayed_work check_flushes_polled;
   struct delayed_work check_flushes_irq;
+  struct delayed_work handle_event;
   ci_qword_t *base;
   unsigned capacity;
   unsigned next;
-  int txq;
-  unsigned queue_num;
+  int txq_num;
+  int queue_num;
 };
 
 /** enum_nic_ef10ct_rxq_state - Current state of the rxq.
@@ -55,18 +57,23 @@ enum efhw_nic_ef10ct_rxq_state {
 };
 
 struct efhw_nic_ef10ct_rxq {
-  int evq;
+  int evq_id;
   int ref_count;
   struct mutex bind_lock; /* Lock to serialise concurrent binds/unbinds */
   enum efhw_nic_ef10ct_rxq_state state;
   uint64_t *post_buffer_addr;
   struct oo_hugetlb_page *buffer_pages;
   size_t n_buffer_pages;
+
+  /* Shared rxqs only */
+  struct efhw_nic_efct_rxq_wakeup_bits apps;
+  uint32_t pktix; /* Total number of packets, shift right for sbufs */
 };
 
 struct ef10ct_shared_kernel_evq {
   int evq_id;
   struct efhw_nic_ef10ct_evq *evq;
+  uint page_order;
   struct efhw_iopages iopages;
   uint32_t irq;
   uint32_t channel;
@@ -93,11 +100,13 @@ struct efhw_nic_ef10ct {
     struct efhw_stack_allocator rx;
     struct mutex lock;
   } vi_allocator;
-  struct efct_filter_state filter_state;
+  struct efct_filter_state *filter_state;
   struct efrm_debugfs_dir debug_dir;
   struct xarray irqs;
   struct mutex irq_lock;
   struct efx_design_params efx_design_params;
+  EFHW_MCDI_DECLARE_BUF(supported_filter_matches,
+                        MC_CMD_GET_PARSER_DISP_INFO_OUT_LENMAX);
 };
 
 static inline u32 ef10ct_get_queue_num(u32 queue_handle)
@@ -138,6 +147,10 @@ ef10ct_reconstruct_queue_handle(u32 queue_num,
 }
 
 int ef10ct_alloc_evq(struct efhw_nic *nic);
-void ef10ct_free_evq(struct efhw_nic *nic, int evq);
+void ef10ct_free_evq(struct efhw_nic *nic, int evq_id);
+int ef10ct_alloc_txq(struct efhw_nic *nic);
+void ef10ct_free_txq(struct efhw_nic *nic, int txq_id);
+int ef10ct_alloc_rxq(struct efhw_nic *nic);
+void ef10ct_free_rxq(struct efhw_nic *nic, int rxq_id);
 
 #endif /* CI_EFHW_EF10CT_H */

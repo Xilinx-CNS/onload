@@ -229,10 +229,7 @@ int main(int argc, char* argv[])
 {
   ef_pd pd;
   ef_pio pio;
-  /* Use Express datapath as default for X4 interfaces. For NICs which
-   * don't have multiple datapaths, parse_interface_with_flags() (called
-   * by parse_opts() ) will clear this from pd_flags */
-  enum ef_pd_flags pd_flags = EF_PD_EXPRESS;
+  enum ef_pd_flags pd_flags = EF_PD_DEFAULT;
   int vi_flags = EF_VI_FLAGS_DEFAULT;
   pthread_t trigger_thread_id;
   cpu_set_t cpuset;
