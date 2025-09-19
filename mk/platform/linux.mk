@@ -26,7 +26,7 @@ CFLAGS_KERNEL :=
 endif
 
 ifdef CONFIG_ARM64
-EXTRA_CFLAGS += -mcmodel=large
+ccflags-y += -mcmodel=large
 endif
 
 # To build without -g set CONFIG_DEBUG_INFO to empty string

@@ -22,24 +22,24 @@ KDIR ?= /lib/modules/$(KVER)/build
 export KDIR KVER
 
 
-EXTRA_CPPFLAGS += -I$(TOPPATH)/src/include -I$(BUILDPATH)/include \
+cppflags-y += -I$(TOPPATH)/src/include -I$(BUILDPATH)/include \
 		-I$(BUILDPATH) -I$(TOPPATH)/$(CURRENT) -D__ci_driver__
 ifdef NDEBUG
-EXTRA_CPPFLAGS += -DNDEBUG
+cppflags-y += -DNDEBUG
 endif
 ifndef MMAKE_LIBERAL
-EXTRA_CFLAGS += -Werror
+ccflags-y += -Werror
 endif # MMAKE_LIBERAL
 
 # TODO Address these in the source code.
-EXTRA_CFLAGS += -Wno-missing-prototypes -Wno-missing-declarations
+ccflags-y += -Wno-missing-prototypes -Wno-missing-declarations
 
 ifdef W_NO_STRING_TRUNCATION
-EXTRA_CFLAGS += -Wno-stringop-truncation
+ccflags-y += -Wno-stringop-truncation
 endif
 
 ifndef NDEBUG
-EXTRA_CFLAGS += -g
+ccflags-y += -g
 endif
 
 HAVE_EFCT ?=
@@ -53,13 +53,13 @@ HAVE_CNS_EFCT := $(or $(and $(wildcard $(X3_NET_PATH)/include/linux/net/xilinx/x
 endif
 
 ifeq ($(or $(filter 1, $(HAVE_KERNEL_EFCT) $(HAVE_CNS_EFCT)),0),1)
-  EXTRA_CFLAGS += -DCI_HAVE_EFCT_AUX=1
+  ccflags-y += -DCI_HAVE_EFCT_AUX=1
   ifneq ($(HAVE_CNS_EFCT),0)
-    EXTRA_CFLAGS += -I$(X3_NET_PATH)/include
+    ccflags-y += -I$(X3_NET_PATH)/include
   endif
 else
   ifneq ($(HAVE_EFCT),1)
-    EXTRA_CFLAGS += -DCI_HAVE_EFCT_AUX=0
+    ccflags-y += -DCI_HAVE_EFCT_AUX=0
   else
     $(error Unable to build Onload with EFCT or AUX bus support)
   endif
@@ -67,31 +67,31 @@ endif
 
 HAVE_EF10CT ?= 1
 ifeq ($(HAVE_EF10CT),0)
-  EXTRA_CFLAGS += -DCI_HAVE_EF10CT=0
+  ccflags-y += -DCI_HAVE_EF10CT=0
 else
-  EXTRA_CFLAGS += -DCI_HAVE_EF10CT=1
+  ccflags-y += -DCI_HAVE_EF10CT=1
 endif
 
 HAVE_SDCI ?= 0
 ifeq ($(HAVE_SDCI),1)
-	EXTRA_CFLAGS += -DCI_HAVE_SDCI=1
+	ccflags-y += -DCI_HAVE_SDCI=1
 else
-	EXTRA_CFLAGS += -DCI_HAVE_SDCI=0
+	ccflags-y += -DCI_HAVE_SDCI=0
 endif
 
 HAVE_SFC ?= 1
 ifeq ($(HAVE_SFC),1)
-  EXTRA_CFLAGS += -DCI_HAVE_SFC=1
+  ccflags-y += -DCI_HAVE_SFC=1
 else
-  EXTRA_CFLAGS += -DCI_HAVE_SFC=0
+  ccflags-y += -DCI_HAVE_SFC=0
 endif
 
 TRANSPORT_CONFIG_OPT_HDR ?= ci/internal/transport_config_opt_extra.h
-EXTRA_CFLAGS += -DTRANSPORT_CONFIG_OPT_HDR='<$(TRANSPORT_CONFIG_OPT_HDR)>'
+ccflags-y += -DTRANSPORT_CONFIG_OPT_HDR='<$(TRANSPORT_CONFIG_OPT_HDR)>'
 
-EXTRA_CFLAGS += $(MMAKE_CFLAGS) $(EXTRA_CPPFLAGS)
-EXTRA_AFLAGS += $(EXTRA_CPPFLAGS)
+ccflags-y += $(MMAKE_CFLAGS) $(cppflags-y)
+asflags-y += $(cppflags-y)
 
 ifdef M_NO_OUTLINE_ATOMICS
-EXTRA_CFLAGS += -mno-outline-atomics
+ccflags-y += -mno-outline-atomics
 endif

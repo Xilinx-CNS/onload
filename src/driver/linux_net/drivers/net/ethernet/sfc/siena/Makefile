@@ -22,7 +22,7 @@ override CONFIG_SFC_DRIVERLINK :=
 override CONFIG_SFC_VDPA :=
 
 # For CONFIG_SFC_TRACING includes via linux <include/trace/define_trace.h>
-EXTRA_CFLAGS += -I$(src)
+ccflags-y += -I$(src)
 
 ifdef EFX_FOR_UPSTREAM
 # match UNIFDEF_DEFINES in export.sh
@@ -89,7 +89,7 @@ sfc-siena-$(CONFIG_SFC_DUMP) += dump.o
 obj-$(CONFIG_SFC_SIENA)	+= sfc-siena.o
 ifndef EFX_UPSTREAM
 ifndef EFX_DISABLE_GRO
-EXTRA_CFLAGS += -DEFX_USE_GRO
+ccflags-y += -DEFX_USE_GRO
 endif
 ifdef KERNELRELEASE
 # Kernel build
