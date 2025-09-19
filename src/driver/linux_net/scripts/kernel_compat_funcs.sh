@@ -508,6 +508,11 @@ cc-disable-warning = $(call try-run,\
 	$(CC) $(KBUILD_CPPFLAGS) $(KBUILD_CFLAGS) -W$(strip $(1)) -c -xc /dev/null -o "$$TMP",-Wno-$(strip $(1)))
 endif
 EXTRA_CFLAGS = -Werror $(call cc-disable-warning, unused-but-set-variable)
+
+CC_VERSION_TEXT = $(shell LC_ALL=C $(CC) --version 2>/dev/null | head -n 1)
+ifneq ($(findstring clang,$(CC_VERSION_TEXT)),)
+	ccflags-y += -Wno-error=format-truncation
+endif
 '
 
 # Ensure it looks like a build tree and we can build a module
