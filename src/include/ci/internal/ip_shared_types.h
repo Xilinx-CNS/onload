@@ -1023,6 +1023,7 @@ typedef struct {
   ci_uint32             ctpio_frame_len_check;
   ci_uint32             ctpio_max_frame_len;
 #endif
+  bool                  shrub_queues[EF_VI_MAX_EFCT_RXQS];
 } ci_netif_state_nic_t;
 
 

@@ -46,7 +46,6 @@ struct tcp_helper_nic {
   /* On arches where the efct RXQs are managed by onload rather than the
    * net driver we track the bufsets for mapping purposes here. */
   struct oo_iobufset*  thn_efct_iobs[EF_VI_MAX_EFCT_RXQS];
-  bool                 thn_shrub_queues[EF_VI_MAX_EFCT_RXQS];
 };
 
 

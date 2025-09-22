@@ -955,10 +955,11 @@ static int tcp_helper_select_rxq(tcp_helper_resource_t *trs, int intf_i,
 {
   int i;
   int rxq = -1;
+  ci_netif_state_nic_t *ns_nic = &trs->netif.state->nic[intf_i];
 
   for( i = 0; i < EF_VI_MAX_EFCT_RXQS; i++ ) {
     if( (*vi->efct_rxqs.active_qs & (1ull << i)) &&
-        (!!trs->nic[intf_i].thn_shrub_queues[i] == !!want_shrub) ) {
+        (!!ns_nic->shrub_queues[i] == !!want_shrub) ) {
       rxq = efct_get_rxq_state(vi, i)->qid;
       break;
     }
@@ -1116,7 +1117,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
       }
       /* It doesn't matter if we set this now and then fail later, this value
        * is only valid to read for queues we know are already attached. */
-      trs->nic[intf_i].thn_shrub_queues[qix] = true;
+      ni_nic->shrub_queues[qix] = true;
     }
 
     rc = efrm_rxq_alloc(vi_rs, rxq,
@@ -1943,8 +1944,6 @@ static int allocate_vis(tcp_helper_resource_t* trs,
            sizeof(trs->nic[intf_i].thn_efct_rxq));
     memset(trs->nic[intf_i].thn_efct_iobs, 0,
            sizeof(trs->nic[intf_i].thn_efct_iobs));
-    memset(trs->nic[intf_i].thn_shrub_queues, 0,
-           sizeof(trs->nic[intf_i].thn_shrub_queues));
   }
 
   /* This loop does the work of allocating a vi, using the information built
