@@ -415,7 +415,9 @@ ci_inline void efct_tx_complete(ef_vi* vi, struct efct_tx_state* tx, uint32_t dm
   int i = qs->added & q->mask;
 
   if( tx->tail_len != 0 ) {
-    tx->tail[tx->tail_len / sizeof(tx->tail[0])] <<= (8 - tx->tail_len) * 8;
+    const int idx = tx->tail_len / sizeof(tx->tail[0]);
+    const int offset = tx->tail_len % sizeof(tx->tail[0]);
+    tx->tail[idx] <<= (sizeof(tx->tail[0]) - offset) * 8;
     efct_tx_tail(tx);
   }
   while( tx->offset % efct_tx_scale_offset_bytes(EFCT_TX_ALIGNMENT) != 0 )
