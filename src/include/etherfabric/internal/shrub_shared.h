@@ -78,7 +78,7 @@ enum ef_shrub_controller_command {
   EF_SHRUB_CONTROLLER_DESTROY,
   EF_SHRUB_CONTROLLER_CREATE_HWPORT,
   EF_SHRUB_CONTROLLER_CREATE_IFINDEX,
-  EF_SHRUB_CONTROLLER_DUMP,
+  EF_SHRUB_CONTROLLER_DUMP_TO_FILE,
 };
 
 #define EF_SHRUB_DEFAULT_BUFFER_COUNT 4
@@ -174,7 +174,7 @@ struct ef_shrub_controller_request {
     } destroy; /* EF_SHRUB_CONTROLLER_DESTROY */
     struct {
       char file_name[EF_SHRUB_DUMP_LOG_SIZE];
-    } dump; /* EF_SHRUB_CONTROLLER_DUMP */
+    } dump; /* EF_SHRUB_CONTROLLER_DUMP_TO_FILE */
   };
 };
 

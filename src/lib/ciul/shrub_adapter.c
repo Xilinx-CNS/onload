@@ -104,7 +104,7 @@ int ef_shrub_adapter_send_dump(ef_shrub_request_sender send_request_func,
 {
   struct ef_shrub_controller_request request = {0};
   request.controller_version = EF_SHRUB_VERSION;
-  request.command = EF_SHRUB_CONTROLLER_DUMP;
+  request.command = EF_SHRUB_CONTROLLER_DUMP_TO_FILE;
   strncpy(request.dump.file_name, filename, EF_SHRUB_DUMP_LOG_SIZE - 1);
   request.dump.file_name[EF_SHRUB_DUMP_LOG_SIZE - 1] = '\0';
   return send_request_func(controller_id, &request);

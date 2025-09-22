@@ -298,7 +298,8 @@ static int create_directory(const char *path)
   return rc;
 }
 
-static int shrub_dump(shrub_controller_config *config, const char *file_name)
+static int shrub_dump_to_file(shrub_controller_config *config,
+                              const char *file_name)
 {
   char file_path[EF_SHRUB_LOG_LEN];
   int rc = 0;
@@ -507,8 +508,8 @@ static int poll_socket(shrub_controller_config *config)
               config, hwport_mask, ifindex, buffer_count, client_fd
             );
             break;
-          case EF_SHRUB_CONTROLLER_DUMP:
-            shrub_dump(config, request.dump.file_name);
+          case EF_SHRUB_CONTROLLER_DUMP_TO_FILE:
+            shrub_dump_to_file(config, request.dump.file_name);
             break;
           default:
             if ( config->debug_mode ) {
@@ -590,7 +591,7 @@ static int reactor_loop(shrub_controller_config *config)
     }
     poll_socket(config);
     if ( call_shrub_dump == 1 ) {
-      shrub_dump(config, "controller-signal.dump");
+      shrub_dump_to_file(config, "controller-signal.dump");
       call_shrub_dump = 0;
     }
   }
