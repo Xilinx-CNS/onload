@@ -298,13 +298,68 @@ static int create_directory(const char *path)
   return rc;
 }
 
+static void shrub_log_to_fd(int fd, char *buf, size_t buflen,
+                            const char* fmt, ...)
+{
+  va_list args;
+  int len;
+
+  va_start(args, fmt);
+  len = vsnprintf(buf, buflen, fmt, args);
+  va_end(args);
+  write(fd, buf, len + 1);
+}
+
+static void shrub_dump_to_fd(int fd, shrub_controller_config *config,
+                             char *buf, size_t buflen)
+{
+  shrub_if_config_t *server_config;
+
+  shrub_log_to_fd(fd, buf, buflen, "Shrub Controller State:\n");
+  shrub_log_to_fd(fd, buf, buflen, "  - Controller Name: controller-%d\n",
+                  config->controller_id);
+  shrub_log_to_fd(fd, buf, buflen, "  - Debug Mode: %s\n",
+                  config->debug_mode ? "true" : "false");
+  shrub_log_to_fd(fd, buf, buflen, "  - Controller Dir: %s\n",
+                  config->controller_dir);
+  shrub_log_to_fd(fd, buf, buflen, "  - Config Socket: %s\n",
+                  config->config_socket);
+
+  shrub_log_to_fd(fd, buf, buflen, "\nController Statistics:\n");
+  shrub_log_to_fd(fd, buf, buflen, "  - Client Negotiation Failures: %lu\n",
+                  config->controller_stats.controller_failed_to_neg_client);
+  shrub_log_to_fd(fd, buf, buflen, "  - Accept Failures: %lu\n",
+                  config->controller_stats.controller_accept_failures);
+  shrub_log_to_fd(fd, buf, buflen, "  - Response Send Failures: %lu\n",
+                  config->controller_stats.controller_response_failures);
+  shrub_log_to_fd(fd, buf, buflen, "  - Incompatible clients detected: %lu\n",
+                  config->controller_stats.controller_incompatible_clients);
+
+  server_config = config->server_config_head;
+  while ( server_config != NULL ) {
+    shrub_log_to_fd(fd, buf, buflen, "\nShrub If Config Details:\n");
+    shrub_log_to_fd(fd, buf, buflen, "  - Token ID: %d\n",
+                    server_config->token_id);
+    shrub_log_to_fd(fd, buf, buflen, "  - Buffer Count: %d\n",
+                    server_config->buffer_count);
+    shrub_log_to_fd(fd, buf, buflen, "  - Ifindex: %d\n",
+                    server_config->ifindex);
+    shrub_log_to_fd(fd, buf, buflen, "  - Hwports: %u\n",
+                    server_config->hw_ports);
+    shrub_log_to_fd(fd, buf, buflen, "  - Clients %d\n",
+                    server_config->ref_count);
+    server_config = server_config->next;
+  }
+}
+
+#define LOGBUF_SIZE 256
 static int shrub_dump_to_file(shrub_controller_config *config,
                               const char *file_name)
 {
   char file_path[EF_SHRUB_LOG_LEN];
+  char logbuf[LOGBUF_SIZE];
   int rc = 0;
-  shrub_if_config_t *server_config;
-  FILE *file;
+  int fd;
 
   rc = snprintf(file_path, sizeof(file_path), "%s/%s", config->log_dir,
                 file_name);
@@ -317,44 +372,20 @@ static int shrub_dump_to_file(shrub_controller_config *config,
   if ( !directory_exists(config->log_dir) )
     create_directory(config->log_dir);
 
-  file = fopen(file_path, "w");
-  if ( file == NULL ) {
+  fd = open(file_path, O_WRONLY | O_CREAT, S_IRUSR | S_IRGRP);
+  if ( fd < 0 ) {
     rc = -errno;
     ci_log("Error: shrub_controller was unable "
            "to open a file for shrub dump!");
     return rc;
   }
 
-  fprintf(file, "Shrub Controller State:\n");
-  fprintf(file, "  - Controller Name: controller-%d\n", config->controller_id);
-  fprintf(file, "  - Debug Mode: %s\n", config->debug_mode ? "true" : "false");
-  fprintf(file, "  - Controller Dir: %s\n", config->controller_dir);
-  fprintf(file, "  - Config Socket: %s\n", config->config_socket);
+  shrub_dump_to_fd(fd, config, logbuf, LOGBUF_SIZE);
 
-  fprintf(file, "\nController Statistics:\n");
-  fprintf(file, "  - Client Negotiation Failures: %lu\n",
-          config->controller_stats.controller_failed_to_neg_client);
-  fprintf(file, "  - Accept Failures: %lu\n",
-          config->controller_stats.controller_accept_failures);
-  fprintf(file, "  - Response Send Failures: %lu\n",
-          config->controller_stats.controller_response_failures);
-  fprintf(file, "  - Incompatible clients detected: %lu\n",
-          config->controller_stats.controller_incompatible_clients);
-
-
-  server_config = config->server_config_head;
-  while ( server_config != NULL ) {
-    fprintf(file, "\nShrub If Config Details:\n");
-    fprintf(file, "  - Token ID: %d\n", server_config->token_id);
-    fprintf(file, "  - Buffer Count: %d\n", server_config->buffer_count);
-    fprintf(file, "  - Ifindex: %d\n", server_config->ifindex);
-    fprintf(file, "  - Hwports: %u\n", server_config->hw_ports);
-    fprintf(file, "  - Clients %d\n", server_config->ref_count);
-    server_config = server_config->next;
-  }
-
-  fclose(file);
+  close(fd);
   return rc;
+
+
 }
 
 static int create_onload_config_socket(const char *socket_path, uintptr_t* config_socket_fd, int epoll_fd)
