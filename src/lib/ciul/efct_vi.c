@@ -322,7 +322,11 @@ ci_inline void efct_tx_init(ef_vi* vi, struct efct_tx_state* tx)
 /* store a left-over byte from the start or end of a block */
 ci_inline void efct_tx_tail_byte(struct efct_tx_state* tx, uint8_t byte)
 {
+#if CI_CFG_CXL
   const int idx = tx->tail_len / sizeof(tx->tail[0]);
+#else
+  const int idx = 0;
+#endif
   BUG_ON(tx->tail_len >= sizeof(tx->tail));
   tx->tail[idx] = (tx->tail[idx] << 8) | byte;
   tx->tail_len++;
