@@ -1435,10 +1435,6 @@ ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
   int rxq_num = rxq->qid;
   int rc;
 
-  /* This releases the SW RXQ resource, so is independent of the underlying
-   * HW RXQ flush and free. */
-  freer(rxq);
-
   mutex_lock(&ef10ct->rxq[rxq_num].bind_lock);
   for (prev_app = &ef10ct->rxq[rxq_num].apps.live_apps; *prev_app;
        prev_app = &(*prev_app)->next) {
@@ -1448,6 +1444,10 @@ ef10ct_shared_rxq_unbind(struct efhw_nic* nic, struct efhw_efct_rxq *rxq,
     }
   }
   rxq->next = NULL;
+
+  /* This releases the SW RXQ resource, so is independent of the underlying
+   * HW RXQ flush and free. */
+  freer(rxq);
 
   EFHW_ASSERT(ef10ct->rxq[rxq_num].ref_count > 0);
   ef10ct->rxq[rxq_num].ref_count--;

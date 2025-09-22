@@ -528,6 +528,8 @@ struct efhw_func_ops {
 
 	int (*shared_rxq_bind)(struct efhw_nic* nic,
 			       struct efhw_shared_bind_params *params);
+	/*! Unbind from a shared rxq.
+	 * freer must not call back into efhw */
 	void (*shared_rxq_unbind)(struct efhw_nic* nic,
 				  struct efhw_efct_rxq *rxq,
 				  efhw_efct_rxq_free_func_t *freer);
