@@ -310,48 +310,45 @@ static void shrub_log_to_fd(int fd, char *buf, size_t buflen,
   write(fd, buf, len + 1);
 }
 
+#define SECTION_SEP "---------------------------------------------------------"
 static void shrub_dump_summary_to_fd(int fd, shrub_controller_config *config,
                                      char *buf, size_t buflen)
 {
-  shrub_log_to_fd(fd, buf, buflen, "Shrub Controller State:\n");
-  shrub_log_to_fd(fd, buf, buflen, "  - Controller Name: controller-%d\n",
-                  config->controller_id);
-  shrub_log_to_fd(fd, buf, buflen, "  - Debug Mode: %s\n",
-                  config->debug_mode ? "true" : "false");
-  shrub_log_to_fd(fd, buf, buflen, "  - Controller Dir: %s\n",
-                  config->controller_dir);
-  shrub_log_to_fd(fd, buf, buflen, "  - Config Socket: %s\n",
+  shrub_log_to_fd(fd, buf, buflen, SECTION_SEP);
+  shrub_log_to_fd(fd, buf, buflen, "\nshrub controller\n");
+  shrub_log_to_fd(fd, buf, buflen, "  name: controller-%d%s\n",
+                  config->controller_id, config->debug_mode ? " (debug)" : "");
+  shrub_log_to_fd(fd, buf, buflen, "  dir: %s\n", config->controller_dir);
+  shrub_log_to_fd(fd, buf, buflen, "  config socket: %s\n",
                   config->config_socket);
 }
 
 static void shrub_dump_stats_to_fd(int fd, shrub_controller_config *config,
                                    char *buf, size_t buflen)
 {
-  shrub_log_to_fd(fd, buf, buflen, "\nController Statistics:\n");
-  shrub_log_to_fd(fd, buf, buflen, "  - Client Negotiation Failures: %lu\n",
+  shrub_log_to_fd(fd, buf, buflen, SECTION_SEP);
+  shrub_log_to_fd(fd, buf, buflen, "\ncontroller statistics:\n");
+  shrub_log_to_fd(fd, buf, buflen, "  client negotiation failures: %lu\n",
                   config->controller_stats.controller_failed_to_neg_client);
-  shrub_log_to_fd(fd, buf, buflen, "  - Accept Failures: %lu\n",
+  shrub_log_to_fd(fd, buf, buflen, "  accept failures: %lu\n",
                   config->controller_stats.controller_accept_failures);
-  shrub_log_to_fd(fd, buf, buflen, "  - Response Send Failures: %lu\n",
+  shrub_log_to_fd(fd, buf, buflen, "  response send failures: %lu\n",
                   config->controller_stats.controller_response_failures);
-  shrub_log_to_fd(fd, buf, buflen, "  - Incompatible clients detected: %lu\n",
+  shrub_log_to_fd(fd, buf, buflen, "  incompatible clients detected: %lu\n",
                   config->controller_stats.controller_incompatible_clients);
 }
 
 static void shrub_dump_server_to_fd(int fd, shrub_if_config_t *server_config,
                                     char *buf, size_t buflen)
 {
-  shrub_log_to_fd(fd, buf, buflen, "\nShrub If Config Details:\n");
-  shrub_log_to_fd(fd, buf, buflen, "  - Token ID: %d\n",
-                  server_config->token_id);
-  shrub_log_to_fd(fd, buf, buflen, "  - Buffer Count: %d\n",
-                  server_config->buffer_count);
-  shrub_log_to_fd(fd, buf, buflen, "  - Ifindex: %d\n",
-                  server_config->ifindex);
-  shrub_log_to_fd(fd, buf, buflen, "  - Hwports: %u\n",
-                  server_config->hw_ports);
-  shrub_log_to_fd(fd, buf, buflen, "  - Clients %d\n",
-                  server_config->ref_count);
+  shrub_log_to_fd(fd, buf, buflen, SECTION_SEP);
+  shrub_log_to_fd(fd, buf, buflen, "\nshrub server\n");
+  shrub_log_to_fd(fd, buf, buflen, "  ifindex: %d hwports: %x\n",
+                  server_config->ifindex, server_config->hw_ports);
+  shrub_log_to_fd(fd, buf, buflen, "  buffer count: %d client count: %d "
+                  "token: %x\n", server_config->buffer_count,
+                  server_config->ref_count, server_config->token_id);
+
 }
 
 static void shrub_dump_servers_to_fd(int fd, shrub_controller_config *config,
@@ -368,8 +365,8 @@ static void shrub_dump_to_fd(int fd, shrub_controller_config *config,
                              char *buf, size_t buflen)
 {
   shrub_dump_summary_to_fd(fd, config, buf, buflen);
-  shrub_dump_stats_to_fd(fd, config, buf, buflen);
   shrub_dump_servers_to_fd(fd, config, buf, buflen);
+  shrub_dump_stats_to_fd(fd, config, buf, buflen);
 }
 
 #define LOGBUF_SIZE 256
