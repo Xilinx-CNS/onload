@@ -68,8 +68,6 @@ struct shrub_controller_stats
 struct shrub_controller_vi
 {
   ef_vi vi;
-  int n_ev;
-  int i;
   ef_pd pd;
   ef_driver_handle dh;
 };
