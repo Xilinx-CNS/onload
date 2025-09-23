@@ -384,8 +384,17 @@ static int shrub_dump_to_file(shrub_controller_config *config,
 
   close(fd);
   return rc;
+}
 
+static int shrub_dump(shrub_controller_config *config, int fd, size_t bufsize)
+{
+  char *buf = malloc(bufsize);
+  if( !buf )
+    return -ENOMEM;
 
+  shrub_dump_to_fd(fd, config, buf, bufsize);
+  free(buf);
+  return 0;
 }
 
 static int create_onload_config_socket(const char *socket_path, uintptr_t* config_socket_fd, int epoll_fd)
@@ -541,6 +550,9 @@ static int poll_socket(shrub_controller_config *config)
             break;
           case EF_SHRUB_CONTROLLER_DUMP_TO_FILE:
             shrub_dump_to_file(config, request.dump.file_name);
+            break;
+          case EF_SHRUB_CONTROLLER_SHRUB_DUMP:
+            shrub_dump(config, client_fd, request.shrub_dump.logbuf_size);
             break;
           default:
             if ( config->debug_mode ) {
