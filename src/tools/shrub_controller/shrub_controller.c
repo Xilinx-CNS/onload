@@ -310,11 +310,9 @@ static void shrub_log_to_fd(int fd, char *buf, size_t buflen,
   write(fd, buf, len + 1);
 }
 
-static void shrub_dump_to_fd(int fd, shrub_controller_config *config,
-                             char *buf, size_t buflen)
+static void shrub_dump_summary_to_fd(int fd, shrub_controller_config *config,
+                                     char *buf, size_t buflen)
 {
-  shrub_if_config_t *server_config;
-
   shrub_log_to_fd(fd, buf, buflen, "Shrub Controller State:\n");
   shrub_log_to_fd(fd, buf, buflen, "  - Controller Name: controller-%d\n",
                   config->controller_id);
@@ -324,7 +322,11 @@ static void shrub_dump_to_fd(int fd, shrub_controller_config *config,
                   config->controller_dir);
   shrub_log_to_fd(fd, buf, buflen, "  - Config Socket: %s\n",
                   config->config_socket);
+}
 
+static void shrub_dump_stats_to_fd(int fd, shrub_controller_config *config,
+                                   char *buf, size_t buflen)
+{
   shrub_log_to_fd(fd, buf, buflen, "\nController Statistics:\n");
   shrub_log_to_fd(fd, buf, buflen, "  - Client Negotiation Failures: %lu\n",
                   config->controller_stats.controller_failed_to_neg_client);
@@ -334,22 +336,40 @@ static void shrub_dump_to_fd(int fd, shrub_controller_config *config,
                   config->controller_stats.controller_response_failures);
   shrub_log_to_fd(fd, buf, buflen, "  - Incompatible clients detected: %lu\n",
                   config->controller_stats.controller_incompatible_clients);
+}
 
-  server_config = config->server_config_head;
+static void shrub_dump_server_to_fd(int fd, shrub_if_config_t *server_config,
+                                    char *buf, size_t buflen)
+{
+  shrub_log_to_fd(fd, buf, buflen, "\nShrub If Config Details:\n");
+  shrub_log_to_fd(fd, buf, buflen, "  - Token ID: %d\n",
+                  server_config->token_id);
+  shrub_log_to_fd(fd, buf, buflen, "  - Buffer Count: %d\n",
+                  server_config->buffer_count);
+  shrub_log_to_fd(fd, buf, buflen, "  - Ifindex: %d\n",
+                  server_config->ifindex);
+  shrub_log_to_fd(fd, buf, buflen, "  - Hwports: %u\n",
+                  server_config->hw_ports);
+  shrub_log_to_fd(fd, buf, buflen, "  - Clients %d\n",
+                  server_config->ref_count);
+}
+
+static void shrub_dump_servers_to_fd(int fd, shrub_controller_config *config,
+                                     char *buf, size_t buflen)
+{
+  shrub_if_config_t *server_config = config->server_config_head;
   while ( server_config != NULL ) {
-    shrub_log_to_fd(fd, buf, buflen, "\nShrub If Config Details:\n");
-    shrub_log_to_fd(fd, buf, buflen, "  - Token ID: %d\n",
-                    server_config->token_id);
-    shrub_log_to_fd(fd, buf, buflen, "  - Buffer Count: %d\n",
-                    server_config->buffer_count);
-    shrub_log_to_fd(fd, buf, buflen, "  - Ifindex: %d\n",
-                    server_config->ifindex);
-    shrub_log_to_fd(fd, buf, buflen, "  - Hwports: %u\n",
-                    server_config->hw_ports);
-    shrub_log_to_fd(fd, buf, buflen, "  - Clients %d\n",
-                    server_config->ref_count);
+    shrub_dump_server_to_fd(fd, server_config, buf, buflen);
     server_config = server_config->next;
   }
+}
+
+static void shrub_dump_to_fd(int fd, shrub_controller_config *config,
+                             char *buf, size_t buflen)
+{
+  shrub_dump_summary_to_fd(fd, config, buf, buflen);
+  shrub_dump_stats_to_fd(fd, config, buf, buflen);
+  shrub_dump_servers_to_fd(fd, config, buf, buflen);
 }
 
 #define LOGBUF_SIZE 256
