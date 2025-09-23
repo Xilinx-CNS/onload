@@ -677,6 +677,8 @@ static void ci_netif_dump_vi(ci_netif* ni, int intf_i, oo_dump_log_fn_t logger,
   ef_vi* vi = ci_netif_vi(ni, intf_i);
   const char *irq = "irq";
   const char *channel = "channel";
+  unsigned shrub_mask = 0;
+  int i;
 
   if( intf_i < 0 || intf_i >= CI_CFG_MAX_INTERFACES ||
       ! efrm_nic_set_read(&ni->nic_set, intf_i) ) {
@@ -705,13 +707,19 @@ static void ci_netif_dump_vi(ci_netif* ni, int intf_i, oo_dump_log_fn_t logger,
   logger(log_arg, "  evq: sync_synced=%x sync_flags=%x",
          vi->ep_state->evq.sync_timestamp_synchronised,
          vi->ep_state->evq.sync_flags);
-  if( vi->efct_rxqs.ops )
+  if( vi->efct_rxqs.ops ) {
     vi->efct_rxqs.ops->dump_stats(vi, logger, log_arg);
-  else
+    for( i = 0; i < EF_VI_MAX_EFCT_RXQS; i++ )
+      if( nic->shrub_queues[i] )
+        shrub_mask |= 1 << i;
+    logger(log_arg, "  shrub queue mask: %x", shrub_mask);
+  }
+  else {
     logger(log_arg, "  rxq: cap=%d lim=%d spc=%d level=%d total_desc=%d",
            ef_vi_receive_capacity(vi), ni->state->rxq_limit,
            ci_netif_rx_vi_space(ni, vi), ef_vi_receive_fill_level(vi),
            vi->ep_state->rxq.removed);
+  }
 
   logger(log_arg, "  txq: cap=%d lim=%d spc=%d level=%d pkts=%d oflow_pkts=%d",
          ef_vi_transmit_capacity(vi), ef_vi_transmit_capacity(vi),
