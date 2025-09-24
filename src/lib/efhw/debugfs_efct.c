@@ -58,9 +58,12 @@ efct_debugfs_read_exclusive_rxq_mapping(struct seq_file *file, int rxq_n,
   seq_printf(file, "exclusive rxq map: ");
   for( qid = 0; qid < rxq_n; ++qid ) {
     uint32_t excl = fs->exclusive_rxq_mapping[qid];
-    seq_printf(file, "%s%d",
-               qid == 0 ? "" : " ",
-               excl && excl != EFHW_PD_NON_EXC_TOKEN);
+    if( qid % 8 == 0 )
+      seq_printf(file, "\n%3d:", qid);
+    if( excl && excl != EFHW_PD_NON_EXC_TOKEN )
+      seq_printf(file, " %08x", excl);
+    else
+      seq_printf(file, "        -");
   }
   seq_printf(file, "\n");
   return 0;
