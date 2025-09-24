@@ -145,6 +145,16 @@ X4 Datapath Restrictions
   EF_RX_DATAPATH=enterprise
 
 
+X4 Diagnostics
+--------------
+
+The onload_shrubdump tool provides diagnostic information from shared
+reusable buffer controllers but the format of its output cannot be
+relied upon to be consistent between this release and future releases.
+The debug logging behaviour of the controllers themselves is also subject to
+change.
+
+
 X4 Known Issues
 ---------------
 
