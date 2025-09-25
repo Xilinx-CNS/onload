@@ -70,7 +70,7 @@ int ef_shrub_adapter_send_ifindex(ef_shrub_request_sender send_request_func,
 }
 
 int ef_shrub_adapter_send_hwport(ef_shrub_request_sender send_request_func,
-                                 int controller_id, cicp_hwport_mask_t hw_port,
+                                 int controller_id, ci_hwport_id_t hw_port,
                                  uint32_t buffers)
 {
   /*

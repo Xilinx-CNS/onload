@@ -38,6 +38,9 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <ci/efhw/common.h>
+
+
 int (*ci_sys_ioctl)(int, long unsigned int, ...) =
     ioctl; /* taken from cplane/private.h (example code from cplane/client.c) */
 
@@ -76,7 +79,7 @@ struct shrub_controller_vi
 typedef struct shrub_if_config_s
 {
   int ifindex;
-  cicp_hwport_mask_t hw_ports;
+  ci_hwport_id_t hw_port;
   int token_id;
   int buffer_count;
   struct shrub_controller_vi res;
@@ -117,15 +120,56 @@ static void usage(void)
   fprintf(stderr, "  -K       Log to kmsg\n");
 }
 
+static bool is_hwport_llct(shrub_controller_config *config, ci_hwport_id_t hwport)
+{
+  struct cp_mibs *mib;
+  cp_version_t version;
+  bool is_llct = false;
+
+  if ( hwport == CI_HWPORT_ID_BAD )
+    return false;
+  
+  CP_VERLOCK_START(version, mib, config->cp)
+  
+  if ( hwport < mib->dim->hwport_max && !cicp_hwport_row_is_free(&mib->hwport[hwport]) ) {
+    cp_nic_flags_t nic_flags = mib->hwport[hwport].nic_flags;
+    is_llct = (nic_flags & NIC_FLAG_LLCT) != 0;
+  }
+  CP_VERLOCK_STOP(version, mib)
+
+  if ( config->debug_mode )
+    ci_log("Debug: hwport %d, is_llct=%d", hwport, is_llct);
+  
+  return is_llct;
+}
+
+// Based on the implementation of oo_get_llct_hwports found in tcp_helper_resource.c
+static ci_hwport_id_t get_first_llct_hwport(shrub_controller_config *config,
+                                            cicp_hwport_mask_t hwport_mask)
+{
+  for( ; hwport_mask != 0; hwport_mask &= (hwport_mask - 1) ) {
+    ci_hwport_id_t hw_port = cp_hwport_mask_first(hwport_mask);
+    if( is_hwport_llct(config, hw_port) )
+      return hw_port;
+  }
+  return CI_HWPORT_ID_BAD;
+}
+
 static int search_for_existing_server(shrub_controller_config *config,
-                                      int ifindex)
+                                      ci_hwport_id_t new_hw_port)
 {
   shrub_if_config_t *current_interface = config->server_config_head;
+  if ( config->debug_mode )
+    ci_log("Debug: search_for_existing_server: new_hw_port=%d", new_hw_port);
+
+  if ( new_hw_port == CI_HWPORT_ID_BAD )
+    return -EINVAL;
+
   while ( current_interface != NULL ) {
-    if ( current_interface->ifindex == ifindex ) {
+    if ( current_interface->hw_port == new_hw_port ) {
       if ( config->debug_mode )
         ci_log("Info: shrub_controller found duplicate shrub_server "
-               "with ifindex %d", ifindex);
+               "with hw_port %d", current_interface->hw_port);
       current_interface->ref_count++;
       return current_interface->token_id;
     }
@@ -134,16 +178,31 @@ static int search_for_existing_server(shrub_controller_config *config,
   return 0;
 }
 
-static cicp_hwport_mask_t
+static ci_hwport_id_t
 convert_ifindex_to_hwport(shrub_controller_config *config, int ifindex)
 {
   cicp_hwport_mask_t hwport_mask = 0;
+  ci_hwport_id_t result;
+
   oo_cp_find_llap(config->cp, ifindex, NULL, NULL, &hwport_mask, NULL, NULL);
-  return hwport_mask;
+
+  if ( config->debug_mode )
+    ci_log("Debug: ifindex=%d, original hwport_mask=0x%x (%u)",
+          ifindex, hwport_mask, hwport_mask);
+
+  if ( hwport_mask == 0 )
+    return CI_HWPORT_ID_BAD;
+
+  result = get_first_llct_hwport(config, hwport_mask);
+
+  if ( result != CI_HWPORT_ID_BAD && config->debug_mode )
+    ci_log("Debug: Found LLCT hw_port=%u", result);
+
+  return result;
 }
 
 static int convert_hwport_to_ifindex(shrub_controller_config *config,
-                                     cicp_hwport_mask_t hw_port)
+                                     ci_hwport_id_t hw_port)
 {
   ci_ifid_t ifindex;
   struct cp_mibs *mib;
@@ -157,7 +216,7 @@ static int convert_hwport_to_ifindex(shrub_controller_config *config,
 }
 
 static int add_server_config(shrub_controller_config *config,
-                             cicp_hwport_mask_t hw_port, int ifindex,
+                             ci_hwport_id_t hw_port, int ifindex,
                              uint32_t buffer_count)
 {
 
@@ -177,7 +236,7 @@ static int add_server_config(shrub_controller_config *config,
   }
 
   new_shrub_config->ifindex = ifindex;
-  new_shrub_config->hw_ports = hw_port;
+  new_shrub_config->hw_port = hw_port;
   new_shrub_config->ref_count = 0;
   new_shrub_config->buffer_count = buffer_count;
   new_shrub_config->next = config->server_config_head;
@@ -350,8 +409,8 @@ static void shrub_dump_server_to_fd(int fd, shrub_if_config_t *server_config,
 
   shrub_log_to_fd(fd, buf, buflen, SECTION_SEP);
   shrub_log_to_fd(fd, buf, buflen, "\nshrub server\n");
-  shrub_log_to_fd(fd, buf, buflen, "  ifindex: %d hwports: %x\n",
-                  server_config->ifindex, server_config->hw_ports);
+  shrub_log_to_fd(fd, buf, buflen, "  ifindex: %d hw_port: %x\n",
+                  server_config->ifindex, server_config->hw_port);
   shrub_log_to_fd(fd, buf, buflen, "  buffer count: %d client count: %d "
                   "token: %x\n", server_config->buffer_count,
                   server_config->ref_count, server_config->token_id);
@@ -464,7 +523,7 @@ static int create_onload_config_socket(const char *socket_path, uintptr_t* confi
   if ( rc < 0 ) {
     ci_log("Error: shrub_controller onload socket listen failed");
     goto cleanup_socket;
-  } 
+  }
 
   /* Add config_socket_fd to the epoll instance */
   event.data.fd = *config_socket_fd;
@@ -483,10 +542,10 @@ cleanup_socket:
 }
 
 static int process_create_command(shrub_controller_config *config,
-                                  cicp_hwport_mask_t hw_port, int ifindex,
+                                  ci_hwport_id_t hw_port, int ifindex,
                                   uint32_t buffer_count, uintptr_t client_fd)
 {
-  int rc = search_for_existing_server(config, ifindex);
+  int rc = search_for_existing_server(config, hw_port);
 
   /* Either rc is -1 and the cplane can't recognise the intf or we have a
      pre-existing shrub_token/server */
@@ -518,10 +577,10 @@ static int process_create_command(shrub_controller_config *config,
 
   if ( config->debug_mode ) {
     ci_log("Info: shrub_controller created a new server on interface with "
-           "ifindex %d buffer_count %d hwport %d",
+           "ifindex %d buffer_count %d hw_port %d",
            config->server_config_head->ifindex,
            config->server_config_head->buffer_count,
-           config->server_config_head->hw_ports);
+           config->server_config_head->hw_port);
   }
   return config->server_config_head->token_id;
 }
@@ -531,7 +590,7 @@ static int poll_socket(shrub_controller_config *config)
   int rc = 0;
   const int max_events = 1;
   uint32_t buffer_count = EF_SHRUB_DEFAULT_BUFFER_COUNT;
-  cicp_hwport_mask_t hwport_mask = 0xffffffff;
+  ci_hwport_id_t hw_port = CI_HWPORT_ID_BAD;
   struct ef_shrub_controller_request request;
   int ifindex = -1;
   struct epoll_event events[max_events];
@@ -552,7 +611,7 @@ static int poll_socket(shrub_controller_config *config)
       }
 
       response_status = ef_shrub_socket_recv(client_fd, &request, sizeof(request));
-      
+
       if ( response_status == 0 ) {
         if ( request.controller_version != EF_SHRUB_VERSION ) {
           if ( config->debug_mode ) {
@@ -565,7 +624,7 @@ static int poll_socket(shrub_controller_config *config)
           config->controller_stats.controller_incompatible_clients++;
         } else {
           buffer_count = EF_SHRUB_DEFAULT_BUFFER_COUNT;
-          hwport_mask = 0xffffffff;
+          hw_port = CI_HWPORT_ID_BAD;
           ifindex = -1;
 
           switch (request.command)
@@ -575,18 +634,28 @@ static int poll_socket(shrub_controller_config *config)
             break;
           case EF_SHRUB_CONTROLLER_CREATE_IFINDEX:
             ifindex = request.create_ifindex.ifindex;
-            hwport_mask = convert_ifindex_to_hwport(config, ifindex);
+            hw_port = convert_ifindex_to_hwport(config, ifindex);
+
+            if ( hw_port == CI_HWPORT_ID_BAD ) {
+              if ( config->debug_mode ) {
+                ci_log("Error: shrub_controller was unable to convert "
+                       "ifindex %d to a valid hw_port", ifindex);
+              }
+              response_status = -EINVAL;
+              break;
+            }
+
             buffer_count = request.create_ifindex.buffer_count;
             response_status = process_create_command(
-              config, hwport_mask, ifindex, buffer_count, client_fd
+              config, hw_port, ifindex, buffer_count, client_fd
             );
             break;
           case EF_SHRUB_CONTROLLER_CREATE_HWPORT:
-            hwport_mask = request.create_hwport.hw_port;
-            ifindex = convert_hwport_to_ifindex(config, hwport_mask);
+            hw_port = request.create_hwport.hw_port;
+            ifindex = convert_hwport_to_ifindex(config, hw_port);
             buffer_count = request.create_hwport.buffer_count;
             response_status = process_create_command(
-              config, hwport_mask, ifindex, buffer_count, client_fd
+              config, hw_port, ifindex, buffer_count, client_fd
             );
             break;
           case EF_SHRUB_CONTROLLER_DUMP_TO_FILE:
@@ -604,7 +673,7 @@ static int poll_socket(shrub_controller_config *config)
             break;
           }
         }
-      } 
+      }
 
       if ( response_status < 0 ) {
         config->controller_stats.controller_failed_to_neg_client++;
@@ -687,7 +756,7 @@ int parse_interface(const char *arg, shrub_controller_config *config) {
   char iface[IFNAMSIZ] = {0};
   int buffer_count;
   unsigned int ifindex;
-  cicp_hwport_mask_t hwport;
+  ci_hwport_id_t hw_port;
   size_t iface_len;
   char *buffer_str;
 
@@ -725,8 +794,14 @@ int parse_interface(const char *arg, shrub_controller_config *config) {
   if ( ifindex == 0 )
     return -errno;
 
-  hwport = convert_ifindex_to_hwport(config, ifindex);
-  return add_server_config(config, hwport, ifindex, buffer_count);
+  hw_port = convert_ifindex_to_hwport(config, ifindex);
+  if ( hw_port == CI_HWPORT_ID_BAD ) {
+    ci_log("Error: shrub_controller was unable to convert "
+           "ifindex %d to a valid hw_port", ifindex);
+    return -EINVAL;
+  }
+
+  return add_server_config(config, hw_port, ifindex, buffer_count);
 }
 
 static void tear_down_servers(shrub_controller_config *config)
