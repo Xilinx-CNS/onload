@@ -1654,8 +1654,7 @@ struct filter_insert_params {
 };
 
 
-static int get_rxq_num_from_mask(struct efhw_nic *nic,
-                                 const struct cpumask *mask, bool exclusive)
+static int alloc_new_rxq(struct efhw_nic *nic)
 {
   int rc;
 
@@ -1699,38 +1698,24 @@ static int get_rxq_num_from_mask(struct efhw_nic *nic,
 }
 
 
-static int select_rxq(struct filter_insert_params *params, uint64_t rxq_in,
+static int select_rxq(struct filter_insert_params *params, int rxq_in,
                       int *allocated)
 {
   struct efhw_nic_ef10ct *ef10ct = params->nic->arch_extra;
-  bool anyqueue, loose, exclusive;
+  bool anyqueue = params->flags & EFHW_FILTER_F_ANY_RXQ;
   int rxq_num = -1; /* ignored on failure, but initialised for logging */
   int rc = 0;
 
-  anyqueue = params->flags & EFHW_FILTER_F_ANY_RXQ;
-  loose = ((params->flags & EFHW_FILTER_F_PREF_RXQ) ||
-           (params->flags & EFHW_FILTER_F_ANY_RXQ));
-  exclusive = params->flags & EFHW_FILTER_F_EXCL_RXQ;
-
   if( !anyqueue ) {
     if( rxq_in >= ef10ct->rxq_n ) {
-      EFHW_WARN("%s: Invalid queue id 0x%llx\n", __func__, rxq_in);
+      EFHW_WARN("%s: Invalid queue id %d\n", __func__, rxq_in);
       rc = -EINVAL;
       goto out;
     }
     rxq_num = rxq_in;
   }
   else {
-    if( params->mask ) {
-      rxq_num = get_rxq_num_from_mask(params->nic, params->mask, exclusive);
-      *allocated = true;
-    }
-  }
-
-  /* Failed to get an rxq matching our cpumask, so allow fallback to any cpu
-   * if allowed */
-  if( rxq_num < 0 && loose ) {
-    rxq_num = get_rxq_num_from_mask(params->nic, cpu_online_mask, exclusive);
+    rxq_num = alloc_new_rxq(params->nic);
     *allocated = true;
   }
 
@@ -1742,8 +1727,8 @@ static int select_rxq(struct filter_insert_params *params, uint64_t rxq_in,
   }
 
  out:
-  EFHW_TRACE("%s: any: %d loose: %d exclusive: %d rxq_in: %llu rc: %d rxq: %x",
-             __func__, anyqueue, loose, exclusive, rxq_in, rc, rxq_num);
+  EFHW_TRACE("%s: any: %d rxq_in: %d rc: %d rxq: %d", __func__, anyqueue,
+             rxq_in, rc, rxq_num);
 
   return rc < 0 ? rc : rxq_num;
 }
