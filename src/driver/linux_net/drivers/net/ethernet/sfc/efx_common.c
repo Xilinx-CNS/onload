@@ -66,6 +66,11 @@ static bool link_down_on_reset;
 module_param(link_down_on_reset, bool, 0444);
 MODULE_PARM_DESC(link_down_on_reset,
 		 "Signal the link down and up on resets");
+
+static bool disable_recovery = false;
+module_param(disable_recovery, bool, 0444);
+MODULE_PARM_DESC(disable_recovery,
+		 "Disable recovery");
 #endif
 
 /* How often and how many times to poll for a reset while waiting for a
@@ -1291,6 +1296,8 @@ static void efx_reset_work(struct work_struct *data)
 	if (!pending)
 		return;
 
+	if (disable_recovery)
+		return;
 	rtnl_lock();
 
 	/* We checked the state in efx_schedule_reset() but it may

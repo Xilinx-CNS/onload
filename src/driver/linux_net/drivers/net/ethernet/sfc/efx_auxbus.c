@@ -1249,6 +1249,25 @@ static const struct efx_auxdev_llct_ops aux_llct_devops = {
 	.rxq_free = efx_auxbus_rxq_free,
 };
 
+static void efx_auxbus_handle_client_reset(struct efx_client *client,
+					   struct efx_auxdev_event *event)
+{
+	struct efx_auxdev_client *cdev = &client->auxiliary_info;
+
+	if (event->value == EFX_IN_RESET) {
+		/* If the NIC has reset then all of the queues we allocated
+		 * will be gone, and it is the responsibility of the auxbus
+		 * client to reallocate any queues it wants post-reset.
+		 */
+		xa_destroy(&cdev->txqs);
+		xa_destroy(&cdev->rxqs);
+		xa_destroy(&cdev->evqs);
+		xa_init(&cdev->txqs);
+		xa_init(&cdev->rxqs);
+		xa_init(&cdev->evqs);
+	}
+}
+
 int efx_auxbus_send_events(struct efx_probe_data *pd,
 			   struct efx_auxdev_event *event)
 {
@@ -1273,6 +1292,9 @@ int efx_auxbus_send_events(struct efx_probe_data *pd,
 
 			if (!client)
 				continue;
+
+			if (event->type == EFX_AUXDEV_EVENT_IN_RESET)
+				efx_auxbus_handle_client_reset(client, event);
 
 			cdev = &client->auxiliary_info;
 			if (!(cdev->events_requested & BIT(event->type)))

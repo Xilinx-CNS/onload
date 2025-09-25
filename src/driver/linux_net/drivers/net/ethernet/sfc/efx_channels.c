@@ -456,6 +456,13 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 		min_channels = 2;
 	}
 
+	vec_count = pci_msix_vec_count(efx->pci_dev);
+	if (vec_count < 0)
+		return vec_count;
+
+	if (vec_count < max_channels)
+		max_channels = vec_count;
+
 	if (max_channels < min_channels) {
 		pci_err(efx->pci_dev,
 			"Unable to satisfy minimum channel requirements\n");
@@ -476,14 +483,6 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 	efx_allocate_xdp_channels(efx, max_channels, n_channels);
 	n_channels += efx->n_xdp_channels;
 
-	vec_count = pci_msix_vec_count(efx->pci_dev);
-	if (vec_count < 0)
-		return vec_count;
-	if (vec_count < min_channels) {
-		pci_err(efx->pci_dev,
-			"Unable to satisfy minimum channel requirements\n");
-		return -ENOSPC;
-	}
 	if (vec_count < n_channels) {
 		pci_err(efx->pci_dev,
 			"WARNING: Insufficient MSI-X vectors available (%d < %u).\n",

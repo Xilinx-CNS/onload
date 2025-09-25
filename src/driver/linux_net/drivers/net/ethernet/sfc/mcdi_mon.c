@@ -602,6 +602,8 @@ static int efx_mcdi_read_dynamic_sensor_list(struct efx_nic *efx)
 #endif
 
 static int efx_mcdi_read_dynamic_sensor_list_info(struct efx_nic *efx,
+						  int *type_idx,
+						  size_t num_types,
 						  unsigned int *handle_list,
 						  unsigned int num_handles)
 {
@@ -610,7 +612,6 @@ static int efx_mcdi_read_dynamic_sensor_list_info(struct efx_nic *efx,
 	MCDI_DECLARE_BUF(inbuf,
 			 MC_CMD_DYNAMIC_SENSORS_GET_DESCRIPTIONS_IN_LEN(EFX_DYNAMIC_SENSOR_INFO_READ_MAX_HANDLES));
 	struct efx_dynamic_sensor_description *sensor = NULL;
-	static int type_idx[EFX_HWMON_TYPES_COUNT] = {0};
 	unsigned int handle;
 	int i, rc = 0;
 	size_t outlen;
@@ -651,6 +652,12 @@ static int efx_mcdi_read_dynamic_sensor_list_info(struct efx_nic *efx,
 		       MCDI_PTR(str_ptr, DYNAMIC_SENSORS_DESCRIPTION_NAME),
 		       MC_CMD_DYNAMIC_SENSORS_DESCRIPTION_NAME_LEN);
 		sensor->type = MCDI_DWORD(str_ptr, DYNAMIC_SENSORS_DESCRIPTION_TYPE);
+		if (sensor->type >= num_types) {
+			/* Unknown type, so ignore sensor */
+			i++;
+			outlen -= MC_CMD_DYNAMIC_SENSORS_GET_DESCRIPTIONS_OUT_SENSORS_LEN;
+			continue;
+		}
 
 		sensor->limits[EFX_SENSOR_LIMIT_WARNING_LO] =
 			MCDI_DWORD(str_ptr, DYN_SENSOR_LIMIT_LO_WARNING);
@@ -701,6 +708,7 @@ static int efx_mcdi_read_dynamic_sensor_info(struct efx_nic *efx)
 	unsigned int handles[EFX_DYNAMIC_SENSOR_INFO_READ_MAX_HANDLES];
 	struct efx_mcdi_mon *hwmon = efx_mcdi_mon(efx);
 	struct efx_dynamic_sensor_description *sensor;
+	int type_idx[EFX_HWMON_TYPES_COUNT] = {0};
 	unsigned int j, i = 0;
 	int rc = 0;
 
@@ -712,6 +720,8 @@ static int efx_mcdi_read_dynamic_sensor_info(struct efx_nic *efx)
 		if ((i == EFX_DYNAMIC_SENSOR_INFO_READ_MAX_HANDLES) ||
 		    (j == (hwmon->n_dynamic_sensors - 1))) {
 			rc = efx_mcdi_read_dynamic_sensor_list_info(efx,
+								    type_idx,
+								    ARRAY_SIZE(type_idx),
 								    handles, i);
 			if (!rc)
 				i = 0;

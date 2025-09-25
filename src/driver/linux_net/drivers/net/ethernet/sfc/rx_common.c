@@ -1219,6 +1219,9 @@ void efx_set_default_rx_indir_table(struct efx_rss_context *ctx, u32 spread)
 {
 	size_t i;
 
+	if (spread <= 1)
+		return;
+
 	for (i = 0; i < ARRAY_SIZE(ctx->rx_indir_table); i++)
 		ctx->rx_indir_table[i] =
 			ethtool_rxfh_indir_default(i, spread);
