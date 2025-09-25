@@ -12,6 +12,7 @@ struct efct_filter_insert_in {
   int filter_id;
   uint64_t drv_id;
   int rxq;
+  unsigned flags;
 };
 struct efct_filter_insert_out {
   int rxq;

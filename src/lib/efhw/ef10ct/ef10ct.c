@@ -1649,8 +1649,6 @@ ef10ct_buffer_map_type(struct efhw_nic *nic)
 
 struct filter_insert_params {
   struct efhw_nic *nic;
-  const struct cpumask *mask;
-  unsigned flags;
 };
 
 
@@ -1698,11 +1696,11 @@ static int alloc_new_rxq(struct efhw_nic *nic)
 }
 
 
-static int select_rxq(struct filter_insert_params *params, int rxq_in,
+static int select_rxq(struct efhw_nic *nic, int rxq_in, unsigned flags,
                       int *allocated)
 {
-  struct efhw_nic_ef10ct *ef10ct = params->nic->arch_extra;
-  bool anyqueue = params->flags & EFHW_FILTER_F_ANY_RXQ;
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  bool anyqueue = flags & EFHW_FILTER_F_ANY_RXQ;
   int rxq_num = -1; /* ignored on failure, but initialised for logging */
   int rc = 0;
 
@@ -1715,13 +1713,13 @@ static int select_rxq(struct filter_insert_params *params, int rxq_in,
     rxq_num = rxq_in;
   }
   else {
-    rxq_num = alloc_new_rxq(params->nic);
+    rxq_num = alloc_new_rxq(nic);
     *allocated = true;
   }
 
   if( rxq_num < 0 ) {
     EFHW_WARN("%s: Unable to find the queue ID for given mask, flags= %d\n",
-              __func__, params->flags);
+              __func__, flags);
     rc = rxq_num;
     goto out;
   }
@@ -1787,7 +1785,7 @@ static int ef10ct_filter_op(const struct efct_filter_insert_in *in_data,
                               EFHW_MCDI_DWORD(in, FILTER_OP_IN_MATCH_FIELDS)) )
     return -EPROTONOSUPPORT;
 
-  rxq_num = select_rxq(params, in_data->rxq, &allocated);
+  rxq_num = select_rxq(params->nic, in_data->rxq, in_data->flags, &allocated);
   if( rxq_num < 0 )
     return rxq_num;
 
@@ -1860,9 +1858,7 @@ static int ef10ct_filter_op(const struct efct_filter_insert_in *in_data,
 static int ef10ct_filter_insert_op(const struct efct_filter_insert_in *in,
                                    struct efct_filter_insert_out *out)
 {
-  struct filter_insert_params *params = (struct filter_insert_params*)
-                                        in->drv_opaque;
-  bool multi = params->flags & EFHW_FILTER_F_MULTI;
+  bool multi = in->flags & EFHW_FILTER_F_MULTI;
   uint32_t base_flow_type;
 
   /* Bail out early with a known error for IPv6 filters. We have a more
@@ -1929,7 +1925,6 @@ ef10ct_filter_insert(struct efhw_nic *nic,
   unsigned flags = efhw_params->flags;
   struct filter_insert_params params = {
     .nic = nic,
-    .mask = efhw_params->mask,
   };
   struct efct_filter_params efct_params = {
     .rxq = efhw_params->rxq,
@@ -1950,7 +1945,6 @@ ef10ct_filter_insert(struct efhw_nic *nic,
   /* There's no special RXQ 0 here, so don't allow fallback to SW filter */
   flags |= EFHW_FILTER_F_USE_HW;
 
-  params.flags = flags;
   efct_params.flags = flags;
   return efct_filter_insert(ef10ct->filter_state, efhw_params->spec,
                             &hw_filter, &efct_params);
@@ -2001,13 +1995,12 @@ ef10ct_filter_redirect(struct efhw_nic *nic, int filter_id,
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct filter_insert_params params = {
     .nic = nic,
-    .mask = efhw_params->mask,
-    .flags = efhw_params->flags | EFHW_FILTER_F_USE_HW,
   };
+  /* Add F_USE_HW to flags as we don't support fallback to sw filtering */
   struct efct_filter_params efct_params = {
     .rxq = efhw_params->rxq,
     .pd_excl_token = efhw_params->exclusive_rxq_token,
-    .flags = params.flags,
+    .flags = efhw_params->flags | EFHW_FILTER_F_USE_HW,
     .insert_op = ef10ct_filter_redirect_op,
     .insert_data = &params,
     .filter_flags = nic->filter_flags,

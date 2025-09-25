@@ -578,6 +578,7 @@ efct_filter_insert(struct efct_filter_state *state,
       .filter_id = node.filter_id,
       .drv_id = EFCT_HW_FILTER_DRV_ID_DUMMY,
       .rxq = *rxq,
+      .flags = flags,
     };
 
     rc = params->insert_op(&op_in, &op_out);
@@ -656,6 +657,7 @@ efct_filter_redirect(struct efct_filter_state *state, int filter_id,
     .filter_id = node->filter_id,
     .drv_id = state->hw_filters[hw_filter_idx].drv_id,
     .rxq = *rxq,
+    .flags = flags,
   };
 
   rc = params->insert_op(&op_in, &op_out);
