@@ -208,10 +208,10 @@ static const ci_oword_t* efct_rx_next_header(const ef_vi* vi, uint32_t meta_pkt)
 
 /* Check for actions needed on an rxq. This must match the checks made in
  * efct_poll_rx to ensure none are missed. */
-static bool efct_rxq_check_event(const ef_vi* vi, int qid)
+static bool efct_rxq_check_event(const ef_vi* vi, int qix)
 {
-  const ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[qid];
-  const ef_vi_efct_rxq_ptr* rxq_ptr = &vi->ep_state->rxq.rxq_ptr[qid];
+  const ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[qix];
+  const ef_vi_efct_rxq_ptr* rxq_ptr = &vi->ep_state->rxq.rxq_ptr[qix];
   uint32_t meta_pkt;
 
   if( ! efct_rxq_is_active(rxq) )
@@ -224,7 +224,7 @@ static bool efct_rxq_check_event(const ef_vi* vi, int qid)
   if( pkt_id_to_index_in_superbuf(meta_pkt) >= rxq_ptr->superbuf_pkts )
 #ifndef __KERNEL__
     /* only signal new event if rollover can be done */
-    return vi->efct_rxqs.ops->available(vi, qid);
+    return vi->efct_rxqs.ops->available(vi, qix);
 #else
     /* Returning no event interferes with oo_handle_wakeup_int_driven
      * Let the interrupt handler deal with the event */
@@ -836,12 +836,12 @@ static void efct_ef_vi_receive_push(ef_vi* vi)
 {
 }
 
-static int rx_rollover(ef_vi* vi, int qid)
+static int rx_rollover(ef_vi* vi, int qix)
 {
   const uint64_t pkts_per_superbuf = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
   uint32_t meta_pkt;
-  ef_vi_efct_rxq_ptr* rxq_ptr = &vi->ep_state->rxq.rxq_ptr[qid];
-  ef_vi_efct_rxq_state* rxq_efct_state = &vi->ep_state->rxq.efct_state[qid];
+  ef_vi_efct_rxq_ptr* rxq_ptr = &vi->ep_state->rxq.rxq_ptr[qix];
+  ef_vi_efct_rxq_state* rxq_efct_state = &vi->ep_state->rxq.efct_state[qix];
   ef_vi_rxq_state* rxq_state = &vi->ep_state->rxq;
   unsigned sbseq;
   bool sentinel;
@@ -865,7 +865,7 @@ static int rx_rollover(ef_vi* vi, int qid)
       rxq_state->n_evq_rx_pkts < pkts_per_superbuf )
     return -EAGAIN;
 
-  rc = vi->efct_rxqs.ops->next(vi, qid, &sentinel, &sbseq);
+  rc = vi->efct_rxqs.ops->next(vi, qix, &sentinel, &sbseq);
   if( rc < 0 )
     return rc;
 
@@ -875,7 +875,7 @@ static int rx_rollover(ef_vi* vi, int qid)
   rxq_state->n_evq_rx_pkts -= (int)rxq_efct_state->generates_events *
                               pkts_per_superbuf;
 
-  meta_pkt = (qid * CI_EFCT_MAX_SUPERBUFS + rc) << PKT_ID_PKT_BITS;
+  meta_pkt = (qix * CI_EFCT_MAX_SUPERBUFS + rc) << PKT_ID_PKT_BITS;
 
   if( rxq_ptr->meta_offset == 0 ) {
     /* Simple case, metadata located with data in the first new packet */
@@ -1569,13 +1569,13 @@ const void* efct_vi_rx_future_peek(ef_vi* vi)
 {
   uint64_t qs = *vi->efct_rxqs.active_qs;
   for( ; CI_LIKELY( qs ); qs &= (qs - 1) ) {
-    unsigned qid = __builtin_ctzll(qs);
-    ef_vi_efct_rxq_ptr* rxq_ptr = &vi->ep_state->rxq.rxq_ptr[qid];
+    unsigned qix = __builtin_ctzll(qs);
+    ef_vi_efct_rxq_ptr* rxq_ptr = &vi->ep_state->rxq.rxq_ptr[qix];
     unsigned pkt_id;
 
     /* Skip queues that have pending non-packet related work
      * The work will be picked up by poll or noticed by efct_rxq_check_event */
-    if( efct_rxq_need_config(&vi->efct_rxqs.q[qid]) )
+    if( efct_rxq_need_config(&vi->efct_rxqs.q[qix]) )
       continue;
 
     /* Beware: under onload, the kernel may be polling and updating `rxq_ptr`
@@ -1601,7 +1601,7 @@ const void* efct_vi_rx_future_peek(ef_vi* vi)
       const char* poison_addr = start - 2;
       uint64_t v = *(volatile uint64_t*)poison_addr;
       if(CI_LIKELY( v != CI_EFCT_DEFAULT_POISON )) {
-        vi->future_qid = qid;
+        vi->future_qix = qix;
         return start;
       }
       else {
@@ -1617,12 +1617,12 @@ int efct_vi_rx_future_poll(ef_vi* vi, ef_event* evs, int evs_len)
 {
   int count;
 
-  EF_VI_ASSERT(((ci_int8) vi->future_qid) >= 0);
-  EF_VI_ASSERT(efct_rxq_is_active(&vi->efct_rxqs.q[vi->future_qid]));
-  count = efct_poll_rx(vi, vi->future_qid, evs, evs_len);
+  EF_VI_ASSERT(((ci_int8) vi->future_qix) >= 0);
+  EF_VI_ASSERT(efct_rxq_is_active(&vi->efct_rxqs.q[vi->future_qix]));
+  count = efct_poll_rx(vi, vi->future_qix, evs, evs_len);
 #ifndef NDEBUG
   if( count )
-    vi->future_qid = -1;
+    vi->future_qix = -1;
 #endif
   return count;
 }
@@ -1632,11 +1632,11 @@ static int efct_ef_eventq_has_event(const ef_vi* vi)
   return efct_tx_check_event(vi) || efct_rx_check_event(vi);
 }
 
-unsigned efct_vi_next_rx_rq_id(ef_vi* vi, int qid)
+unsigned efct_vi_next_rx_rq_id(ef_vi* vi, int qix)
 {
-  if( efct_rxq_need_config(&vi->efct_rxqs.q[qid]) )
+  if( efct_rxq_need_config(&vi->efct_rxqs.q[qix]) )
     return ~0u;
-  return vi->ep_state->rxq.rxq_ptr[qid].data_pkt;
+  return vi->ep_state->rxq.rxq_ptr[qix].data_pkt;
 }
 
 int efct_vi_rxpkt_get_precise_timestamp(ef_vi* vi, uint32_t pkt_id,
@@ -1711,12 +1711,12 @@ static int efct_ef_vi_receive_get_timestamp(struct ef_vi* vi, const void* pkt,
   return efct_vi_rxpkt_get_precise_timestamp(vi, pkt_id, ts_out);
 }
 
-int efct_vi_get_wakeup_params(ef_vi* vi, int qid, unsigned* sbseq,
+int efct_vi_get_wakeup_params(ef_vi* vi, int qix, unsigned* sbseq,
                               unsigned* pktix)
 {
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
-  ef_vi_efct_rxq_ptr* rxq_ptr = &qs->rxq_ptr[qid];
-  ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[qid];
+  ef_vi_efct_rxq_ptr* rxq_ptr = &qs->rxq_ptr[qix];
+  ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[qix];
   uint64_t sbseq_next;
   unsigned ix;
 
