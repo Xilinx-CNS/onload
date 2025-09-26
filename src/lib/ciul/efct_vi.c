@@ -173,6 +173,21 @@ static const ci_oword_t* efct_rx_header(const ef_vi* vi, size_t pkt_id)
   return (const ci_oword_t*)(base + ix * EFCT_PKT_STRIDE);
 }
 
+/* The payload data for this packet */
+static inline char* efct_rx_data(ef_vi* vi, uint32_t pkt_id)
+{
+  /* assume DP_FRAME_OFFSET_FIXED (correct for initial hardware) */
+  return (char*)efct_rx_header(vi, pkt_id) + EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
+}
+
+/* The poison location for this packet */
+static inline void* poison_addr(ef_vi* vi, uint32_t pkt_id)
+{
+  /* Write poison value to the start of each frame. Subtract 2 to obtain a
+   * 64-bit aligned pointer. */
+  return efct_rx_data(vi, pkt_id) - 2;
+}
+
 static uint32_t rxq_ptr_to_pkt_id(uint32_t ptr)
 {
   /* Masking off the sentinel */
@@ -1523,8 +1538,7 @@ const void* efct_vi_rxpkt_get(ef_vi* vi, uint32_t pkt_id)
   EF_VI_ASSERT(ef_vi_get_real_arch(vi) == EF_VI_ARCH_EFCT ||
                ef_vi_get_real_arch(vi) == EF_VI_ARCH_EF10CT);
 
-  /* assume DP_FRAME_OFFSET_FIXED (correct for initial hardware) */
-  return (char*)efct_rx_header(vi, pkt_id) + EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
+  return efct_rx_data(vi, pkt_id);
 }
 
 /* This function is the inverse of `efct_vi_rxpkt_get` */
@@ -1606,17 +1620,15 @@ const void* efct_vi_rx_future_peek(ef_vi* vi)
       continue;
 
     {
-      const char* start = (char*)efct_rx_header(vi, pkt_id) +
-                          EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
-      const char* poison_addr = start - 2;
-      uint64_t v = *(volatile uint64_t*)poison_addr;
-      if(CI_LIKELY( v != CI_EFCT_DEFAULT_POISON )) {
+      const char* addr = poison_addr(vi, pkt_id);
+      if(CI_LIKELY( *(volatile uint64_t*)addr != CI_EFCT_DEFAULT_POISON )) {
         vi->future_qix = qix;
-        return start;
+        EF_VI_ASSERT(addr + 2 == efct_rx_data(vi, pkt_id));
+        return addr + 2;
       }
       else {
-        ci_prefetch_multiline_4(poison_addr, 1);
-        ci_prefetch_multiline_4(poison_addr, 5);
+        ci_prefetch_multiline_4(addr, 1);
+        ci_prefetch_multiline_4(addr, 5);
       }
     }
   }
