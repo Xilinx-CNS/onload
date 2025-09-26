@@ -1582,11 +1582,20 @@ static uint32_t efct_vi_rxpkt_get_pkt_id(ef_vi* vi, const void* pkt)
 
 void efct_vi_rxpkt_release(ef_vi* vi, uint32_t pkt_id)
 {
-  EF_VI_ASSERT(efct_rx_desc(vi, pkt_id)->refcnt > 0);
+  struct efct_rx_descriptor* desc = efct_rx_desc(vi, pkt_id);
 
-  if( --efct_rx_desc(vi, pkt_id)->refcnt == 0 )
+  /* Poison each packet when it's released, to avoid a latency glitch if
+   * we write to all the packets at once when freeing the buffer */
+  if( desc->poison )
+    *(uint64_t*)poison_addr(vi, pkt_id) = CI_EFCT_DEFAULT_POISON;
+
+  EF_VI_ASSERT(desc->refcnt > 0);
+  if( --desc->refcnt == 0 ) {
+    /* All packets have been poisoned, so no further poisoning is needed */
+    desc->poison = false;
     vi->efct_rxqs.ops->free(vi, pkt_id_to_rxq_ix(pkt_id),
                             pkt_id_to_local_superbuf_ix(pkt_id));
+  }
 }
 
 const void* efct_vi_rx_future_peek(ef_vi* vi)

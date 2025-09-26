@@ -316,6 +316,7 @@ static void test_poison(void)
   bool sentinel;
   unsigned sbseq;
   int buf;
+  void* data;
 
   ef_vi* vi = alloc_vi();
   ef_vi_efct_rxq_ops* ops = vi->efct_rxqs.ops;
@@ -327,8 +328,11 @@ static void test_poison(void)
   buf = ops->next(vi, 0, &sentinel, &sbseq);
   CHECK(buf, >=, 0);
   CHECK(get_posted(), ==, buf);
-  check_poison((void *)get_superbuf(vi, 0, buf));
+  data = (void*)get_superbuf(vi, 0, buf);
+  check_poison(data);
+  memset(data, 0, EFCT_RX_SUPERBUF_BYTES);
   ops->free(vi, 0, buf);
+  check_poison(data);
 
   free_vi(vi);
 }

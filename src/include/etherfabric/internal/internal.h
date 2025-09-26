@@ -149,8 +149,8 @@ struct efct_rx_descriptor
   uint16_t refcnt;
   uint16_t superbuf_pkts;
   int16_t  sbid_next; /* id of next buffer in a linked list, or -1 */
-  uint8_t  sentinel;
-  uint8_t  padding[1];
+  uint8_t  sentinel;  /* sentinel we expect to see in incoming packets */
+  uint8_t  poison;    /* we are responsible for re-poisoning after use */
 
   /* This union assumes that mis-located metadata and user-space buffer
    * management are mutually exclusive. If that's ever not the case, we'll
