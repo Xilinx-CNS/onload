@@ -106,6 +106,16 @@ static inline void assert_pkt_id_fields(void)
   EF_VI_BUILD_ASSERT(PKT_ID_TOTAL_BITS <= 31);
 }
 
+static uint32_t make_pkt_id(uint32_t q, uint32_t b, uint32_t p)
+{
+  EF_VI_ASSERT(q < (1 << PKT_ID_RXQ_BITS));
+  EF_VI_ASSERT(b < (1 << PKT_ID_SBUF_BITS));
+  EF_VI_ASSERT(p < (1 << PKT_ID_PKT_BITS));
+  return (q << (PKT_ID_PKT_BITS + PKT_ID_SBUF_BITS)) |
+         (b << (PKT_ID_PKT_BITS)) |
+         p;
+}
+
 static int pkt_id_to_index_in_superbuf(uint32_t pkt_id)
 {
   return pkt_id & ((1u << PKT_ID_PKT_BITS) - 1);
@@ -875,7 +885,7 @@ static int rx_rollover(ef_vi* vi, int qix)
   rxq_state->n_evq_rx_pkts -= (int)rxq_efct_state->generates_events *
                               pkts_per_superbuf;
 
-  meta_pkt = (qix * CI_EFCT_MAX_SUPERBUFS + rc) << PKT_ID_PKT_BITS;
+  meta_pkt = make_pkt_id(qix, rc, 0);
 
   if( rxq_ptr->meta_offset == 0 ) {
     /* Simple case, metadata located with data in the first new packet */
@@ -1369,7 +1379,7 @@ int efct_vi_sync_rxq(ef_vi *vi, int ix, int qid)
   /* Once we have the first superbuf that isn't entirely full, then we should
    * look through it to find the first packet in that superbuf that hasn't been
    * used yet. */
-  meta_pkt = (ix * CI_EFCT_MAX_SUPERBUFS + rc) << PKT_ID_PKT_BITS;
+  meta_pkt = make_pkt_id(ix, rc, 0);
   header = (void *)((char *)efct_superbuf_access(vi, ix, rc));
   for ( pkt_index = 0; pkt_index < rxq_ptr->superbuf_pkts;
         header += EFCT_PKT_STRIDE / sizeof(*header), pkt_index++ )
