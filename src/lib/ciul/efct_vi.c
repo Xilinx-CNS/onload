@@ -252,14 +252,21 @@ struct efct_tx_state
 {
   /* base address of the aperture */
   volatile efct_tx_aperture_t* aperture;
+#if ! CI_CFG_CXL
+  /* left over bytes after writing a block */
+  efct_tx_aperture_t tail[EFCT_TX_TAIL_SIZE];
+#endif
   /* number of left over bytes in 'tail' */
   unsigned tail_len;
   /* number of 64-bit words from start of aperture */
   uint64_t offset;
   /* mask to keep offset within the aperture range */
   uint64_t mask;
-  /* left over bytes after writing a block */
+#if CI_CFG_CXL
+  /* left over bytes after writing a block - this should be appropriately
+   * aligned to avoid two unaligned loads when using movdir64b */
   efct_tx_aperture_t tail[EFCT_TX_TAIL_SIZE] EF_VI_ALIGN(EF_VI_DMA_ALIGN);
+#endif
 };
 
 /* generic tx header */
