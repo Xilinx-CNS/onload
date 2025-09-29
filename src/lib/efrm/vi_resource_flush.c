@@ -132,6 +132,7 @@ efrm_vi_resource_efct_rxq_flush_done(struct efrm_vi *virs,
 	if (virs->efct_flush_outstanding) {
 		virs->efct_flush_outstanding--;
 
+		EFRM_ASSERT(spin_is_locked(&efrm_vi_manager->rm.rm_lock));
 		list_del(efrm_rxq_get_flush_list(rxq));
 
 		efrm_rxq_free(rxq);
@@ -240,10 +241,14 @@ efrm_vi_resource_issue_tx_flush(struct efrm_vi *virs, bool *completed)
 static void efrm_vi_resource_issue_efct_rx_flush(struct efrm_vi *virs,
 	struct efrm_efct_rxq *rxq)
 {
+	EFRM_ASSERT(spin_is_locked(&efrm_vi_manager->rm.rm_lock));
 	list_add_tail(efrm_rxq_get_flush_list(rxq),
-	&nvi_from_virs(virs)->efct_rx_flush_outstanding_list);
+	              &nvi_from_virs(virs)->efct_rx_flush_outstanding_list);
 
+	/* Drop spin lock as efhw_nic_* calls can block */
+	spin_unlock_bh(&efrm_vi_manager->rm.rm_lock);
 	efrm_rxq_flush(rxq);
+	spin_lock_bh(&efrm_vi_manager->rm.rm_lock);
 
 	/* flush_jiffies needs to be different than JIFFIES_NO_TIMEOUT,
 	* we ensure this by always setting the least significant bit */
@@ -549,10 +554,7 @@ void efrm_pt_flush(struct efrm_vi *virs)
 	list_for_each_safe(pos, temp, &virs->efct_rxq_list) {
 		rxq = efrm_rxq_from_vi_list(pos);
 
-		/* Drop spin lock as efhw_nic_* calls can block */
-		spin_unlock_bh(&efrm_vi_manager->rm.rm_lock);
 		efrm_vi_resource_issue_efct_rx_flush(virs, rxq);
-		spin_lock_bh(&efrm_vi_manager->rm.rm_lock);
 	}
 
 	/* Issue the RX flush if possible or queue it for later. */
