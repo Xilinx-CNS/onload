@@ -3516,6 +3516,16 @@ void efx_ptp_event(struct efx_nic *efx, efx_qword_t *ev)
 			  "PTP out of sequence event %d\n", code);
 		ptp->evt_frag_idx = 0;
 	}
+
+	if (!ptp->workwq) {
+		netif_err(efx, hw, efx->net_dev, "PTP event with missing phc ptp data workwq\n");
+		return;
+	}
+	if (!ptp->pps_workwq) {
+		netif_err(efx, hw, efx->net_dev, "PTP event with missing phc ptp data pps workwq\n");
+		return;
+	}
+
 	/* Relay all events to the PF that administers the hardware */
 	efx = ptp->efx;
 

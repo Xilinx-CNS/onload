@@ -42,8 +42,10 @@ struct efx_x4_mcdi_port_data {
 		u8 module_seq;
 		bool duplex;
 		unsigned int speed;
+		u8 requested_fec;
 	} link;
 };
+#define EFX_REQUESTED_FEC_UNKNOWN 0xff
 
 int efx_mcdi_get_port_handle(struct efx_nic *efx, u32 *handle);
 

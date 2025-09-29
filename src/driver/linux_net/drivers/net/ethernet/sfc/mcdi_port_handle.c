@@ -606,6 +606,22 @@ static u32 ethtool_fec_to_x4_mcdi(u32 supported_fec, u32 ethtool_fec)
 
 static u32 x4_mcdi_fec_to_ethtool(struct efx_x4_mcdi_port_data *port_data)
 {
+	/* Use requested FEC reported by firmware, if available */
+	switch (port_data->link.requested_fec) {
+	case MC_CMD_FEC_NONE:
+		return ETHTOOL_FEC_OFF;
+	case MC_CMD_FEC_BASER:
+		return ETHTOOL_FEC_BASER;
+	case MC_CMD_FEC_RS:
+		return ETHTOOL_FEC_RS;
+	case EFX_REQUESTED_FEC_UNKNOWN:
+		/* Fall back to deducing requested FEC mode */
+		break;
+	default:
+		/* Unknown requested FEC mode */
+		return ETHTOOL_FEC_AUTO;
+	}
+
 	if ((port_data->link.control & BIT(MC_CMD_LINK_FLAGS_AUTONEG_EN))) {
 		/* Autonegotiation is enabled. Firmware computed the
 		 * advertised abilites from either the FEC_MODE in an
@@ -830,7 +846,7 @@ static
 int efx_x4_mcdi_link_state(struct efx_nic *efx)
 {
 	struct efx_x4_mcdi_port_data *port_data = efx->port_data;
-	MCDI_DECLARE_BUF(outbuf, MC_CMD_LINK_STATE_OUT_V3_LEN);
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_LINK_STATE_OUT_V4_LEN);
 	DECLARE_BITMAP(tech_tmp, MC_CMD_ETH_TECH_TECH_WIDTH);
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_LINK_STATE_IN_LEN);
 	void *supported, *advertised, *partner;
@@ -943,6 +959,13 @@ int efx_x4_mcdi_link_state(struct efx_nic *efx)
 		port_data->link.speed =
 			MCDI_DWORD(outbuf, LINK_STATE_OUT_V3_LINK_SPEED);
 	}
+
+	/* Previously requested FEC configuration */
+	if (outlen < MC_CMD_LINK_STATE_OUT_V4_LEN)
+		port_data->link.requested_fec = EFX_REQUESTED_FEC_UNKNOWN;
+	else
+		port_data->link.requested_fec =
+			MCDI_BYTE(outbuf, LINK_STATE_OUT_V4_REQUESTED_FEC_MODE);
 
 	return 0;
 }
