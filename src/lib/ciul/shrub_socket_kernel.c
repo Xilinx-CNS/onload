@@ -12,6 +12,7 @@
 #include <net/af_unix.h>
 
 #include <linux/nsproxy.h> /* TODO ON-16394 see shrub_socket_open */
+#include <ci/driver/kernel_compat.h>
 #include <driver/linux_onload/onload_kernel_compat.h>
 #include <etherfabric/internal/efct_uk_api.h>
 
@@ -177,9 +178,15 @@ static int map_buffers(uint64_t* addr_out, struct file* file,
   const char* page_end;
   pgoff_t pgoff = 0;
 
+#ifdef EFRM_HUGETLB_INDEX_BY_PAGE
+  pgoff_t pgstride = CI_HUGEPAGE_SIZE / PAGE_SIZE;
+#else
+  pgoff_t pgstride = 1;
+#endif
+
   buffer_count = bytes_to_buffers(bytes);
 
-  for( buffers_got = 0; buffers_got != buffer_count; ++pgoff ) {
+  for( buffers_got = 0; buffers_got != buffer_count; pgoff += pgstride ) {
     page = find_or_create_page(file->f_mapping, pgoff, GFP_KERNEL);
 
     if( page == NULL )
