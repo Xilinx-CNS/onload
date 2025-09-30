@@ -111,6 +111,9 @@ apply to all VIs, using the EF_VI_EXTRA_VI_FLAGS environment variable:
  - Enable SDCI without steering tags: EF_VI_EXTRA_VI_FLAGS=tph_enable
  - Enable SDCI with steering tags   : EF_VI_EXTRA_VI_FLAGS=tph_enable,tph_mode
 
+Please note that when using SDCI with steering tags, a NIC reset may result in
+incorrect steering tags being used, which may degrade performance.
+
 
 X4 Functionality
 ----------------
