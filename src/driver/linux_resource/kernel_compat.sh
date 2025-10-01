@@ -188,6 +188,9 @@ EFRM_HAVE_FOLLOW_PFNMAP_START symbol follow_pfnmap_start include/linux/mm.h
 EFRM_HAVE_FOLLOW_PTE symbol follow_pte include/linux/mm.h
 EFRM_HAVE_FOLLOW_PTE_VMA symtype follow_pte include/linux/mm.h int(struct vm_area_struct*, unsigned long, pte_t**, spinlock_t**)
 
+EFX_NEED_NETDEV_HOLD		nsymbol	netdev_hold		include/linux/netdevice.h
+EFX_HAVE_DEV_HOLD_TRACK		symbol	dev_hold_track		include/linux/netdevice.h
+
 # TODO move onload-related stuff from net kernel_compat
 " | grep -E -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }

@@ -69,6 +69,7 @@
 #include "sfcaffinity.h"
 #include <ci/driver/resource/linux_efhw_nic.h>
 #include <ci/driver/resource/driverlink.h>
+#include <linux/reboot.h>
 #include "debugfs.h"
 
 MODULE_AUTHOR("Solarflare Communications");
@@ -209,7 +210,7 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct device *dev,
 	/* Tie the lifetime of the kernel's state to that of our own. */
 	if( dev )
 		get_device(dev);
-	dev_hold(net_dev);
+	netdev_hold(net_dev, &nic->net_dev_tracker, GFP_KERNEL);
 
 	rc = efhw_nic_ctor(nic, res_dim, dev_type, net_dev, dev,
 			   timer_quantum_ns);
@@ -240,7 +241,7 @@ fail2:
 fail1:
 	if( dev )
 		put_device(dev);
-	dev_put(net_dev);
+	netdev_put(net_dev, &nic->net_dev_tracker);
 	return rc;
 }
 
@@ -266,7 +267,7 @@ linux_efrm_nic_reclaim(struct linux_efhw_nic *lnic,
 
 	/* Replace the net & pci devs */
 	get_device(dev);
-	dev_hold(net_dev);
+	netdev_hold(net_dev, &nic->net_dev_tracker, GFP_KERNEL);
 	spin_lock_bh(&nic->pci_dev_lock);
 	old_dev = nic->dev;
 	nic->dev = dev;
@@ -584,7 +585,7 @@ efrm_nic_do_unplug(struct efhw_nic* nic, bool hard)
 	spin_unlock_bh(&nic->pci_dev_lock);
 
 	EFRM_ASSERT(net_dev != NULL);
-	dev_put(net_dev);
+	netdev_put(net_dev, &nic->net_dev_tracker);
 	put_device(dev);
 
 	return 0;
@@ -709,6 +710,21 @@ static void efrm_nic_del_all(void)
 		efrm_nic_del(linux_efhw_nic(nic));
 }
 
+static int sfc_resource_shutdown_notify(struct notifier_block *unused1,
+				        unsigned long unused2, void *unused3)
+{
+	/* Due to refcounting reasons in netdev, these must
+	 * be called for the shutdown to happen without delays
+	 */
+	efrm_nondl_unregister();
+	efrm_nondl_shutdown();
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block sfc_resource_shutdown_nb = {
+	.notifier_call = sfc_resource_shutdown_notify,
+};
 
 /****************************************************************************
  *
@@ -761,6 +777,8 @@ static int init_sfc_resource(void)
 	efrm_install_sysfs_entries();
 	efrm_nondl_register();
 
+	register_reboot_notifier(&sfc_resource_shutdown_nb);
+
 	return 0;
 
 failed_notifier:
@@ -783,6 +801,8 @@ failed_resources:
  ****************************************************************************/
 static void cleanup_sfc_resource(void)
 {
+	unregister_reboot_notifier(&sfc_resource_shutdown_nb);
+
 	efrm_nondl_unregister();
 	efrm_remove_sysfs_entries();
 	efrm_nondl_shutdown();

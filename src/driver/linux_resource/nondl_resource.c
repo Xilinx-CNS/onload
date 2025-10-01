@@ -8,6 +8,7 @@
 #include <ci/efrm/efrm_client.h>
 #include <ci/efrm/nondl.h>
 #include <linux/rtnetlink.h>
+#include <linux/netdevice.h>
 
 /* Maximum number of VIs we will try to create for each device. */
 #define MAX_VIS 128
@@ -94,6 +95,9 @@ void efrm_nondl_unregister_driver(struct efrm_nondl_driver *driver)
 
   rtnl_lock();
 
+  if (!nondl_driver)
+    goto out;
+
   EFRM_ASSERT(nondl_driver == driver);
 
   list_for_each_entry_safe_reverse(device, device_n, &driver->devices,
@@ -104,6 +108,7 @@ void efrm_nondl_unregister_driver(struct efrm_nondl_driver *driver)
 
   nondl_driver = NULL;
 
+out:
   rtnl_unlock();
 }
 EXPORT_SYMBOL(efrm_nondl_unregister_driver);
@@ -132,7 +137,7 @@ int efrm_nondl_register_netdev(struct net_device *netdev,
 
   INIT_LIST_HEAD(&device->node);
 
-  dev_hold(netdev);
+  netdev_hold(netdev, &device->netdev_tracker, GFP_KERNEL);
   device->netdev = netdev;
   device->n_vis = n_vis;
   device->is_up = 1;
@@ -153,7 +158,7 @@ static void efrm_nondl_cleanup_netdev(struct efrm_nondl_device *device)
   BUG_ON(device->driver);
 
   list_del(&device->node);
-  dev_put(device->netdev);
+  netdev_put(device->netdev, &device->netdev_tracker);
 
   kfree(device);
 }
