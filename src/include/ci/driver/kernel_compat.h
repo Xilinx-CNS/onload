@@ -546,4 +546,17 @@ static inline int efrm_follow_pfn(struct vm_area_struct *vma,
 }
 #endif
 
+/* Historically, page->index was expressed in the huge page size units.
+ * Then, it changed to the PAGE_SIZE units. We use the presence of the
+ * hugetlb_basepage_index() function as a marker of this transition.
+ * We also use the presence of filemap_lock_hugetlb_folio() to
+ * distinguish between older Linux kernels (< 5.4) and newer (>= 6.7
+ * for vanilla, and >= 5.14 for RHEL 9.6) where hugetlb_basepage_index()
+ * was not present.
+ */
+#if defined(EFRM_HAS_FILEMAP_LOCK_HUGETLB_FOLIO) && ! defined(EFRM_HAS_HUGETLB_BASEPAGE_INDEX)
+#define EFRM_HUGETLB_INDEX_BY_PAGE yes
+#endif
+
+
 #endif /* DRIVER_LINUX_RESOURCE_KERNEL_COMPAT_H */

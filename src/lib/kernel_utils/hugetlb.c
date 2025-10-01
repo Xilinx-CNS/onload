@@ -317,15 +317,7 @@ EXPORT_SYMBOL(oo_hugetlb_pages_prealloc);
 loff_t
 oo_hugetlb_page_offset(struct page *page)
 {
-	/* Historically, page->index was expressed in the huge page size units.
-	 * Then, it changed to the PAGE_SIZE units. We use the presence of the
-	 * hugetlb_basepage_index() function as a marker of this transition.
-	 * We also use the presence of filemap_lock_hugetlb_folio() to
-	 * distinguish between older Linux kernels (< 5.4) and newer (>= 6.7
-	 * for vanilla, and >= 5.14 for RHEL 9.6) where hugetlb_basepage_index()
-	 * was not present.
-	 */
-#if defined(EFRM_HAS_FILEMAP_LOCK_HUGETLB_FOLIO) && ! defined(EFRM_HAS_HUGETLB_BASEPAGE_INDEX)
+#ifdef EFRM_HUGETLB_INDEX_BY_PAGE
 	return page->index * PAGE_SIZE;
 #else
 	return page->index * OO_HUGEPAGE_SIZE;
