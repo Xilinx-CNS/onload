@@ -354,10 +354,10 @@ typedef struct ci_resource_op_s {
       /*bool*/uint8_t   rollover;
     } buffer_post;
     struct {
-      unsigned token;
+      uint32_t token;
     } pd_excl_rxq_tok_get;
     struct {
-      unsigned token;
+      uint32_t token;
     } shared_rxq_tok_set;
   } u CI_ALIGN(8);
 } ci_resource_op_t;
