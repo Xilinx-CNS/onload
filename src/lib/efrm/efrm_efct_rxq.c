@@ -151,7 +151,36 @@ static int efrm_debugfs_read_sbufs_pkts_max(struct seq_file *file,
 	return efrm_debugfs_read_u32(file, &val);
 }
 
-static const struct efrm_debugfs_parameter efrm_debugfs_efct_rxq_parameters[] = {
+static int efrm_debugfs_read_qix(struct seq_file *file, const void *data)
+{
+	struct efrm_efct_rxq *rxq = (struct efrm_efct_rxq *)data;
+	uint32_t val = rxq->hw.qix;
+	return efrm_debugfs_read_x32(file, &val);
+}
+
+static int efrm_debugfs_read_wake_at(struct seq_file *file, const void *data)
+{
+	struct efrm_efct_rxq *rxq = (struct efrm_efct_rxq *)data;
+	uint32_t val = rxq->hw.wake_at_seqno;
+	return efrm_debugfs_read_x32(file, &val);
+}
+
+static int efrm_debugfs_read_shared_evq(struct seq_file *file,
+					const void *data)
+{
+	struct efrm_efct_rxq *rxq = (struct efrm_efct_rxq *)data;
+	uint32_t val = rxq->hw.shared_evq;
+	return efrm_debugfs_read_x32(file, &val);
+}
+
+static int efrm_debugfs_read_instance(struct seq_file *file, const void *data)
+{
+	struct efrm_efct_rxq *rxq = (struct efrm_efct_rxq *)data;
+	uint32_t val = rxq->hw.wakeup_instance;
+	return efrm_debugfs_read_u32(file, &val);
+}
+
+static const struct efrm_debugfs_parameter efrm_debugfs_efct_krxq_params[] = {
 	_EFRM_RAW_PARAMETER(inq_size, efrm_debugfs_read_inq_size),
 	_EFRM_RAW_PARAMETER(inq_level, efrm_debugfs_read_inq_level),
 	_EFRM_RAW_PARAMETER(inq_full, efrm_debugfs_read_inq_full),
@@ -165,15 +194,29 @@ static const struct efrm_debugfs_parameter efrm_debugfs_efct_rxq_parameters[] = 
 	_EFRM_RAW_PARAMETER(sbufs_pkts_max, efrm_debugfs_read_sbufs_pkts_max),
 	{NULL},
 };
+
+static const struct efrm_debugfs_parameter efrm_debugfs_efct_urxq_params[] = {
+	_EFRM_RAW_PARAMETER(qix, efrm_debugfs_read_qix),
+	_EFRM_RAW_PARAMETER(wake_at_seqno, efrm_debugfs_read_wake_at),
+	_EFRM_RAW_PARAMETER(wakeup_instance, efrm_debugfs_read_instance),
+	_EFRM_RAW_PARAMETER(shared_evq, efrm_debugfs_read_shared_evq),
+	{NULL},
+};
+
 #endif
 
-static void efrm_init_debugfs_efct_rxq(struct efrm_efct_rxq *rxq)
+static void efrm_init_debugfs_efct_rxq(struct efrm_efct_rxq *rxq, bool krxq)
 {
 #ifdef CONFIG_DEBUG_FS
 	struct efrm_resource *rs = efrm_rxq_to_resource(rxq);
 	struct efrm_resource *vi_rs = efrm_from_vi_resource(rxq->vi);
 	efrm_debugfs_add_rs(rs, vi_rs, rxq->hw.qid);
-	efrm_debugfs_add_rs_files(rs, efrm_debugfs_efct_rxq_parameters, rxq);
+	if( krxq )
+		efrm_debugfs_add_rs_files(rs, efrm_debugfs_efct_krxq_params,
+					  rxq);
+	else
+		efrm_debugfs_add_rs_files(rs, efrm_debugfs_efct_urxq_params,
+					  rxq);
 #endif
 }
 
@@ -263,8 +306,7 @@ int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix, bool timestamp_req,
 	efrm_client_add_resource(vi_rs->rs_client, &rxq->rs);
 	efrm_resource_ref(vi_rs);
 	list_add_tail(&rxq->vi_link, &vi->efct_rxq_list);
-	if( shm_ix >= 0 )
-	  efrm_init_debugfs_efct_rxq(rxq);
+	efrm_init_debugfs_efct_rxq(rxq, shm_ix >= 0);
 	*rxq_out = rxq;
 	return 0;
 
@@ -301,10 +343,9 @@ void efrm_rxq_flush(struct efrm_efct_rxq *rxq)
 
 	efhw_nic_shared_rxq_unbind(rxq->rs.rs_client->nic, &rxq->hw,
 	                           dummy_freer);
-	if (shm_ix >= 0) {
-		efrm_fini_debugfs_efct_rxq(rxq);
+	efrm_fini_debugfs_efct_rxq(rxq);
+	if (shm_ix >= 0)
 		rxq->vi->efct_shm->active_qs &= ~(1ull << shm_ix);
-	}
 }
 EXPORT_SYMBOL(efrm_rxq_flush);
 
@@ -351,10 +392,9 @@ void efrm_rxq_release(struct efrm_efct_rxq *rxq)
 	if (__efrm_resource_release(&rxq->rs)) {
 		struct efrm_client* rs_client = rxq->rs.rs_client;
 		int shm_ix = rxq->hw.qix;
-		if (shm_ix >= 0) {
-			efrm_fini_debugfs_efct_rxq(rxq);
+		efrm_fini_debugfs_efct_rxq(rxq);
+		if (shm_ix >= 0)
 			rxq->vi->efct_shm->active_qs &= ~(1ull << shm_ix);
-		}
 		list_del(&rxq->vi_link);
 		efhw_nic_shared_rxq_unbind(rxq->rs.rs_client->nic, &rxq->hw,
 					   free_rxq);
