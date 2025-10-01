@@ -40,7 +40,7 @@ endif
 
 ifdef MMAKE_USE_KBUILD
   objd	:= $(obj)/
-  EXTRA_CFLAGS += $(CP_INTF_VER_CFLAGS)
+  ccflags-y += $(CP_INTF_VER_CFLAGS)
 else
   objd	:=
   MMAKE_CFLAGS += $(CP_INTF_VER_CFLAGS) -I../..
@@ -74,4 +74,3 @@ obj-y     := $(LIB_OBJS)
 include $(TOPPATH)/mk/site/cplane.mk
 ccflags-y := $(CP_INTF_VER_CFLAGS)
 endif
-
