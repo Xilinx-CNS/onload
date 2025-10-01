@@ -181,8 +181,12 @@ static int map_buffers(uint64_t* addr_out, struct file* file,
 
   for( buffers_got = 0; buffers_got != buffer_count; ++pgoff ) {
     page = find_or_create_page(file->f_mapping, pgoff, GFP_KERNEL);
-    if( page == NULL || page_size(page) != CI_HUGEPAGE_SIZE )
-      goto fail;
+
+    if( page == NULL )
+      goto fail_unlocked;
+
+    if( page_size(page) != CI_HUGEPAGE_SIZE )
+      goto fail_locked;
 
     for( buffer = page_address(page), page_end = buffer + CI_HUGEPAGE_SIZE;
          buffer != page_end && buffers_got != buffer_count;
@@ -195,7 +199,9 @@ static int map_buffers(uint64_t* addr_out, struct file* file,
   *addr_out = (uint64_t)buffers;
   return 0;
 
-fail:
+fail_locked:
+  unlock_page(page);
+fail_unlocked:
   put_buffer_pages(buffers, buffers_got);
   return -EFAULT;
 #endif
