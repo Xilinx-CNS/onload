@@ -33,6 +33,9 @@ int efct_request_wakeup(struct efhw_nic *nic,
   uint32_t pkt_seqno = make_pkt_seq(sbseq, pktix);
   uint32_t now = CI_READ_ONCE(bits->now);
 
+  app->last_req_seqno = pkt_seqno;
+  app->last_req_now = now;
+
   EFHW_ASSERT(pkt_seqno != EFCT_INVALID_PKT_SEQNO);
   /* Interrupt wakeups are traditionally defined simply by equality, but we
    * need to use proper ordering because apps can run significantly ahead of

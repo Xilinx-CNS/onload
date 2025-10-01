@@ -180,6 +180,22 @@ static int efrm_debugfs_read_instance(struct seq_file *file, const void *data)
 	return efrm_debugfs_read_u32(file, &val);
 }
 
+static int efrm_debugfs_read_last_req_seqno(struct seq_file *file,
+					    const void *data)
+{
+	struct efrm_efct_rxq *rxq = (struct efrm_efct_rxq *)data;
+	uint32_t val = rxq->hw.last_req_seqno;
+	return efrm_debugfs_read_x32(file, &val);
+}
+
+static int efrm_debugfs_read_last_req_now(struct seq_file *file,
+					  const void *data)
+{
+	struct efrm_efct_rxq *rxq = (struct efrm_efct_rxq *)data;
+	uint32_t val = rxq->hw.last_req_now;
+	return efrm_debugfs_read_x32(file, &val);
+}
+
 static const struct efrm_debugfs_parameter efrm_debugfs_efct_krxq_params[] = {
 	_EFRM_RAW_PARAMETER(inq_size, efrm_debugfs_read_inq_size),
 	_EFRM_RAW_PARAMETER(inq_level, efrm_debugfs_read_inq_level),
@@ -200,6 +216,8 @@ static const struct efrm_debugfs_parameter efrm_debugfs_efct_urxq_params[] = {
 	_EFRM_RAW_PARAMETER(wake_at_seqno, efrm_debugfs_read_wake_at),
 	_EFRM_RAW_PARAMETER(wakeup_instance, efrm_debugfs_read_instance),
 	_EFRM_RAW_PARAMETER(shared_evq, efrm_debugfs_read_shared_evq),
+	_EFRM_RAW_PARAMETER(last_req_seqno, efrm_debugfs_read_last_req_seqno),
+	_EFRM_RAW_PARAMETER(last_req_now, efrm_debugfs_read_last_req_now),
 	{NULL},
 };
 

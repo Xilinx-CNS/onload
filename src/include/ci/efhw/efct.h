@@ -55,6 +55,8 @@ struct efhw_efct_rxq {
   uint32_t wake_at_seqno;
   unsigned wakeup_instance;
   unsigned shared_evq;
+  unsigned last_req_seqno;
+  unsigned last_req_now;
   union {
     struct efhw_efct_krxq krxq;
     struct efhw_efct_urxq urxq;
