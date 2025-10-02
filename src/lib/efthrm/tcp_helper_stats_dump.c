@@ -83,10 +83,12 @@ static void ci_netif_dump_vi_info_stats(ci_netif* ni, int intf_i,
   logger(log_arg, "%s: stack=%d intf=%d dev=%s hw=%d%c%d", __FUNCTION__,
          NI_ID(ni), intf_i, nic->dev_name, (int) nic->vi_arch,
          nic->vi_variant, (int) nic->vi_revision);
-  logger(log_arg, "  vi=%d  gvi=0x%x  pd_owner=%d channel=%d tcpdump=%s"
+  logger(log_arg, "  vi=%d  gvi=0x%x  pd_owner=%d %s=%d tcpdump=%s"
          " vi_flags=%x oo_vi_flags=%x", ef_vi_instance(vi),
          (ef_vi_instance(vi) << efhw_nic->vi_shift) + efhw_nic->vi_base,
-         nic->pd_owner, (int) nic->vi_channel,
+         nic->pd_owner,
+         nic->vi_nic_flags & EFHW_VI_NIC_IRQ ? "irq" : "channel",
+         (int) nic->vi_channel_or_irq,
          ni->state->dump_intf[intf_i] == OO_INTF_I_DUMP_ALL ? "all" :
          (ni->state->dump_intf[intf_i] == OO_INTF_I_DUMP_NO_MATCH ?
           "nomatch" : "off"), vi->vi_flags, nic->oo_vi_flags);

@@ -115,6 +115,13 @@ int efrm_vi_get_channel(struct efrm_vi *virs)
 }
 EXPORT_SYMBOL(efrm_vi_get_channel);
 
+int efrm_vi_get_irq(struct efrm_vi *virs)
+{
+	/* virs->vec is NULL in the case the interrupt is not managed by us. */
+	return virs->vec ? virs->vec->irq : -1;
+}
+EXPORT_SYMBOL(efrm_vi_get_irq);
+
 int efrm_vi_get_rx_error_stats(struct efrm_vi* virs,
 			       void* data,
 			       size_t data_len,

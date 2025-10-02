@@ -693,7 +693,7 @@ static void ci_netif_dump_vi(ci_netif* ni, int intf_i, oo_dump_log_fn_t logger,
   logger(log_arg, "  vi=%d pd_owner=%d %s=%d tcpdump=%s vi_flags=%x oo_vi_flags=%x",
          ef_vi_instance(vi), nic->pd_owner,
          nic->vi_nic_flags & EFHW_VI_NIC_IRQ ? irq : channel,
-         (int) nic->vi_channel,
+         (int) nic->vi_channel_or_irq,
          ni->state->dump_intf[intf_i] == OO_INTF_I_DUMP_ALL ? "all" :
          (ni->state->dump_intf[intf_i] == OO_INTF_I_DUMP_NO_MATCH ?
           "nomatch" : "off"), vi->vi_flags, nic->oo_vi_flags);

@@ -282,6 +282,7 @@ extern struct device *efrm_vi_get_dev(struct efrm_vi *);
 extern void efrm_vi_get_dev_name(struct efrm_vi *virs, char* name);
 
 extern int efrm_vi_get_channel(struct efrm_vi *);
+extern int efrm_vi_get_irq(struct efrm_vi *);
 
 extern int efrm_vi_set_get_vi_instance(struct efrm_vi *);
 

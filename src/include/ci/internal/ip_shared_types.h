@@ -987,7 +987,7 @@ typedef struct {
   CI_ULCONST ci_uint16  vi_instance;
   CI_ULCONST ci_uint16  vi_rxq_size;
   CI_ULCONST ci_uint16  vi_txq_size;
-  CI_ULCONST ci_uint16  vi_channel;
+  CI_ULCONST ci_uint16  vi_channel_or_irq;
   CI_ULCONST ci_uint8   vi_arch;
   CI_ULCONST ci_uint8   vi_variant;
   CI_ULCONST ci_uint8   vi_revision;
