@@ -86,6 +86,8 @@ enum ef10ct_queue_handle_type {
   EF10CT_QUEUE_HANDLE_TYPE_EVQ = MC_CMD_QUEUE_HANDLE_QUEUE_TYPE_LL_EVQ,
 };
 
+#define EF10CT_SHARED_NO_RX_EVS 0
+#define EF10CT_SHARED_RX_EVS 1
 struct efhw_nic_ef10ct {
   uint32_t evq_n;
   struct efhw_nic_ef10ct_evq *evq;

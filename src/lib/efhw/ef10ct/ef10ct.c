@@ -880,7 +880,8 @@ ef10ct_nic_wakeup_request(struct efhw_nic *nic, volatile void __iomem* io_page,
      * rx event then leave early. */
     /* TODO ON-16670 Properly determine which shared evqs have rx event
      * suppression */
-    if (shared_evq == NULL || shared_evq == &ef10ct->shared[0]) {
+    if (shared_evq == NULL ||
+        shared_evq == &ef10ct->shared[EF10CT_SHARED_NO_RX_EVS]) {
       return;
     }
 
@@ -1311,14 +1312,14 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
     if (params->interrupt_req) {
       /* FIXME ON-16187: Choose a sensible shared evq*/
       EFHW_ASSERT(ef10ct->shared_n >= 2);
-      evq = ef10ct->shared[1].evq_id;
+      evq = ef10ct->shared[EF10CT_SHARED_RX_EVS].evq_id;
       EFHW_TRACE("%s: Using shared evq 0x%x WITH rx EVENTS", __func__, evq);
       suppress_events = false;
 
       efct_app_list_push(&ef10ct->rxq[rxq_num].apps.live_apps, params->rxq);
     } else {
       EFHW_ASSERT(ef10ct->shared_n >= 1 );
-      evq = ef10ct->shared[0].evq_id;
+      evq = ef10ct->shared[EF10CT_SHARED_NO_RX_EVS].evq_id;
       EFHW_TRACE("%s: Using shared evq 0x%x", __func__, evq);
       suppress_events = true;
     }
@@ -1547,6 +1548,9 @@ ef10ct_nic_shared_rxq_request_wakeup(struct efhw_nic *nic,
                                      bool allow_recursion)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+
+  if( !rxq->shared_evq )
+    return 0;
 
   return efct_request_wakeup(nic, &ef10ct->rxq[rxq->qid].apps, rxq,
                              sbseq, pktix, allow_recursion);
