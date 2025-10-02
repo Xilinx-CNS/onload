@@ -849,19 +849,27 @@ static void efct_check_for_flushes(struct work_struct *work)
 }
 
 
-static int efct_flush_tx_dma_channel(struct efhw_nic *nic, uint dmaq, uint evq)
+static int efct_free_txq(struct efhw_nic *nic, uint txq)
 {
   struct device *dev;
   struct xlnx_efct_device* edev;
   struct xlnx_efct_client* cli;
-  struct efhw_nic_efct *efct = nic->arch_extra;
-  struct efhw_nic_efct_evq *efct_evq = &efct->evq[evq];
   int rc = 0;
 
   EFCT_PRE(dev, edev, cli, nic, rc);
-  edev->ops->free_txq(cli, dmaq);
+  edev->ops->free_txq(cli, txq);
   EFCT_POST(dev, edev, cli, nic, rc);
 
+  return rc;
+}
+
+
+static int efct_flush_tx_dma_channel(struct efhw_nic *nic, uint dmaq, uint evq)
+{
+  struct efhw_nic_efct *efct = nic->arch_extra;
+  struct efhw_nic_efct_evq *efct_evq = &efct->evq[evq];
+
+  efct_free_txq(nic, dmaq);
   atomic_inc(&efct_evq->queues_flushing);
   schedule_delayed_work(&efct_evq->check_flushes, 0);
 
