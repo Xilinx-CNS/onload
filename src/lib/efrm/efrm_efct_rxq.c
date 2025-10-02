@@ -359,9 +359,10 @@ void efrm_rxq_flush(struct efrm_efct_rxq *rxq)
 {
 	int shm_ix = rxq->hw.qix;
 
+	/* fini debugfs before unbind, as that can free rxq */
+	efrm_fini_debugfs_efct_rxq(rxq);
 	efhw_nic_shared_rxq_unbind(rxq->rs.rs_client->nic, &rxq->hw,
 	                           dummy_freer);
-	efrm_fini_debugfs_efct_rxq(rxq);
 	if (shm_ix >= 0)
 		rxq->vi->efct_shm->active_qs &= ~(1ull << shm_ix);
 }
