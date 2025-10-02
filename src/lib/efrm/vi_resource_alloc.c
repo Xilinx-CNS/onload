@@ -1103,31 +1103,52 @@ __efrm_vi_q_flush(struct efhw_nic* nic, struct efrm_vi* virs,
 }
 
 
-int
-efrm_vi_q_flush(struct efrm_vi *virs, enum efhw_q_type queue_type)
+static int
+efrm_vi_q_flush_state(struct efrm_vi *virs, enum efhw_q_type queue_type)
 {
 	struct efrm_vi_q *q = &virs->q[queue_type];
+#ifndef NDEBUG
 	struct efhw_nic *nic = virs->rs.rs_client->nic;
 	struct efrm_nic* efrm_nic = efrm_nic(nic);
-	int rc = 0;
+#endif
 
-	mutex_lock(&efrm_nic->dmaq_state.lock);
+	EFRM_ASSERT(mutex_is_locked(&efrm_nic->dmaq_state.lock));
 
 	if( list_empty(&q->init_link) ) {
 		EFRM_TRACE("Queue already flushed nic %d type %d 0x%x(0x%x)",
-			  nic->index, queue_type, virs->rs.rs_instance, q->qid);
-		/* we should not issue MCDI now */
-		rc = -EALREADY;
-		mutex_unlock(&efrm_nic->dmaq_state.lock);
-		return rc;
+			   nic->index, queue_type, virs->rs.rs_instance,
+			   q->qid);
+		return -EALREADY;
 	} else {
 		list_del(&q->init_link);
 		INIT_LIST_HEAD(&q->init_link);
 	}
 
+	return 0;
+}
+
+
+int
+efrm_vi_q_flush(struct efrm_vi *virs, enum efhw_q_type queue_type)
+{
+	struct efhw_nic *nic = virs->rs.rs_client->nic;
+#ifndef NDEBUG
+	struct efrm_vi_q *q = &virs->q[queue_type];
+#endif
+	struct efrm_nic* efrm_nic = efrm_nic(nic);
+	int rc = 0;
+
+	mutex_lock(&efrm_nic->dmaq_state.lock);
+
+	rc = efrm_vi_q_flush_state(virs, queue_type);
+	if( rc < 0 )
+		goto unlock_out;
+
 	rc = __efrm_vi_q_flush(nic, virs, queue_type);
 	EFRM_TRACE("Flushed queue nic %d type %d 0x%x(0x%x) rc %d",
 		  nic->index, queue_type, virs->rs.rs_instance, q->qid, rc);
+
+unlock_out:
 	mutex_unlock(&efrm_nic->dmaq_state.lock);
 	return rc;
 }
