@@ -82,6 +82,9 @@
 	((nic)->efhw_func->post_reset((nic)))
 #define efhw_nic_release_hardware(nic)      \
 	((nic)->efhw_func->release_hardware((nic)))
+#define efhw_nic_post_tx_error(nic, txq) \
+	((nic)->efhw_func->post_tx_error ? \
+	 (nic)->efhw_func->post_tx_error((nic), (txq)) : 0)
 
 /*-------------- Event support  ------------ */
 

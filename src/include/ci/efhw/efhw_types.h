@@ -300,6 +300,9 @@ struct efhw_func_ops {
 	/*! release any allocated resources */
 	void (*release_hardware) (struct efhw_nic *nic);
 
+	/*! reset state after a TX error event */
+	int (*post_tx_error) (struct efhw_nic *nic, uint txq);
+
   /*-------------- Event support  ------------ */
 
 	/*! Enable the given event queue */

@@ -877,6 +877,17 @@ static int efct_flush_tx_dma_channel(struct efhw_nic *nic, uint dmaq, uint evq)
 }
 
 
+static int
+efct_nic_post_tx_error(struct efhw_nic* nic, uint txq)
+{
+  /* After we have seen a TX error event, the TXQ will have been torn down by
+   * firmware, and we need to reinit it to use it again. However, the driver
+   * doesn't know the queue has been torn down, so we must pretend to free it
+   * instead and allow the X3 driver to update its state. */
+  return efct_free_txq(nic, txq);
+}
+
+
 static int efct_flush_rx_dma_channel(struct efhw_nic *nic, uint dmaq)
 {
   /* rxqs are a software-only concept, no flush required */
@@ -1217,6 +1228,7 @@ struct efhw_func_ops efct_char_functional_units = {
   .init_hardware = efct_nic_init_hardware,
   .post_reset = efct_nic_tweak_hardware,
   .release_hardware = efct_nic_release_hardware,
+  .post_tx_error = efct_nic_post_tx_error,
   .event_queue_enable = efct_nic_event_queue_enable,
   .event_queue_disable = efct_nic_event_queue_disable,
   .evq_requires_time_sync = efct_nic_evq_requires_time_sync,
