@@ -892,17 +892,17 @@ static size_t ef100_update_stats(struct efx_nic *efx,
 	struct ef100_nic_data *nic_data = efx->nic_data;
 	DECLARE_BITMAP(mask, EF100_STAT_COUNT) = {};
 	u64 *stats = nic_data->stats;
+	int rc;
 
 	spin_lock_bh(&efx->stats_lock);
 
 	ef100_common_stat_mask(mask);
 	ef100_ethtool_stat_mask(mask);
 
-	efx_nic_copy_stats(efx, mc_stats);
-	efx_nic_update_stats(ef100_stat_desc, EF100_STAT_COUNT, mask,
-			     stats,
-			     efx->mc_initial_stats, mc_stats);
-
+	rc = efx_nic_copy_stats(efx, mc_stats);
+	if (!rc)
+		efx_nic_update_stats(ef100_stat_desc, EF100_STAT_COUNT, mask,
+				     stats, efx->mc_initial_stats, mc_stats);
 	kfree(mc_stats);
 
 #if 0   /* Not all stats have been coded yet */

@@ -696,7 +696,7 @@ size_t efx_nic_describe_stats(const struct efx_hw_stat_desc *desc, size_t count,
  *
  * Return: a negative error code or 0 on success.
  */
-int efx_nic_copy_stats(struct efx_nic *efx, __le64 *dest)
+int __must_check efx_nic_copy_stats(struct efx_nic *efx, __le64 *dest)
 {
 	int retry;
 	__le64 generation_start, generation_end;
@@ -721,6 +721,9 @@ int efx_nic_copy_stats(struct efx_nic *efx, __le64 *dest)
 			return 0; /* return good data */
 		udelay(100);
 	}
+	netif_info(efx, drv, efx->net_dev,
+		   "Inconsistent periodic stats DMA buffer generation counts (start %llx end %llx)\n",
+		   le64_to_cpu(generation_start), le64_to_cpu(generation_end));
 
 	rc = -EIO;
 

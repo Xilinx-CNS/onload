@@ -2218,20 +2218,25 @@ static size_t efx_ef10_update_stats_pf(struct efx_nic *efx, u64 *full_stats,
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 	DECLARE_BITMAP(mask, EF10_STAT_COUNT) = {};
 	u64 *stats = nic_data->stats;
+	int rc;
 
 	spin_lock_bh(&efx->stats_lock);
 
-	efx_nic_copy_stats(efx, nic_data->mc_stats);
-	if (efx_nic_port_handle_supported(efx)) {
-		efx_x4_get_stat_mask(efx, mask);
-		efx_nic_update_stats(nic_data->x4_stat_desc, EF10_STAT_COUNT,
-				     mask, stats, efx->mc_initial_stats,
-				     nic_data->mc_stats);
-	} else {
-		efx_ef10_get_stat_mask(efx, mask);
-		efx_nic_update_stats(efx_ef10_stat_desc, EF10_STAT_COUNT,
-				     mask, stats, efx->mc_initial_stats,
-				     nic_data->mc_stats);
+	rc = efx_nic_copy_stats(efx, nic_data->mc_stats);
+	if (!rc) {
+		if (efx_nic_port_handle_supported(efx)) {
+			efx_x4_get_stat_mask(efx, mask);
+			efx_nic_update_stats(nic_data->x4_stat_desc,
+					     EF10_STAT_COUNT, mask, stats,
+					     efx->mc_initial_stats,
+					     nic_data->mc_stats);
+		} else {
+			efx_ef10_get_stat_mask(efx, mask);
+			efx_nic_update_stats(efx_ef10_stat_desc,
+					     EF10_STAT_COUNT, mask, stats,
+					     efx->mc_initial_stats,
+					     nic_data->mc_stats);
+		}
 	}
 
 	/* Update derived statistics */
