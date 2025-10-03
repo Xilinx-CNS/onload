@@ -157,6 +157,9 @@ struct efhw_af_xdp_vi
 
   struct efab_af_xdp_offsets kernel_offsets;
   struct efhw_page user_offsets_page;
+
+  spinlock_t waiter_lock;
+  bool waiter_added;
   struct event_waiter waiter;
 
   struct ring_map ring_mapping[4];
@@ -693,8 +696,12 @@ static void xdp_release_vi(struct efhw_nic* nic, struct efhw_af_xdp_vi* vi)
     return;
 
   /* Stop from using this socket */
-  if( vi->waiter.wait.func != NULL )
+  spin_lock_bh(&vi->waiter_lock);
+  if( vi->waiter.wait.func != NULL && vi->waiter_added ) {
+    vi->waiter_added = false;
     remove_wait_queue(sk_sleep(vi->sock->sk), &vi->waiter.wait);
+  }
+  spin_unlock_bh(&vi->waiter_lock);
   fput(vi->sock->file);
 
 #ifdef EFRM_HAS_FLUSH_DELAYED_FPUT
@@ -834,8 +841,12 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
   if( rc < 0 )
     goto fail;
 
-  if( vi->waiter.wait.func != NULL )
-    add_wait_queue(sk_sleep(vi->sock->sk), &vi->waiter.wait);
+  spin_lock_init(&vi->waiter_lock);
+
+  spin_lock_bh(&vi->waiter_lock);
+  vi->waiter_added = true;
+  add_wait_queue(sk_sleep(vi->sock->sk), &vi->waiter.wait);
+  spin_unlock_bh(&vi->waiter_lock);
 
   user_offsets->mmap_bytes = efhw_page_map_bytes(page_map);
 
@@ -1068,6 +1079,15 @@ static int wait_callback(struct wait_queue_entry* wait, unsigned mode,
                          int flags, void* key)
 {
   struct event_waiter* w = container_of(wait, struct event_waiter, wait);
+  struct efhw_af_xdp_vi* vi = vi_by_instance(w->nic, w->evq);
+
+  spin_lock_bh(&vi->waiter_lock);
+  if (vi->waiter_added) {
+    vi->waiter_added = false;
+    __remove_wait_queue(sk_sleep(vi->sock->sk), &vi->waiter.wait);
+  }
+  spin_unlock_bh(&vi->waiter_lock);
+
   efhw_handle_wakeup_event(w->nic, w->evq, w->budget);
   return 1;
 }
@@ -1086,14 +1106,18 @@ af_xdp_nic_event_queue_enable(struct efhw_nic *nic,
 
   init_waitqueue_func_entry(&vi->waiter.wait, wait_callback);
   vi->waiter.nic = nic;
-  vi->waiter.evq = params->wakeup_channel;
+  vi->waiter.evq = params->evq;
   /* The budget currently has little relevance as Onload doesn't try to
    * poll AF_XDP from an interrupt context. The value may need some thought
    * if that changes in future. */
   vi->waiter.budget = 64;
 
-  if( vi->sock != NULL )
+  spin_lock_bh(&vi->waiter_lock);
+  if( vi->sock != NULL && !vi->waiter_added ) {
+    vi->waiter_added = true;
     add_wait_queue(sk_sleep(vi->sock->sk), &vi->waiter.wait);
+  }
+  spin_unlock_bh(&vi->waiter_lock);
 
   return 0;
 }
@@ -1111,6 +1135,14 @@ static void
 af_xdp_nic_wakeup_request(struct efhw_nic *nic, volatile void __iomem* io_page,
 			int vi_id, int rptr)
 {
+    struct efhw_af_xdp_vi* vi = vi_by_instance(nic, vi_id);
+
+    spin_lock_bh(&vi->waiter_lock);
+    if( vi->sock != NULL && !vi->waiter_added ) {
+      vi->waiter_added = true;
+      __add_wait_queue(sk_sleep(vi->sock->sk), &vi->waiter.wait);
+    }
+    spin_unlock_bh(&vi->waiter_lock);
 }
 
 static void af_xdp_nic_sw_event(struct efhw_nic *nic, int data, int evq)
