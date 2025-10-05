@@ -20,6 +20,21 @@
 #define ANCIENT_KERNEL_HACK
 #endif
 
+#ifdef EFRM_NEED_UNIXCB
+struct unix_skb_parms {
+	struct pid		*pid;		/* skb credentials	*/
+	kuid_t			uid;
+	kgid_t			gid;
+	struct scm_fp_list	*fp;		/* Passed files		*/
+#ifdef CONFIG_SECURITY_NETWORK
+	u32			secid;		/* Security ID		*/
+#endif
+	u32			consumed;
+} __randomize_layout;
+
+#define UNIXCB(skb)	(*(struct unix_skb_parms *)&((skb)->cb))
+#endif
+
 int ef_shrub_socket_open(uintptr_t* socket_out)
 {
   int rc;
