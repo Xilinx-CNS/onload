@@ -1419,7 +1419,7 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
 out_good:
   ef10ct->rxq[rxq_num].ref_count++;
   params->rxq->qid = rxq_num;
-  params->rxq->shared_evq = !real_evq;
+  params->rxq->uses_shared_evq = !real_evq;
   params->rxq->wake_at_seqno = EFCT_INVALID_PKT_SEQNO;
   params->rxq->wakeup_instance = params->wakeup_instance;
 out_locked:
@@ -1549,7 +1549,7 @@ ef10ct_nic_shared_rxq_request_wakeup(struct efhw_nic *nic,
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
 
-  if( !rxq->shared_evq )
+  if( !rxq->uses_shared_evq )
     return 0;
 
   return efct_request_wakeup(nic, &ef10ct->rxq[rxq->qid].apps, rxq,

@@ -105,7 +105,7 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
    * tcp_helper_post_filter_add for how onload does this.
    * Currently, we can safely assume this as the interrupt_req parameter in the
    * above call to efrm_rxq_alloc is false, which implies a shared EVQ. */
-  ci_assert(efrm_rxq_get_hw(rxq)->shared_evq);
+  ci_assert(efrm_rxq_get_hw(rxq)->uses_shared_evq);
 
   rs->rs_base = efrm_rxq_to_resource(rxq);
 out:

@@ -169,8 +169,8 @@ static int efrm_debugfs_read_shared_evq(struct seq_file *file,
 					const void *data)
 {
 	struct efrm_efct_rxq *rxq = (struct efrm_efct_rxq *)data;
-	uint32_t val = rxq->hw.shared_evq;
-	return efrm_debugfs_read_x32(file, &val);
+	bool val = rxq->hw.uses_shared_evq;
+	return efrm_debugfs_read_bool(file, &val);
 }
 
 static int efrm_debugfs_read_instance(struct seq_file *file, const void *data)

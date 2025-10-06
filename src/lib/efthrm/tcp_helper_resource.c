@@ -1139,7 +1139,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
     /* TODO: ON-16824: get this working with the ulhelper build */
 #if ! CI_CFG_UL_INTERRUPT_HELPER
     efct_get_rxq_state(vi, qix)->generates_events =
-      ! efrm_rxq_get_hw(trs->nic[intf_i].thn_efct_rxq[qix])->shared_evq;
+      ! efrm_rxq_get_hw(trs->nic[intf_i].thn_efct_rxq[qix])->uses_shared_evq;
 
     /* Because we're not guaranteed to have the netif lock at this point, we
      * defer updating n_evq_rx_pkts until the next time the netif lock is
@@ -2229,7 +2229,7 @@ static void detach_efct_rxqs(tcp_helper_resource_t* trs)
     for( rxq_i = 0; rxq_i < ARRAY_SIZE(trs_nic->thn_efct_rxq); ++rxq_i ) {
       if( trs_nic->thn_efct_rxq[rxq_i] ) {
         /* Non-shared event queues are handled separately */
-        if (efrm_rxq_get_hw(trs_nic->thn_efct_rxq[rxq_i])->shared_evq)
+        if (efrm_rxq_get_hw(trs_nic->thn_efct_rxq[rxq_i])->uses_shared_evq)
           efrm_rxq_release(trs_nic->thn_efct_rxq[rxq_i]);
         trs_nic->thn_efct_rxq[rxq_i] = NULL; /* pointer is no longer needed */
         if( trs_nic->thn_efct_iobs[rxq_i] )
