@@ -356,27 +356,35 @@ static int efct_ubufs_attach(ef_vi* vi,
   rc = efct_ubufs_init_rxq_resource(vi, qid, n_superbufs, interrupt_mode,
                                     &rxq->rxq_id);
   if( rc < 0 ) {
-    LOGVV(ef_log("%s: efct_ubufs_init_rxq_resource rxq %d", __FUNCTION__, rc));
+    LOGVV(ef_log("%s: efct_ubufs_init_rxq_resource %d", __FUNCTION__, rc));
     return rc;
   }
-  /* TODO ON-16693 cleanup resource on failure */
 
   if( shared_mode ) {
     void* superbufs = (void*)efct_superbuf_access(vi, ix, 0);
-    return efct_ubufs_shared_attach_internal(vi, ix, qid, superbufs);
+    rc = efct_ubufs_shared_attach_internal(vi, ix, qid, superbufs);
+    if( rc < 0 ) {
+      LOGVV(ef_log("%s: efct_ubufs_shared_attach_internal %d", __FUNCTION__, rc));
+      goto fail;
+    }
   }
   else {
     rc = efct_ubufs_init_rxq_buffers(vi, ix, fd, n_superbufs,
                                      rxq->rxq_id, ubufs->pd, ubufs->pd_dh,
                                      &rxq->memreg_id, &rxq->rx_post_buffer_reg);
     if( rc < 0 ) {
-      LOGVV(ef_log("%s: efct_ubufs_init_rxq_buffers rxq %d", __FUNCTION__, rc));
-      return rc;
+      LOGVV(ef_log("%s: efct_ubufs_init_rxq_buffers %d", __FUNCTION__, rc));
+      goto fail;
     }
 
     efct_ubufs_local_attach_internal(vi, ix, qid, n_superbufs);
-    return ix;
   }
+
+  return ix;
+
+fail:
+  efct_ubufs_free_resource(vi, rxq->rxq_id);
+  return rc;
 }
 
 static void efct_ubufs_detach(ef_vi* vi, int ix)

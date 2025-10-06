@@ -15,7 +15,24 @@
 #include "unit_test.h"
 
 /* Dependencies */
-int efct_vi_find_free_rxq(ef_vi* vi, int qid) { return qid; }
+struct dependency_checks {
+  bool fail_find_free;
+  bool fail_init_resource;
+  bool fail_init_buffers;
+
+  int called_init_resource;
+  int called_free_resource;
+  int called_init_buffers;
+} *checks;
+
+int efct_vi_find_free_rxq(ef_vi* vi, int qid)
+{
+  if( checks && checks->fail_find_free )
+    return -EPROTO;
+
+  return qid;
+}
+
 void efct_vi_start_rxq(ef_vi* vi, int ix, int qid) {}
 
 void* efct_ubufs_alloc_mem(size_t size)
@@ -37,14 +54,20 @@ int efct_ubufs_init_rxq_resource(ef_vi *vi, int qid, unsigned n_superbufs,
                                  bool interrupt_mode,
                                  efch_resource_id_t* resource_id_out)
 {
-  // TODO check this is called correctly
+  if( checks ) {
+    ++checks->called_init_resource;
+    if( checks->fail_init_resource )
+      return -EPROTO;
+  }
+
   *resource_id_out = efch_make_resource_id(42);
   return 0;
 }
 
 void efct_ubufs_free_resource(ef_vi* vi, efch_resource_id_t resource_id)
 {
-  // TODO check this is called correctly
+  if( checks )
+    ++checks->called_free_resource;
 }
 
 int efct_ubufs_init_rxq_buffers(ef_vi* vi, int ix, int fd,
@@ -56,7 +79,12 @@ int efct_ubufs_init_rxq_buffers(ef_vi* vi, int ix, int fd,
 {
   void* map;
 
-  // TODO check this is called correctly
+  if( checks ) {
+    ++checks->called_init_buffers;
+    if( checks->fail_init_buffers )
+      return -EPROTO;
+  }
+
   CHECK(rxq_id.index, ==, 42);
 
   /* Don't need hugepages for testing */
@@ -304,10 +332,43 @@ static void test_poison(void)
   free_vi(vi);
 }
 
+static void test_failure(void)
+{
+  ef_vi* vi = alloc_vi();
+  ef_vi_efct_rxq_ops* ops = vi->efct_rxqs.ops;
+
+  STATE_ALLOC(struct dependency_checks, cks);
+  checks = cks;
+
+  checks->fail_find_free = true;
+  CHECK(ops->attach(vi, 0, -1, 1, false, false), <, 0);
+  STATE_CHECK(checks, called_init_resource, 0);
+  STATE_CHECK(checks, called_free_resource, 0);
+
+  checks->fail_find_free = false;
+  checks->fail_init_resource = true;
+  CHECK(ops->attach(vi, 0, -1, 1, false, false), <, 0);
+  STATE_CHECK(checks, called_init_resource, 1);
+  STATE_CHECK(checks, called_init_buffers,  0);
+  STATE_CHECK(checks, called_free_resource, 0);
+
+  checks->fail_init_resource = false;
+  checks->fail_init_buffers = true;
+  CHECK(ops->attach(vi, 0, -1, 1, false, false), <, 0);
+  STATE_CHECK(checks, called_init_resource, 1);
+  STATE_CHECK(checks, called_init_buffers,  1);
+  STATE_CHECK(checks, called_free_resource, 1);
+
+  checks->fail_init_buffers = false;
+  STATE_FREE(checks);
+  checks = NULL;
+}
+
 int main(void)
 {
   TEST_RUN(test_efct_ubufs);
   TEST_RUN(test_sentinel);
   TEST_RUN(test_poison);
+  TEST_RUN(test_failure);
   TEST_END();
 }
