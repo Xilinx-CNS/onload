@@ -17,6 +17,7 @@
 #ifdef HAVE_AF_XDP
 
 #include <linux/if_xdp.h>
+#include <ci/internal/transport_config_opt.h>
 #include "af_xdp_defs.h"
 #include "logging.h"
 
@@ -455,7 +456,7 @@ int efxdp_vi_init(ef_vi* vi)
                                  efxdp_ef_vi_transmitv_ctpio_fallback_not_supp;
   }
 
-  vi->rx_buffer_len = 2048;
+  vi->rx_buffer_len = CI_CFG_PKT_BUF_SIZE;
   vi->rx_prefix_len = 0;
   vi->evq_phase_bits = 1; /* We set this flag for ef_eventq_has_event */
 
