@@ -1123,9 +1123,9 @@ static int efct_tx_handle_control_event(ef_vi* vi, ci_qword_t event,
     case EFCT_CTRL_EV_ERROR:
       efct_tx_handle_error_event(vi, event, ev_out);
       n_evs++;
-      ef_log("%s: ERROR: MCDI TX error event %u (raw: "CI_QWORD_FMT") - "
-             "check parameters to transmit_init()", __FUNCTION__,
-             QWORD_GET_U(EFCT_ERROR_REASON, event), CI_QWORD_VAL(event));
+      LOG(ef_log("%s: ERROR: MCDI TX error event %u (raw: "CI_QWORD_FMT") - "
+                 "check parameters to transmit_init()", __FUNCTION__,
+                 QWORD_GET_U(EFCT_ERROR_REASON, event), CI_QWORD_VAL(event)));
       break;
     case EFCT_CTRL_EV_FLUSH:
       LOG(ef_log("%s: Saw flush in poll", __FUNCTION__));
