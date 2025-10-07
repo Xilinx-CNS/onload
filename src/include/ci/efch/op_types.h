@@ -233,6 +233,7 @@ typedef struct ci_resource_op_s {
 # define                CI_RSOP_RX_BUFFER_POST          0x8E
 # define                CI_RSOP_PD_EXCL_RXQ_TOKEN_GET   0x8F
 # define                CI_RSOP_SHARED_RXQ_TOKEN_SET    0x90
+# define                CI_RSOP_REINIT_TXQ              0x91
 
   union {
     struct {

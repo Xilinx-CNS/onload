@@ -2988,6 +2988,52 @@ __ef_vi_get_vi_from_q_id(ef_vi* vi, int q_id)
   return (q_id >= 0 && q_id < vi->vi_qs_n) ? vi->vi_qs[q_id] : NULL;
 }
 
+/*! \brief Restart the given VI's TXQ after a TX error event
+**
+** \param vi             The VI that owns the TXQ that generated the TX error
+**
+** \return 0 on success, or a negative error code.
+**
+** This function reinitialises the TXQ owned by the given VI to allow transmit
+** to happen again. This function should be called after a TX error event is
+** observed while polling for events - when using a shared event queue, you
+** must map the QID returned in the TX error event to the appropriate VI that
+** owns that TXQ resource. Use of this function in other circumstances is
+** undefined.
+**
+** Please note:
+** - Between this TXQ observing a TX error event in a poll, and the successful
+**   calling and returning of this function, you should not attempt further
+**   packet transmissions.
+** - You may continue to poll the event queue for this VI before this function
+**   is called, and process any events seen.
+** - It is safe to call this function in parallel with event queue polling and
+**   processing.
+** - It is safe to interact with other VIs while this function is being called.
+**
+** The below code snippet provides an example of how this function could be
+** used when sharing an event queue between multiple transmit queues. If the
+** TXQ is the same as the EVQ VI, then it would be sufficient to replace any
+** references to txq_vi with evq_vi.
+**
+** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~{.c}
+** n_evs = ef_eventq_poll(evq_vi, evs, sizeof(evs) / sizeof(evs[0]));
+** for( ev_i = 0; ev_i < n_evs; ev_i++ ) {
+**   if( EF_EVENT_TYPE(evs[ev_i]) == EF_EVENT_TYPE_TX_ERROR ) {
+**     txq_vi = ef_vi_get_vi_from_q_id(evq_vi, EF_EVENT_TX_ERROR_Q_ID(evs[i]));
+**     ef_vi_for_each_tx_error_failed_transmit(txq_vi, dma_id)
+**       handle_failed_transmit(txq_vi, dma_id);
+**     ef_vi_reinit_txq_post_error(txq_vi);
+**   }
+** }
+** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+*/
+#define ef_vi_reinit_txq_post_error(vi) \
+  __ef_vi_reinit_txq_post_error((vi))
+
+extern int
+__ef_vi_reinit_txq_post_error(ef_vi* vi);
+
 #ifdef __cplusplus
 }
 #endif

@@ -376,7 +376,7 @@ static void ef_vi_set_intf_ver(char* intf_ver, size_t len)
    * It'd also be possible to enhance the checksum computation to be smarter
    * (e.g. by ignoring comments, etc.).
    */
-  if( strcmp(EFCH_INTF_VER, "e8096ca4daff44bf5a7ba99ad4f97e6f") ) {
+  if( strcmp(EFCH_INTF_VER, "c309d320bdfd80679d72a2053af37d9f") ) {
     fprintf(stderr, "ef_vi: ERROR: char interface has changed to %s\n",
             EFCH_INTF_VER);
     abort();
@@ -900,6 +900,22 @@ int ef_vi_pace(ef_vi* ep, ef_driver_handle fd, int val)
 {
   LOGV(ef_log("ef_vi_pace: not supported"));
   return -EOPNOTSUPP;
+}
+
+int __ef_vi_reinit_txq_post_error(ef_vi* vi)
+{
+  ci_resource_op_t op = { 0 };
+  int rc = 0;
+
+  op.op = CI_RSOP_REINIT_TXQ;
+  op.id = efch_make_resource_id(vi->vi_resource_id);
+  rc = ci_resource_op(vi->dh, &op);
+  if( rc < 0 )
+    return rc;
+
+  ef_vi_reset_txq(vi);
+
+  return 0;
 }
 
 /*! \cidoxg_end */

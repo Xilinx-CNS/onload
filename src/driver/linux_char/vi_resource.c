@@ -660,6 +660,10 @@ efch_vi_rm_rsops(efch_resource_t* rs, ci_resource_table_t* rt,
       rc = 0;
       break;
 
+    case CI_RSOP_REINIT_TXQ:
+      rc = efrm_vi_reinit_txq(virs);
+      break;
+
     default:
       rc = efch_filter_list_op_add(rs->rs_base, efrm_vi_get_pd(virs),
                                    &rs->vi.fl, op, copy_out, 0u, -1);
