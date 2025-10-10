@@ -18,6 +18,9 @@ MMAKE_EXTLIBS	:= -L../../../../build/gnu_x86_64/lib/onload_ext/		\
 				-lonload_ext -lpthread
 CC		:= gcc
 
+.PHONY: all test targets clean
+all: $(TARGETS)
+
 %.o: %.c
 	@$(CC) $(MMAKE_CFLAGS) -c $^
 
@@ -49,8 +52,6 @@ test: $(TARGETS)
 	@LPI_INTERCEPT_CONFIG_FILE="./.onload_intercept"             \
 	 LD_PRELOAD="./libpthread_intercept.so.1.0.0.1 libonload.so" \
 	 ./libpthread_test
-
-all: $(TARGETS)
 
 targets:
 	@echo $(TARGETS) test
