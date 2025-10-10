@@ -60,6 +60,13 @@ MODULE_PARM_DESC(mcdi_log_commands,
 #endif
 #endif
 
+#ifdef EFX_NOT_UPSTREAM
+static bool disable_filter_tracking = false;
+module_param(disable_filter_tracking, bool, 0444);
+MODULE_PARM_DESC(disable_filter_tracking,
+		 "Disable filter tracking at driver attach time");
+#endif
+
 static int efx_mcdi_rpc_async_internal(struct efx_nic *efx,
 				       struct efx_mcdi_cmd *cmd,
 				       unsigned int *handle,
@@ -1865,6 +1872,9 @@ int efx_mcdi_drv_attach(struct efx_nic *efx, u32 fw_variant, u32 *out_flags,
 	in = (1 << MC_CMD_DRV_ATTACH_IN_ATTACH_LBN) |
 	     (1 << MC_CMD_DRV_ATTACH_IN_WANT_V2_LINKCHANGES_LBN);
 
+	if (disable_filter_tracking)
+		in |= (1 << MC_CMD_DRV_ATTACH_IN_DISABLE_FILTER_TRACKING_LBN);
+
 #ifdef EFX_NOT_UPSTREAM
 	/* We request TX-only VI spreading. The firmware will only provide
 	 * this if we're a single port device where this is actually useful.
@@ -1903,6 +1913,13 @@ int efx_mcdi_drv_attach(struct efx_nic *efx, u32 fw_variant, u32 *out_flags,
 	if (rc == 0) {
 		pci_dbg(efx->pci_dev,
 			"%s attached with flags %#x\n", __func__, flags);
+		if (disable_filter_tracking &&
+		    !(flags & (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_FILTER_TRACKING_DISABLED))) {
+			pci_warn(efx->pci_dev,
+				 "%s filter tracking NOT disabled. Available filter resources may be reduced\n",
+				 __func__);
+	}
+
 		if (out_flags)
 			*out_flags = flags;
 	}
@@ -2749,10 +2766,11 @@ int efx_mcdi_nvram_erase(struct efx_nic *efx, unsigned int type,
 }
 
 int efx_mcdi_nvram_update_finish(struct efx_nic *efx, unsigned int type,
-				 enum efx_update_finish_mode mode)
+				enum efx_update_finish_mode mode,
+				struct netlink_ext_ack *extack)
 {
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_NVRAM_UPDATE_FINISH_V2_IN_LEN);
-	MCDI_DECLARE_BUF(outbuf, MC_CMD_NVRAM_UPDATE_FINISH_V2_OUT_LEN);
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_NVRAM_UPDATE_FINISH_V3_OUT_LEN);
 	size_t outlen;
 	u32 reboot;
 	int rc, rc2;
@@ -2817,6 +2835,28 @@ int efx_mcdi_nvram_update_finish(struct efx_nic *efx, unsigned int type,
 		case MC_CMD_NVRAM_VERIFY_RC_SECURITY_LEVEL_DOWNGRADE:
 			rc = -EPERM;
 			break;
+		case MC_CMD_NVRAM_VERIFY_RC_BAD_CONFIG:
+			if (outlen >= MC_CMD_NVRAM_UPDATE_FINISH_V3_OUT_LEN) {
+				char* str = MCDI_PTR(outbuf,
+						     NVRAM_UPDATE_FINISH_V3_OUT_ERROR_STRING);
+				if (extack) {
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NL_SET_ERR_MSG_FMT_MOD)
+					NL_SET_ERR_MSG_FMT_MOD(
+						extack, "%.*s",
+						MC_CMD_NVRAM_UPDATE_FINISH_V3_OUT_ERROR_STRING_LEN,
+						str);
+#else
+					NL_SET_ERR_MSG_MOD(extack,
+							   "Configuration INI file failed validation");
+#endif
+				}
+				netif_err(efx, drv, efx->net_dev,
+					  "NVRAM_UPDATE_FINISH bad config: %.*s\n",
+					  MC_CMD_NVRAM_UPDATE_FINISH_V3_OUT_ERROR_STRING_LEN,
+					  str);
+			}
+			rc = -EINVAL;
+			break;
 		default:
 			netif_err(efx, drv, efx->net_dev,
 				  "Unknown response to NVRAM_UPDATE_FINISH\n");
@@ -2830,7 +2870,8 @@ int efx_mcdi_nvram_update_finish(struct efx_nic *efx, unsigned int type,
 #define	EFX_MCDI_NVRAM_UPDATE_FINISH_MAX_POLL_DELAY_MS 5000
 #define	EFX_MCDI_NVRAM_UPDATE_FINISH_RETRIES 185
 
-int efx_mcdi_nvram_update_finish_polled(struct efx_nic *efx, unsigned int type)
+int efx_mcdi_nvram_update_finish_polled(struct efx_nic *efx, unsigned int type,
+					struct netlink_ext_ack *extack)
 {
 	unsigned int delay = EFX_MCDI_NVRAM_UPDATE_FINISH_INITIAL_POLL_DELAY_MS;
 	unsigned int retry = 0;
@@ -2845,7 +2886,7 @@ int efx_mcdi_nvram_update_finish_polled(struct efx_nic *efx, unsigned int type)
 	 * case, we poll for at least 900 seconds, at increasing intervals
 	 * (5ms, 50ms, 500ms, 5s).
 	 */
-	rc = efx_mcdi_nvram_update_finish(efx, type, EFX_UPDATE_FINISH_BACKGROUND);
+	rc = efx_mcdi_nvram_update_finish(efx, type, EFX_UPDATE_FINISH_BACKGROUND, extack);
 	while (rc == -EAGAIN) {
 		if (retry > EFX_MCDI_NVRAM_UPDATE_FINISH_RETRIES)
 			return -ETIMEDOUT;
@@ -2855,7 +2896,7 @@ int efx_mcdi_nvram_update_finish_polled(struct efx_nic *efx, unsigned int type)
 		if (delay < EFX_MCDI_NVRAM_UPDATE_FINISH_MAX_POLL_DELAY_MS)
 			delay *= 10;
 
-		rc = efx_mcdi_nvram_update_finish(efx, type, EFX_UPDATE_FINISH_POLL);
+		rc = efx_mcdi_nvram_update_finish(efx, type, EFX_UPDATE_FINISH_POLL, extack);
 	}
 	return rc;
 }
@@ -3028,7 +3069,8 @@ int efx_mcdi_mtd_sync(struct mtd_info *mtd)
 		part->updating = false;
 		rc = efx_mcdi_nvram_update_finish(part->mtd_struct->efx,
 						  part->nvram_type,
-						  EFX_UPDATE_FINISH_WAIT);
+						  EFX_UPDATE_FINISH_WAIT,
+						  NULL);
 	}
 
 	return rc;

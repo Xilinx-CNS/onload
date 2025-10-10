@@ -797,8 +797,10 @@ enum efx_update_finish_mode {
 };
 
 int efx_mcdi_nvram_update_finish(struct efx_nic *efx, unsigned int type,
-				 enum efx_update_finish_mode mode);
-int efx_mcdi_nvram_update_finish_polled(struct efx_nic *efx, unsigned int type);
+				enum efx_update_finish_mode mode,
+				struct netlink_ext_ack *extack);
+int efx_mcdi_nvram_update_finish_polled(struct efx_nic *efx, unsigned int type,
+					struct netlink_ext_ack *extack);
 
 #ifdef CONFIG_SFC_MTD
 int efx_mcdi_mtd_read(struct mtd_info *mtd, loff_t start, size_t len,

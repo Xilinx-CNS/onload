@@ -106,9 +106,9 @@ out_update_finish:
 	if (rc)
 		/* Don't obscure the return code from an earlier failure */
 		(void)efx_mcdi_nvram_update_finish(efx, type,
-						   EFX_UPDATE_FINISH_ABORT);
+						EFX_UPDATE_FINISH_ABORT, NULL);
 	else
-		rc = efx_mcdi_nvram_update_finish_polled(efx, type);
+		rc = efx_mcdi_nvram_update_finish_polled(efx, type, NULL);
 
 out:
 	if (!rc) {

@@ -13,6 +13,7 @@
 #include "net_driver.h"
 #include <linux/firmware.h>
 
-int efx_reflash_flash_firmware(struct efx_nic *efx, const struct firmware *fw);
+int efx_reflash_flash_firmware(struct efx_nic *efx, const struct firmware *fw,
+			       struct netlink_ext_ack *extack);
 
 #endif  /* _EFX_REFLASH_H */

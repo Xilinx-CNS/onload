@@ -27,6 +27,7 @@ module_param(rx_refill_threshold, uint, 0444);
 MODULE_PARM_DESC(rx_refill_threshold,
 		 "RX descriptor ring refill threshold (%)");
 
+#if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
 /* By default use the NIC specific calculation. This can be set to 0
  * to disable the RX recycle ring.
  */
@@ -34,6 +35,7 @@ static int rx_recycle_ring_size = -1;
 module_param(rx_recycle_ring_size, uint, 0444);
 MODULE_PARM_DESC(rx_recycle_ring_size,
 		 "Maximum number of RX buffers to recycle pages for");
+#endif
 
 /*
  * RX maximum head room required.
@@ -72,14 +74,12 @@ static void efx_rx_slow_fill(struct work_struct *data);
 static void efx_schedule_slow_fill(struct efx_rx_queue *rx_queue);
 static void efx_cancel_slow_fill(struct efx_rx_queue *rx_queue);
 
+#if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
 /* Check the RX page recycle ring for a page that can be reused. */
 static struct page *efx_reuse_page(struct efx_rx_queue *rx_queue)
 {
 	struct page *page;
 	unsigned int index;
-
-	if (!rx_queue->efx->rx_buf_page_share)
-		return NULL;
 
 	/* No page recycling when queue in ZC mode */
 	if (!rx_queue->page_ring)
@@ -143,9 +143,6 @@ void efx_recycle_rx_pages(struct efx_channel *channel,
 {
 	struct efx_rx_queue *rx_queue = efx_channel_get_rx_queue(channel);
 
-	if (!rx_queue->efx->rx_buf_page_share)
-		return;
-
 	do {
 		efx_recycle_rx_page(channel, rx_buf);
 		rx_buf = efx_rx_buf_next(rx_queue, rx_buf);
@@ -166,17 +163,16 @@ static void efx_init_rx_recycle_ring(struct efx_rx_queue *rx_queue)
 		return;
 	}
 #endif
-	if (efx->rx_buf_page_share) {
-		if (!rx_recycle_ring_size)
-			return;
-		else if (rx_recycle_ring_size == -1)
-			bufs_in_recycle_ring = efx_rx_recycle_ring_size(efx);
-		else
-			bufs_in_recycle_ring = rx_recycle_ring_size;
-	} else {
+#if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
+	if (!rx_recycle_ring_size)
+		return;
+	else if (rx_recycle_ring_size == -1)
 		bufs_in_recycle_ring = efx_rx_recycle_ring_size(efx);
-	}
-
+	else
+		bufs_in_recycle_ring = rx_recycle_ring_size;
+#else
+	bufs_in_recycle_ring = efx_rx_recycle_ring_size(efx);
+#endif
 	page_ring_size = roundup_pow_of_two(bufs_in_recycle_ring /
 					    efx->rx_bufs_per_page);
 	rx_queue->page_ring = kcalloc(page_ring_size,
@@ -256,19 +252,6 @@ void efx_discard_rx_packet(struct efx_channel *channel,
 	struct efx_rx_buffer *_rx_buf = rx_buf;
 #endif
 
-	if (!rx_queue->efx->rx_buf_page_share) {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-		if (channel->zc) {
-			do {
-				rx_buf->flags |= EFX_RX_BUF_XSK_REUSE;
-				rx_buf = efx_rx_buf_next(rx_queue, rx_buf);
-			} while (--n_frags);
-		}
-#endif
-		efx_free_rx_buffers(rx_queue, _rx_buf, n_frags);
-		return;
-	}
-
 	do {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 		if (rx_buf->flags & EFX_RX_BUF_ZC)
@@ -284,6 +267,40 @@ void efx_discard_rx_packet(struct efx_channel *channel,
 				    n_frags);
 #endif
 }
+#else
+struct page *efx_reuse_page(struct efx_rx_queue *rx_queue)
+{
+	(void)rx_queue;
+	return NULL;
+}
+
+void efx_recycle_rx_pages(struct efx_channel *channel,
+			  struct efx_rx_buffer *rx_buf,
+			  unsigned int n_frags)
+{
+	(void) channel;
+	(void) rx_buf;
+	(void) n_frags;
+}
+
+void efx_discard_rx_packet(struct efx_channel *channel,
+			   struct efx_rx_buffer *rx_buf,
+			   unsigned int n_frags)
+{
+	struct efx_rx_queue *rx_queue = efx_channel_get_rx_queue(channel);
+	struct efx_rx_buffer *_rx_buf = rx_buf;
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	if (channel->zc) {
+		do {
+			rx_buf->flags |= EFX_RX_BUF_XSK_REUSE;
+			rx_buf = efx_rx_buf_next(rx_queue, rx_buf);
+		} while (--n_frags);
+	}
+#endif
+	efx_free_rx_buffers(rx_queue, _rx_buf, n_frags);
+}
+#endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 #if defined(CONFIG_XDP_SOCKETS)
@@ -319,15 +336,18 @@ static void efx_fini_rx_buffer_zc(struct efx_rx_queue *rx_queue,
 static void efx_fini_rx_buffer_nzc(struct efx_rx_queue *rx_queue,
 				   struct efx_rx_buffer *rx_buf)
 {
-	if (rx_queue->efx->rx_buf_page_share && rx_buf->page)
-		/* Release the page reference we hold for the buffer. */
+#if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
+	/* Release the page reference we hold for the buffer. */
+	if (rx_buf->page)
 		put_page(rx_buf->page);
+#endif
 
 	/* If this is the last buffer in a page, unmap and free it. */
 	if (rx_buf->flags & EFX_RX_BUF_LAST_IN_PAGE) {
 		efx_unmap_rx_buffer(rx_queue->efx, rx_buf);
-		if (!rx_queue->efx->rx_buf_page_share ||
-		    !(rx_buf->flags & EFX_RX_PAGE_IN_RECYCLE_RING))
+#if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
+		if (!(rx_buf->flags & EFX_RX_PAGE_IN_RECYCLE_RING))
+#endif
 			efx_free_rx_buffers(rx_queue, rx_buf, 1);
 	}
 	rx_buf->page = NULL;
@@ -455,6 +475,7 @@ int efx_init_rx_queue(struct efx_rx_queue *rx_queue)
 	}
 #endif /* CONFIG_XDP_SOCKETS */
 #endif /*EFX_HAVE_XDP_SOCK */
+#if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
 	efx_init_rx_recycle_ring(rx_queue);
 
 	rx_queue->page_remove = 1;
@@ -463,13 +484,11 @@ int efx_init_rx_queue(struct efx_rx_queue *rx_queue)
 	rx_queue->page_recycle_failed = 0;
 	rx_queue->page_recycle_full = 0;
 	rx_queue->page_repost_count = 0;
+#endif
 
 	/* Initialise limit fields */
-	/* RX maximum head room required.
-	 * This must be at least 1 to prevent overflow, plus one packet-worth
-	 * to allow pipelined receives.
-	 */
-	max_fill = rx_queue->ptr_mask + 1 - (1 + efx->rx_max_frags);
+	max_fill = rx_queue->ptr_mask + 1 - EFX_RXD_HEAD_ROOM;
+	max_fill = min(max_fill, rx_queue->max_fill_limit);
 	max_trigger =
 		max_fill - efx->rx_pages_per_batch * efx->rx_bufs_per_page;
 	if (rx_refill_threshold != 0) {
@@ -557,7 +576,9 @@ void efx_fini_rx_queue(struct efx_rx_queue *rx_queue)
 		}
 	}
 
+#if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
 	efx_fini_rx_recycle_ring(rx_queue);
+#endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_RXQ_INFO)
 	if (xdp_rxq_info_is_reg(&rx_queue->xdp_rxq_info))
@@ -599,10 +620,10 @@ void efx_unmap_rx_buffer(struct efx_nic *efx,
 {
 	struct page *page = rx_buf->page;
 
-	if (efx->rx_buf_page_share &&
-	    rx_buf->flags & EFX_RX_PAGE_IN_RECYCLE_RING)
+#if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
+	if (rx_buf->flags & EFX_RX_PAGE_IN_RECYCLE_RING)
 		return;
-
+#endif
 	if (page) {
 		struct efx_rx_page_state *state = page_address(page);
 
@@ -970,8 +991,10 @@ static int efx_init_rx_buffers_nzc(struct efx_rx_queue *rx_queue, bool atomic)
 			}
 			state = page_address(page);
 			state->dma_addr = dma_addr;
-		} else if (efx->rx_buf_page_share && rx_queue->page_ring) {
+#if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
+		} else if (rx_queue->page_ring) {
 			flags |= EFX_RX_PAGE_IN_RECYCLE_RING;
+#endif
 		}
 
 		i = 0;
@@ -981,10 +1004,10 @@ static int efx_init_rx_buffers_nzc(struct efx_rx_queue *rx_queue, bool atomic)
 			efx_init_rx_buffer(rx_queue, page, page_offset, flags);
 			page_offset += efx->rx_page_buf_step;
 		} while (++i < efx->rx_bufs_per_page);
-
-		if (efx->rx_buf_page_share)
-			/* We hold the only reference so just set to required count */
-			page_ref_add(page, efx->rx_bufs_per_page);
+#if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
+		/* We hold the only reference so just set to required count */
+		page_ref_add(page, efx->rx_bufs_per_page);
+#endif
 
 	} while (++count < efx->rx_pages_per_batch);
 
@@ -1007,13 +1030,13 @@ static int efx_init_rx_buffers(struct efx_rx_queue *rx_queue, bool atomic)
 void efx_rx_config_page_split(struct efx_nic *efx)
 {
 	efx->rx_page_buf_step = efx_rx_buffer_step(efx);
-	if (efx->rx_buf_page_share)
-		efx->rx_bufs_per_page = efx->rx_buffer_order ? 1 :
-			((PAGE_SIZE - sizeof(struct efx_rx_page_state)) /
-			 efx->rx_page_buf_step);
-	else
-		efx->rx_bufs_per_page = 1;
-
+#if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
+	efx->rx_bufs_per_page = efx->rx_buffer_order ? 1 :
+		((PAGE_SIZE - sizeof(struct efx_rx_page_state)) /
+		 efx->rx_page_buf_step);
+#else
+	efx->rx_bufs_per_page = 1;
+#endif
 	efx->rx_buffer_truesize = (PAGE_SIZE << efx->rx_buffer_order) /
 		efx->rx_bufs_per_page;
 	efx->rx_pages_per_batch = DIV_ROUND_UP(EFX_RX_PREFERRED_BATCH,

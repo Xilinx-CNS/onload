@@ -285,6 +285,11 @@ struct efx_ptp_data {
 	struct list_head rxfilters_ucast;
 	struct mutex rxfilters_lock;
 	struct kernel_hwtstamp_config config;
+	/* Serialise ptp events and destruction
+	 * across functions.
+	 */
+	spinlock_t lock;
+	bool destroying;
 	bool enabled;
 	unsigned int mode;
 	void (*ns_to_nic_time)(s64 ns, u32 *nic_major, u32 *nic_minor);
@@ -2857,6 +2862,9 @@ static int efx_ptp_probe_post_io(struct efx_nic *efx)
 	ptp = kzalloc(sizeof(struct efx_ptp_data), GFP_KERNEL);
 	if (!ptp)
 		return -ENOMEM;
+
+	spin_lock_init(&ptp->lock);
+
 	efx->ptp_data = ptp;
 
 	/* X4 needs to enable PTP before any PTP MCDI commands
@@ -3086,6 +3094,15 @@ void efx_ptp_remove_post_io(struct efx_nic *efx)
 	/* ensure that the work queues are canceled and destroyed only once. */
 	if (!ptp_data)
 		return;
+
+	/* Signal that cross-function pps events shouldn't
+	 * access ptp during teardown.
+	 * The spinlock ensures this is atomic with respect
+	 * to efx_ptp_event.
+	 */
+	spin_lock_bh(&ptp_data->lock);
+	ptp_data->destroying = true;
+	spin_unlock_bh(&ptp_data->lock);
 
 	if (efx_nic_rev(efx) < EFX_REV_X4)
 		(void)efx_ptp_disable(efx);
@@ -3432,6 +3449,9 @@ static void ptp_event_failure(struct efx_nic *efx, int expected_frag_len)
 static void ptp_event_fault(struct efx_nic *efx, struct efx_ptp_data *ptp)
 {
 	int code = EFX_QWORD_FIELD(ptp->evt_frags[0], MCDI_EVENT_DATA);
+
+	if (!efx)
+		return;
 	if (ptp->evt_frag_idx != 1) {
 		ptp_event_failure(efx, 1);
 		return;
@@ -3442,6 +3462,8 @@ static void ptp_event_fault(struct efx_nic *efx, struct efx_ptp_data *ptp)
 
 static void ptp_event_pps(struct efx_nic *efx, struct efx_ptp_data *ptp)
 {
+	if (!ptp)
+		return;
 	if (efx && ptp->pps_workwq)
 		queue_work(ptp->pps_workwq, &ptp->pps_work);
 
@@ -3505,8 +3527,15 @@ void efx_ptp_event(struct efx_nic *efx, efx_qword_t *ev)
 				   "Received PTP event (code %d) but PTP not set up\n",
 				   code);
 		return;
-	} else if (!ptp->efx)
-		return; /* PTP data is being removed, ignore */
+	}
+
+	/* Ensure this event can't race against
+	 * the phc function tearing down its PTP struct.
+	 */
+	spin_lock_bh(&ptp->lock);
+
+	if (ptp->destroying || !ptp->efx)
+		goto out; /* PTP data is being removed, ignore */
 
 	if (ptp->evt_frag_idx == 0) {
 		ptp->evt_code = code;
@@ -3544,6 +3573,9 @@ void efx_ptp_event(struct efx_nic *efx, efx_qword_t *ev)
 			  "PTP too many event fragments\n");
 		ptp->evt_frag_idx = 0;
 	}
+
+out:
+	spin_unlock_bh(&ptp->lock);
 }
 
 void efx_time_sync_event(struct efx_channel *channel, efx_qword_t *ev)

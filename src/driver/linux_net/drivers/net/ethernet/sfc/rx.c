@@ -48,6 +48,7 @@ MODULE_PARM_DESC(underreport_skb_truesize, "Give false skb truesizes. "
 #define EFX_RX_CB_DEFAULT 192u
 static unsigned int rx_cb_size = EFX_RX_CB_DEFAULT;
 
+#if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
 static void efx_repost_rx_page(struct efx_rx_queue *rx_queue,
 			       struct efx_rx_buffer *rx_buf)
 {
@@ -118,6 +119,7 @@ static void efx_repost_rx_page(struct efx_rx_queue *rx_queue,
 			get_page(page);
 	} while (--nr_bufs > 0);
 }
+#endif
 
 static void efx_rx_packet__check_len(struct efx_rx_queue *rx_queue,
 				     struct efx_rx_buffer *rx_buf,
@@ -206,16 +208,16 @@ static struct sk_buff *efx_rx_mk_skb(struct efx_rx_queue *rx_queue,
 			rx_buf = efx_rx_buf_next(rx_queue, rx_buf);
 		}
 	} else {
-		if (efx->rx_buf_page_share) {
-			if (!(rx_buf->flags & EFX_RX_PAGE_IN_RECYCLE_RING)) {
-				__free_pages(rx_buf->page, efx->rx_buffer_order);
-			} else {
-				efx_repost_rx_page(rx_queue, rx_buf);
-				*_rx_buf = NULL;
-			}
-		} else {
+#if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
+		if (!(rx_buf->flags & EFX_RX_PAGE_IN_RECYCLE_RING)) {
+#endif
 			__free_pages(rx_buf->page, efx->rx_buffer_order);
+#if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
+		} else {
+			efx_repost_rx_page(rx_queue, rx_buf);
+			*_rx_buf = NULL;
 		}
+#endif
 		*ehp = new_eh;
 		rx_buf->page = NULL;
 		n_frags = 0;
@@ -248,7 +250,7 @@ void efx_rx_packet(struct efx_rx_queue *rx_queue, unsigned int index,
 	if (n_frags == 1) {
 		if (!(flags & EFX_RX_PKT_PREFIX_LEN))
 			efx_rx_packet__check_len(rx_queue, rx_buf, len);
-	} else if (unlikely(n_frags > efx->rx_max_frags) ||
+	} else if (unlikely(n_frags > EFX_RX_MAX_FRAGS) ||
 		   unlikely(len <= (n_frags - 1) * efx->rx_dma_len) ||
 		   unlikely(len > n_frags * efx->rx_dma_len) ||
 		   unlikely(!efx->rx_scatter)) {

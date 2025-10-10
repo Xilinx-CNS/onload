@@ -487,12 +487,12 @@ static int efx_devlink_flash_update(struct devlink *devlink,
 	if (rc)
 		return rc;
 
-	rc = efx_reflash_flash_firmware(efx, fw);
+	rc = efx_reflash_flash_firmware(efx, fw, extack);
 
 	release_firmware(fw);
 	return rc;
 #else
-	return efx_reflash_flash_firmware(efx, params->fw);
+	return efx_reflash_flash_firmware(efx, params->fw, extack);
 #endif
 }
 

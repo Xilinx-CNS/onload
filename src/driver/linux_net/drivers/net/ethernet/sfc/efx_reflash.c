@@ -449,7 +449,8 @@ static int efx_reflash_write_partition(struct efx_nic *efx,
 	return 0;
 }
 
-int efx_reflash_flash_firmware(struct efx_nic *efx, const struct firmware *fw)
+int efx_reflash_flash_firmware(struct efx_nic *efx, const struct firmware *fw,
+			       struct netlink_ext_ack *extack)
 {
 	size_t data_size, size, erase_align, write_align;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_DEVLINK)
@@ -577,9 +578,10 @@ out_update_finish:
 	if (rc)
 		/* Don't obscure the return code from an earlier failure */
 		(void) efx_mcdi_nvram_update_finish(efx, type,
-						    EFX_UPDATE_FINISH_ABORT);
+						EFX_UPDATE_FINISH_ABORT,
+						extack);
 	else
-		rc = efx_mcdi_nvram_update_finish_polled(efx, type);
+		rc = efx_mcdi_nvram_update_finish_polled(efx, type, extack);
 
 out:
 	if (!rc) {

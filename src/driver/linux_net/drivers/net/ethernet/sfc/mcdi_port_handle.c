@@ -967,6 +967,33 @@ int efx_x4_mcdi_link_state(struct efx_nic *efx)
 		port_data->link.requested_fec =
 			MCDI_BYTE(outbuf, LINK_STATE_OUT_V4_REQUESTED_FEC_MODE);
 
+
+	if (port_data->link.status &
+	    (BIT(MC_CMD_LINK_STATUS_FLAGS_PMD_MDI_DISCONNECTED) |
+	     BIT(MC_CMD_LINK_STATUS_FLAGS_PMD_UNSUPPORTED))) {
+		/* Module not present or unsupported (and LOCAL_AN_SUPPORT
+		 * flag is not valid). Enable Auto Negotiation support and
+		 * advertise all fixed port supported abilities, so that
+		 * firmware will choose appropriate settings when a
+		 * supported module is plugged in.
+		 */
+
+		/* Enable AutoNeg support (use any value except NONE) */
+		port_data->link.supported_autoneg = MC_CMD_AN_CLAUSE73;
+
+		/* Advertise all supported technologies */
+		bitmap_copy(port_data->advertised.tech_mask,
+			    port_data->fixed_port.tech_mask,
+			    MC_CMD_ETH_TECH_TECH_WIDTH);
+
+		/* Advertise all supported FEC modes */
+		port_data->advertised.fec = port_data->fixed_port.fec;
+		port_data->advertised.requested_fec = 0;
+
+		/* Advertise all supported pause modes */
+		port_data->advertised.pause = port_data->fixed_port.pause;
+	}
+
 	return 0;
 }
 

@@ -243,6 +243,7 @@ EFX_HAVE_XSK_BUFF_DMA_SYNC_FOR_CPU_2PARAM	symtype xsk_buff_dma_sync_for_cpu	incl
 EFX_HAVE_XSK_NEED_WAKEUP		symbol	xsk_umem_uses_need_wakeup	include/net/xdp_sock.h include/net/xdp_sock_drv.h
 EFX_HAVE_COALESCE_PARAMS		member struct_ethtool_ops supported_coalesce_params include/linux/ethtool.h
 EFX_NEED_NETLINK_EXT_ACK		nsymbol	netlink_ext_ack	include/linux/netlink.h
+EFX_HAVE_NL_SET_ERR_MSG_FMT_MOD		symbol	NL_SET_ERR_MSG_FMT_MOD	include/linux/netlink.h
 EFX_HAVE_ETHTOOL_RXFH_PARAM		symbol	ethtool_rxfh_param	include/linux/ethtool.h
 EFX_HAVE_XDP_QUERY_PROG			symbol XDP_QUERY_PROG	include/linux/netdevice.h
 EFX_HAVE_XDP_FRAME_SZ			member struct_xdp_buff	frame_sz	include/net/xdp.h

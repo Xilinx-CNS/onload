@@ -381,7 +381,7 @@ int efx_ethtool_flash_device(struct net_device *net_dev,
 	dev_hold(net_dev);
 	rtnl_unlock();
 
-	rc = efx_reflash_flash_firmware(efx, fw);
+	rc = efx_reflash_flash_firmware(efx, fw, NULL);
 
 	rtnl_lock();
 	dev_put(net_dev);

@@ -129,6 +129,10 @@ static inline unsigned long efx_max_evtq_size(struct efx_nic *efx)
 		(1 << (fls(efx->supported_bitmap) - 1)) : EFX_MAX_EVQ_SIZE);
 }
 
+/* Each packet can consume up to ceil(max_frame_len / buffer_size) buffers */
+#define EFX_RX_MAX_FRAGS DIV_ROUND_UP(EFX_MAX_FRAME_LEN(EFX_MAX_MTU), \
+                                      EFX_RX_USR_BUF_SIZE)
+
 /* Maximum number of TCP segments we support for soft-TSO */
 #define EFX_TSO_MAX_SEGS	100
 
