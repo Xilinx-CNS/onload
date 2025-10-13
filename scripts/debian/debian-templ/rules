@@ -240,8 +240,6 @@ binary-indep: build install
 #	dh_makeshlibs -i
 	dh_installdeb -i
 	dh_shlibdeps -i
-	dh_gencontrol -i
-	dh_md5sums -i
 
 ifneq (,$(filter #TYPE#-dev,$(DOPACKAGES)))
 	dh_installdirs -p$(develpackage) usr/include/
@@ -253,6 +251,9 @@ ifneq (,$(filter #TYPE#-examples,$(DOPACKAGES)))
 	i_prefix=$(CURDIR)/debian/$(examplespackage) scripts/onload_install \
 		--verbose --packaged --examples
 endif
+# do these after the optional components have been added
+	dh_gencontrol -i
+	dh_md5sums -i
 	dh_builddeb -i
 
 # Build architecture-dependent files here.
