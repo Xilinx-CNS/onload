@@ -342,6 +342,7 @@ Group:            System Environment/Kernel
 Requires:         openonload = %{version}-%{release}
 Suggests:         openonload-devel = %{version}-%{release}
 Provides:         openonload-examples = %{version}-%{release}
+BuildArch:        noarch
 
 %description examples
 OpenOnload is a high performance user-level network stack.
