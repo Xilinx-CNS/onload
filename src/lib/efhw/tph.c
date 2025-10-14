@@ -80,14 +80,14 @@ efhw_set_tph_steering(struct efhw_nic *nic, uint instance, int set,
     }
 
     if( rc != 0 )
-      EFHW_WARN("Failed to read steering tag (error %d), continuing without it",
-                rc);
+      EFHW_WARN_LIMITED("Failed to read steering tag (error %d), continuing without it",
+                        rc);
   }
 
   rc = efhw_nic_set_vi_tlp_processing(nic, instance, set, tag);
   if( rc != 0 )
-    EFHW_WARN("Failed to set steering tag (error %d), continuing without it",
-              rc);
+    EFHW_WARN_LIMITED("Failed to set steering tag (error %d), continuing without it",
+                      rc);
 
   return rc;
 #else /* CI_HAVE_SDCI */
