@@ -61,3 +61,7 @@ onload_set EF_CTPIO_SWITCH_BYPASS 1
 # Assume that application does not invoke calls on a single epoll object
 # concurrently.
 onload_set EF_EPOLL_MT_SAFE 1
+
+# Enable SDCI on platforms which support it.
+onload_set EF_TPH_MODE 2
+
