@@ -58,6 +58,13 @@ static uint64_t           n_pushed;
 static int                ifindex;
 static bool               abort_test = false;
 
+static void handle_tx_error(ef_vi *vi)
+{
+  /* Restart our TXQ */
+  TRY(ef_vi_reinit_txq_post_error(vi));
+  fprintf(stderr, "TXQ restarted after TX error event\n");
+}
+
 static void handle_completions(ef_vi *vi)
 {
   ef_request_id ids[EF_VI_TRANSMIT_BATCH];
@@ -74,6 +81,9 @@ static void handle_completions(ef_vi *vi)
         for ( j = 0; j < n_unbundled; ++j )
           TEST(ids[j] == (uint16_t)(n_sent + j));
         n_sent += n_unbundled;
+        break;
+      case EF_EVENT_TYPE_TX_ERROR:
+        handle_tx_error(vi);
         break;
       default:
         TEST(!"Unexpected event received");
