@@ -3034,6 +3034,37 @@ __ef_vi_get_vi_from_q_id(ef_vi* vi, int q_id)
 extern int
 __ef_vi_reinit_txq_post_error(ef_vi* vi);
 
+/*! \brief Iterate over all packets without completion events after a TX error
+**
+** \param vi             The virtual interface that experienced the TX error.
+** \param dma_id         Storage for each lost DMA ID, updated each iteration.
+**
+** Iterates over all TX packets which were pending a TX completion event at the
+** time this iterator is used. The VI provided must be the one which owns the
+** TXQ that is referred to in the TX error event. Any packets iterated over may
+** not have been transmitted on the wire.
+**
+** If transmitting with CTPIO, it is essential that you call the fallback
+** method, for example ef_vi_transmit_ctpio_fallback, in order to assign
+** a DMA ID to a transmitted packet. Failure to do so will result in an
+** arbitrary, valid DMA ID.
+**
+** NOTE: This should only be used after observing EF_EVENT_TYPE_TX_ERROR and
+** before the TXQ is reinitialised with ef_vi_reinit_txq_post_error, otherwise
+** the behaviour is undefined. The iterator is also only valid the first time
+** it is used - future uses will find no pending packets.
+**
+** For an example of how this function should be used, please see the
+** documentation for ef_vi_reinit_txq_post_error.
+*/
+#define ef_vi_for_each_tx_error_failed_transmit(vi, dma_id) \
+  for( ; \
+       (vi)->ep_state->txq.removed < (vi)->ep_state->txq.added; \
+       (vi)->ep_state->txq.removed++ ) \
+    if( EF_REQUEST_ID_MASK != \
+        ((dma_id) = (vi)->vi_txq.ids[(vi)->ep_state->txq.removed & \
+                                     (vi)->vi_txq.mask]) )
+
 #ifdef __cplusplus
 }
 #endif
