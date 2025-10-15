@@ -60,6 +60,25 @@ static bool               abort_test = false;
 
 static void handle_tx_error(ef_vi *vi)
 {
+  ef_request_id dma_id;
+  int n_incomplete_tx = 0;
+
+  /* We may have some outstanding packets we tried sending, but never received
+   * (and will never receive) completions for, which we should handle before
+   * restarting our TXQ. */
+  ef_vi_for_each_tx_error_failed_transmit(vi, dma_id) {
+    /* The TX packet with `dma_id` may have failed to transmit, so we try
+     * again. In this example app, we send packets with sequential DMA IDs,
+     * so the below test holds, and we must reduce the value used to track
+     * the number of packets pushed to the NIC. */
+    TEST(dma_id == (uint16_t)(n_sent + n_incomplete_tx++));
+    n_pushed--;
+  }
+  TEST(n_pushed == n_sent);
+  fprintf(stderr,
+          "Found %d TX packets with no completion after TX error event\n",
+          n_incomplete_tx);
+
   /* Restart our TXQ */
   TRY(ef_vi_reinit_txq_post_error(vi));
   fprintf(stderr, "TXQ restarted after TX error event\n");
