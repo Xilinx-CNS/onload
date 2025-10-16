@@ -74,5 +74,15 @@ efx_auxbus_wait_for_event_callbacks(struct efx_client_type_data *client_type)
 			 client_type->type);
 #endif
 }
+
+static inline void efx_send_event(struct efx_nic *efx,
+                                  enum efx_auxdev_event_type type, bool value)
+{
+        struct efx_auxdev_event ev = {};
+
+        ev.type = type;
+        ev.value = value;
+        efx_auxbus_send_events(efx_nic_to_probe_data(efx), &ev);
+}
 #endif	/* EFX_NOT_UPSTREAM */
 #endif

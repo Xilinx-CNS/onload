@@ -562,6 +562,8 @@ static int efx_mcdi_errno(struct efx_nic *efx, unsigned int mcdi_err)
 		return -ENOBUFS;
 	case MC_CMD_ERR_MAC_EXIST:
 		return -EADDRINUSE;
+	case MC_CMD_ERR_FILTER_CLASH:
+		return -EBADSLT;
 	case MC_CMD_ERR_NO_EVB_PORT:
 		if (efx->type->is_vf)
 			return -EAGAIN;
@@ -2855,6 +2857,13 @@ int efx_mcdi_nvram_update_finish(struct efx_nic *efx, unsigned int type,
 					  MC_CMD_NVRAM_UPDATE_FINISH_V3_OUT_ERROR_STRING_LEN,
 					  str);
 			}
+			rc = -EINVAL;
+			break;
+		case MC_CMD_NVRAM_VERIFY_RC_UNKNOWN_TYPE:
+			NL_SET_ERR_MSG_MOD(extack,
+					   "File not recognised as valid data format");
+			netif_err(efx, drv, efx->net_dev,
+				  "NVRAM_UPDATE_FINISH unknown data format\n");
 			rc = -EINVAL;
 			break;
 		default:

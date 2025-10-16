@@ -26,7 +26,7 @@
  * this is so when fields in &struct efx_auxdev are added to the end of the
  * struct.
  */
-#define EFX_AUX_ABI_VERSION_MINOR 1
+#define EFX_AUX_ABI_VERSION_MINOR 2
 #define EFX_AUX_ABI_VERSION ((EFX_AUX_ABI_VERSION_MAJOR << 16) | \
 			     EFX_AUX_ABI_VERSION_MINOR)
 #define EFX_AUX_ABI_VERSION_MAJOR_GET(ver) (ver >> 16)
@@ -41,16 +41,19 @@
  * @EFX_AUXDEV_EVENT_IN_RESET: Hardware is resetting.
  * @EFX_AUXDEV_EVENT_LINK_CHANGE: Physical link has changed state.
  * @EFX_AUXDEV_EVENT_POLL: Events need processing. Called from NAPI context.
+ * @EFX_AUXDEV_EVENT_FILTERSTATE: NIC is about to push all or remove all filters.
  */
 enum efx_auxdev_event_type {
 	EFX_AUXDEV_EVENT_IN_RESET,
 	EFX_AUXDEV_EVENT_LINK_CHANGE,
 	EFX_AUXDEV_EVENT_POLL,
+	EFX_AUXDEV_EVENT_FILTERSTATE,
 };
 
 #define EFX_AUXDEV_ALL_EVENTS	(BIT(EFX_AUXDEV_EVENT_IN_RESET) | \
 				 BIT(EFX_AUXDEV_EVENT_LINK_CHANGE) | \
-				 BIT(EFX_AUXDEV_EVENT_POLL))
+				 BIT(EFX_AUXDEV_EVENT_POLL) | \
+				 BIT(EFX_AUXDEV_EVENT_FILTERSTATE))
 
 /* Current state for an EFX_EVENT_IN_RESET event. */
 #define EFX_NOT_IN_RESET	0

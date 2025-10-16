@@ -733,13 +733,11 @@ static const struct efx_debugfs_parameter efx_debugfs_rx_queue_parameters[] = {
 	EFX_UINT_PARAMETER(struct efx_rx_queue, fast_fill_trigger),
 	EFX_UINT_PARAMETER(struct efx_rx_queue, min_fill),
 	EFX_UINT_PARAMETER(struct efx_rx_queue, recycle_count),
-#if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
 	EFX_UINT_PARAMETER(struct efx_rx_queue, page_add),
 	EFX_UINT_PARAMETER(struct efx_rx_queue, page_recycle_count),
 	EFX_UINT_PARAMETER(struct efx_rx_queue, page_recycle_failed),
 	EFX_UINT_PARAMETER(struct efx_rx_queue, page_recycle_full),
 	EFX_UINT_PARAMETER(struct efx_rx_queue, page_repost_count),
-#endif
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
 	EFX_UINT_PARAMETER(struct efx_rx_queue, ssr.n_merges),
 	EFX_UINT_PARAMETER(struct efx_rx_queue, ssr.n_bursts),

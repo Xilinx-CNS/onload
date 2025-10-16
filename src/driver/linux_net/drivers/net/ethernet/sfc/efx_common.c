@@ -138,16 +138,6 @@ const char *const efx_loopback_mode_names[] = {
 #if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 static struct efx_dl_ops efx_driverlink_ops;
 #endif
-
-static void efx_send_event(struct efx_nic *efx,
-			   enum efx_auxdev_event_type type, bool value)
-{
-	struct efx_auxdev_event ev = {};
-
-	ev.type = type;
-	ev.value = value;
-	efx_auxbus_send_events(efx_nic_to_probe_data(efx), &ev);
-}
 #endif
 
 /* Reset workqueue. If any NIC has a hardware failure then a reset will be
@@ -371,6 +361,12 @@ int efx_change_mtu(struct net_device *net_dev, int new_mtu)
 		net_dev->mtu = old_mtu;
 	mutex_unlock(&efx->mac_lock);
 
+	if (net_dev->mtu > ETH_DATA_LEN)
+		/* not sharing page for rx buffers */
+		efx->rx_buf_page_share = 0;
+	else
+		efx->rx_buf_page_share = 1;
+
 	if (efx->state == STATE_NET_UP)
 		efx_start_all(efx);
 	efx_device_attach_if_not_resetting(efx);
@@ -484,14 +480,29 @@ static int efx_start_datapath(struct efx_nic *efx)
 		efx->rx_buffer_order = 0;
 	} else if (efx->type->can_rx_scatter) {
 		BUILD_BUG_ON(EFX_RX_USR_BUF_SIZE % L1_CACHE_BYTES);
-#if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
+		BUILD_BUG_ON(EFX_RX_USR_SHARE_BUF_SIZE % L1_CACHE_BYTES);
 		BUILD_BUG_ON(sizeof(struct efx_rx_page_state) +
 			     2 * ALIGN(NET_IP_ALIGN + EFX_RX_USR_BUF_SIZE,
 				       EFX_RX_BUF_ALIGNMENT) +
 			     XDP_PACKET_HEADROOM > PAGE_SIZE);
-#endif
+
+		BUILD_BUG_ON(sizeof(struct efx_rx_page_state) +
+			     ALIGN(NET_IP_ALIGN + EFX_RX_USR_SHARE_BUF_SIZE,
+				       EFX_RX_BUF_ALIGNMENT) +
+			     XDP_PACKET_HEADROOM > PAGE_SIZE);
+
 		efx->rx_scatter = true;
-		efx->rx_dma_len = EFX_RX_USR_BUF_SIZE;
+
+		if (efx->rx_buf_page_share)
+			efx->rx_dma_len = EFX_RX_USR_BUF_SIZE;
+		else
+			efx->rx_dma_len = EFX_RX_USR_SHARE_BUF_SIZE;
+
+		/* Each packet can consume up to
+		 * ceil(max_frame_len / buffer_size) buffers
+		 */
+		efx->rx_max_frags = DIV_ROUND_UP(EFX_MAX_FRAME_LEN(EFX_MAX_MTU),
+						 efx->rx_dma_len);
 		efx->rx_buffer_order = 0;
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
 		efx->lro_available = false;

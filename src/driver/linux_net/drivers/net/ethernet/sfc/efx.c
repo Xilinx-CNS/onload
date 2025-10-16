@@ -815,6 +815,8 @@ static void efx_init_features(struct efx_nic *efx)
 #endif
 #endif
 #endif
+	/* with default mtu (1500 bytes) sharing page by rx buffers */
+	efx->rx_buf_page_share = 1;
 }
 
 static int efx_register_netdev(struct efx_nic *efx)

@@ -15,6 +15,7 @@
 #include "mcdi.h"
 #include "efx.h"
 #include "rx_common.h"
+#include "efx_auxbus_internal.h"
 
 /* The maximum size of a shared RSS context */
 /* TODO: this should really be from the mcdi protocol export */
@@ -2286,6 +2287,8 @@ int efx_mcdi_filter_table_up(struct efx_nic *efx)
 	if (table->push_filters)
 		return 0;
 
+	efx_send_event(efx, EFX_AUXDEV_EVENT_FILTERSTATE, true);
+
 	down_write(&table->lock);
 	mutex_lock(&efx->rss_lock);
 	mutex_lock(&efx->vport_lock);
@@ -2447,6 +2450,8 @@ void efx_mcdi_filter_table_down(struct efx_nic *efx)
 	}
 
 	table->push_filters = false;
+
+	efx_send_event(efx, EFX_AUXDEV_EVENT_FILTERSTATE, false);
 }
 
 void efx_mcdi_filter_table_fini(struct efx_nic *efx)

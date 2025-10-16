@@ -41,12 +41,11 @@ static inline void efx_sync_rx_buffer(struct efx_nic *efx,
 				      struct efx_rx_buffer *rx_buf,
 				      unsigned int len)
 {
-#if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
-	dma_sync_single_for_cpu(&efx->pci_dev->dev, rx_buf->dma_addr, len,
-				DMA_FROM_DEVICE);
-#else
-	efx_unmap_rx_buffer(efx, rx_buf);
-#endif
+	if (efx->rx_buf_page_share)
+		dma_sync_single_for_cpu(&efx->pci_dev->dev, rx_buf->dma_addr,
+					len, DMA_FROM_DEVICE);
+	else
+		efx_unmap_rx_buffer(efx, rx_buf);
 }
 
 void efx_free_rx_buffers(struct efx_rx_queue *rx_queue,
