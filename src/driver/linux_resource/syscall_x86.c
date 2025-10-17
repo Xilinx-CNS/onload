@@ -179,6 +179,18 @@ static bool is_andl_to_esi(const unsigned char *p)
   return p[0] == 0x21 && (p[1] & 0xc7) == 0xc6;
 }
 
+static bool set_syscall_table(void **syscall_table)
+{
+  efrm_syscall_table = syscall_table;
+  return true;
+}
+
+static bool set_syscall_func(void *p)
+{
+  efrm_x64_sys_call = p;
+  return true;
+}
+
 static void *is_syscall_table(const unsigned char *p)
 {
   /* For linux>=4.6 do_syscall_64() resides in
@@ -304,11 +316,9 @@ static bool find_syscall_from_do_syscall_64(unsigned char *my_do_syscall_64)
   while (p < pend) {
     void *syscall_table, *syscall_func;
     if( (syscall_table = is_syscall_table(p)) != NULL ) {
-      efrm_syscall_table = syscall_table;
-      return true;
+      return set_syscall_table((void**)syscall_table);
     } else if( (syscall_func = is_syscall_func(p)) != NULL) {
-      efrm_x64_sys_call = syscall_func;
-      return true;
+      return set_syscall_func(p);
     }
     p++;
   }
@@ -332,15 +342,13 @@ static bool find_syscall(void)
   p = efrm_find_ksym("x64_sys_call");
   if( p != NULL ) {
     TRAMP_DEBUG("syscall function ksym at %px", (unsigned long*)p);
-    efrm_x64_sys_call = (syscall_fn_t)p;
-    return true;
+    return set_syscall_func(p);
   }
   /* It works with CONFIG_KALLSYMS_ALL=y only. */
   p = efrm_find_ksym("sys_call_table");
   if( p != NULL ) {
     TRAMP_DEBUG("syscall table ksym at %px", (unsigned long*)p);
-    efrm_syscall_table = (void**)p;
-    return true;
+    return set_syscall_table((void**)p);
   }
 #endif
 
