@@ -284,7 +284,9 @@ static int ef10_handler(struct efx_auxdev_client *client,
     case EFX_AUXDEV_EVENT_IN_RESET:
       ef10_post_reset(client, nic, event->value);
       break;
-    case EFX_AUXDEV_EVENT_LINK_CHANGE:
+    default:
+      EFRM_TRACE("%s: Got unsubscribed aux event %x", __func__, event->type);
+      EFRM_ASSERT(false);
       break;
   };
 
@@ -320,7 +322,8 @@ static int ef10_probe(struct auxiliary_device *auxdev,
     return rc;
 
   client = edev->onload_ops->base_ops->open(auxdev, &ef10_handler,
-                                            EFX_AUXDEV_ALL_EVENTS);
+                                            BIT(EFX_AUXDEV_EVENT_IN_RESET) |
+                                            BIT(EFX_AUXDEV_EVENT_POLL));
 
   if( IS_ERR(client) ) {
     rc = PTR_ERR(client);

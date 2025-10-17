@@ -129,6 +129,7 @@ static int ef10ct_handler(struct efx_auxdev_client *client,
       break;
     default:
       /* We should only be getting events we asked for. */
+      EFRM_TRACE("%s: Got unsubscribed aux event %x", __func__, event->type);
       EFRM_ASSERT(false);
       break;
   };
