@@ -793,12 +793,16 @@ int ef_vi_alloc_from_set(ef_vi* vi, ef_driver_handle vi_dh,
 
 int ef_vi_free(ef_vi* ep, ef_driver_handle fd)
 {
+  int i;
   int rc;
 
   ef_vi_compat_free(ep);
 
-  if( ep->efct_rxqs.ops )
+  if( ep->efct_rxqs.ops ) {
+    for( i = 0; i < ep->efct_rxqs.max_qs; ++i )
+      ep->efct_rxqs.ops->detach(ep, i);
     ep->efct_rxqs.ops->cleanup(ep);
+  }
 
   if( ep->vi_ctpio_mmap_ptr != NULL ) {
     rc = ci_resource_munmap(fd, ep->vi_ctpio_mmap_ptr, CTPIO_MMAP_LEN);

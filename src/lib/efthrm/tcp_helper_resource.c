@@ -2242,6 +2242,7 @@ static void detach_efct_rxqs(tcp_helper_resource_t* trs)
 
 static void release_vi(tcp_helper_resource_t* trs)
 {
+  int i;
   int intf_i;
 
   /* Flush vis first to ensure our bufs won't be used any more */
@@ -2279,8 +2280,11 @@ static void release_vi(tcp_helper_resource_t* trs)
       efrm_ctpio_unmap_kernel(tcp_helper_vi(trs, intf_i),
                               trs_nic->thn_ctpio_io_mmap);
 #endif
-    if( vi->efct_rxqs.ops )
+    if( vi->efct_rxqs.ops ) {
+      for( i = 0; i < vi->efct_rxqs.max_qs; ++i )
+        vi->efct_rxqs.ops->detach(vi, i);
       vi->efct_rxqs.ops->cleanup(vi);
+    }
     efrm_vi_resource_release_flushed(tcp_helper_vi(trs, intf_i));
     trs->nic[intf_i].thn_vi_rs = NULL;
     CI_DEBUG_ZERO(ci_netif_vi(&trs->netif, intf_i));

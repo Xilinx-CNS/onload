@@ -432,13 +432,9 @@ static int efct_ubufs_refresh_mappings(ef_vi* vi, int ix,
 
 static void efct_ubufs_cleanup(ef_vi* vi)
 {
-  int i;
   struct efct_ubufs* ubufs = get_ubufs(vi);
 
   efct_superbufs_cleanup(vi);
-  for( i = 0; i < vi->efct_rxqs.max_qs; ++i )
-    efct_ubufs_detach(vi, i);
-
   efct_ubufs_free_mem(ubufs);
 }
 

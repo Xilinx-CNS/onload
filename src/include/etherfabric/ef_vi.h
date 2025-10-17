@@ -910,7 +910,7 @@ typedef struct {
                  unsigned n_superbufs,
                  bool shared_mode,
                  bool interrupt_mode);
-  /** Detach a queue */
+  /** Detach a queue from this vi (affects all users of this vi ) */
   void (*detach)(struct ef_vi*, int ix);
   /** Refresh the internal config; called if config_generation changes */
   int  (*refresh)(struct ef_vi*, int ix);
@@ -919,7 +919,7 @@ typedef struct {
                            uint64_t user_buffers, uint64_t* user_mappings);
   /** Prime the virtual interface's queues (both rx and tx) */
   int  (*prime)(struct ef_vi*, ef_driver_handle dh);
-  /** De-allocate internal resources */
+  /** De-allocate internal local resources (affects this user of this vi) */
   void (*cleanup)(struct ef_vi*);
   void (*dump_stats)(struct ef_vi*, ef_vi_dump_log_fn_t logger, void* log_arg);
   /** Arbitrary user data available when overriding these operations */
