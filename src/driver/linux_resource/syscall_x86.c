@@ -179,14 +179,52 @@ static bool is_andl_to_esi(const unsigned char *p)
   return p[0] == 0x21 && (p[1] & 0xc7) == 0xc6;
 }
 
+/*
+ * Test whether p points to the endbr64 instruction. Onload doesn't support
+ * 32-bit mode, so we needn't check for endbr32.
+ */
+static bool is_endbr64(const unsigned char *p)
+{
+  return p[0] == 0xf3 && p[1] == 0x0f && p[2] == 0x1e && p[3] == 0xfa;
+}
+
+static bool ibt_enabled(void)
+{
+#if defined(EFRM_HAVE_IBT) && defined(CONFIG_X86_KERNEL_IBT)
+  return cpu_feature_enabled(X86_FEATURE_IBT);
+#else
+  return false;
+#endif
+}
+
+static bool check_syscall_ibt_valid(const void *p)
+{
+  if( ibt_enabled() && ! is_endbr64(p) ) {
+    EFRM_ERR("%s: FATAL: Found syscall function, but missing endbr64 instruction. To use onload, please disable IBT with ibt=off in your kernel command line.",
+             __FUNCTION__);
+    return false;
+  }
+
+  return true;
+}
+
 static bool set_syscall_table(void **syscall_table)
 {
+#define CHECK_SYSCALL_IBT_VALID_OP(syscall) \
+  if( ! check_syscall_ibt_valid(syscall_table[__NR_##syscall]) ) \
+    return false;
+
+  FOR_EACH_DISPATCHABLE_SYSCALL(CHECK_SYSCALL_IBT_VALID_OP);
+
   efrm_syscall_table = syscall_table;
   return true;
 }
 
 static bool set_syscall_func(void *p)
 {
+  if( ! check_syscall_ibt_valid(p) )
+    return false;
+
   efrm_x64_sys_call = p;
   return true;
 }

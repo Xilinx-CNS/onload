@@ -145,6 +145,22 @@ extern int efrm_syscall_ctor(void);
 
 #endif /* __aarch64__ */
 
+#ifdef EFRM_HAVE_EPOLL_PWAIT2
+#define IF_EFRM_HAVE_EPOLL_PWAIT2(x) x
+#else
+#define IF_EFRM_HAVE_EPOLL_PWAIT2(x)
+#endif
+
+/* This list must contain all syscalls we want to use in the SYSCALL_DISPATCHn
+ * macro below. */
+#define FOR_EACH_DISPATCHABLE_SYSCALL(OP) \
+  OP(epoll_create1) \
+  OP(epoll_ctl) \
+  OP(epoll_pwait) \
+  OP(epoll_wait) \
+  IF_EFRM_HAVE_EPOLL_PWAIT2(OP(epoll_pwait2)) \
+  OP(bpf)
+
 /* This macro should be used as the sole content of a syscall caller function.
  * The surrounding function definition is omitted from this macro solely
  * because it's tricky to come up with a compact way to get parameter types
