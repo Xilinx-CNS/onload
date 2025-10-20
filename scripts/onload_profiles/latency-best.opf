@@ -10,36 +10,46 @@ onload_import latency
 
 # Use cut-through mode for CTPIO feature on X2 (and later) adapters. This can
 # result in poisoned packets being emitted.
-# At link speeds faster than 10Gb the CPU will generally not be able to keep
-# up so poisoned packets will often be emitted and latency will get worse;
+# X3 and X4 adapters have improved CTPIO implementation, so can use cut-through
+# at all speeds.
+# On X2, link speeds faster than 10Gb the CPU will generally not be able to
+# keep up so poisoned packets will often be emitted and latency will get worse;
 # disable cut-through in those cases.
 if [ -z "$EF_CTPIO_MODE" ]; then
   have_indeterminate=
   have_10k=
   have_non10k=
+  have_nonx2=
   for nic in /sys/class/net/*; do
     driver=$(basename "$(readlink "$nic/device/driver")")
+    pci_deviceid=`(cat $nic/device/device) || echo 0`
     if [ "$driver" = sfc ]; then
-      speed=`(cat $nic/speed 2>/dev/null) || echo 0`
-      if [ $speed = 0 ]; then
+      if [ $pci_deviceid = 0 ]; then
         have_indeterminate=1
-      elif [ $speed -le 10000 ]; then
-        have_10k=1
+      elif [[ $pci_deviceid = 0x0b03 || $pci_deviceid = 0x1b03 ]]; then
+        speed=`(cat $nic/speed 2>/dev/null) || echo 0`
+        if [ $speed = 0 ]; then
+          have_indeterminate=1
+        elif [ $speed -le 10000 ]; then
+          have_10k=1
+        else
+          have_non10k=1
+        fi
       else
-        have_non10k=1
+        have_nonx2=1
       fi
     fi
   done
   if [ "$have_non10k" ]; then
-    if [ "$have_indeterminate" -o "$have_10k" ]; then
-      log "Warning: Disabling CTPIO cut-through because only adapters running at 10GbE benefit from it. If your latency-sensitive traffic is using only a 10GbE adapter then set EF_CTPIO_MODE=ct explicitly"
+    if [[ "$have_indeterminate" || "$have_nonx2" || "$have_10k" ]]; then
+      log "Warning: Disabling CTPIO cut-through because X2 adapters running at greater than 10GbE may not benefit from it. If your latency-sensitive traffic is only using an X4 or X3 adapter, or an X2 adapter at 10GbE then set EF_CTPIO_MODE=ct explicitly"
     else
-      log "Note: Disabling CTPIO cut-through because only adapters running at 10GbE benefit from it"
+      log "Note: Disabling CTPIO cut-through because X2 adapters only benefit from it when running at 10GbE"
     fi
   else
     onload_set EF_CTPIO_MODE ct
     if [ $have_indeterminate ]; then
-      log "Warning: CTPIO cut-through is enabled, but the link speed of some adapters could not be determined. If latency-sensitive traffic is using an adapter running at a speed other than 10GbE then use EF_CTPIO_MODE=sf for best results"
+      log "Warning: CTPIO cut-through is enabled, but the link speed of some adapters could not be determined. If latency-sensitive traffic is using an X2 adapter running at a speed other than 10GbE then use EF_CTPIO_MODE=sf for best results"
     fi
   fi
 fi
