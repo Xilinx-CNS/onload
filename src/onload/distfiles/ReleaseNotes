@@ -196,6 +196,17 @@ Debian DKMS packaging and previewed for RPM users in the Onload-9.0.1.86
 Source RPM.
 
 
+Indirect Branch Tracking (IBT) Incompatibility
+----------------------------------------------
+
+Onload is not compatible with IBT. To use Onload with kernels which include IBT
+support (e.g. RHEL10), ibt=off should be appended to the kernel commandline.
+Attempting to load the onload drivers when IBT is still enabled will result in
+failure to insert the sfc_resource kernel module. Onload will also output a
+message to the kernel log suggesting ibt=off is appended to the kernel
+commandline.
+
+
 Onload-9.0.1.86
 ===============
 
