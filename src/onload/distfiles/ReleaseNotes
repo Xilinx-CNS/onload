@@ -24,12 +24,10 @@ Linux distribution support
 AMD Solarflare(TM) X4 Series Ethernet Adapter
 ---------------------------------------------
 
-There are several limitations on the currently available functionality in
-this preview release.
+This release adds support for the X4 adapter. The following features will
+benefit from improved support in future versions of Onload:
 
-- Currently only 128 TXQs are available on the Express datapath.
 - NIC reset is not handled. A driver reload is required post reset.
-- Shared queues are not available.
 - Filter handling when interfaces change state does not operate correctly
 - Multicast replication between the Express and Enterprise datapath is not
   supported. To use multicast replication onload must be forced to use only
@@ -38,8 +36,6 @@ this preview release.
   datapath.
 - Filter redirection is not supported, which may lead to unexpected behaviour
   in scenerios where port numbers are reused.
-- Physical mode addressing is not supported with Onload and the Express
-  datapath. This limitation does not apply to ef_vi.
 
 X4 Datapath Restrictions
 ------------------------
@@ -63,8 +59,6 @@ X4 Known Issues
 
 - Onload TX event processing can become starved, leading to EVQ overflow,
   manifesting as an assertion failure or kernel panic in efct_poll_tx().
-- Certain stack tear down scenerios can fail with a backtrace indicating
-  problems with queue flush.
 - When an onload stack is created using the Express datapath a log message
   is emitted warning that the queue size has been rounded up. This is because
   the minimum queue size on X4 is higher than the default value and is
