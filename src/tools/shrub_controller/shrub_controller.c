@@ -405,12 +405,18 @@ static void shrub_dump_server_to_fd(int fd, shrub_if_config_t *server_config,
   ef_vi *vi = &svi->vi;
   ef_vi_efct_rxqs *rxqs = &vi->efct_rxqs;
   ef_vi_efct_rxq_state *rxq_state;
+  char ifname[IFNAMSIZ];
   int i;
+
+  memset(ifname, 0, sizeof(ifname));
+  if ( if_indextoname(server_config->ifindex, ifname) == NULL )
+    snprintf(ifname, sizeof(ifname), "unknown");
 
   shrub_log_to_fd(fd, buf, buflen, SECTION_SEP);
   shrub_log_to_fd(fd, buf, buflen, "\nshrub server\n");
-  shrub_log_to_fd(fd, buf, buflen, "  ifindex: %d hw_port: %x\n",
-                  server_config->ifindex, server_config->hw_port);
+  shrub_log_to_fd(fd, buf, buflen, "ifname: %.*s ifindex: %d hw_port: %x\n",
+                  IFNAMSIZ - 1, ifname, server_config->ifindex,
+                  server_config->hw_port);
   shrub_log_to_fd(fd, buf, buflen, "  buffer count: %d client count: %d "
                   "token: %x\n", server_config->buffer_count,
                   server_config->ref_count, server_config->token_id);
