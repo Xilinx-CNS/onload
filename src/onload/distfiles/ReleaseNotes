@@ -21,18 +21,58 @@ Linux distribution support
  - Linux kernels 5.11 - 6.14
 
 
-Packaging changes
------------------
+AMD Solarflare(TM) X4 Series Ethernet Adapter
+---------------------------------------------
 
-Source code examples showcasing how to build applications to use certain
-features of Onload and ef_vi are now included in a new optional subpackage
-called 'onload-examples'. The examples were previously available in Onload
-tarball source release packages and could be extracted from RPM and Debian
-source packages.
+There are several limitations on the currently available functionality in
+this preview release.
+
+- Currently only 128 TXQs are available on the Express datapath.
+- NIC reset is not handled. A driver reload is required post reset.
+- Shared queues are not available.
+- Filter handling when interfaces change state does not operate correctly
+- Multicast replication between the Express and Enterprise datapath is not
+  supported. To use multicast replication onload must be forced to use only
+  the Enterprise datapath with EF_RX_DATAPATH=enterprise. Note that when
+  this option is set unicast traffic will also be using the Enterprise
+  datapath.
+- Filter redirection is not supported, which may lead to unexpected behaviour
+  in scenerios where port numbers are reused.
+- Physical mode addressing is not supported with Onload and the Express
+  datapath. This limitation does not apply to ef_vi.
+
+X4 Datapath Restrictions
+------------------------
+
+- The Wire Order API (WODA) is only guaranteed to operate correctly where
+  only the Enterprise RX path is selected (EF_RX_DATAPATH=enterprise)
+- Application clustering (SO_REUSEPORT/EF_CLUSTER_SIZE) is only supported with
+  EF_RX_DATAPATH=enterprise
+
+X4 Diagnostics
+--------------
+
+The onload_shrubdump tool provides diagnostic information from shared
+reusable buffer controllers but the format of its output cannot be
+relied upon to be consistent between this release and future releases.
+The debug logging behaviour of the controllers themselves is also subject to
+change.
+
+X4 Known Issues
+---------------
+
+- Onload TX event processing can become starved, leading to EVQ overflow,
+  manifesting as an assertion failure or kernel panic in efct_poll_tx().
+- Certain stack tear down scenerios can fail with a backtrace indicating
+  problems with queue flush.
+- When an onload stack is created using the Express datapath a log message
+  is emitted warning that the queue size has been rounded up. This is because
+  the minimum queue size on X4 is higher than the default value and is
+  harmless.
 
 
-X3522 driver
-------------
+AMD Alveo(TM) X3 Series Low Latency Ethernet Adapter
+----------------------------------------------------
 
 The minimum compatible X3522 driver version to match the Onload supported OS
 list is v1.6.8.0.
@@ -64,8 +104,8 @@ the capabilities API (EF_VI_CAP_RX_POLL), for example:
 See also the source code for eflatency which uses this feature.
 
 
-SDCI
-----
+Smart Data Cache Injection
+--------------------------
 
 Smart Data Cache Injection (SDCI) support has been added to allow steering of
 network packets directly to a core's L2 cache. Currently, SDCI is limited to
@@ -115,72 +155,22 @@ Please note that when using SDCI with steering tags, a NIC reset may result in
 incorrect steering tags being used, which may degrade performance.
 
 
-X4 Functionality
-----------------
-
-There are several limitations on the currently available functionality in
-this preview release.
-
-- Currently only 128 TXQs are available on the Express datapath.
-- NIC reset is not handled. A driver reload is required post reset.
-- Shared queues are not available.
-- Filter handling when interfaces change state does not operate correctly
-- Multicast replication between the Express and Enterprise datapath is not
-  supported. To use multicast replication onload must be forced to use only
-  the Enterprise datapath with EF_RX_DATAPATH=enterprise. Note that when
-  this option is set unicast traffic will also be using the Enterprise
-  datapath.
-- Filter redirection is not supported, which may lead to unexpected behaviour
-  in scenerios where port numbers are reused.
-- Physical mode addressing is not supported with Onload and the Express
-  datapath. This limitation does not apply to ef_vi.
-
-
-X4 Datapath Restrictions
-------------------------
-
-- The Wire Order API (WODA) is only guaranteed to operate correctly where
-  only the Enterprise RX path is selected (EF_RX_DATAPATH=enterprise)
-- Application clustering (SO_REUSEPORT/EF_CLUSTER_SIZE) is only supported with
-  EF_RX_DATAPATH=enterprise
-
-
-X4 Diagnostics
---------------
-
-The onload_shrubdump tool provides diagnostic information from shared
-reusable buffer controllers but the format of its output cannot be
-relied upon to be consistent between this release and future releases.
-The debug logging behaviour of the controllers themselves is also subject to
-change.
-
-
-X4 Known Issues
----------------
-
-- Onload TX event processing can become starved, leading to EVQ overflow,
-  manifesting as an assertion failure or kernel panic in efct_poll_tx().
-- Certain stack tear down scenerios can fail with a backtrace indicating
-  problems with queue flush.
-- When an onload stack is created using the Express datapath a log message
-  is emitted warning that the queue size has been rounded up. This is because
-  the minimum queue size on X4 is higher than the default value and is
-  harmless.
-
-
-ef_vi Compatibility
--------------------
-
-The ef_vi interface is still under development. As such there are no binary
-compatibility guarantees either backwards or forwards.
-
-
 X2 Rx Timestamping with very old firmware versions
 --------------------------------------------------
 
 A workaround for handling v7.1 firmware on X2 has been removed, which would
 lead to inaccurate timestamps if that firmware was in use. Anyone using this
 outdated firmware should update to a supported version.
+
+
+New package for example applications
+------------------------------------
+
+Source code examples showcasing how to build applications to use certain
+features of Onload and ef_vi are now included in a new optional subpackage
+called 'onload-examples'. The examples were previously available in Onload
+tarball source release packages and could be extracted from RPM and Debian
+source packages.
 
 
 DKMS RPM only available by building SRPM bundle

@@ -32,19 +32,16 @@ Supported platforms
  Linux kernels from 5.11.
 
  The following processor architecture is supported:
- - amd64/em64t (support for AMD processors prior to Zen is deprecated)
+ - amd64/em64t (also known as x86_64)
 
- This release of Onload supports the following Xilinx adapter:
-   Alveo™ XtremeScale™ X3522 low latency network adapter
+ This release of Onload supports models of the following AMD server adapter
+ series that are in current support:
+ - AMD Solarflare(TM) X4 Series Ethernet Adapter
+ - AMD Alveo(TM) X3 Series Low Latency Ethernet Adapter
+ - AMD Solarflare(TM) X2 Series Low Latency Ethernet Adapter
+ - AMD Solarflare(TM) 8000 Series Ethernet Adapter (with Plus license)
 
- Onload supports Solarflare SFC9000 network controller chips,
- including the following network adapters:
-   X2541, X2542
-   X2522, X2522-25G
-   SFN8042
-   SFN8522, SFN8522M, SFN8542, SFN8722
-
- If you are interested in trying or buying Solarflare network adapters,
+ If you are interested in trying or buying AMD Solarflare network adapters,
  please contact <nic-sales@amd.com>.
 
 
@@ -53,7 +50,7 @@ Documentation
 
  The Onload User Guide is available from:
 
-   https://docs.xilinx.com/r/en-US/ug1586-onload-user
+   https://docs.amd.com/r/en-US/ug1586-onload-user
 
  Other documentation for supported network cards including the Server Adapter
  User Guide are available from:
@@ -122,7 +119,7 @@ Any questions?
    https://adaptivesupport.amd.com/s/case/Case/Default
 
 
-(c) Copyright 2010-2024 Advanced Micro Devices, Inc.
+(c) Copyright 2010-2025 Advanced Micro Devices, Inc.
 
 ==========
  version: ONLOAD_VERSION
