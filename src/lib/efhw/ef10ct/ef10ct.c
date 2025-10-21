@@ -1255,10 +1255,44 @@ static int ef10ct_fini_rxq(struct efhw_nic *nic, int rxq_num)
 }
 
 static int
+ef10ct_rxq_init_mcdi(struct efhw_nic* nic, int q_size, int evq, int rxq_num,
+                     int rxq_handle, bool suppress_events)
+{
+  struct efx_auxdev_rpc rpc;
+  EFHW_MCDI_DECLARE_BUF(in, MC_CMD_INIT_RXQ_V5_IN_LEN);
+  EFHW_MCDI_INITIALISE_BUF(in);
+
+  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V5_IN_SIZE, q_size);
+  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V5_IN_TARGET_EVQ, evq);
+  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V5_IN_LABEL, rxq_num);
+  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V5_IN_INSTANCE, rxq_handle);
+  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V5_IN_PORT_ID, EVB_PORT_ID_ASSIGNED);
+
+  EFHW_MCDI_POPULATE_DWORD_5(in, INIT_RXQ_V5_IN_FLAGS,
+                      INIT_RXQ_V5_IN_DMA_MODE,
+                      MC_CMD_INIT_RXQ_V5_IN_EQUAL_STRIDE_SUPER_BUFFER,
+                      INIT_RXQ_V5_IN_FLAG_TIMESTAMP, 1,
+                      INIT_RXQ_V5_IN_FLAG_PREFIX, 1,
+                      INIT_RXQ_V5_IN_FLAG_DISABLE_SCATTER, 1,
+                      INIT_RXQ_V5_IN_FLAG_SUPPRESS_RX_EVENTS, suppress_events);
+
+  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V5_IN_ES_PACKET_STRIDE, EFCT_PKT_STRIDE);
+  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V5_IN_ES_MAX_DMA_LEN, nic->mtu);
+  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V5_IN_ES_PACKET_BUFFERS_PER_BUCKET,
+		      DIV_ROUND_UP(EFCT_RX_SUPERBUF_BYTES, EFCT_PKT_STRIDE));
+
+  rpc.cmd = MC_CMD_INIT_RXQ;
+  rpc.inlen = sizeof(in);
+  rpc.inbuf = (void*)in;
+  rpc.outlen = 0;
+  rpc.outbuf = NULL;
+  return ef10ct_fw_rpc(nic, &rpc);
+}
+
+static int
 ef10ct_shared_rxq_bind(struct efhw_nic* nic,
                        struct efhw_shared_bind_params *params)
 {
-  EFHW_MCDI_DECLARE_BUF(in, MC_CMD_INIT_RXQ_V5_IN_LEN);
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   int flag_tph_tag_mode = (params->flags & EFHW_VI_TPH_TAG_MODE) != 0;
   int flag_enable_tph = (params->flags & EFHW_VI_ENABLE_TPH) != 0;
@@ -1266,11 +1300,13 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
   int rxq_handle;
   int evq;
   int rc = 0;
-  struct efx_auxdev_rpc rpc;
   void **post_buffer_addr;
   bool suppress_events = false;
   bool real_evq = params->interrupt_req &&
                   params->wakeup_instance < ef10ct->evq_n;
+  int q_size = roundup_pow_of_two(
+                        DIV_ROUND_UP(EFCT_RX_SUPERBUF_BYTES, EFCT_PKT_STRIDE) *
+                        CI_EFCT_SUPERBUFS_PER_PAGE * params->n_hugepages);
 
   EFHW_TRACE("%s: evq 0x%x, rxq 0x%x", __func__, params->wakeup_instance,
              params->qid);
@@ -1330,37 +1366,8 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
     EFHW_TRACE("%s: Using non-shared evq 0x%x", __func__, evq);
   }
 
-  EFHW_MCDI_INITIALISE_BUF(in);
-
-  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V5_IN_SIZE,
-                      roundup_pow_of_two(
-                        DIV_ROUND_UP(EFCT_RX_SUPERBUF_BYTES, EFCT_PKT_STRIDE) *
-                        CI_EFCT_SUPERBUFS_PER_PAGE * params->n_hugepages
-                      ));
-  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V5_IN_TARGET_EVQ, evq);
-  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V5_IN_LABEL, rxq_num);
-  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V5_IN_INSTANCE, rxq_handle);
-  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V5_IN_PORT_ID, EVB_PORT_ID_ASSIGNED);
-
-  EFHW_MCDI_POPULATE_DWORD_5(in, INIT_RXQ_V5_IN_FLAGS,
-                             INIT_RXQ_V5_IN_DMA_MODE,
-			     MC_CMD_INIT_RXQ_V5_IN_EQUAL_STRIDE_SUPER_BUFFER,
-			     INIT_RXQ_V5_IN_FLAG_TIMESTAMP, 1,
-			     INIT_RXQ_V5_IN_FLAG_PREFIX, 1,
-			     INIT_RXQ_V5_IN_FLAG_DISABLE_SCATTER, 1,
-			     INIT_RXQ_V5_IN_FLAG_SUPPRESS_RX_EVENTS, suppress_events);
-
-  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V5_IN_ES_PACKET_STRIDE, EFCT_PKT_STRIDE);
-  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V5_IN_ES_MAX_DMA_LEN, nic->mtu);
-  EFHW_MCDI_SET_DWORD(in, INIT_RXQ_V5_IN_ES_PACKET_BUFFERS_PER_BUCKET,
-		       DIV_ROUND_UP(EFCT_RX_SUPERBUF_BYTES, EFCT_PKT_STRIDE));
-
-  rpc.cmd = MC_CMD_INIT_RXQ;
-  rpc.inlen = sizeof(in);
-  rpc.inbuf = (void*)in;
-  rpc.outlen = 0;
-  rpc.outbuf = NULL;
-  rc = ef10ct_fw_rpc(nic, &rpc);
+  rc = ef10ct_rxq_init_mcdi(nic, q_size, evq, rxq_num, rxq_handle,
+                            suppress_events);
   if( rc < 0 ) {
     EFHW_ERR("%s ef10ct_fw_rpc failed. rc = %d\n", __FUNCTION__, rc);
     goto out_locked;
