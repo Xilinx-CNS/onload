@@ -636,7 +636,7 @@ int main(int argc, char* argv[])
   TRY(ef_driver_open(&res->dh));
   if( ! parse_interface_with_flags(argv[0], &interface, &ifindex,
                                    &pd_flags, res->dh) ) {
-    fprintf(stderr, "Unable to parse interface '%s': %s",
+    fprintf(stderr, "Unable to parse interface '%s': %s\n",
             argv[0], strerror(errno));
     usage();
   }
