@@ -140,10 +140,10 @@ bool efrm_filter_check_is_redirect_nop(struct efrm_client *client,
 }
 
 int efrm_filter_redirect(struct efrm_client * client, int filter_id,
-                         struct efx_filter_spec *spec)
+                         struct efx_filter_spec *spec, int *rxq,
+                         unsigned pd_excl_token, const struct cpumask *mask)
 {
   struct efx_filter_spec *old_spec;
-  int rxq_out;
 
   if( efrm_filter_check_is_redirect_nop(client, filter_id, spec) ) {
     LOG_FILTER_OP(ooft_log_hw_filter_op(client, spec, 0, "REDIRECT-NOP"));
@@ -154,7 +154,7 @@ int efrm_filter_redirect(struct efrm_client * client, int filter_id,
   if( !old_spec )
     return -EINVAL;
 
-  return efrm_filter_insert_common(client, spec, &rxq_out, 0, NULL, 0,
+  return efrm_filter_insert_common(client, spec, rxq, pd_excl_token, mask, 0,
                                    filter_id, "REDIRECT-INSERT");
 }
 
