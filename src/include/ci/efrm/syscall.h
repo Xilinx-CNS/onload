@@ -6,6 +6,7 @@
 
 #include <linux/version.h>
 #include "debug.h"
+#include <ci/driver/kernel_compat.h>
 
 /* On 4.17+ on x86_64 and ARM64 the system calls are taking a single
    ptregs argument.
@@ -161,6 +162,20 @@ extern int efrm_syscall_ctor(void);
   IF_EFRM_HAVE_EPOLL_PWAIT2(OP(epoll_pwait2)) \
   OP(bpf)
 
+/* To avoid the above list becoming stale, we assert that all call sites for
+ * SYSCALL_DISPATCHn register their respective syscall name at build time.
+ * This works by creating a struct from the list of valid syscalls, where each
+ * is an integer member, and asserting the size of the member corresponding
+ * with the syscall we are trying to dispatch exists within that struct. */
+#define SYSCALL_DEFINE_INT(syscall) int syscall;
+#define EFRM_BUILD_ASSERT_SYSCALL_DISPATCHABLE(syscall) \
+  ({ \
+    struct { \
+      FOR_EACH_DISPATCHABLE_SYSCALL(SYSCALL_DEFINE_INT) \
+    } x; \
+    EFRM_BUILD_ASSERT(sizeof(x.syscall) != 0); \
+  })
+
 /* This macro should be used as the sole content of a syscall caller function.
  * The surrounding function definition is omitted from this macro solely
  * because it's tricky to come up with a compact way to get parameter types
@@ -169,6 +184,7 @@ extern int efrm_syscall_ctor(void);
 #define SYSCALL_DISPATCHn(_n, _name, _sig, ...)                   \
   ({                                                              \
     SYSCALL_PTR_DEF(_name, _sig);                                 \
+    EFRM_BUILD_ASSERT_SYSCALL_DISPATCHABLE(_name);                \
     EFRM_ASSERT(syscall_fn != NULL);                              \
     SET_SYSCALL_NO(_name);                                        \
     PASS_SYSCALL##_n(_name, __VA_ARGS__);                         \
