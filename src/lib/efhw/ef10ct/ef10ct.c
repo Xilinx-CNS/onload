@@ -1300,6 +1300,7 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
   int rxq_handle;
   int evq;
   int rc = 0;
+  int i;
   void **post_buffer_addr;
   bool suppress_events = false;
   bool real_evq = params->interrupt_req &&
@@ -1307,9 +1308,20 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
   int q_size = roundup_pow_of_two(
                         DIV_ROUND_UP(EFCT_RX_SUPERBUF_BYTES, EFCT_PKT_STRIDE) *
                         CI_EFCT_SUPERBUFS_PER_PAGE * params->n_hugepages);
+  struct oo_hugetlb_page* pages = NULL;
+  bool add_to_wakeup_list = false;
 
   EFHW_TRACE("%s: evq 0x%x, rxq 0x%x", __func__, params->wakeup_instance,
              params->qid);
+
+  /* Bail out early if we're asked for something we already know is crazy */
+  if( rxq_num < 0 || rxq_num >= ef10ct->rxq_n ) {
+    EFHW_ERR(KERN_INFO "%s rxq outside of expected range. rxq = %d",
+             __func__, rxq_num);
+    /* Caller shouldn't really have come up with a dodgy rxq num */
+    EFHW_ASSERT(false);
+    return -EINVAL;
+  }
 
   mutex_lock(&ef10ct->rxq[rxq_num].bind_lock);
 
@@ -1318,7 +1330,7 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
     EFHW_WARN("%s Tried to bind to rxq %d, but it is being freed. Aborting.",
              __func__, rxq_num);
     rc = -EAGAIN;
-    goto out_locked;
+    goto fail1;
   }
 
   if( ef10ct->rxq[rxq_num].ref_count > 0 ) {
@@ -1331,9 +1343,7 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
     /* Get whether the rxq we are binding to is using a shared evq or not. */
     evq_num = ef10ct_get_queue_num(ef10ct->rxq[rxq_num].evq_id);
     real_evq = !ef10ct_is_shared_evq(nic, evq_num);
-
-    efct_app_list_push(&ef10ct->rxq[rxq_num].apps.live_apps, params->rxq);
-
+    add_to_wakeup_list = true;
     goto out_good;
   }
 
@@ -1343,6 +1353,30 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
   /* Needs to be done before the queue is active */
   efhw_set_tph_steering(nic, rxq_handle, flag_enable_tph, flag_tph_tag_mode);
 
+  if( params->hugetlb_alloc != NULL && params->n_hugepages != 0 ) {
+    int i;
+    pages = kzalloc(params->n_hugepages *
+                    sizeof(struct oo_hugetlb_page), GFP_KERNEL);
+
+    if( pages == NULL ) {
+      EFHW_ERR("%s Failed to allocate buffer page table\n", __FUNCTION__);
+      rc = -ENOMEM;
+      goto fail1;
+    }
+
+    for( i = 0; i < params->n_hugepages; ++i ) {
+      rc = oo_hugetlb_page_alloc(params->hugetlb_alloc, &pages[i]);
+      if( rc < 0 ) {
+        EFHW_ERR("%s Failed to allocate buffer page. rc = %d\n",
+                 __FUNCTION__, rc);
+        while( i > 0 )
+          oo_hugetlb_page_free(&pages[--i], false);
+        rc = -ENOMEM;
+        goto fail2;
+      }
+    }
+  }
+
   /* Choose which evq to bind this rxq to. */
   if( !real_evq ) {
     if (params->interrupt_req) {
@@ -1351,8 +1385,7 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
       evq = ef10ct->shared[EF10CT_SHARED_RX_EVS].evq_id;
       EFHW_TRACE("%s: Using shared evq 0x%x WITH rx EVENTS", __func__, evq);
       suppress_events = false;
-
-      efct_app_list_push(&ef10ct->rxq[rxq_num].apps.live_apps, params->rxq);
+      add_to_wakeup_list = true;
     } else {
       EFHW_ASSERT(ef10ct->shared_n >= 1 );
       evq = ef10ct->shared[EF10CT_SHARED_NO_RX_EVS].evq_id;
@@ -1370,45 +1403,17 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
                             suppress_events);
   if( rc < 0 ) {
     EFHW_ERR("%s ef10ct_fw_rpc failed. rc = %d\n", __FUNCTION__, rc);
-    goto out_locked;
-  }
-
-  if( rxq_num < 0 || rxq_num >= ef10ct->rxq_n ) {
-    EFHW_ERR(KERN_INFO "%s rxq outside of expected range. rxq = %d",
-             __func__, rxq_num);
-    rc = -EINVAL;
-    goto out_locked;
+    goto fail3;
   }
 
   post_buffer_addr = (void **)&ef10ct->rxq[rxq_num].post_buffer_addr;
   rc = ef10ct_rx_iomap_buffer_post_register(nic, rxq_handle, post_buffer_addr);
   if (rc < 0) {
-    ef10ct_fini_rxq(nic, rxq_num);
     EFHW_ERR("%s Failed to iomap rx post register. rc = %d", __func__, rc);
-    goto out_locked;
+    goto fail4;
   }
 
   if( params->hugetlb_alloc != NULL && params->n_hugepages != 0 ) {
-    int i;
-    struct oo_hugetlb_page* pages =
-      kzalloc(params->n_hugepages * sizeof(struct oo_hugetlb_page), GFP_KERNEL);
-
-    if( pages == NULL ) {
-      EFHW_ERR("%s Failed to allocate buffer page table\n", __FUNCTION__);
-      return -ENOMEM;
-    }
-
-    for( i = 0; i < params->n_hugepages; ++i ) {
-      rc = oo_hugetlb_page_alloc(params->hugetlb_alloc, &pages[i]);
-      if( rc < 0 ) {
-        EFHW_ERR("%s Failed to allocate buffer page. rc = %d\n", __FUNCTION__, rc);
-        while( i > 0 )
-          oo_hugetlb_page_free(&pages[--i], false);
-        kfree(pages);
-        return rc;
-      }
-    }
-
     ef10ct->rxq[rxq_num].buffer_pages = pages;
     ef10ct->rxq[rxq_num].n_buffer_pages = params->n_hugepages;
   }
@@ -1429,7 +1434,21 @@ out_good:
   params->rxq->uses_shared_evq = !real_evq;
   params->rxq->wake_at_seqno = EFCT_INVALID_PKT_SEQNO;
   params->rxq->wakeup_instance = params->wakeup_instance;
-out_locked:
+  if( add_to_wakeup_list )
+    efct_app_list_push(&ef10ct->rxq[rxq_num].apps.live_apps, params->rxq);
+  mutex_unlock(&ef10ct->rxq[rxq_num].bind_lock);
+  return rc;
+
+fail4:
+  ef10ct_fini_rxq(nic, rxq_num);
+fail3:
+  if( params->hugetlb_alloc != NULL ) {
+    for( i = 0; i < params->n_hugepages; ++i )
+      oo_hugetlb_page_free(&pages[i], false);
+  }
+fail2:
+  kfree(pages);
+fail1:
   mutex_unlock(&ef10ct->rxq[rxq_num].bind_lock);
   return rc;
 }
