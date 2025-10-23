@@ -356,7 +356,7 @@ static bool find_syscall_from_do_syscall_64(unsigned char *my_do_syscall_64)
     if( (syscall_table = is_syscall_table(p)) != NULL ) {
       return set_syscall_table((void**)syscall_table);
     } else if( (syscall_func = is_syscall_func(p)) != NULL) {
-      return set_syscall_func(p);
+      return set_syscall_func(syscall_func);
     }
     p++;
   }
