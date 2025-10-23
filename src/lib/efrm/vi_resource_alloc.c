@@ -1981,6 +1981,33 @@ static int efrm_vi_q_reinit(struct efrm_vi *virs, enum efhw_q_type q_type)
 }
 
 
+int efrm_vi_reinit_txq(struct efrm_vi *virs)
+{
+	struct efhw_nic *nic = virs->rs.rs_client->nic;
+	struct efrm_nic* efrm_nic = efrm_nic(nic);
+	struct efrm_vi_q *q = &virs->q[EFHW_TXQ];
+	int rc;
+
+	EFRM_TRACE("%s: %p", __FUNCTION__, virs);
+
+	if( q->capacity == 0 )
+		return -EINVAL;
+
+	mutex_lock(&efrm_nic->dmaq_state.lock);
+	rc = efrm_vi_q_flush_state(virs, EFHW_TXQ);
+	mutex_unlock(&efrm_nic->dmaq_state.lock);
+	if( rc < 0 )
+	    return rc;
+
+	rc = efhw_nic_post_tx_error(nic, q->qid);
+	if( rc < 0 )
+		return rc;
+
+	return efrm_vi_rm_init_dmaq(virs, EFHW_TXQ, nic);
+}
+EXPORT_SYMBOL(efrm_vi_reinit_txq);
+
+
 void efrm_vi_qs_reinit(struct efrm_vi *virs)
 {
 	atomic_set(&virs->shut_down_flags, 0);

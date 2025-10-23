@@ -256,6 +256,11 @@ extern int
 efrm_vi_q_flush(struct efrm_vi *virs, enum efhw_q_type queue_type);
 
 /**
+ * Reinitialise the TXQ of a VI after a TX error event.
+ */
+extern int efrm_vi_reinit_txq(struct efrm_vi *virs);
+
+/**
  * Reinitialises a VI after a NIC reset 
  */
 extern void efrm_vi_qs_reinit(struct efrm_vi *virs);
