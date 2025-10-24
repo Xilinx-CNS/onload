@@ -1098,14 +1098,27 @@ static inline int efct_poll_rx(ef_vi* vi, int ix, ef_event* evs, int evs_len)
 static void efct_tx_handle_error_event(ef_vi* vi, ci_qword_t event,
                                        ef_event* ev_out)
 {
-  ef_vi_txq_state* qs = &vi->ep_state->txq;
+  int q_id = (vi->nic_type.arch == EF_VI_ARCH_EFCT)
+           ? CI_QWORD_FIELD(event, EFCT_ERROR_LABEL)
+           : CI_QWORD_FIELD(event, EF10CT_ERROR_LABEL);
+  ef_vi_txq_state* qs;
+  ef_vi* txq_vi;
+
+  txq_vi = ef_vi_get_vi_from_q_id(vi, q_id);
+  EF_VI_ASSERT(txq_vi != NULL);
+
+  qs = &txq_vi->ep_state->txq;
+
+  /* Pretend our TXQ is full so all transmits until this queue is reinitialised
+   * fail and are reported to the caller immediately. */
+  qs->ct_added = qs->ct_removed + txq_vi->vi_txq.ct_fifo_bytes;
 
   /* If we get an error event then all that we'll get subsequently for this
    * TXQ is a flush, as the queue will be torn down. That means there's no
    * need to update any of our queue state tracking.
    */
   ev_out->tx_error.type = EF_EVENT_TYPE_TX_ERROR;
-  ev_out->tx_error.q_id = CI_QWORD_FIELD(event, EFCT_ERROR_LABEL);
+  ev_out->tx_error.q_id = q_id;
   ev_out->tx_error.flags = 0;
   ev_out->tx_error.desc_id = ++qs->previous;
   ev_out->tx_error.deferred_evs = 0;
