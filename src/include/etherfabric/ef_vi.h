@@ -306,6 +306,8 @@ enum {
   EF_EVENT_TYPE_RX_REF,
   /** Packets with a bad checksum have been received on an efct adapter */
   EF_EVENT_TYPE_RX_REF_DISCARD,
+ /** Maximum value of this enumeration */
+  EF_EVENT_TYPE_MAX, /* Keep this last */
 };
 
 
