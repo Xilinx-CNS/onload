@@ -2968,6 +2968,26 @@ ef_vi_receive_get_discard_flags(ef_vi* vi, const void* pkt,
                                 unsigned* discard_flags)
                                 __attribute__ ((deprecated));
 
+/*! \brief Get the VI corresponding with the q_id in TX ef_events
+**
+** \param vi             The virtual interface that saw the ef_event
+** \param q_id           The q_id value retrieved from the ef_event
+**
+** \return The corresponding VI, or NULL if it doesn't exist
+**
+** This function provides a mapping between the q_id from a transmit ef_event
+** and the TXQ VI that was used to generate the event. This function should
+** only be used on receipt of a transmit event.
+*/
+#define ef_vi_get_vi_from_q_id(vi, q_id) \
+  __ef_vi_get_vi_from_q_id((vi), (q_id))
+
+ef_vi_inline ef_vi*
+__ef_vi_get_vi_from_q_id(ef_vi* vi, int q_id)
+{
+  return (q_id >= 0 && q_id < vi->vi_qs_n) ? vi->vi_qs[q_id] : NULL;
+}
+
 #ifdef __cplusplus
 }
 #endif
