@@ -1068,15 +1068,19 @@ static int ci_tcp_connect_ul_start(ci_netif *ni, ci_tcp_state* ts, ci_fd_t fd,
           rc = -ENOBUFS;
         }
       }
+
       /* Either a different error, or our efforts to free a filter did not
-       * work.
-       */
-      if( added_scalable )
-        ts->s.s_flags &= ~CI_SOCK_FLAG_SCALACTIVE; /* rollback scalactive flag */
-      ci_netif_pkt_release(ni, pkt);
-      CI_SET_ERROR(*fail_rc, -rc);
-      rc = CI_CONNECT_UL_FAIL;
-      goto fail;
+       * work. */
+      if( rc < 0 ) {
+        /* rollback scalactive flag */
+        if( added_scalable )
+          ts->s.s_flags &= ~CI_SOCK_FLAG_SCALACTIVE;
+
+        ci_netif_pkt_release(ni, pkt);
+        CI_SET_ERROR(*fail_rc, -rc);
+        rc = CI_CONNECT_UL_FAIL;
+        goto fail;
+      }
     }
   }
 
