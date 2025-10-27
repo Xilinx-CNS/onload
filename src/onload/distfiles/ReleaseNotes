@@ -1,5 +1,5 @@
-Unreleased Onload
-=================
+Onload-9.1.0
+============
 
  This is a feature preview of Onload including a new version of the
  sfc net driver.
@@ -75,7 +75,7 @@ list is v1.6.8.0.
 New ef_receive_poll() API call
 ------------------------------
 
-In this release, the ef_vi API gains a facility to poll for receives
+In recent releases, the ef_vi API gained a facility to poll for receives
 separately from transmissions, for potential latency improvements in some
 situations. API usage of ef_receive_poll() is identical to that of
 ef_eventq_poll() although usage should be gated by a check for support by
@@ -157,29 +157,6 @@ lead to inaccurate timestamps if that firmware was in use. Anyone using this
 outdated firmware should update to a supported version.
 
 
-New package for example applications
-------------------------------------
-
-Source code examples showcasing how to build applications to use certain
-features of Onload and ef_vi are now included in a new optional subpackage
-called 'onload-examples'. The examples were previously available in Onload
-tarball source release packages and could be extracted from RPM and Debian
-source packages.
-
-
-DKMS RPM only available by building SRPM bundle
------------------------------------------------
-
-The standalone DKMS package, SF-120887-LS, that included a build of the
-Onload userspace along with the DKMS kernel module component, is no longer
-published. DKMS packages are not meant to include userspace code.
-
-To use DKMS, build and install the DKMS RPM and userspace RPM sub-packages
-together from the Source RPM. This follows the pattern already used by the
-Debian DKMS packaging and previewed for RPM users in the Onload-9.0.1.86
-Source RPM.
-
-
 Indirect Branch Tracking (IBT) Incompatibility
 ----------------------------------------------
 
@@ -191,61 +168,21 @@ message to the kernel log suggesting ibt=off is appended to the kernel
 commandline.
 
 
-Onload-9.0.1.86
-===============
+New package for example applications
+------------------------------------
 
- This is an update release of Onload to fix various bugs in
- OpenOnload-9.0.0.39, add a new version of the sfc net driver,
- simplify packaging, and update the supported operating system list.
-
- Please see the ChangeLog for a full list of changes.
-
-
-Linux distribution support
---------------------------
-
- This package can be installed on:
- - Red Hat Enterprise Linux 8.6 - 8.10
- - Red Hat Enterprise Linux 9.2 - 9.5
- - Canonical Ubuntu Server LTS 22.04 and 24.04
- - Debian 12 "Bookworm"
- - Linux kernels 5.11 - 6.12
+Source code examples showcasing how to build applications to use certain
+features of Onload and ef_vi are now included in a new optional subpackage
+called 'onload-examples'. The examples were previously available in Onload
+tarball source release packages and could be extracted from RPM and Debian
+source packages.
 
 
-Additional packaging options
-----------------------------
+DKMS RPM no longer includes userspace and is built from SRPM bundle
+-------------------------------------------------------------------
 
- - Akmods RPM sub-package as alternative to DKMS
-
-   Red Hat Akmods is a system which, like DKMS, builds kernel modules
-   on-demand. Unlike DKMS, it is integrated into the Red Hat ecosystem.
-   It uses `rpmbuild` to build `onload-kmod-$(uname -r)` RPMs which it installs
-   with `yum`/`dnf`. It will only build for kernel versions which are missing
-   the `/lib/modules/*/extra/onload/` (package name) directory. As with the
-   `dkms` RPM, the `akmods` RPM is available in EPEL. To use:
-
-        rpmbuild -tb --without kmod --without dkms onload-*.tgz
-        yum install -y onload-user onload-akmod
-        /usr/sbin/akmods # Optionally, build immediately
-
- - Optional sub-packages
-
-   When building RPM or DEB packages, all sub-packages are built by default.
-   It is now possible to choose outputs. For example, to build only userland
-   and DKMS sub-packages:
-
-        rpmbuild -tb --without kmod --without akmod onload-*.tgz # RPM
-        debuild -i -uc -us --build-profiles=pkg.onload.nosource # DEB
-
-
-Notice of future change to DKMS RPM
------------------------------------
-
-From the next feature release, the DKMS RPM will not install the Onload
-userspace if it is absent but only install the onload kernel modules,
-requiring the Onload userspace to be installed via the usual onload userspace
-RPM as is done when the kmod RPMs are used. This will follow the pattern
-used by the new Debian DKMS packaging.
+To use DKMS, build and install the DKMS RPM and userspace RPM sub-packages
+together from the Source RPM.
 
 
 Deprecation of tarball installation method (removal under consideration)
@@ -263,231 +200,7 @@ System itself to be resolved clearly and reliably. The OS-independent
 'tarball' method requires more attention to detailed preparatory instructions
 in the user guide.
 
-EnterpriseOnload has always been shipped only using OS packaging formats;
-OpenOnload initially shipped only in tarball form but in recent years has
-also been supplied in the form of OS source packages.
-
 Please contact your sales or support representative if you have any feedback
 on this proposed change in direction for packaging support.
 
-
-Onload-9.0.0.39
-===============
-
- This is a feature release of Onload with refreshed internal interfaces
- between software components (control plane, TCPDirect and sfc net driver),
- adding new features and support for new operating systems and kernels since
- the earlier OpenOnload-8.1.x releases.
-
- An updated version 6.0.1.1000 of the sfc net driver is included for
- X2-based network cards.
-
-
-Linux distribution support
---------------------------
-
- This package can be installed on:
- - Red Hat Enterprise Linux 8.6 - 8.10
- - Red Hat Enterprise Linux 9.2 - 9.4
- - Canonical Ubuntu Server LTS 22.04 and 24.04
- - Debian 12 "Bookworm"
- - Linux kernels 5.11 - 6.9
-
-
-ef_vi Control Plane API
------------------------
-
-The ef_vi API has been extended to allow users to perform lookups of the Linux
-routing tables efficiently and with support for many of the advanced features
-of the Linux networking stack. The implementation of this feature uses the same
-infrastructure which supports Onload and TCPDirect, but presents an API which
-is optimised for usage outside of those products.
-
-The documentation for this API can be found in 'src/include/cplane/api.h',
-and an example of how one might use this api can be found in the
-'src/tests/ef_vi/efsend_cplane.c' example application.
-
-
-Packaging changes
------------------
-
- - Development headers moved to sub-package
-
-   The headers needed to build ef_vi applications, including TCPDirect and
-   to use the new Onload Control Plane API or the Onload Extensions API,
-   have been moved to a new sub-package, either:
-
-    - onload-devel (for RPM), or
-    - onload-dev (for DEB)
-
-   This allows such applications to be built without setting up custom paths
-   or having the Onload runtime and kernel modules installed.
-
-   Headers can also be installed with 'onload_install --headers'.
-
- - DKMS sub-package for Debian
-
-   Debian users now have the option of using DKMS to build kernel modules
-   on the fly as an alternative to using the existing source installation
-   and explicit kernel module package building via module-assistant.
-
-
-X3522 updates
--------------
-
- - Minimum compatible X3522 driver version is v1.6.6.0
-
- - Additional hardware filter types
-
-   Support has been added for ef_vi to use the hardware support for IP Proto
-   and multicast-mismatch filters where supported by the NIC.
-
- - Filter features reported through ef_vi capabilities API
-
-   Previous versions of onload were inconsistent in how filter support was
-   reported in the case of X3522 where some filters are provided through
-   hardware support and some are emulated in software. The behaviour has now
-   changed such that a filter is only reported as supported if it can be
-   provided in hardware.
-
-
-New controls to permit non-root ef_vi applications to manipulate raw filters
-----------------------------------------------------------------------------
-
-Onload-9 adds a new sfc_char module option, 'mac_filters_gid' that can
-extend access by group id for applications to manipulate MAC, IP Proto and
-Ethertype filters. See the output of 'modinfo sfc_char' or the ef_vi user
-guide for details.
-
-
-Support unaccelerated RX sockets with accelerated TX
-----------------------------------------------------
-
-A new function, onload_socket_rx_nonaccel(), has been added to the Onload
-Extensions API to create a socket which will only accelerate tx traffic.
-This means that connect() can be called on a UDP socket without installing
-a filter. This feature only applies to UDP sockets; if used with TCP sockets
-they will not be accelerated in either transmission direction.
-
-
-Improve handling of filter operations during NIC reset
-------------------------------------------------------
-
-Previously, if a filter insertion operation coincided with a NIC reset there was
-the possibility of an orphaned filter being installed on a NIC that wasn't
-resetting. Now, if a filter insertion operation fails for one NIC onload will
-remove any of these orphaned filters. Additionally, if EF_NO_FAIL is set to 0
-there will be more consistent errno value if filters were not installed. The
-errno value will now be 105 (ENOBUFS) if this type of failure occurs.
-
-
-Optional ratelimiting of TCP RST packets
-----------------------------------------
-
-A rate limit can now applied to the sending of TCP RST packets. The minimum
-period in microseconds between sending such packets is controlled by the
-EF_TCP_RST_COOLDOWN environment variable, e.g. 3000 for a 3ms back-off period.
-The default is 0 (no rate limiting) consistent with standard TCP behaviour.
-
-
-Sub-nanosecond timestamp resolution
------------------------------------
-
-Onload and ef_vi now internally process hardware timestamps with
-sub-nanosecond resolution.
-
-Timestamps retrieved via the Onload Extensions API now have the fractional
-nanosecond part populated for hardware timestamps and an additional field
-providing the associated timestamping flags. See extensions_timestamping.h
-for details.
-
-For ef_vi applications using timestamps:
- - ef_vi_receive_get_precise_timestamp() is the new preferred interface to
-   obtain receive timestamps for all NICs. This populates an ef_precisetime
-   object that includes a fractional nanosecond part and sync flags.
- - The sync flags associated with a transmit timestamp should continue to
-   be accessed with the EF_EVENT_TX_TIMESTAMP_SYNC_FLAGS macro but it will
-   no longer be possible to read the low order nanosecond bits to obtain the
-   same flags as they now contain the full integral nanoseconds part.
- - The EF_EVENT_TX_WITH_TIMESTAMP_NSEC_FRAC16 macro provides access to the
-   fractional nanosecond part of an event as a 16-bit quantity. For example,
-   (uint16_t) 0x8000 represents half a nanosecond.
-
-For X2 and X3 the resolution of the timestamp value is 1/4 ns but note that
-the granularity of timestamping clock is hardware-dependent and
-coarser than the timestamp resolution now available through the API.
-
-
-Revised Onload Extensions API (v2) for timestamping
----------------------------------------------------
-
-A new version of the Onload Extensions API for timestamping has been added
-to enable applications to interpret extension and standard timestamps
-reliably irrespective of runtime configuration changes by presenting the
-extended timestamps in a new, distinct, CMSG type. The old (v1) form of
-extension timestamping continues to work as before.
-
-To enable the new form, pass standard SO_TIMESTAMPING-style
-SOF_TIMESTAMPING_* flags to a new SO_TIMETAMPING_OOEXT setsockopt option.
-Trailer timestamps can be enabled using the extended flag
-SOF_TIMESTAMPING_OOEXT_TRAILER. For example:
-
-  struct so_timestamping val = {
-    .flags = SOF_TIMESTAMPING_TX_HARDWARE
-           | SOF_TIMESTAMPING_RX_HARDWARE
-           | SOF_TIMESTAMPING_RAW_HARDWARE
-           | SOF_TIMESTAMPING_OOEXT_TRAILER
-  };
-  setsockopt(fd, SOL_SOCKET, SO_TIMESTAMPING_OOEXT, &val, sizeof val);
-
-Timestamps are delivered with a CMSG of type SCM_TIMESTAMPING_OOEXT. Each
-available timestamp in the payload is provided in a
-'struct scm_timestamping_ooext' where the 'type' field has a combination of
-the elemental SOF_TIMESTAMPING_* flags to indicate what it is and the
-'timestamp' field is the sub-nanosecond precision timestamp with sync
-flags of the form 'struct onload_timestamp'. The possible retrieved timestamp
-types are:
-
-  SOF_TIMESTAMPING_RX_SOFTWARE | SOF_TIMESTAMPING_SOFTWARE
-  SOF_TIMESTAMPING_RX_HARDWARE | SOF_TIMESTAMPING_SYS_HARDWARE
-  SOF_TIMESTAMPING_RX_HARDWARE | SOF_TIMESTAMPING_RAW_HARDWARE
-  SOF_TIMESTAMPING_RX_HARDWARE | SOF_TIMESTAMPING_OOEXT_TRAILER
-  SOF_TIMESTAMPING_TX_HARDWARE | SOF_TIMESTAMPING_SYS_HARDWARE
-  SOF_TIMESTAMPING_TX_HARDWARE | SOF_TIMESTAMPING_RAW_HARDWARE
-
-
-udev rule to set ownership and permission of device nodes
----------------------------------------------------------
-
-Switch from modprobe hooks to udev rules for assigning configured rights to
-onload devices. This will allow for systemd services to load the kernel modules
-without SELinux denying the changes. Configuration is still handled by modifying
-/etc/sysconfig/openonload.
-
-
-Unsupported SFN7000 series not accelerated
-------------------------------------------
-
-The SFN7000-series NICs have been unsupported in Onload since v8.0.0 and
-will not be accelerated in this version of Onload.
-
-
-Unsupported SN1000 functionality removed
-----------------------------------------
-
-Functionality for the unsupported SN1000 adapter and SN1000-specific
-experimental onload extensions hlrx API defined in extensions_zc_hlrx.h have
-been removed.
-
-
-Notice of potential future change for DKMS
-------------------------------------------
-
- - In future releases, the DKMS RPM may not include the Onload userspace but
-   only that which is necessary to build the onload kernel modules, requiring
-   the Onload userspace to be installed via the usual onload userspace RPM
-   as is done when the kmod RPMs are used. This would follow the pattern
-   used by the new Debian DKMS packaging.
-
-
-(c) Copyright 2024 Advanced Micro Devices, Inc.
+(c) Copyright 2025 Advanced Micro Devices, Inc.
