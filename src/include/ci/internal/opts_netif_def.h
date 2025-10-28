@@ -1792,3 +1792,14 @@ CI_CFG_OPT("EF_SHRUB_UNICAST", shrub_unicast, ci_uint32,
 CI_CFG_OPT("EF_SHRUB_DEBUG", shrub_debug, ci_uint32,
 "Output debug logging from shrub controller.",
            1, , 0, 0, 1, yesno)
+
+CI_CFG_OPT("EF_ENABLE_TX_ERROR_RECOVERY", tx_error_recovery, ci_uint32,
+"Recover a broken TXQ after observing a TX error event.\n"
+"If we see a TX error event for any reason, then the interface that saw it "
+"will no longer be able to transmit on this TXQ. Setting this option to 0 "
+"disables the automatic recovery of such a broken TXQ by onload.\n"
+"When this option is enabled, all traffic we tried to send between the TX "
+"error and recovery will be dropped. Notably, UDP packets will not be "
+"retransmitted, but TCP data can be subsequently retransmitted via normal "
+"TCP operation.",
+           1, , 1, 0, 1, yesno)

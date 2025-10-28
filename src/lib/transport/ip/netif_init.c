@@ -1351,6 +1351,8 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
   if( (s = getenv("EF_SHRUB_DEBUG")) )
     opts->shrub_debug = atoi(s);
 
+  if( (s = getenv("EF_ENABLE_TX_ERROR_RECOVERY")) )
+    opts->tx_error_recovery = atoi(s);
 }
 
 
