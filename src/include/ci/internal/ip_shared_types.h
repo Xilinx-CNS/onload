@@ -907,9 +907,11 @@ typedef struct {
   /* we have just allocated a new EFCT RXQ and need to perform some accounting
    * to update the number of packets to enable rx buffer posting */
 #define CI_EPLOCK_NETIF_RX_ACCOUNTING      0x0000400000000000ULL
+  /* some of our queues saw a TX error event and need to be reinitialised */
+#define CI_EPLOCK_NETIF_REINIT_TXQS        0x0000200000000000ULL
 
   /* mask for the above flags that must be handled before dropping lock */
-# define CI_EPLOCK_NETIF_UNLOCK_FLAGS      0xff3bc00000000000ULL
+# define CI_EPLOCK_NETIF_UNLOCK_FLAGS      0xff3be00000000000ULL
 
   /* these flags can be handled in UL */
 #define CI_EPLOCK_NETIF_UL_COMMON_MASK \

@@ -370,6 +370,10 @@ typedef struct {
   ci_addr_t      laddr;
 } oo_alloc_active_wild_t;
 
+typedef struct {
+  ci_uint32 intf_i;
+} oo_reinit_txq_t;
+
 /*--------------------------------------------------------------------
  *
  * Platform dependent IOCTLS

@@ -171,6 +171,9 @@ static void
 tcp_helper_close_pending_endpoints(tcp_helper_resource_t*);
 #endif
 
+static void tcp_helper_reinit_txqs_work(struct work_struct* data);
+static int tcp_helper_reinit_txqs_locked(tcp_helper_resource_t* thr);
+
 #if CI_CFG_NIC_RESET_SUPPORT
 static void
 tcp_helper_purge_txq_work(struct work_struct *data);
@@ -4576,6 +4579,7 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   INIT_WORK(&rs->non_atomic_work, tcp_helper_do_non_atomic);
   ci_sllist_init(&rs->non_atomic_list);
   ci_sllist_init(&rs->ep_tobe_closed);
+  INIT_DELAYED_WORK(&rs->reinit_txq_work, tcp_helper_reinit_txqs_work);
 #endif
   ci_irqlock_ctor(&rs->lock);
   init_completion(&rs->complete);
@@ -7906,6 +7910,11 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
       flags_set &= ~CI_EPLOCK_NETIF_RX_ACCOUNTING;
     }
 
+    if( flags_set & CI_EPLOCK_NETIF_REINIT_TXQS ) {
+      tcp_helper_reinit_txqs_locked(thr);
+      flags_set &= ~CI_EPLOCK_NETIF_REINIT_TXQS;
+    }
+
     /* we have handled all the flags (that get handled before unlock) */
     ci_assert_nflags(flags_set, ~all_after_unlock_flags);
 
@@ -8530,6 +8539,121 @@ int efab_tcp_helper_design_parameters(tcp_helper_resource_t* trs,
     return rc;
 
   return copy_to_user(user_data, &dp, dp.known_size) ? -EFAULT : 0;
+}
+
+#define TXQ_REINIT_ATTEMPT_DELAY (5 * HZ)
+#define TXQ_REINIT_MAX_ATTEMPTS (5)
+
+void tcp_helper_reinit_txq_sw(tcp_helper_resource_t* thr,
+                              int intf_i)
+{
+  struct thr_reset_stack_tx_cb_state cb_state;
+  ci_netif* ni = &thr->netif;
+  oo_pktq* dmaq = &ni->state->nic[intf_i].dmaq;
+  ef_vi* vi = ci_netif_vi(ni, intf_i);
+  int n_incomplete_packets = 0;
+  int n_pending_packets = 0;
+
+  /* Handle any packets we tried sending but couldn't because our TXQ died */
+  while( oo_pktq_not_empty(dmaq) ) {
+    ci_ip_pkt_fmt* pkt = PKT_CHK(ni, dmaq->head);
+    cicp_pkt_complete_fake(ni, pkt);
+    ni->state->nic[intf_i].tx_dmaq_done_seq++;
+    __oo_pktq_next(ni, dmaq, pkt, netif.tx.dmaq_next);
+    n_pending_packets++;
+  }
+
+  /* Handle any packets that we sent, but hadn't received TX completions for */
+  n_incomplete_packets = ni->state->nic[intf_i].tx_dmaq_insert_seq -
+                         ni->state->nic[intf_i].tx_dmaq_done_seq;
+  thr_reset_stack_tx_cb_state_init(&cb_state, thr, intf_i);
+  ef_vi_txq_reinit(vi, thr_reset_stack_tx_cb, &cb_state);
+  if( cb_state.ps.tx_pkt_free_list_n )
+    ci_netif_poll_free_pkts(ni, &cb_state.ps);
+
+  LOG_NT(ci_log("[%d] recovered TXQ on intf %d after TX error event, but dropped %d packets without completions and %d packets which were not sent to the NIC",
+                NI_ID(ni), intf_i, n_incomplete_packets, n_pending_packets));
+}
+
+int tcp_helper_reinit_txq_locked(tcp_helper_resource_t* thr,
+                                 int intf_i)
+{
+  struct efrm_vi* virs = tcp_helper_vi(thr, intf_i);
+  int rc;
+
+  if( virs->q[EFHW_TXQ].capacity == 0 ||
+      virs->flags & (EFRM_VI_RELEASED | EFRM_VI_STOPPING) ||
+      virs->reinit_txq_attempts <= 0 ) {
+    virs->reinit_txq_attempts = 0;
+    return 0;
+  }
+
+  rc = efrm_vi_reinit_txq(virs);
+  if( rc == 0 ) {
+    tcp_helper_reinit_txq_sw(thr, intf_i);
+    virs->reinit_txq_attempts = 0;
+  } else {
+    if( --virs->reinit_txq_attempts <= 0 ) {
+      LOG_E(ci_log("%s: failed to reinitialise txq %d for intf %d, rc=%d, unable to recover",
+                   __FUNCTION__, virs->q[EFHW_TXQ].qid, intf_i, rc));
+    } else {
+      LOG_U(ci_log("%s: failed to reinitialise txq %d for intf %d, rc=%d, %d attempts remaining",
+                   __FUNCTION__, virs->q[EFHW_TXQ].qid, intf_i, rc,
+                   virs->reinit_txq_attempts));
+    }
+  }
+
+  return rc;
+}
+
+static int tcp_helper_reinit_txqs_locked(tcp_helper_resource_t* thr)
+{
+  int any_failed = 0;
+  int i;
+
+  for( i = 0; i < oo_stack_intf_max(&thr->netif); i++ ) {
+    struct efrm_vi* virs = tcp_helper_vi(thr, i);
+    if( virs && virs->reinit_txq_attempts )
+      any_failed |= tcp_helper_reinit_txq_locked(thr, i);
+  }
+
+  if( any_failed )
+    queue_delayed_work(thr->wq, &thr->reinit_txq_work,
+                       TXQ_REINIT_ATTEMPT_DELAY);
+
+  return any_failed;
+}
+
+static void tcp_helper_reinit_txqs_work(struct work_struct* data)
+{
+  tcp_helper_resource_t* thr;
+
+#ifdef EFX_NEED_WORK_API_WRAPPERS
+  thr = container_of(data, tcp_helper_resource_t, reinit_txq_work);
+#else
+  thr = container_of(data, tcp_helper_resource_t, reinit_txq_work.work);
+#endif
+
+  /* Try to lock, and set the necessary flags. Upon next unlocking either by us
+   * acquiring and releasing the lock here, or by the release of the lock by
+   * some other holder, the tcp_helper_reinit_txqs_locked function will be
+   * called, and will handle rescheduling if necessary. */
+  if( efab_tcp_helper_netif_lock_or_set_flags(thr,
+                                              OO_TRUSTED_LOCK_REINIT_TXQS,
+                                              CI_EPLOCK_NETIF_REINIT_TXQS,
+                                              0) ) {
+    ef_eplock_holder_set_single_flag(&thr->netif.state->lock,
+                                     CI_EPLOCK_NETIF_REINIT_TXQS);
+    efab_tcp_helper_netif_unlock(thr, 0);
+  }
+}
+
+int efab_tcp_helper_reinit_txq(tcp_helper_resource_t* trs, int intf_i)
+{
+  struct efrm_vi* virs = tcp_helper_vi(trs, intf_i);
+  virs->reinit_txq_attempts = TXQ_REINIT_MAX_ATTEMPTS;
+  queue_delayed_work(trs->wq, &trs->reinit_txq_work, 0 * HZ);
+  return 0;
 }
 
 static tcp_helper_resource_t*

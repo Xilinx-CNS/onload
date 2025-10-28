@@ -238,6 +238,9 @@ enum {
 #define OO_IOC_DESIGN_PARAMETERS OO_IOC_RW(DESIGN_PARAMETERS, \
                                            oo_design_parameters_t)
 
+  OO_OP_REINIT_TXQ,
+#define OO_IOC_REINIT_TXQ OO_IOC_W(REINIT_TXQ, oo_reinit_txq_t)
+
   OO_OP_CONTIG_END,  /* This is the last in range of contigous opcodes */
 
   /* Here come only placeholder for operations with arbitrary codes */

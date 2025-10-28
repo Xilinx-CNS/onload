@@ -184,6 +184,7 @@ typedef struct tcp_helper_resource_s {
 #define OO_TRUSTED_LOCK_PURGE_TXQS        0x100
 #define OO_TRUSTED_LOCK_PRIME_IF_IDLE     0x200
 #define OO_TRUSTED_LOCK_RX_ACCOUNTING     0x400
+#define OO_TRUSTED_LOCK_REINIT_TXQS       0x800
   volatile unsigned      trusted_lock;
 
   /*! this is used so we can schedule destruction at task time,
@@ -209,6 +210,8 @@ typedef struct tcp_helper_resource_s {
   struct work_struct non_atomic_work;
   /* List of endpoints requiring work in non-atomic context. */
   ci_sllist     non_atomic_list;
+
+  struct delayed_work reinit_txq_work;
 
 #if CI_CFG_NIC_RESET_SUPPORT
   /* For deferring resets to a non-atomic context. */

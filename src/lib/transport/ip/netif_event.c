@@ -1619,6 +1619,26 @@ void ci_netif_tx_pkt_complete(ci_netif* ni, struct ci_netif_poll_state* ps,
   __ci_netif_tx_pkt_complete(ni, ps, pkt, NULL);
 }
 
+static void ci_netif_reinit_txq(ci_netif* ni, int intf_i)
+{
+  int rc;
+#ifdef __KERNEL__
+  tcp_helper_resource_t* thr = netif2tcp_helper_resource(ni);
+
+  rc = efab_tcp_helper_reinit_txq(thr, intf_i);
+#else
+  oo_reinit_txq_t op = {
+    .intf_i = intf_i,
+  };
+
+  rc = oo_resource_op(ci_netif_get_driver_handle(ni), OO_IOC_REINIT_TXQ, &op);
+#endif
+  if( rc < 0 ) {
+    LOG_U(log(LPF "[%d] unable to request recovery from TX_ERROR on intf %d, rc=%d",
+              NI_ID(ni), intf_i, rc));
+  }
+}
+
 static int ci_netif_poll_evq(ci_netif* ni, struct ci_netif_poll_state* ps,
                              int intf_i, int n_evs)
 {
@@ -1818,6 +1838,11 @@ have_events:
                   (int) EF_EVENT_TX_ERROR_TYPE(ev[i]),
                   EF_EVENT_PRI_ARG(ev[i])));
         CITP_STATS_NETIF_INC(ni, tx_error_events);
+        if( ! NI_OPTS(ni).tx_error_recovery )
+          LOG_U(log(LPF "[%d] not attempting to recover from a TX error on intf %d due to unset EF_ENABLE_TX_ERROR_RECOVERY.",
+                    NI_ID(ni), intf_i));
+        else
+          ci_netif_reinit_txq(ni, intf_i);
       }
 
       else if( EF_EVENT_TYPE(ev[i]) == EF_EVENT_TYPE_OFLOW ) {

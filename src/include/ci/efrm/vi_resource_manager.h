@@ -205,6 +205,8 @@ struct efrm_vi {
 	unsigned tx_alt_cp;
 	int      tx_alt_num;
 	unsigned tx_alt_ids[EFRM_VI_TX_ALTERNATIVES_MAX];
+
+	int reinit_txq_attempts;
 };
 
 

@@ -62,6 +62,8 @@
 #include "sfcaffinity.h"
 #include "debugfs_rs.h"
 #include <ci/driver/resource/linux_efhw_nic.h>
+#include <onload/tcp_helper.h>
+#include <onload/tcp_helper_fns.h>
 
 
 struct vi_attr {

@@ -1251,7 +1251,8 @@ static void ci_netif_unlock_slow(ci_netif* ni)
     /* If some flags should be handled in kernel, then there is no point in
      * looping here.  Dive! */
     k_flags |= l & ((CI_EPLOCK_NETIF_UNLOCK_FLAGS & ~all_handled_flags) |
-                    CI_EPLOCK_FL_NEED_WAKE | CI_EPLOCK_NETIF_RX_ACCOUNTING);
+                    CI_EPLOCK_FL_NEED_WAKE | CI_EPLOCK_NETIF_RX_ACCOUNTING |
+                    CI_EPLOCK_NETIF_REINIT_TXQS);
 #if ! CI_CFG_UL_INTERRUPT_HELPER
     if( k_flags != 0 )
       break;
@@ -1261,7 +1262,8 @@ static void ci_netif_unlock_slow(ci_netif* ni)
                      ~(CI_EPLOCK_NETIF_PKT_WAKE |
                        CI_EPLOCK_NETIF_NEED_PRIME |
                        CI_EPLOCK_FL_NEED_WAKE |
-                       CI_EPLOCK_NETIF_RX_ACCOUNTING));
+                       CI_EPLOCK_NETIF_RX_ACCOUNTING |
+                       CI_EPLOCK_NETIF_REINIT_TXQS));
     l = ef_eplock_clear_flags(&ni->state->lock, k_flags);
 #endif
   } while ( !ef_eplock_try_unlock(&ni->state->lock, &l,

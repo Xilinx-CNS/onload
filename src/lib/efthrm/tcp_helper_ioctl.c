@@ -1023,6 +1023,15 @@ oo_design_parameters_rsop(ci_private_t* priv, void *arg)
 }
 
 static int
+oo_reinit_txq_rsop(ci_private_t* priv, void* arg)
+{
+  oo_reinit_txq_t* op = (oo_reinit_txq_t*)arg;
+  if (priv->thr == NULL)
+    return -EINVAL;
+  return efab_tcp_helper_reinit_txq(priv->thr, op->intf_i);
+}
+
+static int
 oo_eplock_lock_rsop(ci_private_t* priv, void* arg)
 {
   long timeout_jiffies = MAX_SCHEDULE_TIMEOUT;
@@ -1614,6 +1623,7 @@ oo_operations_table_t oo_operations[] = {
   op(OO_IOC_EFCT_SUPERBUF_POST, oo_efct_superbuf_config_post_rsop),
   op(OO_IOC_PKT_BUF_MMAP, oo_pkt_buf_map_rsop),
   op(OO_IOC_DESIGN_PARAMETERS, oo_design_parameters_rsop),
+  op(OO_IOC_REINIT_TXQ, oo_reinit_txq_rsop),
 
 /* Here come non contigous operations only, their position need to match
  * index according to their placeholder */
