@@ -28,6 +28,7 @@ ON-16659: address X3 scheduling starvation in tcp_helper_wakeup
 ON-16674: use initramfs.conf to ensure correct sfc module used from boot
 ON-16677: enable LTO in standalone builds or pass through in package builds
 ON-16755: add efsend ability for unlimited sends and SIGINT for ending test
+ON-16808: warn user and fail to load onload drivers if kernel IBT is enabled
 ON-16913: fix option help text in exchange example app
 ON-16993: Handle partial filter install with EF_NO_FAIL=1
 #283: af_xdp scheduling improvements
