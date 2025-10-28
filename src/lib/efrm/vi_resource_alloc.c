@@ -1996,11 +1996,13 @@ int efrm_vi_reinit_txq(struct efrm_vi *virs)
 	if( (virs->flags & (EFRM_VI_RELEASED | EFRM_VI_STOPPING)) != 0 )
 		return -EINVAL;
 
-	mutex_lock(&efrm_nic->dmaq_state.lock);
-	rc = efrm_vi_q_flush_state(virs, EFHW_TXQ);
-	mutex_unlock(&efrm_nic->dmaq_state.lock);
-	if( rc < 0 )
-	    return rc;
+	if( ! list_empty(&q->init_link) ) {
+		mutex_lock(&efrm_nic->dmaq_state.lock);
+		rc = efrm_vi_q_flush_state(virs, EFHW_TXQ);
+		mutex_unlock(&efrm_nic->dmaq_state.lock);
+		if( rc < 0 )
+			return rc;
+	}
 
 	rc = efhw_nic_post_tx_error(nic, q->qid);
 	if( rc < 0 )
