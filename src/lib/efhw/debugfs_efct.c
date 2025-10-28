@@ -97,6 +97,58 @@ efct_debugfs_read_ef10ct_filter_state(struct seq_file *file, const void *data)
   return efct_debugfs_read_filter_state(file, ef10ct->rxq_n, fs);
 }
 
+static void
+efct_debugfs_read_rxq_state(struct seq_file *file,
+                            const struct efhw_nic_ef10ct_rxq *rxq)
+{
+  seq_printf(file, "  evq_id: 0x%x\n", rxq->evq_id);
+  seq_printf(file, "  ref_count: %d\n", rxq->ref_count);
+  switch( rxq->state ) {
+  case EF10CT_RXQ_STATE_FREE:
+    seq_printf(file, "  state: FREE\n");
+    break;
+  case EF10CT_RXQ_STATE_ALLOCATED:
+    seq_printf(file, "  state: ALLOCATED\n");
+    break;
+  case EF10CT_RXQ_STATE_INITIALISED:
+    seq_printf(file, "  state: INITIALISED\n");
+    break;
+  case EF10CT_RXQ_STATE_FREEING:
+    seq_printf(file, "  state: FREEING\n");
+    break;
+  default:
+    seq_printf(file, "  state: UNKNOWN (%d)\n", rxq->state);
+    break;
+  };
+  if( rxq->n_buffer_pages == 0 ) {
+    /* shrub */
+    seq_printf(file, "  now: 0x%x\n", rxq->apps.now);
+    seq_printf(file, "  awaiters: 0x%x\n", rxq->apps.awaiters);
+    seq_printf(file, "  pktix: 0x%x\n", rxq->pktix);
+  }
+  else {
+    /* non-shrub */
+    seq_printf(file, "  n_buffer_pages: %zd\n", rxq->n_buffer_pages);
+  }
+}
+
+static int
+efct_debugfs_read_rxqs_state(struct seq_file *file, const void *data)
+{
+  const struct efhw_nic_ef10ct *ef10ct = data;
+  int i;
+
+  for( i = 0; i < ef10ct->rxq_n; i++ ) {
+    if( (ef10ct->rxq[i].ref_count > 0) ||
+        (ef10ct->rxq[i].state != EF10CT_RXQ_STATE_FREE) ) {
+      seq_printf(file, "\n---------------------\nrxq: %d\n", i);
+      efct_debugfs_read_rxq_state(file, &ef10ct->rxq[i]);
+    }
+  }
+
+  return 0;
+}
+
 
 static const struct efrm_debugfs_parameter efhw_debugfs_efct_parameters[] = {
   EFRM_U32_PARAMETER(struct efhw_nic_efct, rxq_n),
@@ -140,6 +192,7 @@ static const struct efrm_debugfs_parameter efhw_debugfs_ef10ct_parameters[] = {
   EFRM_U32_PARAMETER(struct efhw_nic_ef10ct, rxq_n),
   EFRM_U32_PARAMETER(struct efhw_nic_ef10ct, evq_n),
   _EFRM_RAW_PARAMETER(hw_filters, efct_debugfs_read_ef10ct_filter_state),
+  _EFRM_RAW_PARAMETER(rxqs, efct_debugfs_read_rxqs_state),
   {NULL},
 };
 
