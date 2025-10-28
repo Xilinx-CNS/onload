@@ -1634,6 +1634,7 @@ static void ci_netif_reinit_txq(ci_netif* ni, int intf_i)
   rc = oo_resource_op(ci_netif_get_driver_handle(ni), OO_IOC_REINIT_TXQ, &op);
 #endif
   if( rc < 0 ) {
+    CITP_STATS_NETIF_INC(ni, tx_error_failed_reinit_requests);
     LOG_U(log(LPF "[%d] unable to request recovery from TX_ERROR on intf %d, rc=%d",
               NI_ID(ni), intf_i, rc));
   }

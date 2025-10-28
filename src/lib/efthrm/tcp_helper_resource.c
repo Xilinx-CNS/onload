@@ -8571,6 +8571,8 @@ void tcp_helper_reinit_txq_sw(tcp_helper_resource_t* thr,
   if( cb_state.ps.tx_pkt_free_list_n )
     ci_netif_poll_free_pkts(ni, &cb_state.ps);
 
+  CITP_STATS_NETIF_ADD(ni, tx_error_reinit_dropped_packets,
+                       n_pending_packets + n_incomplete_packets);
   LOG_NT(ci_log("[%d] recovered TXQ on intf %d after TX error event, but dropped %d packets without completions and %d packets which were not sent to the NIC",
                 NI_ID(ni), intf_i, n_incomplete_packets, n_pending_packets));
 }
@@ -8594,6 +8596,7 @@ int tcp_helper_reinit_txq_locked(tcp_helper_resource_t* thr,
     virs->reinit_txq_attempts = 0;
   } else {
     if( --virs->reinit_txq_attempts <= 0 ) {
+      CITP_STATS_NETIF_INC(&thr->netif, tx_error_exhausted_reinit_attempts);
       LOG_E(ci_log("%s: failed to reinitialise txq %d for intf %d, rc=%d, unable to recover",
                    __FUNCTION__, virs->q[EFHW_TXQ].qid, intf_i, rc));
     } else {
@@ -8602,6 +8605,8 @@ int tcp_helper_reinit_txq_locked(tcp_helper_resource_t* thr,
                    virs->reinit_txq_attempts));
     }
   }
+
+  CITP_STATS_NETIF_INC(&thr->netif, tx_error_reinit_attempts);
 
   return rc;
 }

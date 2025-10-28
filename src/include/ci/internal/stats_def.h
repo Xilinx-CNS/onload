@@ -503,6 +503,20 @@ OO_STAT("Number of dropped packets because of EF_DEFER_ARP_MAX limitation.",
         ci_uint32, tx_defer_pkt_drop_limited, count)
 OO_STAT("Number of EF_EVENT_TYPE_TX_ERROR events.  A transmit failed.",
         ci_uint32, tx_error_events, count)
+OO_STAT("Number of times onload tried to reinitialise a TXQ after observing "
+        "an EF_EVENT_TYPE_TX_ERROR event.",
+        ci_uint32, tx_error_reinit_attempts, count)
+OO_STAT("Number of times onload tried to reinitialise a TXQ after observing "
+        "an EF_EVENT_TYPE_TX_ERROR event but exceeded the maximum number of "
+        "reinit attempts, leaving the TXQ unusable.",
+        ci_uint32, tx_error_exhausted_reinit_attempts, count)
+OO_STAT("Number of times onload tried to reinitialise a TXQ after observing "
+        "an EF_EVENT_TYPE_TX_ERROR event but was unable to request that the "
+        "TXQ get recovered by the onload kernel module.",
+        ci_uint32, tx_error_failed_reinit_requests, count)
+OO_STAT("Number of times packets that failed to transmit around an "
+        "EF_EVENT_TYPE_TX_ERROR event.",
+        ci_uint32, tx_error_reinit_dropped_packets, count)
 OO_STAT("Number of RX discards (checksum bad).",
         ci_uint32, rx_discard_csum_bad, count)
 OO_STAT("Number of RX discards (inner checksum bad).",
