@@ -98,8 +98,26 @@ efct_debugfs_read_ef10ct_filter_state(struct seq_file *file, const void *data)
 }
 
 static void
-efct_debugfs_read_rxq_state(struct seq_file *file,
-                            const struct efhw_nic_ef10ct_rxq *rxq)
+efct_debugfs_read_wakeup_bits(struct seq_file *file,
+                              const struct efhw_nic_efct_rxq_wakeup_bits *bits)
+{
+  seq_printf(file, "  now: 0x%x\n", bits->now);
+  seq_printf(file, "  awaiters: 0x%x\n", bits->awaiters);
+}
+
+static void
+efct_debugfs_read_efct_rxq_state(struct seq_file *file,
+                                 const struct efhw_nic_efct_rxq *rxq)
+{
+  seq_printf(file, "  added: 0x%x\n", rxq->sbufs.added);
+  seq_printf(file, "  removed: 0x%x\n", rxq->sbufs.removed);
+  seq_printf(file, "  oldest_app_seq: 0x%x\n", rxq->sbufs.oldest_app_seq);
+  efct_debugfs_read_wakeup_bits(file, &rxq->apps);
+}
+
+static void
+efct_debugfs_read_ef10ct_rxq_state(struct seq_file *file,
+                                   const struct efhw_nic_ef10ct_rxq *rxq)
 {
   seq_printf(file, "  evq_id: 0x%x\n", rxq->evq_id);
   seq_printf(file, "  ref_count: %d\n", rxq->ref_count);
@@ -122,8 +140,7 @@ efct_debugfs_read_rxq_state(struct seq_file *file,
   };
   if( rxq->n_buffer_pages == 0 ) {
     /* shrub */
-    seq_printf(file, "  now: 0x%x\n", rxq->apps.now);
-    seq_printf(file, "  awaiters: 0x%x\n", rxq->apps.awaiters);
+    efct_debugfs_read_wakeup_bits(file, &rxq->apps);
     seq_printf(file, "  pktix: 0x%x\n", rxq->pktix);
   }
   else {
@@ -133,7 +150,7 @@ efct_debugfs_read_rxq_state(struct seq_file *file,
 }
 
 static int
-efct_debugfs_read_rxqs_state(struct seq_file *file, const void *data)
+efct_debugfs_read_ef10ct_rxqs_state(struct seq_file *file, const void *data)
 {
   const struct efhw_nic_ef10ct *ef10ct = data;
   int i;
@@ -142,18 +159,32 @@ efct_debugfs_read_rxqs_state(struct seq_file *file, const void *data)
     if( (ef10ct->rxq[i].ref_count > 0) ||
         (ef10ct->rxq[i].state != EF10CT_RXQ_STATE_FREE) ) {
       seq_printf(file, "\n---------------------\nrxq: %d\n", i);
-      efct_debugfs_read_rxq_state(file, &ef10ct->rxq[i]);
+      efct_debugfs_read_ef10ct_rxq_state(file, &ef10ct->rxq[i]);
     }
   }
 
   return 0;
 }
 
+static int
+efct_debugfs_read_efct_rxqs_state(struct seq_file *file, const void *data)
+{
+  const struct efhw_nic_efct *efct = data;
+  int i;
+
+  for( i = 0; i < efct->rxq_n; i++ ) {
+    seq_printf(file, "\n---------------------\nrxq: %d\n", i);
+    efct_debugfs_read_efct_rxq_state(file, &efct->rxq[i]);
+  }
+
+  return 0;
+}
 
 static const struct efrm_debugfs_parameter efhw_debugfs_efct_parameters[] = {
   EFRM_U32_PARAMETER(struct efhw_nic_efct, rxq_n),
   EFRM_U32_PARAMETER(struct efhw_nic_efct, evq_n),
   _EFRM_RAW_PARAMETER(hw_filters, efct_debugfs_read_efct_filter_state),
+  _EFRM_RAW_PARAMETER(rxqs, efct_debugfs_read_efct_rxqs_state),
   {NULL},
 };
 
@@ -192,7 +223,7 @@ static const struct efrm_debugfs_parameter efhw_debugfs_ef10ct_parameters[] = {
   EFRM_U32_PARAMETER(struct efhw_nic_ef10ct, rxq_n),
   EFRM_U32_PARAMETER(struct efhw_nic_ef10ct, evq_n),
   _EFRM_RAW_PARAMETER(hw_filters, efct_debugfs_read_ef10ct_filter_state),
-  _EFRM_RAW_PARAMETER(rxqs, efct_debugfs_read_rxqs_state),
+  _EFRM_RAW_PARAMETER(rxqs, efct_debugfs_read_ef10ct_rxqs_state),
   {NULL},
 };
 
