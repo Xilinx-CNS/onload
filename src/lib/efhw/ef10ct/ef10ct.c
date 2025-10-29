@@ -214,19 +214,6 @@ static int ef10ct_is_shared_evq(struct efhw_nic *nic, int evq_num)
   return false;
 }
 
-static struct ef10ct_shared_kernel_evq *
-ef10ct_get_shared_evq(struct efhw_nic *nic, int evq_num)
-{
-  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
-  int i;
-
-  for (i = 0; i < ef10ct->shared_n; i++)
-    if (ef10ct_get_queue_num(ef10ct->shared[i].evq_id) == evq_num)
-      return &ef10ct->shared[i];
-
-  return NULL;
-}
-
 /* NOTE: This is just a dumb function that scans through the entire event queue
  * until it finds a flush event then returns. The proper way to handle the event
  * queue is in `ef10ct_poll_evq` but that requires that `evq->next` (which acts
@@ -869,28 +856,12 @@ ef10ct_nic_wakeup_request(struct efhw_nic *nic, volatile void __iomem* io_page,
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   ci_dword_t dwrptr;
 
-  if (vi_id >= ef10ct->evq_n) {
-    struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
-    struct ef10ct_shared_kernel_evq *shared_evq;
-    struct efhw_nic_ef10ct_evq *evq;
-
-    shared_evq = ef10ct_get_shared_evq(nic, vi_id);
-
-    /* If we are using a dummy evq AND the shared evq isn't mean to be used with
-     * rx event then leave early. */
-    /* TODO ON-16670 Properly determine which shared evqs have rx event
-     * suppression */
-    if (shared_evq == NULL ||
-        shared_evq == &ef10ct->shared[EF10CT_SHARED_NO_RX_EVS]) {
-      return;
-    }
-
-    evq = shared_evq->evq;
-    /* Now that we have the actual evq that we want to prime, update the params
-     * to the appropriate values. */
-    vi_id = evq->queue_num;
-    rptr = evq->next & (evq->capacity - 1);
-  }
+  /* If we're using a SW EVQ there's nothing to do here. This VI is using a
+   * shared evq, and those queues are always primed and handled internally to
+   * efhw. RX wakeups for such queues are requested per-queue through the
+   * separate shared wakeup function. */
+  if (vi_id >= ef10ct->evq_n)
+    return;
 
   __DWCHCK(ERF_HZ_READ_IDX);
   __RANGECHCK(rptr, ERF_HZ_READ_IDX_WIDTH);
