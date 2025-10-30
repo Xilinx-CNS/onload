@@ -99,6 +99,7 @@ vi_resource_alloc(struct efrm_vi_attr *attr,
                   int tx_q_tag, int rx_q_tag,
                   struct efrm_vi **virs_out)
 {
+  struct efhw_nic *nic;
   struct efrm_vi *virs;
   int rc;
 
@@ -128,13 +129,14 @@ vi_resource_alloc(struct efrm_vi_attr *attr,
     goto fail_q_alloc;
   rxq_capacity = rc;
 
+  nic = efrm_client_get_nic(virs->rs.rs_client);
+
   /* Size EVQ sensibly based on RX and TX Q sizes */
   if (evq_virs == NULL && evq_capacity < 0) {
     if (vi_flags & EFHW_VI_RX_PACKED_STREAM) {
       evq_capacity = 32 * 1024;
     }
-    else if( efrm_client_get_nic(virs->rs.rs_client)->flags &
-             NIC_FLAG_RX_SHARED ) {
+    else if( nic->flags & NIC_FLAG_RX_SHARED ) {
       /* evq_capacity<0 indicates an additional reserve. See below. */
       evq_capacity = txq_capacity - evq_capacity - 1;
       if (vi_flags & EFHW_VI_TX_TIMESTAMPS)
@@ -165,6 +167,15 @@ vi_resource_alloc(struct efrm_vi_attr *attr,
     }
     if (evq_capacity == 0)
       evq_capacity = -1;
+  }
+
+  /* If the user requested a shared EVQ, but we don't support this, then exit
+   * before we try allocating our queues. */
+  if (evq_virs != NULL && !efhw_nic_supports_shared_evq(nic)) {
+    rc = -EINVAL;
+    EFCH_ERR("%s: attempted to allocate a VI with a shared EVQ, but this is unsupported by this device.",
+             __FUNCTION__);
+    goto fail_q_alloc;
   }
 
   /* TODO AF_XDP: allocation order must match the order that ef_vi

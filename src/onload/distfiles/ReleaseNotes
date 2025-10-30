@@ -44,6 +44,8 @@ X4 Datapath Restrictions
   only the Enterprise RX path is selected (EF_RX_DATAPATH=enterprise)
 - Application clustering (SO_REUSEPORT/EF_CLUSTER_SIZE) is only supported with
   EF_RX_DATAPATH=enterprise
+- Sharing an event queue between multiple VIs is not supported when using the
+  express datapath. This limitation also applies to X3 network cards.
 
 X4 Diagnostics
 --------------

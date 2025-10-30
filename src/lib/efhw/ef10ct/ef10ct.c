@@ -1101,6 +1101,11 @@ static void ef10ct_vi_free(struct efhw_nic *nic, int evq_num, unsigned n_vis)
     ef10ct_vi_free_sw(nic, evq_num);
 }
 
+static bool ef10ct_supports_shared_evq(struct efhw_nic *nic)
+{
+  return false;
+}
+
 /*----------------------------------------------------------------------------
  *
  * DMAQ low-level register interface
@@ -2266,6 +2271,7 @@ struct efhw_func_ops ef10ct_char_functional_units = {
   .wakeup_request = ef10ct_nic_wakeup_request,
   .vi_alloc = ef10ct_vi_alloc,
   .vi_free = ef10ct_vi_free,
+  .supports_shared_evq = ef10ct_supports_shared_evq,
   .dmaq_tx_q_init = ef10ct_dmaq_tx_q_init,
   .dmaq_rx_q_init = ef10ct_dmaq_rx_q_init,
   .flush_tx_dma_channel = ef10ct_flush_tx_dma_channel,

@@ -340,6 +340,10 @@ struct efhw_func_ops {
 	 */
 	void (*vi_free) (struct efhw_nic *nic, int instance, unsigned n_vis);
 
+	/*! Checks if sharing an EVQ between VIs is possible
+	 */
+	bool (*supports_shared_evq) (struct efhw_nic *nic);
+
   /*-------------- DMA support  ------------ */
 
 	/*! Initialise NIC state for a given TX DMAQ

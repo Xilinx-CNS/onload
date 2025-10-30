@@ -21,6 +21,7 @@ ON-16277: allow physical addressing mode selection in eflatency
 ON-16329: allow eflatency to parse payload length list as input
 ON-16330: handle sending ICMP and ICMPv6 over CTPIO
 ON-16400: use rdtscp for more accurate benchmarking
+ON-16425: handle and report hardware not supporting VIs sharing EVQs
 ON-16451: trigger update-initramfs in module-assistant or make-kpkg
 ON-16486: update eflatency to show impact of reading data
 ON-16659: address X3 scheduling starvation in tcp_helper_wakeup
