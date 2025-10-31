@@ -24,9 +24,9 @@ if [ -z "$EF_CTPIO_MODE" ]; then
     driver=$(basename "$(readlink "$nic/device/driver")")
     pci_deviceid=`(cat $nic/device/device) || echo 0`
     if [ "$driver" = sfc ]; then
-      if [ $pci_deviceid = 0 ]; then
+      if [ "$pci_deviceid" = "0" ]; then
         have_indeterminate=1
-      elif [[ $pci_deviceid = 0x0b03 || $pci_deviceid = 0x1b03 ]]; then
+      elif [ "$pci_deviceid" = "0x0b03" ] || [ "$pci_deviceid" = "0x1b03" ]; then
         speed=`(cat $nic/speed 2>/dev/null) || echo 0`
         if [ $speed = 0 ]; then
           have_indeterminate=1
@@ -40,8 +40,8 @@ if [ -z "$EF_CTPIO_MODE" ]; then
       fi
     fi
   done
-  if [ "$have_non10k" ]; then
-    if [[ "$have_indeterminate" || "$have_nonx2" || "$have_10k" ]]; then
+  if [ -n "$have_non10k" ]; then
+    if [ -n "$have_indeterminate" ] || [ -n "$have_nonx2" ] || [ -n "$have_10k" ]; then
       log "Warning: Disabling CTPIO cut-through because X2 adapters running at greater than 10GbE may not benefit from it. If your latency-sensitive traffic is only using an X4 or X3 adapter, or an X2 adapter at 10GbE then set EF_CTPIO_MODE=ct explicitly"
     else
       log "Note: Disabling CTPIO cut-through because X2 adapters only benefit from it when running at 10GbE"
