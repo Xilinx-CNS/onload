@@ -257,6 +257,7 @@ install_userland() {
     install_x "$u64/tools/cplane/onload_cp_server" "$i_sbin/onload_cp_server"
     install_x "$u64/tools/shrub_controller/shrub_controller" \
               "$i_sbin/shrub_controller"
+    install_x "$u64/tools/onload_shrubdump/onload_shrubdump" "$i_usrbin/onload_shrubdump"
     install_x "$u64/tools/onload_mibdump/onload_mibdump" \
               "$i_usrbin/onload_mibdump"
     install_x "$u64/tools/onload_remote_monitor/orm_json" "$i_usrbin/orm_json"

@@ -160,6 +160,7 @@ docopy src/tools/ip           tcpdump_bin.c fuser.c
 docopy src/tools              jni onload_remote_monitor cplane onload_mibdump
 docopy src/tools              onload_helper
 docopy src/tools              shrub_controller
+docopy src/tools              onload_shrubdump
 docopy src/include            etherfabric onload cplane kernel_utils
 docopy src/include/ci         compat compat.h tools tools.h app app.h
 docopy src/include/ci         driver efch efhw efrm internal net
