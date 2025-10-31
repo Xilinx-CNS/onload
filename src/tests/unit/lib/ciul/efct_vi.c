@@ -239,11 +239,11 @@ static int efct_mock_attach(ef_vi* vi, int qid, int buf_fd,
     ops->rxqs->q[qid].next_sbid = -EAGAIN;
 
   if ( shared_mode ) {
-    efct_vi_sync_rxq(vi, qid, qid);
+    return efct_vi_sync_rxq(vi, qid, qid);
   } else {
     efct_vi_start_rxq(vi, qid, qid);
+    return 0;
   }
-  return 0;
 }
 
 static int efct_mock_refresh(ef_vi* vi, int qid)
@@ -867,6 +867,7 @@ static void test_efct_attach_shared_helper(int sbids, int pkts)
 
   int exp_pkts_to_fill = pkts % PKTS_PER_SB;
   int exp_filled_sbs = pkts / PKTS_PER_SB;
+  bool expect_sync = pkts < sbids * PKTS_PER_SB;
 
   /* Code required for testing efct_vi_sync_rxq */
   init_shared_state(rxq, sbids);
@@ -895,15 +896,29 @@ static void test_efct_attach_shared_helper(int sbids, int pkts)
 
   efct_test_attach_only(t, qid, test_shared_mode, expected_next_calls, expected_free_calls);
 
-  int exp_data_pkts = t->vi->ep_state->rxq.rxq_ptr[qid].data_pkt % PKTS_PER_SB;
-
   STATE_CHECK(t->mock_ops, next_qid, qid);
   if ( expected_free_calls > 0 )
     STATE_CHECK(t->mock_ops, free_qid, qid);
 
-  CHECK(exp_data_pkts, ==, (exp_pkts_to_fill > 0 ? exp_pkts_to_fill + 1 : 0));
+  uint32_t meta_pkt = t->vi->ep_state->rxq.rxq_ptr[qid].meta_pkt & 0xffff;
+  uint32_t data_pkt = t->vi->ep_state->rxq.rxq_ptr[qid].data_pkt & 0xffff;
+  if( expect_sync ) {
+    CHECK(meta_pkt, ==, (exp_pkts_to_fill > 0 ? exp_pkts_to_fill + 1 : 0));
+    CHECK(data_pkt, ==, meta_pkt);
+  }
+  else {
+    /* If we failed to sync (i.e. all available buffers are written) then the
+     * queue pointer should be set to force a rollover when the next buffer
+     * becomes available */
+    CHECK(meta_pkt, >=, PKTS_PER_SB);
+  }
 
   efct_test_cleanup(t);
+}
+
+static void test_efct_attach_no_sb(void)
+{
+  test_efct_attach_shared_helper(0, 0);
 }
 
 static void test_efct_attach_first_partially_filled_sb(void)
@@ -911,7 +926,7 @@ static void test_efct_attach_first_partially_filled_sb(void)
   test_efct_attach_shared_helper(3, 100);
 }
 
- static void test_efct_attach_first_fully_filled_sb(void)
+static void test_efct_attach_first_fully_filled_sb(void)
 {
   test_efct_attach_shared_helper(3, 1 * PKTS_PER_SB);
 }
@@ -938,6 +953,7 @@ static void test_efct_attach_end_fully_filled_sb(void)
 
 static void test_efct_attach_shared(void)
 {
+  TEST_RUN(test_efct_attach_no_sb);
   TEST_RUN(test_efct_attach_first_partially_filled_sb);
   TEST_RUN(test_efct_attach_first_fully_filled_sb);
   TEST_RUN(test_efct_attach_middle_partially_filled_sb);

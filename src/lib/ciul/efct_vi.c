@@ -1351,19 +1351,19 @@ int efct_vi_sync_rxq(ef_vi *vi, int ix, int qid)
   efct_get_rxq_state(vi, ix)->qid = qid;
   rxq->config_generation = *rxq->live.config_generation;
   rxq_ptr->superbuf_pkts = *rxq->live.superbuf_pkts;
+  rxq_ptr->meta_pkt = rxq_ptr->superbuf_pkts + 1;
   rxq_ptr->meta_offset = 0;
 
-  rc = vi->efct_rxqs.ops->next(vi, ix, &sentinel, &sbseq);
-  if ( rc < 0 )
-    return rc;
-
   /* Find the first superbuf that isn't entirely full */
-  while ( efct_vi_sb_has_been_filled(vi, rc, sentinel, rxq_ptr->superbuf_pkts, ix, qid) )
-  {
-    vi->efct_rxqs.ops->free(vi, ix, rc);
+  while( true ) {
     rc = vi->efct_rxqs.ops->next(vi, ix, &sentinel, &sbseq);
-    if (rc < 0)
-      return rc;
+    if( rc < 0 )
+      return rc == -EAGAIN ? 0 : rc;
+
+    if( ! efct_vi_sb_has_been_filled(vi, rc, sentinel, rxq_ptr->superbuf_pkts, ix, qid) )
+      break;
+
+    vi->efct_rxqs.ops->free(vi, ix, rc);
   }
 
   /* Once we have the first superbuf that isn't entirely full, then we should
