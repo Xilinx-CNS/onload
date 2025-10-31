@@ -1842,8 +1842,9 @@ static int ef10ct_filter_op(const struct efct_filter_insert_in *in_data,
     uint32_t id_hi = EFHW_MCDI_DWORD(out, FILTER_OP_OUT_HANDLE_HI);
     out_data->rxq = rxq_num;
     out_data->drv_id = id_low | (uint64_t)id_hi << 32;
-    /* Metadata filter_id is the bottom 16 bits of MCDI filter handle */
-    out_data->filter_handle = id_low & 0xffff;
+    /* Metadata filter_id is the bottom (NIC endian) 14 bits of MCDI filter
+     * handle */
+    out_data->filter_handle = (id_low >> 16) & 0x3fff;
   }
 
   /* Free rxq on filter insert failure if this is a newly allocated rxq */
