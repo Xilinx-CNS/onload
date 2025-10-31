@@ -95,6 +95,7 @@ static int cfg_discard = -1;
 static bool cfg_exclusive = false;
 static bool cfg_shared = false;
 static int cfg_qid = -1;
+static bool cfg_filter_id = false;
 
 
 /* Mutex to protect printing from different threads */
@@ -248,11 +249,14 @@ static void handle_batched_rx(struct resources* res, int pkt_buf_i)
 }
 
 
-static void handle_rx_ref(struct resources* res, unsigned pkt_id, int len)
+static void handle_rx_ref(struct resources* res, unsigned pkt_id, int len,
+                          unsigned filter_id)
 {
   const void *p;
 
   LOGV("PKT: received pkt=%u len=%d\n", pkt_id, len);
+  if( cfg_filter_id )
+    LOGI("PKT: filter_id %#x\n", filter_id);
   p = efct_vi_rxpkt_get(&res->vi, pkt_id);
   handle_rx_core(res, p, p, len);
   efct_vi_rxpkt_release(&res->vi, pkt_id);
@@ -315,12 +319,14 @@ static int poll_evq(struct resources* res)
                         EF_EVENT_RX_DISCARD_TYPE(evs[i]));
       break;
     case EF_EVENT_TYPE_RX_REF:
-      handle_rx_ref(res, evs[i].rx_ref.pkt_id, evs[i].rx_ref.len);
+      handle_rx_ref(res, evs[i].rx_ref.pkt_id, evs[i].rx_ref.len,
+                    evs[i].rx_ref.filter_id);
       break;
     case EF_EVENT_TYPE_RX_REF_DISCARD:
       LOGE("ERROR: ref discard flags=%x\n", evs[i].rx_ref_discard.flags);
       handle_rx_ref(res, evs[i].rx_ref_discard.pkt_id,
-                    evs[i].rx_ref_discard.len);
+                    evs[i].rx_ref_discard.len,
+                    evs[i].rx_ref_discard.filter_id);
       break;
     case EF_EVENT_TYPE_RESET:
       LOGE("ERROR: NIC has been Reset and VI is no longer valid\n");
@@ -541,6 +547,7 @@ static __attribute__ ((__noreturn__)) void usage(void)
   fprintf(stderr, "  -x       require an exclusive RX queue\n");
   fprintf(stderr, "  -s       Request a shared RX queue\n");
   fprintf(stderr, "  -q       request specific qid\n");
+  fprintf(stderr, "  -i       output filter id of received packets\n");
   exit(1);
 }
 
@@ -554,8 +561,11 @@ int main(int argc, char* argv[])
   unsigned long use_rx_ref;
   struct in_addr sa_mcast;
   int c, sock, ifindex;
+  ef_filter_cookie filter_cookie;
+  ef_filter_info filter_info;
+  int rc;
 
-  while( (c = getopt (argc, argv, "dtVL:vmbefF:n:jD:xsq:")) != -1 )
+  while( (c = getopt (argc, argv, "dtVL:vmbefF:n:jD:xsq:i")) != -1 )
     switch( c ) {
     case 'd':
       cfg_hexdump = 1;
@@ -604,6 +614,9 @@ int main(int argc, char* argv[])
       break;
     case 'q':
       cfg_qid = atoi(optarg);
+      break;
+    case 'i':
+      cfg_filter_id = true;
       break;
     case '?':
       usage();
@@ -749,7 +762,21 @@ int main(int argc, char* argv[])
     if( cfg_qid >= 0 )
       TRY(ef_filter_spec_set_dest(&filter_spec, cfg_qid, 0));
 
-    TRY(ef_vi_filter_add(&res->vi, res->dh, &filter_spec, NULL));
+    TRY(ef_vi_filter_add(&res->vi, res->dh, &filter_spec, &filter_cookie));
+    if( cfg_filter_id ) {
+      rc = ef_vi_filter_query(&res->vi, res->dh, &filter_cookie, &filter_info,
+                              sizeof(filter_info));
+      if( (rc == 0) && (filter_info.valid_fields != 0) ) {
+        LOGI("Added filter, id: %#x queue: %d\n",
+             filter_info.valid_fields & EF_FILTER_FIELD_ID ?
+               filter_info.filter_id : -1,
+             filter_info.valid_fields & EF_FILTER_FIELD_QUEUE ?
+               filter_info.q_id : -1);
+      }
+      else {
+        LOGE("Unable to obtain filter id, rc %d\n", rc);
+      }
+    }
     ++argv; --argc;
   }
 
