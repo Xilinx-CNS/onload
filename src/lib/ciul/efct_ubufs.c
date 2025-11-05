@@ -65,6 +65,11 @@ static void update_filled(ef_vi* vi, int ix)
   struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[ix];
   bool sentinel_wait = false;
 
+  if( !(vi->ep_state->rxq.efct_active_qs & (1 << ix)) ||
+      state->fifo_tail_hw == -1 ) {
+    return;
+  }
+
   while( state->fifo_count_hw != 0 ) {
     const char* buffer;
     const ci_qword_t* header;
@@ -84,8 +89,9 @@ static void update_filled(ef_vi* vi, int ix)
      * reused before advancing the hardware tail beyond it.)
      */
     EF_VI_ASSERT(vi->efct_rxqs.meta_offset == 0);
+    if( state->fifo_tail_hw == -1 )
+      break;
 
-    EF_VI_ASSERT(state->fifo_tail_hw != -1 ); /* implied by count_hw > 0 */
     desc = efct_rx_desc_for_sb(vi, ix, state->fifo_tail_hw);
     buffer = efct_superbuf_access(vi, ix, state->fifo_tail_hw);
     header = (const ci_qword_t*)(buffer + EFCT_RX_SUPERBUF_BYTES - EFCT_PKT_STRIDE);
