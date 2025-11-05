@@ -29,13 +29,8 @@ benefit from improved support in future versions of Onload:
 
 - NIC reset is not handled. A driver reload is required post reset.
 - Filter handling when interfaces change state does not operate correctly
-- Multicast replication between the Express and Enterprise datapath is not
-  supported. To use multicast replication onload must be forced to use only
-  the Enterprise datapath with EF_RX_DATAPATH=enterprise. Note that when
-  this option is set unicast traffic will also be using the Enterprise
-  datapath.
-- Filter redirection is not supported, which may lead to unexpected behaviour
-  in scenerios where port numbers are reused.
+- Shared queues (shrub) are not fully validated and are not yet supported for
+  production use
 
 X4 Datapath Restrictions
 ------------------------
@@ -59,12 +54,7 @@ change.
 X4 Known Issues
 ---------------
 
-- Onload TX event processing can become starved, leading to EVQ overflow,
-  manifesting as an assertion failure or kernel panic in efct_poll_tx().
-- When an onload stack is created using the Express datapath a log message
-  is emitted warning that the queue size has been rounded up. This is because
-  the minimum queue size on X4 is higher than the default value and is
-  harmless.
+- CRC/Trunc error placeholder (need to confirm behaviour ON-17007)
 
 
 AMD Alveo(TM) X3 Series Low Latency Ethernet Adapter
