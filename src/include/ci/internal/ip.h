@@ -1575,6 +1575,14 @@ extern void citp_waitable_print_to_logger(ci_netif*, citp_waitable*,
 extern void
 ci_tcp_listenq_print_to_logger(ci_netif* ni, ci_tcp_socket_listen* tls,
                                oo_dump_log_fn_t logger, void *log_arg);
+extern int ci_tcp_listenq_bucket_iter(ci_netif* ni, ci_tcp_listen_bucket* bucket,
+                                      void (fn_tsr)(ci_netif* ni,
+                                                    ci_tcp_state_synrecv* tsr,
+                                                    void* arg),
+                                      void (fn_bucket)(ci_netif* ni,
+                                                       ci_tcp_listen_bucket* bucket,
+                                                       void* arg),
+                                      void* arg);
 
 
 /*********************************************************************

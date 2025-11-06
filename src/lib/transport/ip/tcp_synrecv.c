@@ -65,7 +65,7 @@ ci_inline int ci_tcp_listenq_hash2idx(ci_uint32 hash, int level)
  * (sub-)bucket, including the top one.  fn_bucket() is called after all
  * the syn-recv states have been handled via fn_tsr() callback.
  */
-static int
+int
 ci_tcp_listenq_bucket_iter(ci_netif* ni, ci_tcp_listen_bucket* bucket,
                            void (fn_tsr)(ci_netif* ni,
                                          ci_tcp_state_synrecv* tsr,
