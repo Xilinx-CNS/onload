@@ -211,6 +211,7 @@ typedef struct tcp_helper_resource_s {
   /* List of endpoints requiring work in non-atomic context. */
   ci_sllist     non_atomic_list;
 
+  atomic_t reinit_txq_schedulable;
   struct delayed_work reinit_txq_work;
 
 #if CI_CFG_NIC_RESET_SUPPORT

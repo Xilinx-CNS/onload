@@ -168,6 +168,9 @@ static void
 tcp_helper_stop_periodic_work(tcp_helper_resource_t*);
 
 static void
+tcp_helper_stop_txq_reinit(tcp_helper_resource_t*);
+
+static void
 tcp_helper_close_pending_endpoints(tcp_helper_resource_t*);
 #endif
 
@@ -4585,6 +4588,7 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   ci_sllist_init(&rs->non_atomic_list);
   ci_sllist_init(&rs->ep_tobe_closed);
   INIT_DELAYED_WORK(&rs->reinit_txq_work, tcp_helper_reinit_txqs_work);
+  atomic_set(&rs->reinit_txq_schedulable, 1);
 #endif
   ci_irqlock_ctor(&rs->lock);
   init_completion(&rs->complete);
@@ -4962,6 +4966,7 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
  fail5a:
 #endif
 #if ! CI_CFG_UL_INTERRUPT_HELPER
+  tcp_helper_stop_txq_reinit(rs);
   destroy_workqueue(rs->wq);
  fail5:
 #endif
@@ -5878,6 +5883,7 @@ tcp_helper_stop(tcp_helper_resource_t* trs)
 #if ! CI_CFG_UL_INTERRUPT_HELPER
   /* stop the periodic timer callbacks and TXQ-purges. */
   tcp_helper_stop_periodic_work(trs);
+  tcp_helper_stop_txq_reinit(trs);
 #endif
 
   /* stop callbacks from the event queue
@@ -7240,6 +7246,18 @@ tcp_helper_stop_periodic_work(tcp_helper_resource_t* rs)
   flush_workqueue(rs->wq);
 }
 #endif
+
+static void
+tcp_helper_stop_txq_reinit(tcp_helper_resource_t* trs)
+{
+  /* Stop the TXQ reinit work, which like the periodic work, can reschedule
+   * itself. Similarly to the stopping method there, we cancel the pending
+   * work and wait for it to complete twice in case it managed to schedule
+   * itself again after the first cancelling. */
+  atomic_set(&trs->reinit_txq_schedulable, 0);
+  cancel_delayed_work_sync(&trs->reinit_txq_work);
+  cancel_delayed_work_sync(&trs->reinit_txq_work);
+}
 
 /*--------------------------------------------------------------------*/
 
@@ -8627,7 +8645,7 @@ static int tcp_helper_reinit_txqs_locked(tcp_helper_resource_t* thr)
       any_failed |= tcp_helper_reinit_txq_locked(thr, i);
   }
 
-  if( any_failed )
+  if( any_failed && atomic_read(&thr->reinit_txq_schedulable) )
     queue_delayed_work(thr->wq, &thr->reinit_txq_work,
                        TXQ_REINIT_ATTEMPT_DELAY);
 
@@ -8661,8 +8679,13 @@ static void tcp_helper_reinit_txqs_work(struct work_struct* data)
 int efab_tcp_helper_reinit_txq(tcp_helper_resource_t* trs, int intf_i)
 {
   struct efrm_vi* virs = tcp_helper_vi(trs, intf_i);
+
+  if( ! atomic_read(&trs->reinit_txq_schedulable) )
+    return -ESHUTDOWN;
+
   virs->reinit_txq_attempts = TXQ_REINIT_MAX_ATTEMPTS;
   queue_delayed_work(trs->wq, &trs->reinit_txq_work, 0 * HZ);
+
   return 0;
 }
 
