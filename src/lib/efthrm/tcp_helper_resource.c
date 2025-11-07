@@ -8636,20 +8636,22 @@ int tcp_helper_reinit_txq_locked(tcp_helper_resource_t* thr,
 
 static int tcp_helper_reinit_txqs_locked(tcp_helper_resource_t* thr)
 {
-  int any_failed = 0;
+  bool need_retry = false;
   int i;
 
   for( i = 0; i < oo_stack_intf_max(&thr->netif); i++ ) {
     struct efrm_vi* virs = tcp_helper_vi(thr, i);
-    if( virs && virs->reinit_txq_attempts )
-      any_failed |= tcp_helper_reinit_txq_locked(thr, i);
+    if( virs && virs->reinit_txq_attempts ) {
+      int rc = tcp_helper_reinit_txq_locked(thr, i);
+      need_retry = need_retry || (rc != 0 && virs->reinit_txq_attempts > 0);
+    }
   }
 
-  if( any_failed && atomic_read(&thr->reinit_txq_schedulable) )
+  if( need_retry && atomic_read(&thr->reinit_txq_schedulable) )
     queue_delayed_work(thr->wq, &thr->reinit_txq_work,
                        TXQ_REINIT_ATTEMPT_DELAY);
 
-  return any_failed;
+  return need_retry ? -EAGAIN : 0;
 }
 
 static void tcp_helper_reinit_txqs_work(struct work_struct* data)
