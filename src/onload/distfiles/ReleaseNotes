@@ -14,11 +14,15 @@ Linux distribution support
 
  This package can be installed on:
  - Red Hat Enterprise Linux 8.10
- - Red Hat Enterprise Linux 9.4 - 9.6
- - Red Hat Enterprise Linux 10.0
+ - Red Hat Enterprise Linux 9.4 - 9.7(*)
+ - Red Hat Enterprise Linux 10.0 - 10.1(*)
  - Canonical Ubuntu Server LTS 22.04 and 24.04
  - Debian 12 "Bookworm"
+ - Debian 13 "Trixie"
  - Linux kernels 5.11 - 6.14
+
+(*) At the time of writing, RHEL 9.7 and RHEL 10.1 were in a pre-release state
+    but expected to be compatible with this Onload version.
 
 
 AMD Solarflare(TM) X4 Series Ethernet Adapter
