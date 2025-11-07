@@ -2006,12 +2006,18 @@ static void oo_efct_superbuf_post_ioctl(ef_vi* vi, int ix, int sbid,
                                         bool sentinel)
 {
   oo_efct_superbuf_post_t op;
+  int rc;
+
   op.intf_i = vi->efct_rxqs.ops->user_data;
   op.qid = ix;
   op.sbid = sbid;
   op.sentinel = sentinel;
-  oo_resource_op(vi->dh, OO_IOC_EFCT_SUPERBUF_POST, &op);
-  // TODO ON-16698 should we detect errors?
+  rc = oo_resource_op(vi->dh, OO_IOC_EFCT_SUPERBUF_POST, &op);
+
+  // TODO ON-16698 should we handle errors?
+  if( rc < 0 )
+    LOG_U(ci_log("%s(%d, %d, %d): failed to post superbuf to intf_i %d, rc = %d",
+                 __FUNCTION__, ix, sbid, sentinel, op.intf_i, rc));
 }
 
 static void unmap_efct_ubuf_rxq_io_windows(ef_vi* vi)

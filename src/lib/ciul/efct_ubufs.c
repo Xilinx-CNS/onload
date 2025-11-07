@@ -12,11 +12,23 @@
 #include <etherfabric/internal/shrub_socket.h>
 #include <etherfabric/internal/shrub_client.h>
 
+struct efct_ubufs_rxq_stats {
+  uint64_t buffers_freed;            /* Total buffers freed by the application */
+  uint64_t post_fifo_full;           /* Times we couldn't post due to fifo limit */
+  uint64_t free_list_empty;          /* Times free list was empty */
+  uint64_t sw_fifo_empty;            /* Times SW FIFO was empty on next() */
+  uint64_t hw_fifo_empty;            /* Times HW FIFO was empty */
+  uint64_t sentinel_wait;            /* Times we waited for sentinel update */
+  uint64_t acquire_failures;         /* Failed buffer acquisitions (shared mode) */
+  uint64_t release_count;            /* Buffer releases (shared mode) */
+};
+
 struct efct_ubufs_rxq
 {
   struct ef_shrub_client shrub_client;
   efch_resource_id_t rxq_id, memreg_id;
   volatile uint64_t *rx_post_buffer_reg;
+  struct efct_ubufs_rxq_stats stats;
 };
 
 struct efct_ubufs
@@ -50,6 +62,8 @@ static bool rxq_is_local(const ef_vi* vi, int ix)
 static void update_filled(ef_vi* vi, int ix)
 {
   ef_vi_efct_rxq_state* state = &vi->ep_state->rxq.efct_state[ix];
+  struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[ix];
+  bool sentinel_wait = false;
 
   while( state->fifo_count_hw != 0 ) {
     const char* buffer;
@@ -76,12 +90,17 @@ static void update_filled(ef_vi* vi, int ix)
     buffer = efct_superbuf_access(vi, ix, state->fifo_tail_hw);
     header = (const ci_qword_t*)(buffer + EFCT_RX_SUPERBUF_BYTES - EFCT_PKT_STRIDE);
 
-    if( CI_QWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL) != desc->sentinel )
+    if( CI_QWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL) != desc->sentinel ) {
+      sentinel_wait = true;
       break;
+    }
 
     state->fifo_tail_hw = desc->sbid_next;
     state->fifo_count_hw--;
   }
+
+  rxq->stats.sentinel_wait += (sentinel_wait ? 1 : 0);
+  rxq->stats.hw_fifo_empty += (state->fifo_count_hw == 0 ? 1 : 0);
 }
 
 static void poison_superbuf(char *sbuf)
@@ -103,6 +122,9 @@ static void post_buffers(ef_vi* vi, int ix)
 {
   ef_vi_efct_rxq_state* state = &vi->ep_state->rxq.efct_state[ix];
   unsigned limit = get_ubufs(vi)->nic_fifo_limit;
+  struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[ix];
+  bool free_list_was_empty = ( state->free_head == -1 );
+  bool fifo_was_full = ( state->fifo_count_hw >= limit );
 
   while( state->free_head != -1 && state->fifo_count_hw < limit ) {
     int16_t id = state->free_head;
@@ -111,7 +133,6 @@ static void post_buffers(ef_vi* vi, int ix)
 
     state->free_head = desc->sbid_next;
     desc->sbid_next = -1;
-
     /* We assume that the first sentinel value applies to the whole superbuf.
      * TBD: will we ever need to deal with manual rollover?
      */
@@ -120,10 +141,8 @@ static void post_buffers(ef_vi* vi, int ix)
 
     if( state->fifo_count_hw == 0 )
       state->fifo_tail_hw = id;
-
     if( state->fifo_count_sw == 0 )
       state->fifo_tail_sw = id;
-
     if( state->fifo_head != -1 )
       efct_rx_desc_for_sb(vi, ix, state->fifo_head)->sbid_next = id;
 
@@ -133,6 +152,10 @@ static void post_buffers(ef_vi* vi, int ix)
 
     vi->efct_rxqs.ops->post(vi, ix, id, desc->sentinel);
   }
+
+  if ( free_list_was_empty )
+    rxq->stats.free_list_empty++;
+  rxq->stats.post_fifo_full += (fifo_was_full ? 1 : 0);
 }
 
 static int efct_ubufs_next_shared(ef_vi* vi, int ix, bool* sentinel, unsigned* sbseq)
@@ -143,6 +166,7 @@ static int efct_ubufs_next_shared(ef_vi* vi, int ix, bool* sentinel, unsigned* s
   ef_shrub_buffer_id id;
   int rc = ef_shrub_client_acquire_buffer(&rxq->shrub_client, &id, sentinel);
   if ( rc < 0 ) {
+    rxq->stats.acquire_failures++;
     return rc;
   }
   *sbseq = state->sbseq++;
@@ -153,13 +177,16 @@ static int efct_ubufs_next_local(ef_vi* vi, int ix, bool* sentinel, unsigned* sb
 {
   ef_vi_efct_rxq_state* state = &vi->ep_state->rxq.efct_state[ix];
   struct efct_rx_descriptor* desc;
+  struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[ix];
   int id;
 
   update_filled(vi, ix);
   post_buffers(vi, ix);
 
-  if( state->fifo_count_sw == 0 )
+  if( state->fifo_count_sw == 0 ) {
+    rxq->stats.sw_fifo_empty++;
     return -EAGAIN;
+  }
 
   id = state->fifo_tail_sw;
   desc = efct_rx_desc_for_sb(vi, ix, id);
@@ -191,14 +218,17 @@ static void efct_ubufs_free_shared(ef_vi* vi, int ix, int sbid)
 {
   struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[ix];
   ef_shrub_client_release_buffer(&rxq->shrub_client, sbid);
+  rxq->stats.release_count++;
 }
 
 static void efct_ubufs_free(ef_vi* vi, int ix, int sbid)
 {
+  struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[ix];
   if( rxq_is_local(vi, ix) )
     efct_ubufs_free_local(vi, ix, sbid);
   else
     efct_ubufs_free_shared(vi, ix, sbid);
+  rxq->stats.buffers_freed++;
 }
 
 static bool efct_ubufs_local_available(const ef_vi* vi, int ix)
@@ -449,11 +479,24 @@ static void efct_ubufs_dump_stats(ef_vi* vi, ef_vi_dump_log_fn_t logger,
     const struct ef_shrub_client_state* client_state = ef_shrub_client_get_state(client);
     const ef_vi_efct_rxq* efct_rxq = &vi->efct_rxqs.q[ix];
     const ef_vi_efct_rxq_state *efct_state = efct_get_rxq_state(vi, ix);
+    const struct efct_ubufs_rxq_stats* stats = &ubufs->q[ix].stats;
 
     if( *efct_rxq->live.superbuf_pkts != 0 ) {
       logger(log_arg, "  rxq[%d]: hw=%d cfg=%u pkts=%u", ix,
              efct_state->qid, efct_rxq->config_generation,
              *efct_rxq->live.superbuf_pkts);
+
+      logger(log_arg, "  rxq[%d]: buffers freed=%" CI_PRIu64,
+             ix, stats->buffers_freed);
+
+      logger(log_arg, "  rxq[%d]: sw_fifo_empty=%" CI_PRIu64 
+             " hw_fifo_empty=%" CI_PRIu64 " free_list_empty=%" CI_PRIu64, ix,
+             stats->sw_fifo_empty, stats->hw_fifo_empty, stats->free_list_empty);
+
+      logger(log_arg, "  rxq[%d]: sentinel_wait=%" CI_PRIu64 
+             " post_fifo_full=%" CI_PRIu64, ix,
+             stats->sentinel_wait, stats->post_fifo_full);
+
       if( client_state ) {
         logger(log_arg, "  rxq[%d]: server_fifo_size=%" CI_PRIu64
                " server_fifo_idx=%" CI_PRIu64, ix,
@@ -463,6 +506,9 @@ static void efct_ubufs_dump_stats(ef_vi* vi, ef_vi_dump_log_fn_t logger,
                " client_fifo_idx=%" CI_PRIu64, ix,
                client_state->metrics.client_fifo_size,
                client_state->client_fifo_index);
+        logger(log_arg, "  rxq[%d]: acquire_failures=%" CI_PRIu64 
+               " release_count=%" CI_PRIu64, ix,
+               stats->acquire_failures, stats->release_count);
       } else {
         logger(log_arg, "  rxq[%d]: fifo_count_hw=%" CI_PRIu16
                " fifo_count_sw=%" CI_PRIu16, ix, efct_state->fifo_count_hw,

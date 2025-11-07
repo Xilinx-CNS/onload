@@ -1992,6 +1992,9 @@ int efrm_vi_reinit_txq(struct efrm_vi *virs)
 
 	EFRM_TRACE("%s: %p", __FUNCTION__, virs);
 
+	if( nic->devtype.arch == EFHW_ARCH_EFCT )
+		return -EOPNOTSUPP;
+
 	if( q->capacity == 0 )
 		return -EINVAL;
 

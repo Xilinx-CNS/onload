@@ -188,7 +188,6 @@ fi
 docopy src/tests/onload       wire_order
 docopy src/tests/onload       extensions
 docopy src/tests/onload       hwtimestamping
-docopy src/tests/onload       startup
 
 docopy src/tests/onload/onload_remote_monitor       orm_example_client using_collectd
 

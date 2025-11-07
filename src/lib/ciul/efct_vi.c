@@ -1341,7 +1341,6 @@ int efct_vi_sync_rxq(ef_vi *vi, int ix, int qid)
   struct efct_rx_descriptor *desc;
   ci_oword_t *header;
   bool sentinel;
-  bool pkt_sentinel;
   unsigned sbseq;
   uint32_t meta_pkt;
   uint16_t pkt_index;
@@ -1352,32 +1351,36 @@ int efct_vi_sync_rxq(ef_vi *vi, int ix, int qid)
   efct_get_rxq_state(vi, ix)->qid = qid;
   rxq->config_generation = *rxq->live.config_generation;
   rxq_ptr->superbuf_pkts = *rxq->live.superbuf_pkts;
+  rxq_ptr->meta_pkt = rxq_ptr->superbuf_pkts + 1;
   rxq_ptr->meta_offset = 0;
 
-  rc = vi->efct_rxqs.ops->next(vi, ix, &sentinel, &sbseq);
-  if ( rc < 0 )
-    return rc;
-
-  while ( efct_vi_sb_has_been_filled(vi, rc, sentinel, rxq_ptr->superbuf_pkts, ix, qid) )
-  {
-    vi->efct_rxqs.ops->free(vi, ix, rc);
+  /* Find the first superbuf that isn't entirely full */
+  while( true ) {
     rc = vi->efct_rxqs.ops->next(vi, ix, &sentinel, &sbseq);
-    if (rc < 0)
-      return rc;
+    if( rc < 0 )
+      return rc == -EAGAIN ? 0 : rc;
+
+    if( ! efct_vi_sb_has_been_filled(vi, rc, sentinel, rxq_ptr->superbuf_pkts, ix, qid) )
+      break;
+
+    vi->efct_rxqs.ops->free(vi, ix, rc);
   }
 
+  /* Once we have the first superbuf that isn't entirely full, then we should
+   * look through it to find the first packet in that superbuf that hasn't been
+   * used yet. */
   meta_pkt = (ix * CI_EFCT_MAX_SUPERBUFS + rc) << PKT_ID_PKT_BITS;
   header = (void *)((char *)efct_superbuf_access(vi, ix, rc));
   for ( pkt_index = 0; pkt_index < rxq_ptr->superbuf_pkts;
         header += EFCT_PKT_STRIDE / sizeof(*header), pkt_index++ )
-  {
-    pkt_sentinel = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL);
-    if ( pkt_sentinel != sentinel )
-    {
-      meta_pkt += pkt_index;
+    if ( CI_OWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL) != sentinel )
       break;
-    }
-  }
+
+  /* NOTE: it is possible that between finding the first not full superbuf and
+   * looking through the superbuf to find the first unused packet, all of the
+   * packets have now been used. We aren't actually bothered by this, and can
+   * cope in the same way as if we had just finished using this superbuf. */
+  meta_pkt += pkt_index;
 
   rxq_ptr->meta_pkt = ((uint64_t)sbseq << 32) | ((uint64_t)sentinel << 31) | meta_pkt;
   rxq_ptr->data_pkt = meta_pkt;

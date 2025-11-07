@@ -772,7 +772,7 @@ ef10_mcdi_cmd_set_vi_tlp_processing(struct efhw_nic *nic, uint instance,
              __FUNCTION__, (tlp.data >> 19) & 1, tlp.data);
   rc = ef10_mcdi_rpc(nic, MC_CMD_SET_VI_TLP_PROCESSING, sizeof(set_in), 0,
                      &out_size, set_in, NULL);
-  MCDI_CHECK(MC_CMD_SET_VI_TLP_PROCESSING, rc, out_size, 0);
+  MCDI_CHECK(MC_CMD_SET_VI_TLP_PROCESSING, rc, out_size, 1);
 
 #if DEBUG_TLP
   /* read back the value to check it had an effect */

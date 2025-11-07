@@ -1797,9 +1797,14 @@ static void tcp_helper_post_superbuf(ef_vi* vi, int ix, int sbid, bool sentinel)
   int qid = efct_get_rxq_state(vi, ix)->qid;
   ef_addr dma_addr = efct_rx_desc_for_sb(vi, ix, sbid)->dma_addr;
   int owner_id = vi->efct_rxqs.ops->user_data;
+  int rc;
 
-  efhw_nic_post_superbuf(vi->dh, qid, dma_addr, sentinel, false, owner_id);
-  // TODO ON-16698 should we check/handle errors?
+  rc = efhw_nic_post_superbuf(vi->dh, qid, dma_addr, sentinel, false, owner_id);
+
+  // TODO ON-16698 should we handle errors?
+  if( rc < 0 )
+    LOG_U(ci_log("%s(%d, %d, %d): failed to post superbuf to queue %d, rc = %d",
+                 __FUNCTION__, ix, sbid, sentinel, qid, rc));
 }
 
 static int initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
