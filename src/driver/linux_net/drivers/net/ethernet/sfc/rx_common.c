@@ -252,9 +252,7 @@ void efx_discard_rx_packet(struct efx_channel *channel,
 			   unsigned int n_frags)
 {
 	struct efx_rx_queue *rx_queue = efx_channel_get_rx_queue(channel);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 	struct efx_rx_buffer *_rx_buf = rx_buf;
-#endif
 
 	if (!rx_queue->efx->rx_buf_page_share) {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
