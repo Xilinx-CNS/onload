@@ -54,7 +54,12 @@ change.
 X4 Known Issues
 ---------------
 
-- CRC/Trunc error placeholder (need to confirm behaviour ON-17007)
+- The X4 enterprise datapath does not differentiate between CRC errors and
+  truncation errors in RX discard events. As a result, these will be reported
+  as EF_EVENT_RX_DISCARD_CRC_BAD in EF_EVENT_TYPE_RX_DISCARD for ef_vi users.
+  This will be visible to onload users via the rx_discard_crc_bad statistic in
+  stackdump. A side effect of this change is that truncation errors may be
+  mischaracterised as CRC errors, including on older network cards.
 
 
 AMD Alveo(TM) X3 Series Low Latency Ethernet Adapter
@@ -210,6 +215,15 @@ by setting EF_ENABLE_TX_ERROR_RECOVERY=0. Handling of TX error events in ef_vi
 is described and documented in the API functions:
 - ef_vi_reinit_txq_post_error
 - ef_vi_for_each_tx_error_failed_transmit
+
+
+Change in behaviour for CRC and truncation RX discards
+------------------------------------------------------
+
+To support X4, which is unable to differentiate between these error types in RX
+discard events, any NIC using the ef10 architecture, X2 or SFN8k, will also not
+differentiate between these error types. This only affects users with an MTU of
+larger than 1500.
 
 
 (c) Copyright 2025 Advanced Micro Devices, Inc.
