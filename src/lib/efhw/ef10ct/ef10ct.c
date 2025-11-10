@@ -214,6 +214,18 @@ static int ef10ct_is_shared_evq(struct efhw_nic *nic, int evq_num)
   return false;
 }
 
+static struct ef10ct_shared_kernel_evq*
+ef10ct_evq_shared_evq(struct efhw_nic *nic, int evq_num)
+{
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  int i;
+  for (i = 0; i < ef10ct->shared_n; i++)
+    if (ef10ct_get_queue_num(ef10ct->shared[i].evq_id) == evq_num)
+      return &ef10ct->shared[i];
+
+  return NULL;
+}
+
 /* NOTE: This is just a dumb function that scans through the entire event queue
  * until it finds a flush event then returns. The proper way to handle the event
  * queue is in `ef10ct_poll_evq` but that requires that `evq->next` (which acts
@@ -291,12 +303,14 @@ static void ef10ct_check_for_flushes_polled(struct work_struct *work)
   }
 }
 
-static int ef10ct_have_event(ci_qword_t *event, struct efhw_nic_ef10ct_evq *evq)
+static ci_qword_t* ef10ct_event(struct efhw_nic_ef10ct_evq *evq, unsigned ptr)
 {
-  int expect_phase = (evq->next & evq->capacity) != 0;
+  ci_qword_t *event = &evq->base[ptr & (evq->capacity - 1)];
+
+  int expect_phase = (ptr & evq->capacity) != 0;
   int actual_phase = CI_QWORD_FIELD(*event, EFCT_EVENT_PHASE);
 
-  return expect_phase == actual_phase;
+  return expect_phase == actual_phase ? event : NULL;
 }
 
 #define MSB(type, val) ((8 * sizeof(type) - 1) - __builtin_clz(val))
@@ -304,8 +318,9 @@ static int ef10ct_have_event(ci_qword_t *event, struct efhw_nic_ef10ct_evq *evq)
 static int ef10ct_poll_evq(struct efhw_nic_ef10ct_evq *evq,
                            bool *found_flush_out)
 {
-  ci_qword_t *event = &evq->base[evq->next & (evq->capacity - 1)];
+  ci_qword_t *event = ef10ct_event(evq, evq->next);
   struct efhw_nic_ef10ct *ef10ct;
+  struct ef10ct_shared_kernel_evq *shared;
   int q_id;
   int i = 0;
   /* Flush complete events only reserve 8 bits for a queue id. This means that
@@ -315,7 +330,17 @@ static int ef10ct_poll_evq(struct efhw_nic_ef10ct_evq *evq,
   DECLARE_BITMAP(rxqs_with_events, 256) = {0};
   size_t q_num;
 
-  while(ef10ct_have_event(event, evq) && i < evq->capacity) {
+  shared = ef10ct_evq_shared_evq(evq->nic, evq->queue_num);
+  /* We only poll here for shared queues */
+  EFHW_ASSERT(shared);
+
+  /* Check for overflow by checking the phase of the previous event */
+  if( ! ef10ct_event(evq, evq->next - 1) ) {
+    shared->overflow++;
+    WARN_ON_ONCE(1);
+  }
+
+  while(event && i < evq->capacity) {
     evq->next++;
     if(CI_QWORD_FIELD(*event, EFCT_EVENT_TYPE) == EFCT_EVENT_TYPE_CONTROL &&
        CI_QWORD_FIELD(*event, EFCT_CTRL_SUBTYPE) == EFCT_CTRL_EV_FLUSH) {
@@ -325,6 +350,7 @@ static int ef10ct_poll_evq(struct efhw_nic_ef10ct_evq *evq,
         queue_handle = ef10ct_reconstruct_queue_handle(q_id,
                                                   EF10CT_QUEUE_HANDLE_TYPE_TXQ);
         efhw_handle_txdmaq_flushed(evq->nic, queue_handle);
+        shared->tx_flush_evs++;
       } else /* EFCT_FLUSH_TYPE_RX */ {
         queue_handle = ef10ct_reconstruct_queue_handle(q_id,
                                                   EF10CT_QUEUE_HANDLE_TYPE_RXQ);
@@ -334,6 +360,7 @@ static int ef10ct_poll_evq(struct efhw_nic_ef10ct_evq *evq,
         mutex_lock(&ef10ct->rxq[q_id].bind_lock);
         ef10ct_free_rxq(evq->nic, queue_handle);
         mutex_unlock(&ef10ct->rxq[q_id].bind_lock);
+        shared->rx_flush_evs++;
       }
       break;
     }
@@ -346,6 +373,7 @@ static int ef10ct_poll_evq(struct efhw_nic_ef10ct_evq *evq,
       rxq_num = CI_QWORD_FIELD(*event, EFCT_RX_EVENT_LABEL);
       ef10ct = evq->nic->arch_extra;
       rxq = &ef10ct->rxq[rxq_num];
+      shared->rx_evs++;
 
       __set_bit(rxq_num, rxqs_with_events);
 
@@ -357,10 +385,9 @@ static int ef10ct_poll_evq(struct efhw_nic_ef10ct_evq *evq,
 
       num_pkts = CI_QWORD_FIELD(*event, EFCT_RX_EVENT_NUM_PACKETS);
       rxq->pktix += num_pkts;
-
     }
 
-    event = &evq->base[evq->next & (evq->capacity - 1)];
+    event = ef10ct_event(evq, evq->next);
     i++;
   }
 
