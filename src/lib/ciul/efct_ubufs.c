@@ -557,8 +557,13 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
   }
 
   /* TODO ON-16686 get this limit from the design parameter DP_RX_BUFFER_FIFO_SIZE,
-   * perhaps allow configuration to a smaller value to reduce working set */
-  ubufs->nic_fifo_limit = 128;
+   * perhaps allow configuration to a smaller value to reduce working set.
+   * The current value here is selected such that completions for a full
+   * set of buffers will not exceed the kernel EVQ size. Overflow is still
+   * possible if the kernel poll does not keep up as the user space code
+   * judges fill level based on RX buffer fill, so the hw fifo can be empty
+   * without the kernel EVQ having been drained. */
+  ubufs->nic_fifo_limit = 64;
   ubufs->pd = pd;
   ubufs->pd_dh = pd_dh;
   ubufs->is_shrub_token_set = false;
