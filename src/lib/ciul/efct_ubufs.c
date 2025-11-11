@@ -12,23 +12,17 @@
 #include <etherfabric/internal/shrub_socket.h>
 #include <etherfabric/internal/shrub_client.h>
 
-struct efct_ubufs_rxq_stats {
-  uint64_t buffers_freed;            /* Total buffers freed by the application */
-  uint64_t post_fifo_full;           /* Times we couldn't post due to fifo limit */
-  uint64_t free_list_empty;          /* Times free list was empty */
-  uint64_t sw_fifo_empty;            /* Times SW FIFO was empty on next() */
-  uint64_t hw_fifo_empty;            /* Times HW FIFO was empty */
-  uint64_t sentinel_wait;            /* Times we waited for sentinel update */
-  uint64_t acquire_failures;         /* Failed buffer acquisitions (shared mode) */
-  uint64_t release_count;            /* Buffer releases (shared mode) */
-};
+#define EF10CT_STATS_INC(vi, ix, counter) \
+  do { \
+    if ((vi)->vi_stats) \
+      (vi)->vi_stats->ef10ct_stats[ix].counter++; \
+  } while(0)
 
 struct efct_ubufs_rxq
 {
   struct ef_shrub_client shrub_client;
   efch_resource_id_t rxq_id, memreg_id;
   volatile uint64_t *rx_post_buffer_reg;
-  struct efct_ubufs_rxq_stats stats;
 };
 
 struct efct_ubufs
@@ -40,7 +34,6 @@ struct efct_ubufs
   int shrub_server_socket_id;
   ef_driver_handle pd_dh;
   bool is_shrub_token_set;
-
   struct efct_ubufs_rxq q[EF_VI_MAX_EFCT_RXQS];
 };
 
@@ -62,11 +55,12 @@ static bool rxq_is_local(const ef_vi* vi, int ix)
 static void update_filled(ef_vi* vi, int ix)
 {
   ef_vi_efct_rxq_state* state = &vi->ep_state->rxq.efct_state[ix];
-  struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[ix];
   bool sentinel_wait = false;
+  bool corrupt_queue_found = false;
 
   if( !(vi->ep_state->rxq.efct_active_qs & (1 << ix)) ||
       state->fifo_tail_hw == -1 ) {
+    EF10CT_STATS_INC(vi, ix, torn_down_out_of_order);
     return;
   }
 
@@ -89,8 +83,10 @@ static void update_filled(ef_vi* vi, int ix)
      * reused before advancing the hardware tail beyond it.)
      */
     EF_VI_ASSERT(vi->efct_rxqs.meta_offset == 0);
-    if( state->fifo_tail_hw == -1 )
+    if( state->fifo_tail_hw == -1 ) {
+      corrupt_queue_found = true;
       break;
+    }
 
     desc = efct_rx_desc_for_sb(vi, ix, state->fifo_tail_hw);
     buffer = efct_superbuf_access(vi, ix, state->fifo_tail_hw);
@@ -105,8 +101,12 @@ static void update_filled(ef_vi* vi, int ix)
     state->fifo_count_hw--;
   }
 
-  rxq->stats.sentinel_wait += (sentinel_wait ? 1 : 0);
-  rxq->stats.hw_fifo_empty += (state->fifo_count_hw == 0 ? 1 : 0);
+  if ( corrupt_queue_found )
+    EF10CT_STATS_INC(vi, ix, corrupt_rxq_state);
+  if ( sentinel_wait )
+    EF10CT_STATS_INC(vi, ix, sentinel_wait);
+  if ( state->fifo_count_hw == 0 )
+    EF10CT_STATS_INC(vi, ix, hw_fifo_empty);
 }
 
 static void poison_superbuf(char *sbuf)
@@ -128,7 +128,6 @@ static void post_buffers(ef_vi* vi, int ix)
 {
   ef_vi_efct_rxq_state* state = &vi->ep_state->rxq.efct_state[ix];
   unsigned limit = get_ubufs(vi)->nic_fifo_limit;
-  struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[ix];
   bool free_list_was_empty = ( state->free_head == -1 );
   bool fifo_was_full = ( state->fifo_count_hw >= limit );
 
@@ -160,8 +159,9 @@ static void post_buffers(ef_vi* vi, int ix)
   }
 
   if ( free_list_was_empty )
-    rxq->stats.free_list_empty++;
-  rxq->stats.post_fifo_full += (fifo_was_full ? 1 : 0);
+    EF10CT_STATS_INC(vi, ix, free_list_empty);
+  if ( fifo_was_full )
+    EF10CT_STATS_INC(vi, ix, post_fifo_full);
 }
 
 static int efct_ubufs_next_shared(ef_vi* vi, int ix, bool* sentinel, unsigned* sbseq)
@@ -172,7 +172,7 @@ static int efct_ubufs_next_shared(ef_vi* vi, int ix, bool* sentinel, unsigned* s
   ef_shrub_buffer_id id;
   int rc = ef_shrub_client_acquire_buffer(&rxq->shrub_client, &id, sentinel);
   if ( rc < 0 ) {
-    rxq->stats.acquire_failures++;
+    EF10CT_STATS_INC(vi, ix, acquire_failures);
     return rc;
   }
   *sbseq = state->sbseq++;
@@ -183,14 +183,13 @@ static int efct_ubufs_next_local(ef_vi* vi, int ix, bool* sentinel, unsigned* sb
 {
   ef_vi_efct_rxq_state* state = &vi->ep_state->rxq.efct_state[ix];
   struct efct_rx_descriptor* desc;
-  struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[ix];
   int id;
 
   update_filled(vi, ix);
   post_buffers(vi, ix);
 
   if( state->fifo_count_sw == 0 ) {
-    rxq->stats.sw_fifo_empty++;
+    EF10CT_STATS_INC(vi, ix, sw_fifo_empty);
     return -EAGAIN;
   }
 
@@ -224,17 +223,17 @@ static void efct_ubufs_free_shared(ef_vi* vi, int ix, int sbid)
 {
   struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[ix];
   ef_shrub_client_release_buffer(&rxq->shrub_client, sbid);
-  rxq->stats.release_count++;
+  EF10CT_STATS_INC(vi, ix, release_count);
 }
 
 static void efct_ubufs_free(ef_vi* vi, int ix, int sbid)
 {
-  struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[ix];
   if( rxq_is_local(vi, ix) )
     efct_ubufs_free_local(vi, ix, sbid);
   else
     efct_ubufs_free_shared(vi, ix, sbid);
-  rxq->stats.buffers_freed++;
+
+  EF10CT_STATS_INC(vi, ix, buffers_freed);
 }
 
 static bool efct_ubufs_local_available(const ef_vi* vi, int ix)
@@ -485,23 +484,30 @@ static void efct_ubufs_dump_stats(ef_vi* vi, ef_vi_dump_log_fn_t logger,
     const struct ef_shrub_client_state* client_state = ef_shrub_client_get_state(client);
     const ef_vi_efct_rxq* efct_rxq = &vi->efct_rxqs.q[ix];
     const ef_vi_efct_rxq_state *efct_state = efct_get_rxq_state(vi, ix);
-    const struct efct_ubufs_rxq_stats* stats = &ubufs->q[ix].stats;
 
     if( *efct_rxq->live.superbuf_pkts != 0 ) {
       logger(log_arg, "  rxq[%d]: hw=%d cfg=%u pkts=%u", ix,
              efct_state->qid, efct_rxq->config_generation,
              *efct_rxq->live.superbuf_pkts);
 
-      logger(log_arg, "  rxq[%d]: buffers freed=%" CI_PRIu64,
-             ix, stats->buffers_freed);
+      if ( vi->vi_stats != NULL ) {
+        logger(log_arg, "  rxq[%d]: buffers freed=%" CI_PRIu64
+               " torn_down_out_of_order=%" CI_PRIu64 " corrupt_rxq_state=%" CI_PRIu64,
+               ix, vi->vi_stats->ef10ct_stats[ix].buffers_freed,
+               vi->vi_stats->ef10ct_stats[ix].torn_down_out_of_order,
+               vi->vi_stats->ef10ct_stats[ix].corrupt_rxq_state);
 
-      logger(log_arg, "  rxq[%d]: sw_fifo_empty=%" CI_PRIu64 
-             " hw_fifo_empty=%" CI_PRIu64 " free_list_empty=%" CI_PRIu64, ix,
-             stats->sw_fifo_empty, stats->hw_fifo_empty, stats->free_list_empty);
+        logger(log_arg, "  rxq[%d]: sw_fifo_empty=%" CI_PRIu64 
+               " hw_fifo_empty=%" CI_PRIu64 " free_list_empty=%" CI_PRIu64, ix,
+               vi->vi_stats->ef10ct_stats[ix].sw_fifo_empty,
+               vi->vi_stats->ef10ct_stats[ix].hw_fifo_empty,
+               vi->vi_stats->ef10ct_stats[ix].free_list_empty);
 
-      logger(log_arg, "  rxq[%d]: sentinel_wait=%" CI_PRIu64 
-             " post_fifo_full=%" CI_PRIu64, ix,
-             stats->sentinel_wait, stats->post_fifo_full);
+        logger(log_arg, "  rxq[%d]: sentinel_wait=%" CI_PRIu64
+               " post_fifo_full=%" CI_PRIu64, ix,
+               vi->vi_stats->ef10ct_stats[ix].sentinel_wait,
+               vi->vi_stats->ef10ct_stats[ix].post_fifo_full);
+      }
 
       if( client_state ) {
         logger(log_arg, "  rxq[%d]: server_fifo_size=%" CI_PRIu64
@@ -512,9 +518,12 @@ static void efct_ubufs_dump_stats(ef_vi* vi, ef_vi_dump_log_fn_t logger,
                " client_fifo_idx=%" CI_PRIu64, ix,
                client_state->metrics.client_fifo_size,
                client_state->client_fifo_index);
-        logger(log_arg, "  rxq[%d]: acquire_failures=%" CI_PRIu64 
-               " release_count=%" CI_PRIu64, ix,
-               stats->acquire_failures, stats->release_count);
+        if ( vi->vi_stats != NULL ) {
+          logger(log_arg, "  rxq[%d]: acquire_failures=%" CI_PRIu64 
+                 " release_count=%" CI_PRIu64, ix,
+                 vi->vi_stats->ef10ct_stats[ix].acquire_failures,
+                 vi->vi_stats->ef10ct_stats[ix].release_count);
+        }
       } else {
         logger(log_arg, "  rxq[%d]: fifo_count_hw=%" CI_PRIu16
                " fifo_count_sw=%" CI_PRIu16, ix, efct_state->fifo_count_hw,
