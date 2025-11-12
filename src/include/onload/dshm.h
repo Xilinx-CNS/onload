@@ -58,9 +58,14 @@ oo_dshm_fini(void);
 extern int
 oo_dshm_free_handle_list(ci_dllist*);
 
+struct oo_dshm_list;
+
+extern int
+oo_dshm_free_used(struct oo_dshm_list*);
+
 #ifdef OO_MMAP_TYPE_DSHM
 extern int
-oo_dshm_mmap_impl(struct vm_area_struct*);
+oo_dshm_mmap_impl(struct vm_area_struct*, struct oo_dshm_list**);
 #endif
 
 #endif

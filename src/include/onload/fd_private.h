@@ -31,6 +31,8 @@
  *
  *--------------------------------------------------------------------*/
 
+struct oo_dshm_list;
+
 /*! Comment? */
 typedef struct ci_private_s {
   tcp_helper_resource_t *thr; /* Keep it first! */
@@ -49,6 +51,9 @@ typedef struct ci_private_s {
 
   /* List of dshm segments owned by this file. */
   ci_dllist             dshm_list;
+
+  /* List of dshm buffers used by this file. */
+  struct oo_dshm_list* dshm_used_head;
 
   /* Handle to the control plane, and the ID of the fwd table to use.  These
    * are only valid in the case where we don't have a stack. */

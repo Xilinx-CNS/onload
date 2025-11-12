@@ -35,6 +35,7 @@ ON-16802: improve TX error handling
 ON-16808: warn user and fail to load onload drivers if kernel IBT is enabled
 ON-16913: fix option help text in exchange example app
 ON-16993: Handle partial filter install with EF_NO_FAIL=1
+ON-17056: Avoid potential kernel panic using zf_stackdump while closing app
 #283: af_xdp scheduling improvements
 
 
