@@ -182,7 +182,8 @@ int ef_shrub_queue_open(struct ef_shrub_queue* queue,
                         size_t buffer_count,
                         size_t fifo_size,
                         int client_fifo_fd,
-                        int qid)
+                        int qid,
+                        bool use_interrupts)
 {
   int rc;
 
@@ -210,7 +211,7 @@ int ef_shrub_queue_open(struct ef_shrub_queue* queue,
                                  qid,
                                  queue->shared_fds[EF_SHRUB_FD_BUFFERS],
                                  queue->buffer_count,
-                                 false, true);
+                                 false, use_interrupts);
   if (rc < 0)
     goto fail_queue_attach;
   

@@ -125,7 +125,8 @@ out:
 int ef_shrub_client_open(struct ef_shrub_client* client,
                          void* buffers,
                          const char* server_addr,
-                         int qid)
+                         int qid,
+                         bool use_interrupts)
 {
   int rc;
   struct ef_shrub_shared_metrics metrics;
@@ -143,6 +144,7 @@ int ef_shrub_client_open(struct ef_shrub_client* client,
   request.server_version = EF_SHRUB_VERSION;
   request.type = EF_SHRUB_REQUEST_QUEUE;
   request.queue.qid = qid;
+  request.queue.use_interrupts = use_interrupts;
   rc = ef_shrub_socket_send(client->socket, &request, sizeof(request));
   if( rc < 0 )
     goto fail_request;

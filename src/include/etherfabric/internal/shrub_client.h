@@ -40,6 +40,8 @@ int ef_shrub_client_request_token(const char *server_addr,
  * client:      pointer to the structure for managing the connection
  * buffers:     location to map the buffer memory, NULL for arbitrary location
  * server_addr: the address for the server, typically a filesystem path
+ * qid:         hardware QID to attach to
+ * use_irqs:    whether we expect to use interrupts
  *
  * Returns zero on success, or negative error codes including
  *  -ENOMEM       memory allocation failed
@@ -51,7 +53,8 @@ int ef_shrub_client_request_token(const char *server_addr,
 int ef_shrub_client_open(struct ef_shrub_client* client,
                          void* buffers,
                          const char* server_addr,
-                         int qid);
+                         int qid,
+                         bool use_irqs);
 
 /* Close the client connection.
  * This will implicitly release all buffers acquired from the connection.

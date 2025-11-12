@@ -295,7 +295,8 @@ void efct_ubufs_local_attach_internal(ef_vi* vi, int ix, int qid, unsigned n_sup
   post_buffers(vi, ix);
 }
 
-int efct_ubufs_shared_attach_internal(ef_vi* vi, int ix, int qid, void* superbuf)
+int efct_ubufs_shared_attach_internal(ef_vi* vi, int ix, int qid,
+                                      void* superbuf, bool use_interrupts)
 {
   int rc;
   struct ef_shrub_client* client = &get_ubufs(vi)->q[ix].shrub_client;
@@ -318,7 +319,8 @@ int efct_ubufs_shared_attach_internal(ef_vi* vi, int ix, int qid, void* superbuf
 
   attach_path[sizeof(attach_path) - 1] = '\0';
 
-  rc = ef_shrub_client_open(client, superbuf, attach_path, qid);
+  rc = ef_shrub_client_open(client, superbuf, attach_path, qid,
+                            use_interrupts);
   if ( rc < 0 ) {
     LOG(ef_log("%s: ERROR initializing shrub client! rc=%d", __FUNCTION__, rc));
     return rc;
@@ -399,7 +401,7 @@ static int efct_ubufs_attach(ef_vi* vi,
 
   if( shared_mode ) {
     void* superbufs = (void*)efct_superbuf_access(vi, ix, 0);
-    rc = efct_ubufs_shared_attach_internal(vi, ix, qid, superbufs);
+    rc = efct_ubufs_shared_attach_internal(vi, ix, qid, superbufs, false);
     if( rc < 0 ) {
       LOGVV(ef_log("%s: efct_ubufs_shared_attach_internal %d", __FUNCTION__, rc));
       goto fail;

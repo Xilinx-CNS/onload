@@ -148,7 +148,7 @@ static void open_queue(void)
   STATE_ALLOC(struct ef_shrub_queue, queue_);
   queue = queue_;
   ef_shrub_queue_open(queue, vi, buffer_bytes, buffer_count, fifo_size,
-                      client_fifo_fd, qid);
+                      client_fifo_fd, qid, false);
   STATE_STASH(queue);
 }
 
@@ -180,7 +180,7 @@ static void test_shrub_queue_open(void)
   int rc;
   struct ef_shrub_queue queue;
   rc = ef_shrub_queue_open(&queue, vi, buffer_bytes, buffer_count, fifo_size,
-                           client_fifo_fd, qid);
+                           client_fifo_fd, qid, false);
   CHECK(rc, ==, 0);
   CHECK(queue.shared_fds[EF_SHRUB_FD_BUFFERS], ==, buffer_fd);
   CHECK(queue.shared_fds[EF_SHRUB_FD_SERVER_FIFO], ==, server_fifo_fd);

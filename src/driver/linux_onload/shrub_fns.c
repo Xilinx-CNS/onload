@@ -86,7 +86,8 @@ MODULE_PARM_DESC(shrub_controller_path,
                  "Sets the path to the shrub_controller binary. Defaults to "
                  DEFAULT_SHRUB_CONTROLLER_PATH" if empty.");
 
-static int shrub_spawn_server(char* controller_id, bool debug)
+static int shrub_spawn_server(char* controller_id, bool debug,
+                              bool use_interrupts)
 {
   int rc = 0;
   char* path;
@@ -97,6 +98,7 @@ static int shrub_spawn_server(char* controller_id, bool debug)
     "-D",
     "-K",
     debug ? "-d" : NULL,
+    use_interrupts ? "-i" : NULL,
     NULL
   };
   char* envp_flags = "";
@@ -149,7 +151,8 @@ int oo_shrub_spawn_server(ci_private_t *priv, void *arg) {
   rc = snprintf(controller_id, sizeof(controller_id), "%u", shrub_data->controller_id);
   if ( rc < 0 || rc >= sizeof(controller_id) )
     return -EINVAL;
-  return shrub_spawn_server(controller_id, shrub_data->debug);
+  return shrub_spawn_server(controller_id, shrub_data->debug,
+                            shrub_data->use_interrupts);
 }
 
 int oo_shrub_set_sockets(ci_private_t *priv, void* arg) {

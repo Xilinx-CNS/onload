@@ -447,6 +447,7 @@ struct oo_wakeup_eps {
 typedef struct {
   ci_uint32 controller_id;
   ci_uint32 debug;
+  ci_uint32 use_interrupts;
 } shrub_ioctl_data_t;
 
 typedef struct {

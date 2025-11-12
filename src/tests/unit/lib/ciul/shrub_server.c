@@ -23,6 +23,7 @@ static const char server_addr[] = "path/to/server/socket";
 static const size_t buffer_bytes = 64;
 static const size_t buffer_count = 32;
 static const unsigned shared_rxq_token = 32435768; /* arbitrary */
+static const bool shrub_use_interrupts = false;
 
 static struct epoll_event* epoll_event;
 static int last_accept_fd = 42; /* arbitrary */
@@ -116,6 +117,7 @@ int ef_shrub_server_recv(int fd, void* data, size_t bytes)
   switch(shrub_request_type) {
     case EF_SHRUB_REQUEST_QUEUE:
       req->queue.qid = ++last_qid;
+      req->queue.use_interrupts = shrub_use_interrupts;
       break;
     default:
       break;
@@ -150,13 +152,15 @@ int ef_shrub_queue_open(struct ef_shrub_queue* queue,
                         size_t buffer_count_,
                         size_t fifo_size,
                         int client_fifo_fd,
-                        int qid)
+                        int qid,
+                        bool use_interrupts)
 {
   CHECK(vi_, ==, vi);
   CHECK(buffer_bytes_, ==, buffer_bytes);
   CHECK(buffer_count_, ==, buffer_count);
   CHECK(fifo_size, >=, buffer_count);
   CHECK(qid, ==, last_qid);
+  CHECK(use_interrupts, ==, shrub_use_interrupts);
 
   queue->buffer_bytes = buffer_bytes;
   queue->buffer_count = buffer_count;
@@ -258,7 +262,8 @@ static void init_test(void)
 
 static void open_server(void)
 {
-  ef_shrub_server_open(vi, &server, server_addr, buffer_bytes, buffer_count);
+  ef_shrub_server_open(vi, &server, server_addr, buffer_bytes, buffer_count,
+                       shrub_use_interrupts);
   STATE_CHECK(calls, resource_op, 1);
   STATE_REVERT(calls);
 }
@@ -341,7 +346,8 @@ static void test_shrub_server_open(void)
 
   init_test();
 
-  rc = ef_shrub_server_open(vi, &server, server_addr, buffer_bytes, buffer_count);
+  rc = ef_shrub_server_open(vi, &server, server_addr, buffer_bytes,
+                            buffer_count, shrub_use_interrupts);
   CHECK(rc, ==, 0);
   STATE_CHECK(calls, sockets_open, 1);
   STATE_CHECK(calls, remove, 1);

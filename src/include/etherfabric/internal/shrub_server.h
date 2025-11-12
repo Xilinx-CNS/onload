@@ -13,6 +13,7 @@
 #define __CI_CIUL_SHRUB_SERVER_H__
 
 #include <stddef.h>
+#include <stdbool.h>
 struct ef_vi;
 
 /* Opaque structure used to manage a server */
@@ -27,6 +28,7 @@ struct ef_shrub_server;
  * buffer_bytes: the size of each buffer that the server will provide
  * buffer_count: the total number of buffers to allocate
  * qid:          Queue to attach onto.
+ * use_irqs:     Whether this server should use interrupts
  * 
  * Returns zero on success, or a negative error code including
  *  -ENOMEM memory allocation failed
@@ -36,7 +38,8 @@ int ef_shrub_server_open(struct ef_vi* vi,
                          struct ef_shrub_server** server_out,
                          const char* server_addr,
                          size_t buffer_bytes,
-                         size_t buffer_count);
+                         size_t buffer_count,
+                         bool use_irqs);
 
 /* Shut down the server and destroy the opaque structure. This will close
  * all client connections, although shared buffers and other resources may

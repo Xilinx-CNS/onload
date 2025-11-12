@@ -1090,10 +1090,13 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
     int rc;
     int hugepages = 0;
     int superbufs;
-
     /* FIXME ON-16391 avoid the arch check here */
     bool shrub = vi->nic_type.arch == EF_VI_ARCH_EF10CT &&
                  (token == efrm_pd_shared_rxq_token_get(pd));
+    /* We always request interrupts if we aren't using shrub, but if we are
+     * using shrub then we only request them if the netif option is set. */
+    bool interrupt_req = !shrub || NI_OPTS_TRS(trs).shrub_use_interrupts;
+
     if( ! shrub )
       hugepages = max(1,
                       DIV_ROUND_UP(NI_OPTS_TRS(trs).rxq_size * EFCT_PKT_STRIDE,
@@ -1118,7 +1121,8 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
     if (shrub) {
       LOG_NC(ci_log("%s: using shrub for queue %d", __func__, rxq));
       rc = efct_ubufs_shared_attach_internal(vi, qix, rxq,
-                                             vi->efct_rxqs.q[qix].superbufs);
+                                             vi->efct_rxqs.q[qix].superbufs,
+                                             interrupt_req);
       if( rc < 0 ) {
         if( rc != -EINTR )
           LOG_E(ci_log("%s: ERROR: efct_ubufs_shared_attach_internal failed (%d)",
@@ -1132,7 +1136,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
 
     rc = efrm_rxq_alloc(vi_rs, rxq,
                         nic->flags & NIC_FLAG_RX_KERNEL_SHARED ? qix : -1,
-                        true, true, hugepages, trs->trs_efct_alloc,
+                        true, interrupt_req, hugepages, trs->trs_efct_alloc,
                         &trs->nic[intf_i].thn_efct_rxq[qix]);
     if( rc < 0 ) {
       if( rc != -EINTR )

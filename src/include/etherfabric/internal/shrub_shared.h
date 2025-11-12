@@ -45,7 +45,7 @@ static inline uint32_t ef_shrub_buffer_sbseq(ef_shrub_buffer_id id)
 }
 
 /* Protocol version, to check compatibility between client and server */
-#define EF_SHRUB_VERSION 4
+#define EF_SHRUB_VERSION 5
 #define SHRUB_ERR_INCOMPATIBLE_VERSION -1000
 
 /* An identifier that does not represent a buffer, used to indicate empty
@@ -116,6 +116,8 @@ struct ef_shrub_token_response {
 struct ef_shrub_queue_request {
   /* Queue ID that the client intends to connect to */
   uint64_t qid;
+  /* Whether we expect to use interrupts */
+  uint64_t use_interrupts;
 };
 
 /* This structure is sent to the shrub server to make various requests. */
