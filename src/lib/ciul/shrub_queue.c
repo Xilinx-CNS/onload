@@ -15,11 +15,14 @@ struct ef_shrub_queue_buffer
   int fifo_index; /* Valid if ref_count is non-zero */
 };
 
-/* Make a munged id value suitable for writing into the outgoing fifo */
-static ef_shrub_buffer_id make_buffer_id(int index, bool sentinel)
+/* Make a munged id value suitable for writing into the outgoing fifo
+ * Format: [sbseq:32][sentinel:1][index:31]
+ */
+static ef_shrub_buffer_id make_buffer_id(int index, bool sentinel,
+                                         uint32_t sbseq)
 {
   EF_VI_ASSERT(index >= 0);
-  return (sentinel << 31) | index;
+  return ((uint64_t)sbseq << 32) | ((uint64_t)sentinel << 31) | (uint64_t)index;
 }
 
 static bool fifo_has_space(struct ef_shrub_queue* queue)
@@ -162,7 +165,7 @@ static void poll_fifo(struct ef_shrub_queue* queue)
 
     int fifo_index = queue->fifo_index;
     assert(queue->fifo[fifo_index] == EF_SHRUB_INVALID_BUFFER);
-    queue->fifo[fifo_index] = make_buffer_id(buffer_index, sentinel);
+    queue->fifo[fifo_index] = make_buffer_id(buffer_index, sentinel, sbseq);
 
     struct ef_shrub_queue_buffer* buffer = &queue->buffers[buffer_index];
     assert(buffer->ref_count == 0);

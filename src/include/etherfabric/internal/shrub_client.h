@@ -62,13 +62,16 @@ void ef_shrub_client_close(struct ef_shrub_client* client);
  *
  * client:    connection providing the buffer
  * buffer_id: provides an identifier to be used when releasing the buffer
+ * sentinel:  sentinel value for the buffer
+ * sbseq:     superbuf sequence number associated with the buffer
  *
  * Returns zero on success, or negative error codes including
  *  -EAGAIN no buffers available
  */
 int ef_shrub_client_acquire_buffer(struct ef_shrub_client* client,
                                    uint32_t* buffer_id,
-                                   bool* sentinel);
+                                   bool* sentinel,
+                                   uint32_t* sbseq);
 
 /* Indicate that the buffer is no longer needed.
  *
@@ -93,4 +96,3 @@ ef_shrub_client_get_state(const struct ef_shrub_client* client)
 }
 
 #endif
-

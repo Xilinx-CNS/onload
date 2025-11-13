@@ -164,19 +164,21 @@ static void post_buffers(ef_vi* vi, int ix)
     EF10CT_STATS_INC(vi, ix, post_fifo_full);
 }
 
-static int efct_ubufs_next_shared(ef_vi* vi, int ix, bool* sentinel, unsigned* sbseq)
+static int efct_ubufs_next_shared(ef_vi* vi, int ix, bool* sentinel,
+                                  unsigned* sbseq)
 {
   struct efct_ubufs_rxq* rxq = &get_ubufs(vi)->q[ix];
-  ef_vi_efct_rxq_state* state = &vi->ep_state->rxq.efct_state[ix];
+  uint32_t buffer_index;
+  uint32_t shrub_sbseq;
 
-  ef_shrub_buffer_id id;
-  int rc = ef_shrub_client_acquire_buffer(&rxq->shrub_client, &id, sentinel);
+  int rc = ef_shrub_client_acquire_buffer(&rxq->shrub_client, &buffer_index,
+                                          sentinel, &shrub_sbseq);
   if ( rc < 0 ) {
     EF10CT_STATS_INC(vi, ix, acquire_failures);
     return rc;
   }
-  *sbseq = state->sbseq++;
-  return id;
+  *sbseq = shrub_sbseq;
+  return buffer_index;
 }
 
 static int efct_ubufs_next_local(ef_vi* vi, int ix, bool* sentinel, unsigned* sbseq)

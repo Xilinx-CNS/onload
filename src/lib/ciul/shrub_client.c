@@ -185,7 +185,8 @@ int ef_shrub_client_refresh_mappings(const struct ef_shrub_client* client,
 
 int ef_shrub_client_acquire_buffer(struct ef_shrub_client* client,
                                    uint32_t* buffer_id,
-                                   bool* sentinel)
+                                   bool* sentinel,
+                                   uint32_t* sbseq)
 {
   struct ef_shrub_client_state* state = get_state(client);
   int i = state->server_fifo_index;
@@ -198,6 +199,7 @@ int ef_shrub_client_acquire_buffer(struct ef_shrub_client* client,
 
   *buffer_id = ef_shrub_buffer_index(id);
   *sentinel = ef_shrub_buffer_sentinel(id);
+  *sbseq = ef_shrub_buffer_sbseq(id);
   return 0;
 }
 

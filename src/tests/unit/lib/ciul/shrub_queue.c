@@ -29,6 +29,7 @@ static struct ef_shrub_queue* queue;
 static int buffer_seq = 1234; // sequence number, initially arbitrary
 unsigned used_buffers = 0; // bitmask, initially unused
 unsigned buffer_sentinels = 0xaaaaaaaa; // bitmask, initially arbitrary
+static uint32_t buffer_sbseqs[32]; // Track sbseq for each buffer
 
 static int buffer_sentinel(int index)
 {
@@ -37,7 +38,8 @@ static int buffer_sentinel(int index)
 
 static ef_shrub_buffer_id buffer_id(int index)
 {
-  return index | (buffer_sentinel(index) << 31);
+  /* Use the actual sbseq that was assigned to this buffer */
+  return ((uint64_t)buffer_sbseqs[index] << 32) | ((uint64_t)buffer_sentinel(index) << 31) | (uint64_t)index;
 }
 
 int ef_shrub_server_memfd_create(const char* name, size_t size, bool huge)
@@ -103,6 +105,7 @@ static int mock_next(struct ef_vi* vi_, int qix_, bool* sentinel, unsigned* sbse
       buffer_sentinels ^= bit;
       *sentinel = buffer_sentinel(index);
       *sbseq = buffer_seq++;
+      buffer_sbseqs[index] = *sbseq;
       return index;
     }
   }
