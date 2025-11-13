@@ -97,8 +97,10 @@ static int shrub_spawn_server(char* controller_id, bool debug,
     controller_id,
     "-D",
     "-K",
-    debug ? "-d" : NULL,
-    use_interrupts ? "-i" : NULL,
+    /* slots for extra args */
+    NULL,
+    NULL,
+    /* terminator */
     NULL
   };
   char* envp_flags = "";
@@ -106,10 +108,22 @@ static int shrub_spawn_server(char* controller_id, bool debug,
     envp_flags,
     NULL
   };
+  /* This must be the index of the first NULL slot in the argv array */
+  int extra_arg_idx = 5;
 
   path = kmalloc(PATH_MAX, GFP_KERNEL);
   if ( !path )
     return -ENOMEM;
+
+  if( debug )
+    argv[extra_arg_idx++] = "-d";
+
+  if( use_interrupts )
+    argv[extra_arg_idx++] = "-i";
+
+  /* We must create enough slots for extra arguments we pass to the shrub
+   * controller, as otherwise we may not terminate the array correctly. */
+  BUG_ON(extra_arg_idx >= (sizeof(argv) / sizeof(argv[0])));
 
   spin_lock(&shrub_lock);
   strncpy(path, shrub_get_controller_path(), PATH_MAX);
