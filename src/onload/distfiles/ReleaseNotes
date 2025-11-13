@@ -28,31 +28,28 @@ Linux distribution support
 AMD Solarflare(TM) X4 Series Ethernet Adapter
 ---------------------------------------------
 
-This release adds support for the X4 adapter. The following features will
-benefit from improved support in future versions of Onload:
+This release adds support for the X4 adapter.
 
-- NIC reset is not handled. A driver reload is required post reset.
-- Filter handling when interfaces change state does not operate correctly.
+- NIC reset: A driver reload is required following an adapter reset.
+- Filter re-insertion when interfaces change state is not supported.
 - Shared queues (shrub) have associated recommendations for effective use.
 
 X4 Datapath Restrictions
 ------------------------
 
-- The Wire Order API (WODA) is only guaranteed to operate correctly where
-  only the Enterprise RX path is selected (EF_RX_DATAPATH=enterprise)
+- The Wire Order API (WODA) is only guaranteed when only the Enterprise RX path
+  is selected (EF_RX_DATAPATH=enterprise)
 - Application clustering (SO_REUSEPORT/EF_CLUSTER_SIZE) is only supported with
   EF_RX_DATAPATH=enterprise
 - Sharing an event queue between multiple VIs is not supported when using the
-  express datapath. This limitation also applies to X3 network cards.
+  express datapath. This applies to X3 and X4 network cards.
 
 X4 Diagnostics
 --------------
 
 The onload_shrubdump tool provides diagnostic information from shared
-reusable buffer controllers but the format of its output cannot be
-relied upon to be consistent between this release and future releases.
-The debug logging behaviour of the controllers themselves is also subject to
-change.
+reusable buffer controllers. Its output format and debug logging may change
+in future releases.
 
 X4 Known Issues
 ---------------
@@ -149,12 +146,11 @@ Please note that when using SDCI with steering tags, a NIC reset may result in
 incorrect steering tags being used, which may degrade performance.
 
 
-X2 Rx Timestamping with very old firmware versions
---------------------------------------------------
+X2 Rx Timestamping with v7.1 firmware or older
+----------------------------------------------
 
-A workaround for handling v7.1 firmware on X2 has been removed, which would
-lead to inaccurate timestamps if that firmware was in use. Anyone using this
-outdated firmware should update to a supported version.
+Using firmware version v7.1 or older with this release will lead to
+inaccurate timestamps. Updating to a recent firmware version addresses this.
 
 
 Indirect Branch Tracking (IBT) Incompatibility
@@ -192,13 +188,6 @@ A future feature release MAY drop the provision of an OS-independent
 'tarball' release package. In the meantime, the OS-specific packages (source
 RPM and source DEB) are recommended for the best installation experience.
 Docker images are also available via the Onload Operator v3.0 for Kubernetes.
-
-Operating System package formats and their tools provide the best integration
-for user systems and allow dependencies between Onload, related components
-(TCP Direct, the control plane, sfc net driver, sfptpd) and the Operating
-System itself to be resolved clearly and reliably. The OS-independent
-'tarball' method requires more attention to detailed preparatory instructions
-in the user guide.
 
 Please contact your sales or support representative if you have any feedback
 on this proposed change in direction for packaging support.
