@@ -1308,9 +1308,7 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
   bool suppress_events = false;
   bool real_evq = params->interrupt_req &&
                   params->wakeup_instance < ef10ct->evq_n;
-  int q_size = roundup_pow_of_two(
-                        DIV_ROUND_UP(EFCT_RX_SUPERBUF_BYTES, EFCT_PKT_STRIDE) *
-                        CI_EFCT_SUPERBUFS_PER_PAGE * params->n_hugepages);
+  int q_size;
   struct oo_hugetlb_page* pages = NULL;
   bool add_to_wakeup_list = false;
 
@@ -1402,6 +1400,9 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
     EFHW_TRACE("%s: Using non-shared evq 0x%x", __func__, evq);
   }
 
+  q_size = roundup_pow_of_two(
+                        DIV_ROUND_UP(EFCT_RX_SUPERBUF_BYTES, EFCT_PKT_STRIDE) *
+                        CI_EFCT_SUPERBUFS_PER_PAGE * params->n_hugepages);
   rc = ef10ct_rxq_init_mcdi(nic, q_size, evq, rxq_num, rxq_handle,
                             suppress_events);
   if( rc < 0 ) {
