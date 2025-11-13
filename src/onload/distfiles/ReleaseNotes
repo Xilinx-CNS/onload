@@ -1,10 +1,10 @@
 Onload-9.1.0
 ============
 
- This is a feature preview of Onload including a new version of the
- sfc net driver.
-
- This release is not generally supported for acceleration use cases.
+ This is a feature release of Onload adding support for the
+ AMD Solarflare(TM) X4 Series Ethernet Adapter. The release
+ includes a new version of the sfc net driver and various
+ features and fixes.
 
  Please see the ChangeLog for a full list of changes.
 
@@ -32,9 +32,8 @@ This release adds support for the X4 adapter. The following features will
 benefit from improved support in future versions of Onload:
 
 - NIC reset is not handled. A driver reload is required post reset.
-- Filter handling when interfaces change state does not operate correctly
-- Shared queues (shrub) are not fully validated and are not yet supported for
-  production use
+- Filter handling when interfaces change state does not operate correctly.
+- Shared queues (shrub) have associated recommendations for effective use.
 
 X4 Datapath Restrictions
 ------------------------

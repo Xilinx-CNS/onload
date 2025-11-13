@@ -4,6 +4,7 @@ onload-9.1.0
 Update sfc net driver to v6.2.0
 
 Add support for:
+ - AMD Solarflare(TM) X4 Series Ethernet Adapter
  - Red Hat Enterprise Linux 9.7
  - Red Hat Enterprise Linux 10.1
  - Debian 13 "Trixie"
