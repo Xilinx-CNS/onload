@@ -58,7 +58,7 @@ X4 Known Issues
 
 - A future release will improve configurability and the performance of
   shrub in interrupt driven mode.
-- This release supports use cases with a single shrub contoller. Support
+- This release supports use cases with a single shrub controller. Support
   for multiple shrub controllers is planned for a future release.
 - Some newly-introduced statistics for the Express path are placeholders
   that have not yet been activated.
