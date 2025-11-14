@@ -6,6 +6,12 @@ Onload-9.1.0
  includes a new version of the sfc net driver and various
  features and fixes.
 
+ This release fully supports X2 and X4 adapters. Onload support
+ for X3 is 'beta' in this software release. It is recommended
+ that X3 users target migration to the next Onload update.
+
+ It is recommended to read the X4 Migration Guide.
+
  Please see the ChangeLog for a full list of changes.
 
 
@@ -30,22 +36,18 @@ AMD Solarflare(TM) X4 Series Ethernet Adapter
 
 This release adds support for the X4 adapter.
 
-- NIC reset: A driver reload is required following an adapter reset.
-- Filter re-insertion when interfaces change state is not supported.
-- Shared queues (shrub) have associated recommendations for effective use.
+X4 Datapath Selection
+---------------------
 
-X4 Datapath Restrictions
-------------------------
-
-- The Wire Order API (WODA) is only guaranteed when only the Enterprise RX path
-  is selected (EF_RX_DATAPATH=enterprise)
+- The Wire Order API (WODA) is only available for the Enterprise RX path
+  (EF_RX_DATAPATH=enterprise)
 - Application clustering (SO_REUSEPORT/EF_CLUSTER_SIZE) is only supported with
   EF_RX_DATAPATH=enterprise
 - Sharing an event queue between multiple VIs is not supported when using the
   express datapath. This applies to X3 and X4 network cards.
 
-X4 Diagnostics
---------------
+X4 Shrub Diagnostics
+--------------------
 
 The onload_shrubdump tool provides diagnostic information from shared
 reusable buffer controllers. Its output format and debug logging may change
@@ -54,19 +56,12 @@ in future releases.
 X4 Known Issues
 ---------------
 
-- The X4 enterprise datapath does not differentiate between CRC errors and
-  truncation errors in RX discard events. As a result, these will be reported
-  as EF_EVENT_RX_DISCARD_CRC_BAD in EF_EVENT_TYPE_RX_DISCARD for ef_vi users.
-  This will be visible to onload users via the rx_discard_crc_bad statistic in
-  stackdump. A side effect of this change is that truncation errors may be
-  mischaracterised as CRC errors, including on older network cards.
-
-
-AMD Alveo(TM) X3 Series Low Latency Ethernet Adapter
-----------------------------------------------------
-
-The minimum compatible X3522 driver version to match the Onload supported OS
-list is v1.6.8.0.
+- A future release will improve configurability and the performance of
+  shrub in interrupt driven mode.
+- This release supports use cases with a single shrub contoller. Support
+  for multiple shrub controllers is planned for a future release.
+- Some newly-introduced statistics for the Express path are placeholders
+  that have not yet been activated.
 
 
 New ef_receive_poll() API call
@@ -99,51 +94,8 @@ Smart Data Cache Injection
 --------------------------
 
 Smart Data Cache Injection (SDCI) support has been added to allow steering of
-network packets directly to a core's L2 cache. Currently, SDCI is limited to
-X2/X4 NICs and must be configured as documented below. The steering tag used is
-such that the data is steered to the core complex that the VI is created on.
-
-SDCI support in the sfc net driver requires a kernel with TPH support
-(i.e., CONFIG_PCIE_TPH=y), otherwise the request for SDCI support will be
-overriden. To verify whether SDCI support is enabled after compilation, check
-the compilation log for lines of the format:
-
-    Kernel does not support PCIE_TPH
-    TPH functionality will be disabled
-
-Also be aware that use of an onload with SDCI support running on a machine that
-lacks CPU support will result in verbose logging from the sfc net driver when
-it fails to get the steering tags for each of its channels. This will result
-in messages of the following format being added to the kernel log (dmesg):
-
-    pcie_tph_get_cpu_st error(-22) channel <intf-name>-<channel>, cpu <cpu>
-
-On systems where SDCI is not supported by the PCIe root port the error logged
-is:
-
-    failed enabling TPH support
-
-To use this feature with onload, the EF_TPH_MODE environment variable should be
-used, which has the following valid values:
-
- - Disable SDCI (default)           : EF_TPH_MODE=0
- - Enable SDCI without steering tags: EF_TPH_MODE=1
- - Enable SDCI with steering tags   : EF_TPH_MODE=2
-
-To use this feature with ef_vi, one can provide the following VI flags at VI
-allocation time:
-
- - Enable SDCI without steering tags: EF_VI_ENABLE_TPH
- - Enable SDCI with steering tags   : (EF_VI_ENABLE_TPH | EF_VI_TPH_TAG_MODE)
-
-A more coarse-grained solution also exists at the application level, which will
-apply to all VIs, using the EF_VI_EXTRA_VI_FLAGS environment variable:
-
- - Enable SDCI without steering tags: EF_VI_EXTRA_VI_FLAGS=tph_enable
- - Enable SDCI with steering tags   : EF_VI_EXTRA_VI_FLAGS=tph_enable,tph_mode
-
-Please note that when using SDCI with steering tags, a NIC reset may result in
-incorrect steering tags being used, which may degrade performance.
+network packets directly to a core's L2 cache. Currently, SDCI is supported on
+X2/X4 NICs and must be configured as documented in the X4 Migration Guide.
 
 
 X2 Rx Timestamping with v7.1 firmware or older
@@ -184,38 +136,19 @@ together from the Source RPM.
 Deprecation of tarball installation method (removal under consideration)
 ------------------------------------------------------------------------
 
-A future feature release MAY drop the provision of an OS-independent
-'tarball' release package. In the meantime, the OS-specific packages (source
-RPM and source DEB) are recommended for the best installation experience.
-Docker images are also available via the Onload Operator v3.0 for Kubernetes.
-
-Please contact your sales or support representative if you have any feedback
-on this proposed change in direction for packaging support.
+A future feature release might drop the provision of an OS-independent
+'tarball' release package. Source RPM and source DEB packages are recommended
+for the best installation experience. Docker images are also available via the
+Onload Operator v3.0 for Kubernetes.
 
 
-Transmit error recovery improvements
-------------------------------------
+Change in reporting of CRC and truncation RX discards
+-----------------------------------------------------
 
-Transmit error events, reported at the ef_vi level via EF_EVENT_TYPE_TX_ERROR,
-benefit from improved support. Onload is now able to recover from such events
-and ef_vi is able to handle these events without needing to entirely recreate
-the VI that experienced the TX error event. This is only supported on the X4
-express datapath.
-
-Recovery from such events in onload is enabled by default, and can be disabled
-by setting EF_ENABLE_TX_ERROR_RECOVERY=0. Handling of TX error events in ef_vi
-is described and documented in the API functions:
-- ef_vi_reinit_txq_post_error
-- ef_vi_for_each_tx_error_failed_transmit
-
-
-Change in behaviour for CRC and truncation RX discards
-------------------------------------------------------
-
-To support X4, which is unable to differentiate between these error types in RX
-discard events, any NIC using the ef10 architecture, X2 or SFN8k, will also not
-differentiate between these error types. This only affects users with an MTU of
-larger than 1500.
+Ef_vi and Onload now report both CRC and truncated Rx discard events together
+as EF_EVENT_RX_DISCARD_CRC_BAD through ef_vi, and in the rx_discard_crc_bad
+onload_stackdump statistic, except with X3, when behaviour is unchanged. This
+is only relevant when MTU exceeds 1500.
 
 
 (c) Copyright 2025 Advanced Micro Devices, Inc.
