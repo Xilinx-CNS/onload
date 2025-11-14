@@ -20,6 +20,7 @@ struct ef_shrub_server {
   size_t client_fifo_offset;
   int client_fifo_fd;
   unsigned pd_excl_rxq_tok;
+  bool use_interrupts;
   char socket_path[EF_SHRUB_SERVER_SOCKET_LEN];
   struct ef_shrub_connection* closed_connections;
   struct ef_shrub_connection* pending_connections;
@@ -91,7 +92,7 @@ find_queue(struct ef_shrub_server* server, uint64_t qid)
 
 static int server_request_queue(struct ef_shrub_server* server,
                                 struct ef_shrub_connection* connection,
-                                int qid)
+                                int qid, bool use_interrupts)
 {
   struct ef_shrub_queue* queue;
   int rc;
@@ -101,6 +102,9 @@ static int server_request_queue(struct ef_shrub_server* server,
 
   if( connection->queue != NULL )
     return -EALREADY;
+
+  if( use_interrupts != server->use_interrupts )
+    return -EINVAL;
 
   remove_connection(&server->pending_connections, connection);
 
@@ -112,7 +116,7 @@ static int server_request_queue(struct ef_shrub_server* server,
     rc = ef_shrub_queue_open(queue, server->vi,
                              server->buffer_bytes, server->buffer_count,
                              fifo_size(server), server->client_fifo_fd,
-                             qid);
+                             qid, server->use_interrupts);
     if( rc < 0 )
       return rc;
   }
@@ -209,7 +213,8 @@ static int server_request_received(struct ef_shrub_server* server,
      * the epoll set */
     goto out_close;
   case EF_SHRUB_REQUEST_QUEUE:
-    rc = server_request_queue(server, connection, request.queue.qid);
+    rc = server_request_queue(server, connection, request.queue.qid,
+                              request.queue.use_interrupts);
     if( rc < 0 )
       goto out_close;
 
@@ -255,7 +260,8 @@ int ef_shrub_server_open(struct ef_vi* vi,
                          struct ef_shrub_server** server_out,
                          const char* server_addr,
                          size_t buffer_bytes,
-                         size_t buffer_count)
+                         size_t buffer_count,
+                         bool use_irqs)
 {
   struct ef_shrub_server *server;
   int rc;
@@ -284,6 +290,7 @@ int ef_shrub_server_open(struct ef_vi* vi,
 
   server->buffer_count = buffer_count;
   server->buffer_bytes = buffer_bytes;
+  server->use_interrupts = use_irqs;
 
   *server_out = server;
   return 0;

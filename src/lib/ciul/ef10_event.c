@@ -58,7 +58,8 @@ typedef ci_qword_t ef_vi_event;
 ef_vi_inline unsigned discard_type(uint64_t error_bits)
 {
   const uint64_t l2_errors = ( (1llu << ESF_DZ_RX_ECC_ERR_LBN) |
-                               (1llu << ESF_DZ_RX_ECRC_ERR_LBN) );
+                               (1llu << ESF_DZ_RX_ECRC_ERR_LBN) |
+                               (1llu << ESF_DZ_RX_TRUNC_ERR_LBN) );
   const uint64_t l3_errors = ( (1llu << ESF_DZ_RX_TCPUDP_CKSUM_ERR_LBN) |
                                (1llu << ESF_DZ_RX_IPCKSUM_ERR_LBN) );
 

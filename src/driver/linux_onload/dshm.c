@@ -56,6 +56,13 @@ struct oo_dshm_buffer {
 };
 
 
+/* Linked list node for tracking users of a dshm segment */
+struct oo_dshm_list {
+  struct oo_dshm_buffer* buffer;
+  struct oo_dshm_list* next;
+};
+
+
 static inline int /* bool */
 validate_shm_class(ci_int32 shm_class)
 {
@@ -248,11 +255,26 @@ oo_dshm_free_handle_list(ci_dllist* list)
 }
 
 
+int oo_dshm_free_used(struct oo_dshm_list* head)
+{
+  /* We don't need to hold the oo_dshm_state.lock here as this list is local to
+   * this file and if we are shutting down, then we shouldn't be in a context
+   * that allows new memory maps to be created. */
+  while( head ) {
+    struct oo_dshm_list* next = head->next;
+    dshm_release(head->buffer);
+    vfree(head);
+    head = next;
+  }
+
+  return 0;
+}
+
 
 #ifdef OO_MMAP_TYPE_DSHM
 /* Maps a dshm segment into a process's address space. */
 int
-oo_dshm_mmap_impl(struct vm_area_struct* vma)
+oo_dshm_mmap_impl(struct vm_area_struct* vma, struct oo_dshm_list** used_head)
 {
   ci_uint64 map_id = OO_MMAP_OFFSET_TO_MAP_ID(VMA_OFFSET(vma));
   ci_int32 buffer_id = OO_MMAP_DSHM_BUFFER_ID(map_id);
@@ -293,8 +315,27 @@ oo_dshm_mmap_impl(struct vm_area_struct* vma)
        */
       ci_uint32 num_pages = CI_MIN((unsigned long)buffer->num_pages,
                                    map_length >> PAGE_SHIFT);
+      struct oo_dshm_list* dshm_node;
       ci_uint32 i;
-      for( i = 0, rc = 0; i < num_pages && rc == 0; ++i ) {
+
+      /* Reset rc, to allow the remapping loop to start unless we encounter
+       * another error before we reach that point. */
+      rc = 0;
+
+      dshm_node = vmalloc(sizeof(*dshm_node));
+      if( dshm_node == NULL ) {
+        OO_DEBUG_SHM(ci_log("%s: unable to allocate memory to track dshm",
+                            __FUNCTION__));
+        /* Setting rc != 0 here will skip the remapping loop below */
+        rc = -ENOMEM;
+        dshm_release(buffer);
+      } else {
+        dshm_node->buffer = buffer;
+        dshm_node->next = *used_head;
+        *used_head = dshm_node;
+      }
+
+      for( i = 0; i < num_pages && rc == 0; ++i ) {
         /* vm_insert_page() would have been simpler (and allow core dumps to
          * capture these pages), but it fails with anonymous pages */
         rc = remap_pfn_range(vma,
@@ -307,8 +348,8 @@ oo_dshm_mmap_impl(struct vm_area_struct* vma)
       OO_DEBUG_SHM(ci_log("%s: can't map buffer owned by %u", __FUNCTION__,
                           buffer->owner_euid));
       rc = -EACCES;
+      dshm_release(buffer);
     }
-    dshm_release(buffer);
   }
 
   return rc;

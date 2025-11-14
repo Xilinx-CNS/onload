@@ -101,6 +101,7 @@ typedef struct
   struct oo_cplane_handle *cp;
   int oo_fd_handle;
   bool debug_mode;
+  bool use_interrupts;
   char controller_dir[EF_SHRUB_SOCKET_DIR_LEN];
   char log_dir[EF_SHRUB_LOG_LEN];
   char config_socket[EF_SHRUB_NEGOTIATION_SOCKET_LEN];
@@ -115,6 +116,7 @@ static void usage(void)
                   "[<interface>[/<buffer_count>]]...\n");
   fprintf(stderr, "Options:\n");
   fprintf(stderr, "  -d       Enable debug mode\n");
+  fprintf(stderr, "  -i       Enable interrupts\n");
   fprintf(stderr, "  -c       Set controller_id\n");
   fprintf(stderr, "  -D       Daemonise on startup\n");
   fprintf(stderr, "  -K       Log to kmsg\n");
@@ -323,7 +325,8 @@ static int shrub_server_init(shrub_controller_config *config,
 
   rc = ef_shrub_server_open(&res->vi, &interface_config->shrub_server,
                             server_path, DEFAULT_BUFFER_SIZE,
-                            interface_config->buffer_count);
+                            interface_config->buffer_count,
+                            config->use_interrupts);
   if ( rc != 0 ) {
     ci_log("Error: shrub_controller failed to call server open");
     goto fail_server_alloc;
@@ -1051,12 +1054,15 @@ int main(int argc, char *argv[])
     }
   }
 
-  while ( (option = getopt(argc, argv, "dc:DK")) != -1 ) {
+  while ( (option = getopt(argc, argv, "dic:DK")) != -1 ) {
     switch (option)
     {
     case 'd':
       config.debug_mode = true;
       ci_log("Info: shrub_controller Debug Mode Enabled!");
+      break;
+    case 'i':
+      config.use_interrupts = true;
       break;
     case 'c':
       config.controller_id = atoi(optarg);

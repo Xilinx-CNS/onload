@@ -86,7 +86,8 @@ MODULE_PARM_DESC(shrub_controller_path,
                  "Sets the path to the shrub_controller binary. Defaults to "
                  DEFAULT_SHRUB_CONTROLLER_PATH" if empty.");
 
-static int shrub_spawn_server(char* controller_id, bool debug)
+static int shrub_spawn_server(char* controller_id, bool debug,
+                              bool use_interrupts)
 {
   int rc = 0;
   char* path;
@@ -96,7 +97,10 @@ static int shrub_spawn_server(char* controller_id, bool debug)
     controller_id,
     "-D",
     "-K",
-    debug ? "-d" : NULL,
+    /* slots for extra args */
+    NULL,
+    NULL,
+    /* terminator */
     NULL
   };
   char* envp_flags = "";
@@ -104,10 +108,22 @@ static int shrub_spawn_server(char* controller_id, bool debug)
     envp_flags,
     NULL
   };
+  /* This must be the index of the first NULL slot in the argv array */
+  int extra_arg_idx = 5;
 
   path = kmalloc(PATH_MAX, GFP_KERNEL);
   if ( !path )
     return -ENOMEM;
+
+  if( debug )
+    argv[extra_arg_idx++] = "-d";
+
+  if( use_interrupts )
+    argv[extra_arg_idx++] = "-i";
+
+  /* We must create enough slots for extra arguments we pass to the shrub
+   * controller, as otherwise we may not terminate the array correctly. */
+  BUG_ON(extra_arg_idx >= (sizeof(argv) / sizeof(argv[0])));
 
   spin_lock(&shrub_lock);
   strncpy(path, shrub_get_controller_path(), PATH_MAX);
@@ -149,7 +165,8 @@ int oo_shrub_spawn_server(ci_private_t *priv, void *arg) {
   rc = snprintf(controller_id, sizeof(controller_id), "%u", shrub_data->controller_id);
   if ( rc < 0 || rc >= sizeof(controller_id) )
     return -EINVAL;
-  return shrub_spawn_server(controller_id, shrub_data->debug);
+  return shrub_spawn_server(controller_id, shrub_data->debug,
+                            shrub_data->use_interrupts);
 }
 
 int oo_shrub_set_sockets(ci_private_t *priv, void* arg) {

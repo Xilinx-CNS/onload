@@ -8,6 +8,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <etherfabric/internal/shrub_shared.h>
 
 struct ef_shrub_queue {
@@ -32,7 +33,8 @@ int ef_shrub_queue_open(struct ef_shrub_queue* queue,
                         size_t buffer_count,
                         size_t fifo_size,
                         int client_fifo_fd,
-                        int qid);
+                        int qid,
+                        bool use_interrupts);
 
 void ef_shrub_queue_close(struct ef_shrub_queue* queue);
 void ef_shrub_queue_poll(struct ef_shrub_queue* queue);

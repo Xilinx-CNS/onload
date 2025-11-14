@@ -167,6 +167,26 @@ efct_debugfs_read_ef10ct_rxqs_state(struct seq_file *file, const void *data)
 }
 
 static int
+efct_debugfs_read_ef10ct_shared_evqs_state(struct seq_file *file,
+                                           const void *data)
+{
+  const struct efhw_nic_ef10ct *ef10ct = data;
+  int i;
+
+  for( i = 0; i < ef10ct->shared_n; i++ ) {
+    seq_printf(file, "\n---------------------\nshared_evq: %#x\n",
+                     ef10ct->shared[i].evq_id);
+    seq_printf(file, "  irq: %d\n", ef10ct->shared[i].irq);
+    seq_printf(file, "  name: %s\n", ef10ct->shared[i].name);
+    seq_printf(file, "  overflow: %#x\n", ef10ct->shared[i].overflow);
+    seq_printf(file, "  tx_flush_evs: %#x\n", ef10ct->shared[i].tx_flush_evs);
+    seq_printf(file, "  rx_flush_evs: %#x\n", ef10ct->shared[i].rx_flush_evs);
+    seq_printf(file, "  rx_evs: %#x\n", ef10ct->shared[i].rx_evs);
+  }
+
+  return 0;
+}
+static int
 efct_debugfs_read_efct_rxqs_state(struct seq_file *file, const void *data)
 {
   const struct efhw_nic_efct *efct = data;
@@ -224,6 +244,7 @@ static const struct efrm_debugfs_parameter efhw_debugfs_ef10ct_parameters[] = {
   EFRM_U32_PARAMETER(struct efhw_nic_ef10ct, evq_n),
   _EFRM_RAW_PARAMETER(hw_filters, efct_debugfs_read_ef10ct_filter_state),
   _EFRM_RAW_PARAMETER(rxqs, efct_debugfs_read_ef10ct_rxqs_state),
+  _EFRM_RAW_PARAMETER(shared, efct_debugfs_read_ef10ct_shared_evqs_state),
   {NULL},
 };
 

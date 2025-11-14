@@ -77,7 +77,11 @@ struct ef10ct_shared_kernel_evq {
   struct efhw_iopages iopages;
   uint32_t irq;
   uint32_t channel;
-  char name[IFNAMSIZ + 6];
+  char name[IFNAMSIZ + 11];
+  int overflow;
+  int tx_flush_evs;
+  int rx_flush_evs;
+  int rx_evs;
 };
 
 enum ef10ct_queue_handle_type {

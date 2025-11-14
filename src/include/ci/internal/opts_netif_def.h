@@ -1793,6 +1793,15 @@ CI_CFG_OPT("EF_SHRUB_DEBUG", shrub_debug, ci_uint32,
 "Output debug logging from shrub controller.",
            1, , 0, 0, 1, yesno)
 
+CI_CFG_OPT("EF_SHRUB_USE_INTERRUPTS", shrub_use_interrupts, ci_uint32,
+"Enable interrupt driven mode when using shrub.\n"
+"Setting this option will enable interrupts to be used with shrub. If it is "
+"not set, applications must ensure they are actively polling to ensure that "
+"data can be handled in userspace. If interrupts are not enabled and the "
+"application does not spin, we will fall back to the periodic polling timer "
+"to be woken up.",
+           1, , 1, 0, 1, yesno)
+
 CI_CFG_OPT("EF_ENABLE_TX_ERROR_RECOVERY", tx_error_recovery, ci_uint32,
 "Recover a broken TXQ after observing a TX error event.\n"
 "If we see a TX error event for any reason, then the interface that saw it "

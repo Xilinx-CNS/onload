@@ -1,10 +1,16 @@
 Onload-9.1.0
 ============
 
- This is a feature preview of Onload including a new version of the
- sfc net driver.
+ This is a feature release of Onload adding support for the
+ AMD Solarflare(TM) X4 Series Ethernet Adapter. The release
+ includes a new version of the sfc net driver and various
+ features and fixes.
 
- This release is not generally supported for acceleration use cases.
+ This release fully supports X2 and X4 adapters. Onload support
+ for X3 is 'beta' in this software release. It is recommended
+ that X3 users target migration to the next Onload update.
+
+ It is recommended to read the X4 Migration Guide.
 
  Please see the ChangeLog for a full list of changes.
 
@@ -14,64 +20,48 @@ Linux distribution support
 
  This package can be installed on:
  - Red Hat Enterprise Linux 8.10
- - Red Hat Enterprise Linux 9.4 - 9.6
- - Red Hat Enterprise Linux 10.0
+ - Red Hat Enterprise Linux 9.4 - 9.7(*)
+ - Red Hat Enterprise Linux 10.0 - 10.1(*)
  - Canonical Ubuntu Server LTS 22.04 and 24.04
  - Debian 12 "Bookworm"
+ - Debian 13 "Trixie"
  - Linux kernels 5.11 - 6.14
+
+(*) At the time of writing, RHEL 9.7 and RHEL 10.1 were in a pre-release state
+    but expected to be compatible with this Onload version.
 
 
 AMD Solarflare(TM) X4 Series Ethernet Adapter
 ---------------------------------------------
 
-This release adds support for the X4 adapter. The following features will
-benefit from improved support in future versions of Onload:
+This release adds support for the X4 adapter.
 
-- NIC reset is not handled. A driver reload is required post reset.
-- Filter handling when interfaces change state does not operate correctly
-- Multicast replication between the Express and Enterprise datapath is not
-  supported. To use multicast replication onload must be forced to use only
-  the Enterprise datapath with EF_RX_DATAPATH=enterprise. Note that when
-  this option is set unicast traffic will also be using the Enterprise
-  datapath.
-- Filter redirection is not supported, which may lead to unexpected behaviour
-  in scenerios where port numbers are reused.
+X4 Datapath Selection
+---------------------
 
-X4 Datapath Restrictions
-------------------------
-
-- The Wire Order API (WODA) is only guaranteed to operate correctly where
-  only the Enterprise RX path is selected (EF_RX_DATAPATH=enterprise)
+- The Wire Order API (WODA) is only available for the Enterprise RX path
+  (EF_RX_DATAPATH=enterprise)
 - Application clustering (SO_REUSEPORT/EF_CLUSTER_SIZE) is only supported with
   EF_RX_DATAPATH=enterprise
 - Sharing an event queue between multiple VIs is not supported when using the
-  express datapath. This limitation also applies to X3 network cards.
+  express datapath. This applies to X3 and X4 network cards.
 
-X4 Diagnostics
---------------
+X4 Shrub Diagnostics
+--------------------
 
 The onload_shrubdump tool provides diagnostic information from shared
-reusable buffer controllers but the format of its output cannot be
-relied upon to be consistent between this release and future releases.
-The debug logging behaviour of the controllers themselves is also subject to
-change.
+reusable buffer controllers. Its output format and debug logging may change
+in future releases.
 
 X4 Known Issues
 ---------------
 
-- Onload TX event processing can become starved, leading to EVQ overflow,
-  manifesting as an assertion failure or kernel panic in efct_poll_tx().
-- When an onload stack is created using the Express datapath a log message
-  is emitted warning that the queue size has been rounded up. This is because
-  the minimum queue size on X4 is higher than the default value and is
-  harmless.
-
-
-AMD Alveo(TM) X3 Series Low Latency Ethernet Adapter
-----------------------------------------------------
-
-The minimum compatible X3522 driver version to match the Onload supported OS
-list is v1.6.8.0.
+- A future release will improve configurability and the performance of
+  shrub in interrupt driven mode.
+- This release supports use cases with a single shrub controller. Support
+  for multiple shrub controllers is planned for a future release.
+- Some newly-introduced statistics for the Express path are placeholders
+  that have not yet been activated.
 
 
 New ef_receive_poll() API call
@@ -104,59 +94,15 @@ Smart Data Cache Injection
 --------------------------
 
 Smart Data Cache Injection (SDCI) support has been added to allow steering of
-network packets directly to a core's L2 cache. Currently, SDCI is limited to
-X2/X4 NICs and must be configured as documented below. The steering tag used is
-such that the data is steered to the core complex that the VI is created on.
-
-SDCI support in the sfc net driver requires a kernel with TPH support
-(i.e., CONFIG_PCIE_TPH=y), otherwise the request for SDCI support will be
-overriden. To verify whether SDCI support is enabled after compilation, check
-the compilation log for lines of the format:
-
-    Kernel does not support PCIE_TPH
-    TPH functionality will be disabled
-
-Also be aware that use of an onload with SDCI support running on a machine that
-lacks CPU support will result in verbose logging from the sfc net driver when
-it fails to get the steering tags for each of its channels. This will result
-in messages of the following format being added to the kernel log (dmesg):
-
-    pcie_tph_get_cpu_st error(-22) channel <intf-name>-<channel>, cpu <cpu>
-
-On systems where SDCI is not supported by the PCIe root port the error logged
-is:
-
-    failed enabling TPH support
-
-To use this feature with onload, the EF_TPH_MODE environment variable should be
-used, which has the following valid values:
-
- - Disable SDCI (default)           : EF_TPH_MODE=0
- - Enable SDCI without steering tags: EF_TPH_MODE=1
- - Enable SDCI with steering tags   : EF_TPH_MODE=2
-
-To use this feature with ef_vi, one can provide the following VI flags at VI
-allocation time:
-
- - Enable SDCI without steering tags: EF_VI_ENABLE_TPH
- - Enable SDCI with steering tags   : (EF_VI_ENABLE_TPH | EF_VI_TPH_TAG_MODE)
-
-A more coarse-grained solution also exists at the application level, which will
-apply to all VIs, using the EF_VI_EXTRA_VI_FLAGS environment variable:
-
- - Enable SDCI without steering tags: EF_VI_EXTRA_VI_FLAGS=tph_enable
- - Enable SDCI with steering tags   : EF_VI_EXTRA_VI_FLAGS=tph_enable,tph_mode
-
-Please note that when using SDCI with steering tags, a NIC reset may result in
-incorrect steering tags being used, which may degrade performance.
+network packets directly to a core's L2 cache. Currently, SDCI is supported on
+X2/X4 NICs and must be configured as documented in the X4 Migration Guide.
 
 
-X2 Rx Timestamping with very old firmware versions
---------------------------------------------------
+X2 Rx Timestamping with v7.1 firmware or older
+----------------------------------------------
 
-A workaround for handling v7.1 firmware on X2 has been removed, which would
-lead to inaccurate timestamps if that firmware was in use. Anyone using this
-outdated firmware should update to a supported version.
+Using firmware version v7.1 or older with this release will lead to
+inaccurate timestamps. Updating to a recent firmware version addresses this.
 
 
 Indirect Branch Tracking (IBT) Incompatibility
@@ -190,19 +136,19 @@ together from the Source RPM.
 Deprecation of tarball installation method (removal under consideration)
 ------------------------------------------------------------------------
 
-A future feature release MAY drop the provision of an OS-independent
-'tarball' release package. In the meantime, the OS-specific packages (source
-RPM and source DEB) are recommended for the best installation experience.
-Docker images are also available via the Onload Operator v3.0 for Kubernetes.
+A future feature release might drop the provision of an OS-independent
+'tarball' release package. Source RPM and source DEB packages are recommended
+for the best installation experience. Docker images are also available via the
+Onload Operator v3.0 for Kubernetes.
 
-Operating System package formats and their tools provide the best integration
-for user systems and allow dependencies between Onload, related components
-(TCP Direct, the control plane, sfc net driver, sfptpd) and the Operating
-System itself to be resolved clearly and reliably. The OS-independent
-'tarball' method requires more attention to detailed preparatory instructions
-in the user guide.
 
-Please contact your sales or support representative if you have any feedback
-on this proposed change in direction for packaging support.
+Change in reporting of CRC and truncation RX discards
+-----------------------------------------------------
+
+Ef_vi and Onload now report both CRC and truncated Rx discard events together
+as EF_EVENT_RX_DISCARD_CRC_BAD through ef_vi, and in the rx_discard_crc_bad
+onload_stackdump statistic, except with X3, when behaviour is unchanged. This
+is only relevant when MTU exceeds 1500.
+
 
 (c) Copyright 2025 Advanced Micro Devices, Inc.

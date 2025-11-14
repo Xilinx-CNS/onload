@@ -315,11 +315,12 @@ static irqreturn_t ef10ct_event_irq_handler(int irq, void *dev)
 }
 
 static int ef10ct_init_shared_irq(struct ef10ct_shared_kernel_evq *evq,
-                                  irq_handler_t handler)
+                                  irq_handler_t handler,
+                                  const struct efhw_nic *nic,
+                                  const char *name)
 {
-  /* FIXME ON-16187: Better interrupt naming */
-  snprintf(evq->name, sizeof(evq->name), "ef10ct-%d",
-           ef10ct_get_queue_num(evq->evq_id));
+  snprintf(evq->name, sizeof(evq->name), "%s-%s",
+           nic->net_dev ? nic->net_dev->name : "if", name);
 
   return request_irq(evq->irq, handler, 0, evq->name, evq);
 }
@@ -334,7 +335,12 @@ static int ef10ct_nic_create_shared_evq(struct efhw_nic *nic, int shared_ix,
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct efhw_nic_ef10ct_evq *ef10ct_evq;
-  uint page_order = 0; /* TODO: What should the size be? */
+  /* For the queue that just receives flushes we don't need much space, so
+   * just use minimum size. At the moment we don't have a way to sync RX
+   * buffer posting with EVQ poll, so we need to size the EVQ to cope with the
+   * maximum number of outstanding RX events for queues that handle RX evs.
+   * We set the queue as big as possible here. */
+  uint page_order = shared_ix == EF10CT_SHARED_NO_RX_EVS ? 0 : 6;
   int evq_id, rc, evq_num;
   struct ef10ct_shared_kernel_evq *shared_evq = &ef10ct->shared[shared_ix];
   irq_handler_t handler;
@@ -358,7 +364,8 @@ static int ef10ct_nic_create_shared_evq(struct efhw_nic *nic, int shared_ix,
 
   handler = events ? ef10ct_event_irq_handler : ef10ct_flush_irq_handler;
 
-  rc = ef10ct_init_shared_irq(shared_evq, handler);
+  rc = ef10ct_init_shared_irq(shared_evq, handler, nic,
+                              events ? "shrub-rx" : "shrub-flush");
   if (rc < 0)
     goto fail_init_irq;
 

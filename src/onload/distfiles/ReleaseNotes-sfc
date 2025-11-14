@@ -1,6 +1,6 @@
 Solarflare 6.X Linux network driver
 ===================================
-Version:  v6_1_1_1004
+Version:  v6_2_0_1000
 
 
 Overview
@@ -17,6 +17,8 @@ The drivers contained in this package support the following adapters:
   - Xilinx Alveo U25 SmartNIC Accelerator Card
 
 - Solarflare Server Adapters:
+  - AMD Solarflare X4522 PCIe Dual Port SFP56
+  - AMD Solarflare X4542 PCIe Dual Port QSFP56
   - XtremeScale X2522 (10G) PCIe Dual Port SFP28
   - XtremeScale X2522-25G PCIe Dual Port SFP28
   - XtremeScale X2541 PCIe Single Port QSFP28
@@ -58,7 +60,7 @@ kernel
 Installation of the driver can be confirmed by typing:
    modinfo sfc | grep version
 and checking for the line:
-   version: v6_1_1_1004
+   version: v6_2_0_1000
 
 All network interfaces available on the system can be found with:
   ifconfig -a
@@ -92,10 +94,39 @@ Please contact your local AMD support representative or email
 
 Changelog
 ---------
+### v6_2_0_1000
+[General changes]
+~ Fixed various kernel compatibility issues.
+~ Simplified devlink handling.
+~ Resolved various KASAN bugs
+~ Improved error reporting with devlink extack.
 
-### v6_1_1_1004
+X4-6367
+~ Changed ethtool --show-fec to use REQUESTED_FEC_MODE, in order to accuratedly
+  report the requested FEC mode .
+
+X4-7053
+~ Advertised all supported abilities when no module is inserted.
+
+X4-7077
+~ Enhanced reporting for NVRAM updates.
+
+SWNETLINUX-5368
+~ Improved dynamic sensor handling for system telemetry.
+
+SWNETLINUX-5727
+~ Added firmware variant reporting in ethtool -i for X4 adapters.
+
+SWNETLINUX-5740
+~ Introduced disable_filter_tracking module parameter to disable filter
+  tracking feature on X4 adapters.
+
+### v6_1_1_1005
 [General changes]
 ~ Fixes for X4 adapter support
+
+SWNETLINUX-5701
+~ Corrected the semantics for sizing rings on X4 adapters
 
 X4-6458
 ~ No longer advertise unsupported link modes
@@ -2949,10 +2980,12 @@ PF-IOV mode support on SFN7XXX/8XXX adapters:
     with a kernel quirk.
 
 
-Known issues with the platform (KVM/libvirt/kernel)
+Known issues with the platform (KVM/libvirt/iproute2/kernel)
 ---------------------------------------------------
   ~ libvirt direct-bridged mode on-top of a VF is not supported. Please use
     libvirt direct-bridged mode over a PF or direct-passthrough mode with VFs.
+  ~ iproute2 devlink prior to v6.0.0 should only be used to upgrade one NIC at
+    a time.
 Issue 4732:
   ~ On SLES15 SP4 vDPA functionality is only supported if the
     kernel-default-extra package is installed when the driver is build. If the
@@ -2994,6 +3027,18 @@ Issue 47490:
 
 Known Issues with Solarflare driver/firmware
 --------------------------------------------
+X4-7148:
+~ For X4 adapters, the statistics counters rx_eth_crc_err and rx_frm_trunc
+  reported in ethtool (derived from per-queue receive events) are inconsistent
+  with DMA based counters reported by other tools. Packets which are received
+  with CRC errors may be reported by the adapter as frame truncation events.
+  All other counters remain accurate and unaffected.
+
+X4-7064:
+~ Executing ethtool selftest "ethtool -t" can cause the network interface to
+  become unresponsive, resulting in command timeouts and operational failures.
+  Avoid using ethtool selftest.
+
 SWNETLINUX-5369 / SWNETLINUX-5144:
  ~ Changes to net driver RX/TX ring sizes with ethtool are not properly applied
    when Onload module is loaded. This can lead to driver instability. If using

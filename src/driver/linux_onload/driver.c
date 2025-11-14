@@ -297,6 +297,7 @@ int oo_fop_open(struct inode* inode, struct file* filp)
   priv->fd_flags = 0;
   priv->priv_cp = NULL;
   ci_dllist_init(&priv->dshm_list);
+  priv->dshm_used_head = NULL;
 
   filp->private_data = (void*) priv;
   filp->f_op = &oo_fops;

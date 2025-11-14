@@ -700,8 +700,12 @@ static int ef10_ef_vi_receive_set_discards(ef_vi* vi, unsigned discard_err_flags
     mask |= 1LL << ESF_DZ_RX_INNER_TCPUDP_CKSUM_ERR_LBN;
   if( discard_err_flags & EF_VI_DISCARD_RX_INNER_L3_CSUM_ERR )
     mask |= 1LL << ESF_DZ_RX_INNER_IPCKSUM_ERR_LBN;
+
+#define FCS_DISCARD_BITS \
+  ((1LL << ESF_DZ_RX_ECRC_ERR_LBN) | (1LL << ESF_DZ_RX_TRUNC_ERR_LBN))
+
   if( discard_err_flags & EF_VI_DISCARD_RX_ETH_FCS_ERR )
-    mask |= 1LL << ESF_DZ_RX_ECRC_ERR_LBN;
+    mask |= FCS_DISCARD_BITS;
 
   vi->rx_discard_mask = CI_BSWAPC_LE64(mask);
   return 0;
@@ -723,7 +727,7 @@ static uint64_t ef10_ef_vi_receive_get_discards(ef_vi* vi)
     mask |= EF_VI_DISCARD_RX_INNER_L4_CSUM_ERR;
   if( vi_mask & 1LL << ESF_DZ_RX_INNER_IPCKSUM_ERR_LBN )
     mask |= EF_VI_DISCARD_RX_INNER_L3_CSUM_ERR;
-  if( vi_mask & 1LL << ESF_DZ_RX_ECRC_ERR_LBN )
+  if( vi_mask & FCS_DISCARD_BITS )
     mask |= EF_VI_DISCARD_RX_ETH_FCS_ERR;
 
   return mask;
@@ -925,7 +929,7 @@ int ef10_vi_init(ef_vi* vi)
                    | 1LL << ESF_DZ_RX_IPCKSUM_ERR_LBN
                    | 1LL << ESF_DZ_RX_INNER_TCPUDP_CKSUM_ERR_LBN
                    | 1LL << ESF_DZ_RX_INNER_IPCKSUM_ERR_LBN
-                   | 1LL << ESF_DZ_RX_ECRC_ERR_LBN);
+                   | FCS_DISCARD_BITS);
 
   /* EF10 doesn't use phase bits in event queues */
   vi->evq_phase_bits = 0;

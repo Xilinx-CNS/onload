@@ -196,6 +196,7 @@ static ef_vi* alloc_vi(void)
 
   STATE_ALLOC(ef_vi, vi);
   STATE_ALLOC(ef_vi_state, state);
+  posted_added = posted_removed = 0;
   vi->ep_state = state;
   for( i = 0; i < EF_VI_MAX_EFCT_RXQS; ++i ) {
     ef_vi_efct_rxq_state* qs = &state->rxq.efct_state[i];

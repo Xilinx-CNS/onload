@@ -524,7 +524,7 @@ oo_fop_mmap(struct file* file, struct vm_area_struct* vma)
     return oo_cplane_mmap(file, vma);
 #ifdef OO_MMAP_TYPE_DSHM
   case OO_MMAP_TYPE_DSHM:
-    return oo_dshm_mmap_impl(vma);
+    return oo_dshm_mmap_impl(vma, &priv->dshm_used_head);
 #endif
   case OO_MMAP_TYPE_UBUF_POST:
     return oo_ubuf_post_mmap(file, vma);

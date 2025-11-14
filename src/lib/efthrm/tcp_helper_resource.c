@@ -168,6 +168,9 @@ static void
 tcp_helper_stop_periodic_work(tcp_helper_resource_t*);
 
 static void
+tcp_helper_stop_txq_reinit(tcp_helper_resource_t*);
+
+static void
 tcp_helper_close_pending_endpoints(tcp_helper_resource_t*);
 #endif
 
@@ -1087,10 +1090,13 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
     int rc;
     int hugepages = 0;
     int superbufs;
-
     /* FIXME ON-16391 avoid the arch check here */
     bool shrub = vi->nic_type.arch == EF_VI_ARCH_EF10CT &&
                  (token == efrm_pd_shared_rxq_token_get(pd));
+    /* We always request interrupts if we aren't using shrub, but if we are
+     * using shrub then we only request them if the netif option is set. */
+    bool interrupt_req = !shrub || NI_OPTS_TRS(trs).shrub_use_interrupts;
+
     if( ! shrub )
       hugepages = max(1,
                       DIV_ROUND_UP(NI_OPTS_TRS(trs).rxq_size * EFCT_PKT_STRIDE,
@@ -1115,7 +1121,8 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
     if (shrub) {
       LOG_NC(ci_log("%s: using shrub for queue %d", __func__, rxq));
       rc = efct_ubufs_shared_attach_internal(vi, qix, rxq,
-                                             vi->efct_rxqs.q[qix].superbufs);
+                                             vi->efct_rxqs.q[qix].superbufs,
+                                             interrupt_req);
       if( rc < 0 ) {
         if( rc != -EINTR )
           LOG_E(ci_log("%s: ERROR: efct_ubufs_shared_attach_internal failed (%d)",
@@ -1129,7 +1136,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
 
     rc = efrm_rxq_alloc(vi_rs, rxq,
                         nic->flags & NIC_FLAG_RX_KERNEL_SHARED ? qix : -1,
-                        true, true, hugepages, trs->trs_efct_alloc,
+                        true, interrupt_req, hugepages, trs->trs_efct_alloc,
                         &trs->nic[intf_i].thn_efct_rxq[qix]);
     if( rc < 0 ) {
       if( rc != -EINTR )
@@ -4585,6 +4592,7 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   ci_sllist_init(&rs->non_atomic_list);
   ci_sllist_init(&rs->ep_tobe_closed);
   INIT_DELAYED_WORK(&rs->reinit_txq_work, tcp_helper_reinit_txqs_work);
+  atomic_set(&rs->reinit_txq_schedulable, 1);
 #endif
   ci_irqlock_ctor(&rs->lock);
   init_completion(&rs->complete);
@@ -4962,6 +4970,7 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
  fail5a:
 #endif
 #if ! CI_CFG_UL_INTERRUPT_HELPER
+  tcp_helper_stop_txq_reinit(rs);
   destroy_workqueue(rs->wq);
  fail5:
 #endif
@@ -5878,6 +5887,7 @@ tcp_helper_stop(tcp_helper_resource_t* trs)
 #if ! CI_CFG_UL_INTERRUPT_HELPER
   /* stop the periodic timer callbacks and TXQ-purges. */
   tcp_helper_stop_periodic_work(trs);
+  tcp_helper_stop_txq_reinit(trs);
 #endif
 
   /* stop callbacks from the event queue
@@ -7240,6 +7250,18 @@ tcp_helper_stop_periodic_work(tcp_helper_resource_t* rs)
   flush_workqueue(rs->wq);
 }
 #endif
+
+static void
+tcp_helper_stop_txq_reinit(tcp_helper_resource_t* trs)
+{
+  /* Stop the TXQ reinit work, which like the periodic work, can reschedule
+   * itself. Similarly to the stopping method there, we cancel the pending
+   * work and wait for it to complete twice in case it managed to schedule
+   * itself again after the first cancelling. */
+  atomic_set(&trs->reinit_txq_schedulable, 0);
+  cancel_delayed_work_sync(&trs->reinit_txq_work);
+  cancel_delayed_work_sync(&trs->reinit_txq_work);
+}
 
 /*--------------------------------------------------------------------*/
 
@@ -8618,20 +8640,22 @@ int tcp_helper_reinit_txq_locked(tcp_helper_resource_t* thr,
 
 static int tcp_helper_reinit_txqs_locked(tcp_helper_resource_t* thr)
 {
-  int any_failed = 0;
+  bool need_retry = false;
   int i;
 
   for( i = 0; i < oo_stack_intf_max(&thr->netif); i++ ) {
     struct efrm_vi* virs = tcp_helper_vi(thr, i);
-    if( virs && virs->reinit_txq_attempts )
-      any_failed |= tcp_helper_reinit_txq_locked(thr, i);
+    if( virs && virs->reinit_txq_attempts ) {
+      int rc = tcp_helper_reinit_txq_locked(thr, i);
+      need_retry = need_retry || (rc != 0 && virs->reinit_txq_attempts > 0);
+    }
   }
 
-  if( any_failed )
+  if( need_retry && atomic_read(&thr->reinit_txq_schedulable) )
     queue_delayed_work(thr->wq, &thr->reinit_txq_work,
                        TXQ_REINIT_ATTEMPT_DELAY);
 
-  return any_failed;
+  return need_retry ? -EAGAIN : 0;
 }
 
 static void tcp_helper_reinit_txqs_work(struct work_struct* data)
@@ -8661,8 +8685,13 @@ static void tcp_helper_reinit_txqs_work(struct work_struct* data)
 int efab_tcp_helper_reinit_txq(tcp_helper_resource_t* trs, int intf_i)
 {
   struct efrm_vi* virs = tcp_helper_vi(trs, intf_i);
+
+  if( ! atomic_read(&trs->reinit_txq_schedulable) )
+    return -ESHUTDOWN;
+
   virs->reinit_txq_attempts = TXQ_REINIT_MAX_ATTEMPTS;
   queue_delayed_work(trs->wq, &trs->reinit_txq_work, 0 * HZ);
+
   return 0;
 }
 

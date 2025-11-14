@@ -326,6 +326,7 @@ onload_alloc_file(tcp_helper_resource_t *thr, oo_sp ep_id,
 void onload_priv_free(ci_private_t *priv)
 {
   if( priv->_filp->f_path.mnt != onload_mnt ) {
+    oo_dshm_free_used(priv->dshm_used_head);
     oo_dshm_free_handle_list(&priv->dshm_list);
     ci_free(priv);
   }

@@ -19,8 +19,12 @@
 #define __CI_CIUL_SHRUB_SHARED_H__
 
 /* Identifier for a buffer, an index into the shared buffer memory.
- * The MSB for the id corresponds to the sentinel for the buffer. */
-typedef uint32_t ef_shrub_buffer_id;
+ * Format (64-bit):
+ *   Bits [0:30]   - buffer index (31 bits, supports up to 2^31 buffers)
+ *   Bit  [31]     - sentinel (1 bit)
+ *   Bits [32:63]  - sbseq (32 bits, superbuf sequence number)
+ */
+typedef uint64_t ef_shrub_buffer_id;
 
 /* The index of a buffer id */
 static inline uint32_t ef_shrub_buffer_index(ef_shrub_buffer_id id)
@@ -31,11 +35,17 @@ static inline uint32_t ef_shrub_buffer_index(ef_shrub_buffer_id id)
 /* The sentinel value of a buffer id */
 static inline uint32_t ef_shrub_buffer_sentinel(ef_shrub_buffer_id id)
 {
-  return id >> 31;
+  return (id >> 31) & 1;
+}
+
+/* The sbseq value of a buffer id */
+static inline uint32_t ef_shrub_buffer_sbseq(ef_shrub_buffer_id id)
+{
+  return id >> 32;
 }
 
 /* Protocol version, to check compatibility between client and server */
-#define EF_SHRUB_VERSION 4
+#define EF_SHRUB_VERSION 5
 #define SHRUB_ERR_INCOMPATIBLE_VERSION -1000
 
 /* An identifier that does not represent a buffer, used to indicate empty
@@ -106,6 +116,8 @@ struct ef_shrub_token_response {
 struct ef_shrub_queue_request {
   /* Queue ID that the client intends to connect to */
   uint64_t qid;
+  /* Whether we expect to use interrupts */
+  uint64_t use_interrupts;
 };
 
 /* This structure is sent to the shrub server to make various requests. */
@@ -183,4 +195,3 @@ struct ef_shrub_controller_request {
 };
 
 #endif
-
