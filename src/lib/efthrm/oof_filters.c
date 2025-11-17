@@ -2582,14 +2582,23 @@ oof_socket_add_wild(struct oof_manager* fm, struct oof_socket* skf,
   else if( ! oof_socket_can_share_hw_filter(skf, &lpa->lpa_filter) ) {
     /* H/w filter already exists but points to a different stack.  This is
      * fixed if necessary in oof_local_port_addr_fixup_wild().
+     *
+     * oof_local_port_addr_fixup_wild will not fix the hw filters if
+     * (!oof_socket_can_share_hw_filter && fm->fm_hwports_no5tuple). This will
+     * result in this stack reusing a hw filter that points to a different
+     * stack, resulting in unaccelerated sockets in this stack. Return an error
+     * here to prevent this.
      */
-    OO_DEBUG_IPF(other_skf = oof_wild_socket(lp, lpa, skf->af_space);
-                 if( other_skf != NULL )
-                   ci_log(FSK_FMT "STEAL "IPX_TRIPLE_FMT" from "SK_FMT,
-                          FSK_PRI_ARGS(skf),
-                          IPX_TRIPLE_ARGS(lp->lp_protocol,
-                          AF_IP(laddr), lp->lp_lport),
-                          SK_PRI_ARGS(other_skf)));
+    if( fm->fm_hwports_no5tuple )
+      rc = -EEXIST;
+    else
+      OO_DEBUG_IPF(other_skf = oof_wild_socket(lp, lpa, skf->af_space);
+                   if( other_skf != NULL )
+                     ci_log(FSK_FMT "STEAL "IPX_TRIPLE_FMT" from "SK_FMT,
+                            FSK_PRI_ARGS(skf),
+                            IPX_TRIPLE_ARGS(lp->lp_protocol,
+                            AF_IP(laddr), lp->lp_lport),
+                            SK_PRI_ARGS(other_skf)));
   }
   if( nat_preimage.n_results > 0 )
     oof_nat_table_lookup_free(&nat_preimage);
