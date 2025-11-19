@@ -22,6 +22,9 @@ static uint64_t rx_len = 42;
 static uint64_t rx_flt = 7;
 static uint16_t PKTS_PER_SB = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
 
+static size_t DEFAULT_SB_PER_RXQ = 16;
+static size_t MAX_RXQ_BUFFER_BYTES = (size_t)CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES;
+
 /* Arbitrary TX values */
 #define TX_LEN (EFCT_TX_ALIGNMENT - EFCT_TX_HEADER_BYTES)
 static char tx_buf[TX_LEN];
@@ -301,8 +304,10 @@ static struct efct_test* efct_test_init_test(int q_max, int arch, int nic_flags)
   t->mock_rxqs.q_max = q_max;
   t->mock_rxqs.q = calloc(q_max, sizeof(struct efct_mock_rxq));
   assert(t->mock_rxqs.q != NULL);
-  t->mock_rxqs.superbuf = calloc(q_max, (size_t)CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES);
-  assert(t->mock_rxqs.superbuf != NULL);
+  t->mock_rxqs.superbuf =
+    mmap(NULL, q_max * MAX_RXQ_BUFFER_BYTES,
+         PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  assert(t->mock_rxqs.superbuf != MAP_FAILED);
 
   vi->efct_rxqs.ops = &mock_ops->ops;
   vi->efct_rxqs.active_qs = &t->mock_rxqs.active_qs;
@@ -314,12 +319,10 @@ static struct efct_test* efct_test_init_test(int q_max, int arch, int nic_flags)
     q->live.superbuf_pkts = &t->mock_rxqs.q[i].superbuf_pkts;
     q->live.config_generation = &t->mock_rxqs.q[i].config_generation;
     q->live.time_sync = &t->mock_rxqs.q[i].time_sync;
-    q->superbuf = t->mock_rxqs.superbuf +
-      (size_t)i * CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES;
+    q->superbuf = t->mock_rxqs.superbuf + i * MAX_RXQ_BUFFER_BYTES;
   }
 
-  vi->vi_rxq.mask =
-    (size_t)CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE - 1;
+  vi->vi_rxq.mask = DEFAULT_SB_PER_RXQ * PKTS_PER_SB - 1;
   vi->vi_rxq.descriptors =
     calloc(q_max, CI_EFCT_MAX_SUPERBUFS * EFCT_RX_DESCRIPTOR_BYTES);
   assert(vi->vi_rxq.descriptors != NULL);
@@ -408,7 +411,7 @@ static void efct_test_cleanup(struct efct_test* t)
   free(t->vi->vi_ctpio_mmap_ptr);
 
   free(t->mock_rxqs.q);
-  free(t->mock_rxqs.superbuf);
+  munmap(t->mock_rxqs.superbuf, t->mock_rxqs.q_max * MAX_RXQ_BUFFER_BYTES);
   STATE_FREE(t->mock_ops);
   STATE_FREE(t->vi);
   free(t);
@@ -597,7 +600,7 @@ static void efct_test_attach_only(struct efct_test* t, int qid, bool shared_mode
   STATE_CHECK(t->mock_ops, anything_called, exp_anything_called);
   STATE_CHECK(t->mock_ops, attach_called, 1);
   STATE_CHECK(t->mock_ops, attach_qid, qid);
-  STATE_CHECK(t->mock_ops, attach_superbufs, CI_EFCT_MAX_SUPERBUFS);
+  STATE_CHECK(t->mock_ops, attach_superbufs, DEFAULT_SB_PER_RXQ);
 }
 
 static void efct_test_attach(struct efct_test* t, int qid)
@@ -814,7 +817,7 @@ static void test_efct_attach_local(void)
   STATE_CHECK(t->mock_ops, anything_called, 1);
   STATE_CHECK(t->mock_ops, attach_called, 1);
   STATE_CHECK(t->mock_ops, attach_qid, 3);
-  STATE_CHECK(t->mock_ops, attach_superbufs, CI_EFCT_MAX_SUPERBUFS);
+  STATE_CHECK(t->mock_ops, attach_superbufs, DEFAULT_SB_PER_RXQ);
 
   efct_test_attach(t, 1);
   efct_test_attach(t, 2);
@@ -857,7 +860,7 @@ static void test_efct_attach_shared_helper(int sbids, int pkts)
   STATE_CHECK(t->mock_ops, anything_called, 1);
   STATE_CHECK(t->mock_ops, attach_called, 1);
   STATE_CHECK(t->mock_ops, attach_qid, 3);
-  STATE_CHECK(t->mock_ops, attach_superbufs, CI_EFCT_MAX_SUPERBUFS);
+  STATE_CHECK(t->mock_ops, attach_superbufs, DEFAULT_SB_PER_RXQ);
 
   /* test_setup */
   int qid = 1;
