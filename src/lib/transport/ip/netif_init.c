@@ -1277,9 +1277,6 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
   opts->multiarch_rx_datapath =
     parse_enum(opts, "EF_RX_DATAPATH", multiarch_rx_opts, "both");
 
-  if( (s = getenv("EF_LLCT_TEST_SHRUB")) )
-    opts->llct_test_shrub = atoi(s);
-
   if( (s = getenv("EF_KERNEL_PACKETS_BATCH_SIZE")) )
     opts->kernel_packets_batch_size = atoi(s);
 
