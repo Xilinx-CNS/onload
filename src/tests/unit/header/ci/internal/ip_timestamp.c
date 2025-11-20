@@ -239,7 +239,7 @@ static void test_rx_pkt_timestamp_cpacket_many(void)
   uint32_t sec = 0x12345678;
   uint32_t nsec = 0xfedcba98;
   uint32_t subnano = 0x564738;
-  uint8_t stuff[128];
+  uint8_t stuff[128] = {};
 
   STATE_ALLOC(union pkt_buf, buf);
   STATE_ALLOC(struct onload_timestamp, ts);
@@ -274,7 +274,7 @@ static void test_rx_pkt_timestamp_cpacket_bogus(void)
   uint32_t sec = 0x12345678;
   uint32_t nsec = 0xfedcba98;
   uint32_t subnano = 0x564738;
-  uint8_t stuff[3];
+  uint8_t stuff[3] = {};
 
   STATE_ALLOC(union pkt_buf, buf);
   STATE_ALLOC(struct onload_timestamp, ts);
