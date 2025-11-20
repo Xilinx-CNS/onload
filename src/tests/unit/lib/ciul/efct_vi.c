@@ -219,6 +219,17 @@ static void efct_mock_free(ef_vi* vi, int qid, int sbid)
     STATE_CHECK(ops, free_sbid, ops->rxqs->q[qid].shared_sbid_to_free);
 }
 
+static void alloc_buffers(ef_vi* vi, int qid, size_t n_superbufs)
+{
+  void* addr = (void*)vi->efct_rxqs.q[qid].superbuf;
+  void* map = mmap(addr,
+                   n_superbufs * EFCT_RX_SUPERBUF_BYTES,
+                   PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
+                   -1, 0);
+  assert(map == addr);
+}
+
 static int efct_mock_attach(ef_vi* vi, int qid, int buf_fd,
                             unsigned n_superbufs, bool shared_mode,
                             bool interrupt_mode)
@@ -237,13 +248,12 @@ static int efct_mock_attach(ef_vi* vi, int qid, int buf_fd,
 
   ops->rxqs->active_qs |= (1 << qid);
   ops->rxqs->q[qid].superbuf_pkts = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
-  
-  if ( !shared_mode )
-    ops->rxqs->q[qid].next_sbid = -EAGAIN;
 
   if ( shared_mode ) {
     return efct_vi_sync_rxq(vi, qid, qid);
   } else {
+    alloc_buffers(vi, qid, n_superbufs);
+    ops->rxqs->q[qid].next_sbid = -EAGAIN;
     efct_vi_start_rxq(vi, qid, qid);
     return 0;
   }
@@ -306,7 +316,7 @@ static struct efct_test* efct_test_init_test(int q_max, int arch, int nic_flags)
   assert(t->mock_rxqs.q != NULL);
   t->mock_rxqs.superbuf =
     mmap(NULL, q_max * MAX_RXQ_BUFFER_BYTES,
-         PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+         PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   assert(t->mock_rxqs.superbuf != MAP_FAILED);
 
   vi->efct_rxqs.ops = &mock_ops->ops;
@@ -874,6 +884,7 @@ static void test_efct_attach_shared_helper(int sbids, int pkts)
 
   /* Code required for testing efct_vi_sync_rxq */
   init_shared_state(rxq, sbids);
+  alloc_buffers(t->vi, qid, DEFAULT_SB_PER_RXQ);
   int sbid_index;
   for ( sbid_index = 0; sbid_index < rxq->shared_size; sbid_index++, pkts -= PKTS_PER_SB ) {
     rxq->shared_sbids[sbid_index] = sbid_index;
