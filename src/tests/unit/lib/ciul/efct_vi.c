@@ -1060,6 +1060,46 @@ static void test_efct_refresh_alloc(void)
   efct_test_cleanup(t);
 }
 
+static void test_efct_refresh_fail(void)
+{
+  ef_event evs[1];
+  struct efct_test* t = efct_test_init_rx_x3(1);
+  struct efct_mock_rxq* rxq = &t->mock_rxqs.q[0];
+  rxq->refresh_action = REFRESH_ACTION_FAIL;
+
+  rxq->next_sbid = 0;
+  rxq->next_sentinel = true;
+  CHECK(efct_vi_rx_future_peek(t->vi), ==, NULL);
+
+  efct_test_attach_only(t, 0, 0, 0, 0);
+  CHECK(efct_vi_rx_future_peek(t->vi), ==, NULL);
+
+  CHECK(ef_eventq_poll(t->vi, evs, 1), ==, 0);
+  STATE_CHECK(t->mock_ops, anything_called, 1);
+  STATE_CHECK(t->mock_ops, refresh_called, 1);
+  STATE_CHECK(t->mock_ops, refresh_qid, 0);
+  STATE_UPDATE(t->vi, efct_rxqs.q[0].config_generation, 0);
+
+  CHECK(efct_vi_rx_future_peek(t->vi), ==, NULL);
+
+  /* We retry after failure */
+  rxq->refresh_action = REFRESH_ACTION_ALLOC;
+  CHECK(ef_eventq_poll(t->vi, evs, 1), ==, 0);
+  STATE_CHECK(t->mock_ops, anything_called, 2);
+  STATE_CHECK(t->mock_ops, refresh_called, 1);
+  STATE_CHECK(t->mock_ops, refresh_qid, 0);
+  STATE_CHECK(t->mock_ops, next_called, 1);
+  STATE_CHECK(t->mock_ops, next_qid, 0);
+  STATE_UPDATE(t->vi, efct_rxqs.q[0].config_generation, 1);
+
+  CHECK(efct_vi_rx_future_peek(t->vi), ==, NULL);
+  strcpy(rxq->next_pkt, "FUTURE");
+  CHECK(efct_vi_rx_future_peek(t->vi), ==, t->mock_rxqs.q[0].next_pkt);
+
+
+  efct_test_cleanup(t);
+}
+
 static void efct_test_check_rx_event(struct efct_test* t, int qid,
                                      const ef_event* ev)
 {
@@ -1831,6 +1871,7 @@ int main(void)
     TEST_RUN(test_efct_attach_shared);
     TEST_RUN(test_efct_refresh);
     TEST_RUN(test_efct_refresh_alloc);
+    TEST_RUN(test_efct_refresh_fail);
     TEST_RUN(test_efct_rx);
     TEST_RUN(test_efct_rx_discard);
     TEST_RUN(test_efct_natural_rollover);

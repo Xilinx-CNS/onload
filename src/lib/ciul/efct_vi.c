@@ -1005,16 +1005,12 @@ static inline int efct_poll_rx(ef_vi* vi, int ix, ef_event* evs, int evs_len)
      * thinking, to deal with multiple successive refreshes correctly, but we
      * must write it after we're done, to deal with concurrent calls to
      * efct_rxq_check_event() */
-    if( vi->efct_rxqs.ops->refresh(vi, ix) < 0 ) {
-#ifndef __KERNEL__
-      /* Update rxq's value even if the refresh_func fails, since retrying it
-       * every poll is unlikely to be productive either. Except in
-       * kernelspace, since one of the possible outcomes is a crash and we
-       * don't want that */
-      rxq->config_generation = new_generation;
-#endif
+    if( vi->efct_rxqs.ops->refresh(vi, ix) < 0 )
+      /* ON-17092: it might be better to disable the queue, or somehow throttle
+       * the rate of retrying, as it's unlikely to be successful and may impact
+       * polling of other queues */
       return 0;
-    }
+
     rxq->config_generation = new_generation;
   }
 
