@@ -64,6 +64,12 @@ struct efct_mock_rxq {
   char* next_meta;
   char* superbuf;
   char* superbuf_end;
+
+  enum {
+    REFRESH_ACTION_NONE,
+    REFRESH_ACTION_FAIL,
+    REFRESH_ACTION_ALLOC
+  } refresh_action;
 };
 
 struct efct_mock_ops {
@@ -235,6 +241,7 @@ static int efct_mock_attach(ef_vi* vi, int qid, int buf_fd,
                             bool interrupt_mode)
 {
   struct efct_mock_ops* ops = mock_ops(vi);
+  struct efct_mock_rxq* rxq = &ops->rxqs->q[qid];
 
   ops->anything_called += 1;
   ops->attach_called += 1;
@@ -247,13 +254,17 @@ static int efct_mock_attach(ef_vi* vi, int qid, int buf_fd,
     return -EALREADY;
 
   ops->rxqs->active_qs |= (1 << qid);
-  ops->rxqs->q[qid].superbuf_pkts = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
+  rxq->superbuf_pkts = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
 
   if ( shared_mode ) {
     return efct_vi_sync_rxq(vi, qid, qid);
   } else {
-    alloc_buffers(vi, qid, n_superbufs);
-    ops->rxqs->q[qid].next_sbid = -EAGAIN;
+    if( rxq->refresh_action == REFRESH_ACTION_NONE ) {
+      alloc_buffers(vi, qid, n_superbufs);
+      rxq->next_sbid = -EAGAIN;
+    } else {
+      rxq->config_generation++;
+    }
     efct_vi_start_rxq(vi, qid, qid);
     return 0;
   }
@@ -265,7 +276,20 @@ static int efct_mock_refresh(ef_vi* vi, int qid)
   ops->anything_called += 1;
   ops->refresh_called += 1;
   ops->refresh_qid = qid;
-  return 0;
+
+  switch( ops->rxqs->q[qid].refresh_action ) {
+    case REFRESH_ACTION_NONE:
+      return 0;
+
+    case REFRESH_ACTION_ALLOC:
+      alloc_buffers(vi, qid, DEFAULT_SB_PER_RXQ);
+      ops->rxqs->q[qid].refresh_action = REFRESH_ACTION_NONE;
+      return 0;
+
+    case REFRESH_ACTION_FAIL:
+    default:
+      return -EINVAL;
+  }
 }
 
 static int efct_mock_prime(ef_vi* vi, ef_driver_handle dh)
@@ -999,6 +1023,39 @@ static void test_efct_refresh(void)
       efct_test_poll_idle(t);
     }
   }
+
+  efct_test_cleanup(t);
+}
+
+static void test_efct_refresh_alloc(void)
+{
+  ef_event evs[1];
+  struct efct_test* t = efct_test_init_rx_x3(1);
+  struct efct_mock_rxq* rxq = &t->mock_rxqs.q[0];
+  rxq->refresh_action = REFRESH_ACTION_ALLOC;
+
+  /* Make a buffer available. It's not yet mapped into our memory, so we
+   * shouldn't be accessing it until we've completed a refresh. The test
+   * will fail rather harshly with a segfault otherwise.
+   */
+  rxq->next_sbid = 0;
+  rxq->next_sentinel = true;
+  CHECK(efct_vi_rx_future_peek(t->vi), ==, NULL);
+
+  efct_test_attach_only(t, 0, 0, 0, 0);
+  CHECK(efct_vi_rx_future_peek(t->vi), ==, NULL);
+
+  CHECK(ef_eventq_poll(t->vi, evs, 1), ==, 0);
+  STATE_CHECK(t->mock_ops, anything_called, 2);
+  STATE_CHECK(t->mock_ops, refresh_called, 1);
+  STATE_CHECK(t->mock_ops, refresh_qid, 0);
+  STATE_CHECK(t->mock_ops, next_called, 1);
+  STATE_CHECK(t->mock_ops, next_qid, 0);
+  STATE_UPDATE(t->vi, efct_rxqs.q[0].config_generation, 1);
+
+  CHECK(efct_vi_rx_future_peek(t->vi), ==, NULL);
+  strcpy(rxq->next_pkt, "FUTURE");
+  CHECK(efct_vi_rx_future_peek(t->vi), ==, t->mock_rxqs.q[0].next_pkt);
 
   efct_test_cleanup(t);
 }
@@ -1773,6 +1830,7 @@ int main(void)
     TEST_RUN(test_efct_attach_local);
     TEST_RUN(test_efct_attach_shared);
     TEST_RUN(test_efct_refresh);
+    TEST_RUN(test_efct_refresh_alloc);
     TEST_RUN(test_efct_rx);
     TEST_RUN(test_efct_rx_discard);
     TEST_RUN(test_efct_natural_rollover);
