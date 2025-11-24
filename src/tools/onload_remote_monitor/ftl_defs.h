@@ -1159,6 +1159,14 @@ typedef struct oo_tcp_socket_stats oo_tcp_socket_stats;
 		   n_rx_pkts, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))                               \
     FTL_TSTRUCT_END(ctx)
 
+#define STRUCT_STATE_SYNRECV(ctx) \
+    FTL_TSTRUCT_BEGIN(ctx, ci_tcp_state_synrecv, )                                              \
+    FTL_TFIELD_IPXADDR(ctx, l_addr, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))                    \
+    FTL_TFIELD_IPXADDR(ctx, r_addr, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))                    \
+    FTL_TFIELD_PORT(ctx, l_port, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))                       \
+    FTL_TFIELD_PORT(ctx, r_port, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))                       \
+    FTL_TSTRUCT_END(ctx)
+
 #define STRUCT_TCP_LISTEN(ctx) \
     FTL_TSTRUCT_BEGIN(ctx, ci_tcp_socket_listen, )                            \
     FTL_TFIELD_STRUCT(ctx, ci_sock_cmn, s, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))              \
