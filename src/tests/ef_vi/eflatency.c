@@ -271,6 +271,22 @@ static void output_results(struct timeval start, struct timeval end)
   }
 }
 
+static void output_results_no_stats(struct timeval start, struct timeval end)
+{
+  double run_mean;
+  int usec = (end.tv_sec - start.tv_sec) * 1000000;
+  usec += end.tv_usec - start.tv_usec;
+  run_mean = (double) usec / cfg_iter;
+  printf("%d\t%0.3lf\n", cfg_payload_len, run_mean);
+  last_mean_latency_usec = run_mean;
+
+  if( yaml_fp ) {
+    fprintf(yaml_fp,
+            "  - { payload_len: %d, frame_len: %d, runtime_mean: %.0lf }\n",
+            cfg_payload_len, tx_frame_len, run_mean * 1e3);
+  }
+}
+
 /**********************************************************************/
 
 
@@ -328,7 +344,29 @@ generic_ping(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi,
   output_results(start, end);
 }
 
+static void
+generic_ping_no_stats(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi,
+             void (*rx_wait)(struct eflatency_vi*, struct eflatency_vi*),
+             void (*tx_send)(struct eflatency_vi*))
+{
+  struct timeval start, end;
+  int i;
 
+  for( i = 0; i < cfg_warmups; ++i ) {
+    tx_send(tx_vi);
+    poll_tx_and_wait_for_pkt(rx_vi, tx_vi, rx_wait);
+  }
+
+  gettimeofday(&start, NULL);
+
+  for( i = 0; i < cfg_iter; ++i ) {
+    tx_send(tx_vi);
+    poll_tx_and_wait_for_pkt(rx_vi, tx_vi, rx_wait);
+  }
+
+  gettimeofday(&end, NULL);
+  output_results_no_stats(start, end);
+}
 
 static void
 generic_pong(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi,
@@ -850,6 +888,7 @@ static __attribute__((noreturn)) void usage(const char* fmt, ...)
   fprintf(stderr, "  -o <filename>       - save raw timings to file\n");
   fprintf(stderr, "  -y <filename>       - save result data to file (YAML)\n");
   fprintf(stderr, "  -S                  - use shared RXQ (if available)\n");
+  fprintf(stderr, "  -N                  - don't measure timings for every ping iteration\n");
   fprintf(stderr, "\n");
   exit(1);
 }
@@ -860,6 +899,7 @@ int main(int argc, char* argv[])
   int rx_ifindex = -1 , tx_ifindex = -1;
   int c;
   bool ping = false;
+  bool cfg_no_stats = false;
   const test_t* t;
   int iters_run = 0;
   struct eflatency_vi* tx_vi_ptr;
@@ -892,7 +932,7 @@ int main(int argc, char* argv[])
     p = (unsigned int)__v;                                   \
   } while( 0 );
 
-  while( (c = getopt (argc, argv, "n:s:w:c:pm:t:d:o:y:S")) != -1 )
+  while( (c = getopt (argc, argv, "n:s:w:c:pm:t:d:o:y:SN")) != -1 )
     switch( c ) {
     case 'n':
       OPT_INT(optarg, cfg_iter);
@@ -983,6 +1023,9 @@ int main(int argc, char* argv[])
     case 'S':
       cfg_shared = true;
       break;
+    case 'N':
+      cfg_no_stats = true;
+      break;
     case '?':
       usage(NULL);
     default:
@@ -994,6 +1037,12 @@ int main(int argc, char* argv[])
 
   argc -= optind;
   argv += optind;
+
+  /* no-stats ping function does not have timings for iterations */
+  if( cfg_no_stats && cfg_save_file ){
+    printf("ERROR: Raw timings are not applicable with -N option\n");
+    exit(EXIT_FAILURE);
+  }
 
   /* Open driver handle now, so we can determine caps */
   TRY(ef_driver_open(&driver_handle));
@@ -1159,14 +1208,19 @@ int main(int argc, char* argv[])
   printf("# TX mode: %s\n", t->name);
   printf("# RX event type: %s\n",
          use_rx_ref ? "EF_EVENT_TYPE_RX_REF" : "EF_EVENT_TYPE_RX");
-  if( ping )
+  if (ping && cfg_no_stats)
+    printf("paylen\tmean\n");
+  else if( ping )
     printf("paylen\tmean\tmin\t50%%\t95%%\t99%%\tmax\n");
 
   for( ; ; ) {
     ++iters_run;
     if( t->init )
       t->init(&rx_vi, tx_vi_ptr);
-    (ping ? generic_ping : generic_pong)(&rx_vi, tx_vi_ptr, rx_wait, t->send);
+    if( ping )
+       (cfg_no_stats ? generic_ping_no_stats : generic_ping)(&rx_vi, tx_vi_ptr, rx_wait, t->send);
+    else
+        generic_pong(&rx_vi, tx_vi_ptr, rx_wait, t->send);
     if( t->cleanup != NULL )
       t->cleanup(&rx_vi.vi, &tx_vi_ptr->vi);
     if( payload_lens ) {
