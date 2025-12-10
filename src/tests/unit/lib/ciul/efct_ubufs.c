@@ -262,9 +262,10 @@ static void test_efct_ubufs(void)
     CHECK(ops->available(vi, 0), ==, false);
     CHECK(ops->next(vi, 0, &sentinel, &sbseq), ==, -EAGAIN);
 
-    for( i = 0; i < SUPERBUF_COUNT; ++i ) {
+    for( i = 1; i < SUPERBUF_COUNT; ++i ) {
       ops->free(vi, 0, bufs[i]);
     }
+    ops->free(vi, 0, bufs[0]);
   }
 
   free_vi(vi);
