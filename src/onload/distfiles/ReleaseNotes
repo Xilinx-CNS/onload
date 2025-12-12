@@ -1,5 +1,31 @@
-Onload-9.1.0
+Onload-9.1.1
 ============
+
+ Placeholder release notes for work in progress.
+
+ This is an update release of Onload that includes a new version
+ of the sfc net driver and various fixes.
+
+ This release adds full support for X3 along side X2 and X4 adapters.
+
+ Please see the ChangeLog for a full list of changes.
+
+
+Linux distribution support
+--------------------------
+
+ This package can be installed on:
+ - Red Hat Enterprise Linux 8.10
+ - Red Hat Enterprise Linux 9.4 - 9.7
+ - Red Hat Enterprise Linux 10.0 - 10.1
+ - Canonical Ubuntu Server LTS 22.04 and 24.04
+ - Debian 12 "Bookworm"
+ - Debian 13 "Trixie"
+ - Linux kernels 5.11 - 6.14
+
+
+Onload-9.1.0.24
+===============
 
  This is a feature release of Onload adding support for the
  AMD Solarflare(TM) X4 Series Ethernet Adapter. The release
