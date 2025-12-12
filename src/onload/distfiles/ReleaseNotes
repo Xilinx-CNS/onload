@@ -21,7 +21,28 @@ Linux distribution support
  - Canonical Ubuntu Server LTS 22.04 and 24.04
  - Debian 12 "Bookworm"
  - Debian 13 "Trixie"
- - Linux kernels 5.11 - 6.14
+ - kernel.org Linux kernels 5.11 - 6.15(*)
+
+(*) To build for Linux kernel version 6.15, see section below.
+
+
+Workaround for Linux-6.15: no_shrub build profile
+-------------------------------------------------
+
+The current support in Onload for sharing X4 Express datapath queues
+is incompatible with Linux version 6.15. This will be addressed in a future
+release, which will no longer require this workaround. This version of
+Onload must be built with the 'no_shrub' build profile on such kernels.
+
+The 'no_shrub' build profile prevents Onloaded applications from sharing
+X4 Express datapath queues but does not affect the ability of ef_vi and
+TCPDirect applications to use them.
+
+To use this build profile, build as follows:
+
+ - with debuild, --build-profiles=pkg.onload.profile-no_shrub
+ - with rpmbuild, --define "build_profile no_shrub"
+ - with onload_install, --build-profile no_shrub
 
 
 Onload-9.1.0.24
