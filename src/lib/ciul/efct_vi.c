@@ -106,6 +106,16 @@ static inline void assert_pkt_id_fields(void)
   EF_VI_BUILD_ASSERT(PKT_ID_TOTAL_BITS <= 31);
 }
 
+static uint32_t make_pkt_id(uint32_t q, uint32_t b, uint32_t p)
+{
+  EF_VI_ASSERT(q < (1 << PKT_ID_RXQ_BITS));
+  EF_VI_ASSERT(b < (1 << PKT_ID_SBUF_BITS));
+  EF_VI_ASSERT(p < (1 << PKT_ID_PKT_BITS));
+  return (q << (PKT_ID_PKT_BITS + PKT_ID_SBUF_BITS)) |
+         (b << (PKT_ID_PKT_BITS)) |
+         p;
+}
+
 static int pkt_id_to_index_in_superbuf(uint32_t pkt_id)
 {
   return pkt_id & ((1u << PKT_ID_PKT_BITS) - 1);
@@ -163,6 +173,21 @@ static const ci_oword_t* efct_rx_header(const ef_vi* vi, size_t pkt_id)
   return (const ci_oword_t*)(base + ix * EFCT_PKT_STRIDE);
 }
 
+/* The payload data for this packet */
+static inline char* efct_rx_data(ef_vi* vi, uint32_t pkt_id)
+{
+  /* assume DP_FRAME_OFFSET_FIXED (correct for initial hardware) */
+  return (char*)efct_rx_header(vi, pkt_id) + EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
+}
+
+/* The poison location for this packet */
+static inline void* poison_addr(ef_vi* vi, uint32_t pkt_id)
+{
+  /* Write poison value to the start of each frame. Subtract 2 to obtain a
+   * 64-bit aligned pointer. */
+  return efct_rx_data(vi, pkt_id) - 2;
+}
+
 static uint32_t rxq_ptr_to_pkt_id(uint32_t ptr)
 {
   /* Masking off the sentinel */
@@ -208,10 +233,10 @@ static const ci_oword_t* efct_rx_next_header(const ef_vi* vi, uint32_t meta_pkt)
 
 /* Check for actions needed on an rxq. This must match the checks made in
  * efct_poll_rx to ensure none are missed. */
-static bool efct_rxq_check_event(const ef_vi* vi, int qid)
+static bool efct_rxq_check_event(const ef_vi* vi, int qix)
 {
-  const ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[qid];
-  const ef_vi_efct_rxq_ptr* rxq_ptr = &vi->ep_state->rxq.rxq_ptr[qid];
+  const ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[qix];
+  const ef_vi_efct_rxq_ptr* rxq_ptr = &vi->ep_state->rxq.rxq_ptr[qix];
   uint32_t meta_pkt;
 
   if( ! efct_rxq_is_active(rxq) )
@@ -224,7 +249,7 @@ static bool efct_rxq_check_event(const ef_vi* vi, int qid)
   if( pkt_id_to_index_in_superbuf(meta_pkt) >= rxq_ptr->superbuf_pkts )
 #ifndef __KERNEL__
     /* only signal new event if rollover can be done */
-    return vi->efct_rxqs.ops->available(vi, qid);
+    return vi->efct_rxqs.ops->available(vi, qix);
 #else
     /* Returning no event interferes with oo_handle_wakeup_int_driven
      * Let the interrupt handler deal with the event */
@@ -836,12 +861,12 @@ static void efct_ef_vi_receive_push(ef_vi* vi)
 {
 }
 
-static int rx_rollover(ef_vi* vi, int qid)
+static int rx_rollover(ef_vi* vi, int qix)
 {
   const uint64_t pkts_per_superbuf = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
   uint32_t meta_pkt;
-  ef_vi_efct_rxq_ptr* rxq_ptr = &vi->ep_state->rxq.rxq_ptr[qid];
-  ef_vi_efct_rxq_state* rxq_efct_state = &vi->ep_state->rxq.efct_state[qid];
+  ef_vi_efct_rxq_ptr* rxq_ptr = &vi->ep_state->rxq.rxq_ptr[qix];
+  ef_vi_efct_rxq_state* rxq_efct_state = &vi->ep_state->rxq.efct_state[qix];
   ef_vi_rxq_state* rxq_state = &vi->ep_state->rxq;
   unsigned sbseq;
   bool sentinel;
@@ -865,7 +890,7 @@ static int rx_rollover(ef_vi* vi, int qid)
       rxq_state->n_evq_rx_pkts < pkts_per_superbuf )
     return -EAGAIN;
 
-  rc = vi->efct_rxqs.ops->next(vi, qid, &sentinel, &sbseq);
+  rc = vi->efct_rxqs.ops->next(vi, qix, &sentinel, &sbseq);
   if( rc < 0 )
     return rc;
 
@@ -875,7 +900,7 @@ static int rx_rollover(ef_vi* vi, int qid)
   rxq_state->n_evq_rx_pkts -= (int)rxq_efct_state->generates_events *
                               pkts_per_superbuf;
 
-  meta_pkt = (qid * CI_EFCT_MAX_SUPERBUFS + rc) << PKT_ID_PKT_BITS;
+  meta_pkt = make_pkt_id(qix, rc, 0);
 
   if( rxq_ptr->meta_offset == 0 ) {
     /* Simple case, metadata located with data in the first new packet */
@@ -980,16 +1005,12 @@ static inline int efct_poll_rx(ef_vi* vi, int ix, ef_event* evs, int evs_len)
      * thinking, to deal with multiple successive refreshes correctly, but we
      * must write it after we're done, to deal with concurrent calls to
      * efct_rxq_check_event() */
-    if( vi->efct_rxqs.ops->refresh(vi, ix) < 0 ) {
-#ifndef __KERNEL__
-      /* Update rxq's value even if the refresh_func fails, since retrying it
-       * every poll is unlikely to be productive either. Except in
-       * kernelspace, since one of the possible outcomes is a crash and we
-       * don't want that */
-      rxq->config_generation = new_generation;
-#endif
+    if( vi->efct_rxqs.ops->refresh(vi, ix) < 0 )
+      /* ON-17092: it might be better to disable the queue, or somehow throttle
+       * the rate of retrying, as it's unlikely to be successful and may impact
+       * polling of other queues */
       return 0;
-    }
+
     rxq->config_generation = new_generation;
   }
 
@@ -1369,7 +1390,7 @@ int efct_vi_sync_rxq(ef_vi *vi, int ix, int qid)
   /* Once we have the first superbuf that isn't entirely full, then we should
    * look through it to find the first packet in that superbuf that hasn't been
    * used yet. */
-  meta_pkt = (ix * CI_EFCT_MAX_SUPERBUFS + rc) << PKT_ID_PKT_BITS;
+  meta_pkt = make_pkt_id(ix, rc, 0);
   header = (void *)((char *)efct_superbuf_access(vi, ix, rc));
   for ( pkt_index = 0; pkt_index < rxq_ptr->superbuf_pkts;
         header += EFCT_PKT_STRIDE / sizeof(*header), pkt_index++ )
@@ -1513,8 +1534,7 @@ const void* efct_vi_rxpkt_get(ef_vi* vi, uint32_t pkt_id)
   EF_VI_ASSERT(ef_vi_get_real_arch(vi) == EF_VI_ARCH_EFCT ||
                ef_vi_get_real_arch(vi) == EF_VI_ARCH_EF10CT);
 
-  /* assume DP_FRAME_OFFSET_FIXED (correct for initial hardware) */
-  return (char*)efct_rx_header(vi, pkt_id) + EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
+  return efct_rx_data(vi, pkt_id);
 }
 
 /* This function is the inverse of `efct_vi_rxpkt_get` */
@@ -1558,24 +1578,33 @@ static uint32_t efct_vi_rxpkt_get_pkt_id(ef_vi* vi, const void* pkt)
 
 void efct_vi_rxpkt_release(ef_vi* vi, uint32_t pkt_id)
 {
-  EF_VI_ASSERT(efct_rx_desc(vi, pkt_id)->refcnt > 0);
+  struct efct_rx_descriptor* desc = efct_rx_desc(vi, pkt_id);
 
-  if( --efct_rx_desc(vi, pkt_id)->refcnt == 0 )
+  /* Poison each packet when it's released, to avoid a latency glitch if
+   * we write to all the packets at once when freeing the buffer */
+  if( desc->poison )
+    *(uint64_t*)poison_addr(vi, pkt_id) = CI_EFCT_DEFAULT_POISON;
+
+  EF_VI_ASSERT(desc->refcnt > 0);
+  if( --desc->refcnt == 0 ) {
+    /* All packets have been poisoned, so no further poisoning is needed */
+    desc->poison = false;
     vi->efct_rxqs.ops->free(vi, pkt_id_to_rxq_ix(pkt_id),
                             pkt_id_to_local_superbuf_ix(pkt_id));
+  }
 }
 
 const void* efct_vi_rx_future_peek(ef_vi* vi)
 {
   uint64_t qs = *vi->efct_rxqs.active_qs;
   for( ; CI_LIKELY( qs ); qs &= (qs - 1) ) {
-    unsigned qid = __builtin_ctzll(qs);
-    ef_vi_efct_rxq_ptr* rxq_ptr = &vi->ep_state->rxq.rxq_ptr[qid];
+    unsigned qix = __builtin_ctzll(qs);
+    ef_vi_efct_rxq_ptr* rxq_ptr = &vi->ep_state->rxq.rxq_ptr[qix];
     unsigned pkt_id;
 
     /* Skip queues that have pending non-packet related work
      * The work will be picked up by poll or noticed by efct_rxq_check_event */
-    if( efct_rxq_need_config(&vi->efct_rxqs.q[qid]) )
+    if( efct_rxq_need_config(&vi->efct_rxqs.q[qix]) )
       continue;
 
     /* Beware: under onload, the kernel may be polling and updating `rxq_ptr`
@@ -1596,17 +1625,15 @@ const void* efct_vi_rx_future_peek(ef_vi* vi)
       continue;
 
     {
-      const char* start = (char*)efct_rx_header(vi, pkt_id) +
-                          EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
-      const char* poison_addr = start - 2;
-      uint64_t v = *(volatile uint64_t*)poison_addr;
-      if(CI_LIKELY( v != CI_EFCT_DEFAULT_POISON )) {
-        vi->future_qid = qid;
-        return start;
+      const char* addr = poison_addr(vi, pkt_id);
+      if(CI_LIKELY( *(volatile uint64_t*)addr != CI_EFCT_DEFAULT_POISON )) {
+        vi->future_qix = qix;
+        EF_VI_ASSERT(addr + 2 == efct_rx_data(vi, pkt_id));
+        return addr + 2;
       }
       else {
-        ci_prefetch_multiline_4(poison_addr, 1);
-        ci_prefetch_multiline_4(poison_addr, 5);
+        ci_prefetch_multiline_4(addr, 1);
+        ci_prefetch_multiline_4(addr, 5);
       }
     }
   }
@@ -1617,12 +1644,12 @@ int efct_vi_rx_future_poll(ef_vi* vi, ef_event* evs, int evs_len)
 {
   int count;
 
-  EF_VI_ASSERT(((ci_int8) vi->future_qid) >= 0);
-  EF_VI_ASSERT(efct_rxq_is_active(&vi->efct_rxqs.q[vi->future_qid]));
-  count = efct_poll_rx(vi, vi->future_qid, evs, evs_len);
+  EF_VI_ASSERT(((ci_int8) vi->future_qix) >= 0);
+  EF_VI_ASSERT(efct_rxq_is_active(&vi->efct_rxqs.q[vi->future_qix]));
+  count = efct_poll_rx(vi, vi->future_qix, evs, evs_len);
 #ifndef NDEBUG
   if( count )
-    vi->future_qid = -1;
+    vi->future_qix = -1;
 #endif
   return count;
 }
@@ -1632,11 +1659,11 @@ static int efct_ef_eventq_has_event(const ef_vi* vi)
   return efct_tx_check_event(vi) || efct_rx_check_event(vi);
 }
 
-unsigned efct_vi_next_rx_rq_id(ef_vi* vi, int qid)
+unsigned efct_vi_next_rx_rq_id(ef_vi* vi, int qix)
 {
-  if( efct_rxq_need_config(&vi->efct_rxqs.q[qid]) )
+  if( efct_rxq_need_config(&vi->efct_rxqs.q[qix]) )
     return ~0u;
-  return vi->ep_state->rxq.rxq_ptr[qid].data_pkt;
+  return vi->ep_state->rxq.rxq_ptr[qix].data_pkt;
 }
 
 int efct_vi_rxpkt_get_precise_timestamp(ef_vi* vi, uint32_t pkt_id,
@@ -1711,12 +1738,12 @@ static int efct_ef_vi_receive_get_timestamp(struct ef_vi* vi, const void* pkt,
   return efct_vi_rxpkt_get_precise_timestamp(vi, pkt_id, ts_out);
 }
 
-int efct_vi_get_wakeup_params(ef_vi* vi, int qid, unsigned* sbseq,
+int efct_vi_get_wakeup_params(ef_vi* vi, int qix, unsigned* sbseq,
                               unsigned* pktix)
 {
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
-  ef_vi_efct_rxq_ptr* rxq_ptr = &qs->rxq_ptr[qid];
-  ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[qid];
+  ef_vi_efct_rxq_ptr* rxq_ptr = &qs->rxq_ptr[qix];
+  ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[qix];
   uint64_t sbseq_next;
   unsigned ix;
 

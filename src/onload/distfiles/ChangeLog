@@ -1,7 +1,20 @@
-onload-9.1.0
+onload-9.1.1
 ------------
 
-Update sfc net driver to v6.2.0
+Update src net driver to v6_2_0_1003
+
+Changes:
+
+ON-16871: add missing EF_EVENT_TYPE_MAX to enum
+ON-16887: X4 Express: poison packet data early, at release of packet
+ON-17059: X3: avoid segfault in opportunistic packet polling under stress
+ON-17069: add no-stats option to eflatency test application
+
+
+onload-9.1.0.24
+---------------
+
+Update sfc net driver to v6.2.0.1000
 
 Add support for:
  - AMD Solarflare(TM) X4 Series Ethernet Adapter

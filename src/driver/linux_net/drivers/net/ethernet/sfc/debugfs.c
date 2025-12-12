@@ -1003,6 +1003,8 @@ static const struct efx_debugfs_parameter efx_debugfs_nic_parameters[] = {
 	EFX_UINT_PARAMETER(struct efx_nic, rx_buffer_truesize),
 	EFX_INT_MODE_PARAMETER(struct efx_nic, interrupt_mode),
 	EFX_NIC_STATE_PARAMETER(struct efx_nic, state),
+	EFX_BOOL_PARAMETER(struct efx_nic, rx_buf_page_share),
+	EFX_BOOL_PARAMETER(struct efx_nic, user_rx_page_sharing),
 	{NULL},
 };
 

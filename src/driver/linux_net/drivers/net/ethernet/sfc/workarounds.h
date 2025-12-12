@@ -51,4 +51,10 @@
  */
 #define EFX_WORKAROUND_3130(efx) EFX_WORKAROUND_X4(efx)
 
+/* X4 (and X4A) report CRC errors and over-size packet errors in the
+ * RX_TRUNC_ERR event flag. Report this flag as a CRC error as that is more
+ * likely.
+ */
+#define EFX_WORKAROUND_7148(efx) EFX_WORKAROUND_X4(efx)
+
 #endif /* EFX_WORKAROUNDS_H */

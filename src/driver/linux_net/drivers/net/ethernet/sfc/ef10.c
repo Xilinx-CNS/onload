@@ -1496,6 +1496,15 @@ static int efx_ef10_init_nic(struct efx_nic *efx)
 		nic_data->must_realloc_vis = false;
 	}
 
+	if (nic_data->must_enable_netport_events) {
+		if (efx_nic_port_handle_supported(efx)) {
+			rc = efx_x4_mcdi_enable_netport_events(efx);
+			if (rc)
+				return rc;
+		}
+		nic_data->must_enable_netport_events = false;
+	}
+
 	nic_data->mc_stats = kmalloc(efx->stats_dma_size, GFP_KERNEL);
 	if (!nic_data->mc_stats)
 		return -ENOMEM;
@@ -1589,6 +1598,7 @@ static void efx_ef10_reset_mc_allocations(struct efx_nic *efx)
 
 	nic_data->must_realloc_vis = true;
 	nic_data->must_restore_piobufs = true;
+	nic_data->must_enable_netport_events = true;
 	efx->stats_initialised = false;
 }
 
@@ -1773,6 +1783,8 @@ static void efx_ef10_monitor(struct efx_nic *efx)
 	{ NULL, 64, 8 * MC_CMD_MAC_ ## mcdi_name }
 #define EF10_OTHER_STAT(ext_name)				\
 	[EF10_STAT_ ## ext_name] = { #ext_name, 0, 0 }
+#define X4_DMA_STAT(ext_name)					\
+	[EF10_STAT_ ## ext_name] = { #ext_name, 64, 0 }
 
 static const struct efx_hw_stat_desc efx_ef10_stat_desc[EF10_STAT_COUNT] = {
 	EF10_DMA_STAT(port_tx_bytes, TX_BYTES),
@@ -1870,6 +1882,43 @@ static const struct efx_hw_stat_desc efx_ef10_stat_desc[EF10_STAT_COUNT] = {
 	EF10_DMA_STAT(ctpio_fallback, CTPIO_FALLBACK),
 	EF10_DMA_STAT(ctpio_poison, CTPIO_POISON),
 	EF10_DMA_STAT(ctpio_erase, CTPIO_ERASE),
+	X4_DMA_STAT(ll_ctpio_win_bytes),
+	X4_DMA_STAT(ll_ctpio_win_warm_packets),
+	X4_DMA_STAT(ll_ctpio_win_warm_bytes),
+	X4_DMA_STAT(ll_eth_tx_active),
+	X4_DMA_STAT(ll_eth_tx_pause),
+	X4_DMA_STAT(ll_eth_tx_packets),
+	X4_DMA_STAT(ll_eth_tx_bytes),
+	X4_DMA_STAT(ll_eth_tx_ctur_packets),
+	X4_DMA_STAT(ll_eth_tx_ctur_bytes),
+	X4_DMA_STAT(ll_eth_tx_rsp),
+	X4_DMA_STAT(ll_ini_req_txev_coal),
+	X4_DMA_STAT(ll_ini_req_txev_packets),
+	X4_DMA_STAT(ll_ini_req_txev_bytes),
+	X4_DMA_STAT(ll_eth_rx_active),
+	X4_DMA_STAT(ll_eth_rx_pause),
+	X4_DMA_STAT(ll_eth_rx_packets),
+	X4_DMA_STAT(ll_eth_rx_bad_packets),
+	X4_DMA_STAT(ll_eth_rx_bytes),
+	X4_DMA_STAT(ll_eth_rx_en_dropped_packets),
+	X4_DMA_STAT(ll_eth_rx_en_dropped_bytes),
+	X4_DMA_STAT(ll_eth_rx_full_dropped_packets),
+	X4_DMA_STAT(ll_eth_rx_full_dropped_bytes),
+	X4_DMA_STAT(ll_eth_rx_qen_dropped_packets),
+	X4_DMA_STAT(ll_eth_rx_qen_dropped_bytes),
+	X4_DMA_STAT(ll_eth_rx_nodsc_dropped_packets),
+	X4_DMA_STAT(ll_eth_rx_nodsc_dropped_bytes),
+	X4_DMA_STAT(ll_ini_req_rxpkt_packets),
+	X4_DMA_STAT(ll_ini_req_rxpkt_bytes),
+	X4_DMA_STAT(ll_ini_req_rxmeta),
+	X4_DMA_STAT(ll_ini_req_rxev_coal),
+	X4_DMA_STAT(ll_ini_req_rxev_packets),
+	X4_DMA_STAT(ll_ini_req_rxev_bytes),
+	X4_DMA_STAT(ll_eth_rx_trunc_dropped_bytes),
+	X4_DMA_STAT(ll_ctpio_win_drain_packets),
+	X4_DMA_STAT(ll_ctpio_win_drain_bytes),
+	X4_DMA_STAT(ll_tx_ev_backpressure),
+	X4_DMA_STAT(ll_rx_ev_backpressure),
 };
 
 static void efx_ef10_common_stat_mask(unsigned long *mask)
@@ -3479,7 +3528,10 @@ efx_ef10_handle_rx_event_errors(struct efx_rx_queue *rx_queue,
 		handled = true;
 	}
 	if (EFX_QWORD_FIELD(*event, ESF_DZ_RX_TRUNC_ERR)) {
-		rx_queue->n_rx_frm_trunc += n_packets;
+		if (EFX_WORKAROUND_7148(efx))
+			rx_queue->n_rx_eth_crc_err += n_packets;
+		else
+			rx_queue->n_rx_frm_trunc += n_packets;
 		return EFX_RX_PKT_DISCARD;
 	}
 	if (EFX_QWORD_FIELD(*event, ESF_DZ_RX_IPCKSUM_ERR)) {
@@ -4374,15 +4426,13 @@ static int efx_ef10_start_bist(struct efx_nic *efx, u32 bist_type)
 {
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_START_BIST_IN_LEN);
 
+	BUILD_BUG_ON(MC_CMD_START_BIST_OUT_LEN != 0);
+
 	MCDI_SET_DWORD(inbuf, START_BIST_IN_TYPE, bist_type);
 	return efx_mcdi_rpc(efx, MC_CMD_START_BIST, inbuf, sizeof(inbuf),
 			    NULL, 0, NULL);
 }
 
-/* MC BISTs follow a different poll mechanism to phy BISTs.
- * The BIST is done in the poll handler on the MC, and the MCDI command
- * will block until the BIST is done.
- */
 static int efx_ef10_poll_bist(struct efx_nic *efx)
 {
 	int rc;
@@ -4390,30 +4440,38 @@ static int efx_ef10_poll_bist(struct efx_nic *efx)
 	size_t outlen;
 	u32 result;
 
-	rc = efx_mcdi_rpc(efx, MC_CMD_POLL_BIST, NULL, 0,
-			   outbuf, sizeof(outbuf), &outlen);
-	if (rc != 0)
-		return rc;
+	BUILD_BUG_ON(MC_CMD_POLL_BIST_IN_LEN != 0);
 
-	if (outlen < MC_CMD_POLL_BIST_OUT_LEN)
-		return -EIO;
+	do {
+		rc = efx_mcdi_rpc(efx, MC_CMD_POLL_BIST, NULL, 0,
+				  outbuf, sizeof(outbuf), &outlen);
+		if (rc != 0)
+			return rc;
 
-	result = MCDI_DWORD(outbuf, POLL_BIST_OUT_RESULT);
-	switch (result) {
-	case MC_CMD_POLL_BIST_PASSED:
-		netif_dbg(efx, hw, efx->net_dev, "BIST passed.\n");
-		return 0;
-	case MC_CMD_POLL_BIST_TIMEOUT:
-		netif_err(efx, hw, efx->net_dev, "BIST timed out\n");
-		return -EIO;
-	case MC_CMD_POLL_BIST_FAILED:
-		netif_err(efx, hw, efx->net_dev, "BIST failed.\n");
-		return -EIO;
-	default:
-		netif_err(efx, hw, efx->net_dev,
-			  "BIST returned unknown result %u", result);
-		return -EIO;
-	}
+		if (outlen < MC_CMD_POLL_BIST_OUT_LEN)
+			return -EIO;
+
+		result = MCDI_DWORD(outbuf, POLL_BIST_OUT_RESULT);
+		switch (result) {
+		case MC_CMD_POLL_BIST_PASSED:
+			netif_dbg(efx, hw, efx->net_dev, "BIST passed.\n");
+			return 0;
+		case MC_CMD_POLL_BIST_TIMEOUT:
+			netif_err(efx, hw, efx->net_dev, "BIST timed out\n");
+			return -EIO;
+		case MC_CMD_POLL_BIST_FAILED:
+			netif_err(efx, hw, efx->net_dev, "BIST failed.\n");
+			return -EIO;
+		case MC_CMD_POLL_BIST_RUNNING:
+			netif_dbg(efx, hw, efx->net_dev, "BIST running.\n");
+			ssleep(1);
+			break;
+		default:
+			netif_err(efx, hw, efx->net_dev,
+				"BIST returned unknown result %u", result);
+			return -EIO;
+		}
+	} while (1);
 }
 
 static int efx_ef10_run_bist(struct efx_nic *efx, u32 bist_type)

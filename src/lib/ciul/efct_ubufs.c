@@ -109,9 +109,11 @@ static void update_filled(ef_vi* vi, int ix)
     EF10CT_STATS_INC(vi, ix, hw_fifo_empty);
 }
 
-static void poison_superbuf(char *sbuf)
+static void poison_superbuf(ef_vi* vi, int ix, int id)
 {
   int i;
+  char* sbuf = (char*)efct_superbuf_access(vi, ix, id);
+
   /* Write poison value to the start of each frame. Subtract 2 to obtain a
    * 64-bit aligned pointer.
    */
@@ -142,7 +144,6 @@ static void post_buffers(ef_vi* vi, int ix)
      * TBD: will we ever need to deal with manual rollover?
      */
     desc->sentinel = ! CI_QWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL);
-    poison_superbuf((char *)header);
 
     if( state->fifo_count_hw == 0 )
       state->fifo_tail_hw = id;
@@ -197,6 +198,7 @@ static int efct_ubufs_next_local(ef_vi* vi, int ix, bool* sentinel, unsigned* sb
 
   id = state->fifo_tail_sw;
   desc = efct_rx_desc_for_sb(vi, ix, id);
+  desc->poison = true;
   state->fifo_tail_sw = desc->sbid_next;
   state->fifo_count_sw--;
   *sbseq = state->sbseq++;
@@ -214,6 +216,17 @@ static int efct_ubufs_next(ef_vi* vi, int ix, bool* sentinel, unsigned* sbseq)
 
 static void efct_ubufs_free_local(ef_vi* vi, int ix, int sbid)
 {
+  struct efct_rx_descriptor* desc = efct_rx_desc_for_sb(vi, ix, sbid);
+
+  /* If we are consuming packets, we will already have poisoned them in
+   * efct_vi_rxpkt_release. We also need to handle the case, for example in
+   * a shrub server, where the buffers are freed without consuming/releasing
+   * each individual packet. */
+  if( desc->poison ) {
+    desc->poison = false;
+    poison_superbuf(vi, ix, sbid);
+  }
+
   /* Order is important: make sure the hardware tail is advanced beyond this
    * buffer before freeing it; free it before attempting to post more. */
   update_filled(vi, ix);
@@ -285,8 +298,10 @@ void efct_ubufs_local_attach_internal(ef_vi* vi, int ix, int qid, unsigned n_sup
   unsigned id;
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
 
-  for( id = 0; id < n_superbufs; ++id )
+  for( id = 0; id < n_superbufs; ++id ) {
+    poison_superbuf(vi, ix, id);
     efct_rx_sb_free_push(vi, ix, id);
+  }
 
   qs->efct_state[ix].config_generation = 1; /* force an initial refresh */
   qs->efct_state[ix].superbuf_pkts = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;

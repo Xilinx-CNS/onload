@@ -6724,10 +6724,7 @@ static void defer_poll_and_prime(tcp_helper_resource_t* trs)
 static int tcp_helper_wakeup(tcp_helper_resource_t* trs, int intf_i, int budget)
 {
   ci_netif* ni = &trs->netif;
-
-#define THR_PRIME_SYNC     0x01
-#define THR_PRIME_DEFER    0x02
-  int n = 0, thr_prime;
+  int n = 0, prime_async;
 
   TCP_HELPER_RESOURCE_ASSERT_VALID(trs, -1);
   OO_DEBUG_RES(ci_log(FN_FMT, FN_PRI_ARGS(ni)));
@@ -6742,7 +6739,7 @@ static int tcp_helper_wakeup(tcp_helper_resource_t* trs, int intf_i, int budget)
   }
 
   /* Don't reprime if someone is spinning -- let them poll the stack. */
-  thr_prime = ci_netif_is_spinner(ni) ? 0 : THR_PRIME_SYNC | THR_PRIME_DEFER;
+  prime_async = ! ci_netif_is_spinner(ni);
 
   if( ci_netif_intf_has_event(ni, intf_i) ) {
     if( efab_tcp_helper_netif_try_lock(trs, 1) ) {
@@ -6773,7 +6770,7 @@ static int tcp_helper_wakeup(tcp_helper_resource_t* trs, int intf_i, int budget)
       }
 
       if( ni->state->poll_did_wake ) {
-        thr_prime = 0;
+        prime_async = 0;
         CITP_STATS_NETIF_INC(ni, interrupt_wakes);
       }
       else {
@@ -6785,8 +6782,7 @@ static int tcp_helper_wakeup(tcp_helper_resource_t* trs, int intf_i, int budget)
     else {
       /* Couldn't get the lock.  We take this as evidence that another thread
        * is alive and doing stuff, so no need to re-enable interrupts.  The
-       * EF_INT_REPRIME option or EFCT overrides, though allows only deferred
-       * re-priming.
+       * EF_INT_REPRIME option overrides.
        *
        * There are three potential classes of entity which could be holding
        * the lock:
@@ -6811,33 +6807,22 @@ static int tcp_helper_wakeup(tcp_helper_resource_t* trs, int intf_i, int budget)
        * processes handling those connections (many packets).
        */
       CITP_STATS_NETIF_INC(ni, interrupt_lock_contends);
-      if( NI_OPTS(ni).int_reprime ||
-          (ni->state->nic[intf_i].oo_vi_flags & OO_VI_FLAGS_RX_SHARED) ) {
-        thr_prime &=~ THR_PRIME_SYNC;
-      }
-      else {
-        thr_prime = 0;
-      }
+      if( ! NI_OPTS(ni).int_reprime &&
+          ! (ni->state->nic[intf_i].oo_vi_flags & OO_VI_FLAGS_RX_SHARED) )
+        prime_async = 0;
     }
   }
   else {
     CITP_STATS_NETIF_INC(ni, interrupt_no_events);
   }
 
-  if( thr_prime && tcp_helper_reprime_is_needed(ni) &&
+  if( prime_async && tcp_helper_reprime_is_needed(ni) &&
       tcp_helper_start_request_wakeup(trs, intf_i) ) {
-    if( thr_prime & THR_PRIME_SYNC ) {
-      int rc = tcp_helper_request_wakeup_nic_from_wakeup(trs, intf_i);
-      if( ! rc )
-        CITP_STATS_NETIF_INC(ni, interrupt_primes);
-
-      /* Only reprime on EAGAIN. */
-      if( rc != -EAGAIN )
-        thr_prime = 0;
-    }
-
-    if( thr_prime & THR_PRIME_DEFER )
+    int rc = tcp_helper_request_wakeup_nic_from_wakeup(trs, intf_i);
+    if( rc == -EAGAIN )
       defer_poll_and_prime(trs);
+    else
+      CITP_STATS_NETIF_INC(ni, interrupt_primes);
   }
 
   return n;

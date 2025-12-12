@@ -596,10 +596,12 @@ MODULE_PARM_DESC(rx_copybreak,
 
 #define EFX_SSR_MAX_SKB_FRAGS	MAX_SKB_FRAGS
 
+#define EFX_LRO_TABLE_SIZE_DEFAULT 128
+
 /* Size of the LRO hash table.  Must be a power of 2.  A larger table
  * means we can accelerate a larger number of streams.
  */
-static unsigned int lro_table_size = 128;
+static unsigned int lro_table_size = EFX_LRO_TABLE_SIZE_DEFAULT;
 module_param(lro_table_size, uint, 0644);
 MODULE_PARM_DESC(lro_table_size,
 		 "Size of the LRO hash table.  Must be a power of 2");
@@ -656,13 +658,20 @@ int efx_ssr_init(struct efx_rx_queue *rx_queue, struct efx_nic *efx)
 	struct efx_ssr_state *st = &rx_queue->ssr;
 	unsigned int i;
 
-	st->conns_mask = lro_table_size - 1;
 	if (!is_power_of_2(lro_table_size)) {
 		netif_err(efx, drv, efx->net_dev,
-			  "lro_table_size(=%u) must be a power of 2\n",
-			  lro_table_size);
-		return -EINVAL;
+			  "lro_table_size(=%u) must be a power of 2. Using default value(%u)\n",
+			  lro_table_size, EFX_LRO_TABLE_SIZE_DEFAULT);
+		lro_table_size = EFX_LRO_TABLE_SIZE_DEFAULT;
 	}
+	if (lro_table_size < 2) {
+		netif_err(efx, drv, efx->net_dev,
+			  "lro_table_size(=%u) must be at least 2. Using default value(%u)\n",
+			  lro_table_size, EFX_LRO_TABLE_SIZE_DEFAULT);
+		lro_table_size = EFX_LRO_TABLE_SIZE_DEFAULT;
+	}
+	st->conns_mask = lro_table_size - 1;
+
 	st->efx = efx;
 	st->conns = kmalloc_array((st->conns_mask + 1),
 				  sizeof(st->conns[0]), GFP_KERNEL);

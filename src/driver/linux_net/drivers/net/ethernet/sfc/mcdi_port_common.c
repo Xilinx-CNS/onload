@@ -1750,11 +1750,13 @@ bool efx_mcdi_port_process_event_common(struct efx_channel *channel,
 						     event, budget);
 #endif
 		return true;
-	case MCDI_EVENT_CODE_SENSOREVT:
+	case MCDI_EVENT_CODE_DYNAMIC_SENSORS_STATE_CHANGE:
+	case MCDI_EVENT_CODE_DYNAMIC_SENSORS_CHANGE:
 	        if (efx_nic_has_dynamic_sensors(efx))
 			efx_mcdi_dynamic_sensor_event(efx, event);
-		else
-			efx_mcdi_sensor_event(efx, event);
+		return true;
+	case MCDI_EVENT_CODE_SENSOREVT:
+		efx_mcdi_sensor_event(efx, event);
 		return true;
 	case MCDI_EVENT_CODE_TX_ERR:
 	case MCDI_EVENT_CODE_RX_ERR:

@@ -306,6 +306,8 @@ enum {
   EF_EVENT_TYPE_RX_REF,
   /** Packets with a bad checksum have been received on an efct adapter */
   EF_EVENT_TYPE_RX_REF_DISCARD,
+ /** Maximum value of this enumeration */
+  EF_EVENT_TYPE_MAX, /* Keep this last */
 };
 
 
@@ -1172,8 +1174,8 @@ typedef struct ef_vi {
   struct ef_vi*                 vi_qs[EF_VI_MAX_QS];
   /** Number of virtual queues for the virtual interface */
   int                           vi_qs_n;
-  /** Id of queue a pending PFTF packet belongs to */
-  uint8_t                       future_qid;
+  /** Index of queue a pending PFTF packet belongs to */
+  uint8_t                       future_qix;
   /** Access to EFCT queues */
   ef_vi_efct_rxqs               efct_rxqs;
 

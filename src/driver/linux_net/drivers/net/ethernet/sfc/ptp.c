@@ -202,6 +202,8 @@ struct efx_pps_dev_attr {
  * @rxfilters_ucast: Receive filters for unicast PTP packets
  * @rxfilters_lock: Serialise access to PTP filters
  * @config: Current timestamp configuration
+ * @lock: Protect state during cross-function PTP event handling
+ * @destroying: Avoid cross-function access to PTP data during teardown
  * @enabled: PTP operation enabled. If this is disabled normal timestamping
  *	     can still work.
  * @mode: Mode in which PTP operating (PTP version)
@@ -1630,9 +1632,9 @@ int efx_ef10_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings)
 }
 
 struct efx_x4_ptp_timeset {
-	struct timespec64 host_start;
-	struct timespec64 host_end;
-	struct timespec64 nic_time;
+	ktime_t host_start;
+	ktime_t host_end;
+	ktime_t nic_time;
 	u64 window; /* Derived: host_end - host_start */
 	s64 mc_host_diff; /* Derived: mc_time - host_time */
 };
@@ -1655,53 +1657,24 @@ static ktime_t efx_x4_ptp_s64_qns_to_ktime(s64 time)
 	return ktime_set(nic_major, nic_minor);
 }
 
-static struct timespec64 efx_x4_ptp_s64_qns_to_timespec64(s64 time)
-{
-	return ktime_to_timespec64(efx_x4_ptp_s64_qns_to_ktime(time));
-}
-
-/* Use the same number of samples as X3 */
-#define PTP_TIME_READ_SAMPLE_NUM 6
-static s64 efx_x4_ptp_get_the_time_delay(struct efx_nic *efx)
-{
-	u64 times[PTP_TIME_READ_SAMPLE_NUM];
-	s64 diff_min = LONG_MAX;
-	ktime_t t0, t1;
-	s64 diff;
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(times); i++)
-		times[i] = efx_x4_ptp_read_time(efx);
-
-	for (i = 0; i < ARRAY_SIZE(times) - 1; i++) {
-		t1 = efx_x4_ptp_s64_qns_to_ktime(times[i + 1]);
-		t0 = efx_x4_ptp_s64_qns_to_ktime(times[i]);
-		diff = ktime_to_ns(ktime_sub(t1, t0));
-		if (diff < diff_min)
-			diff_min = diff;
-	}
-
-	/* Assume delay is half the time taken to read THE_TIME */
-	return diff_min >> 1;
-}
-
-/* Testing suggests that 1000 ns isn't quite enough time to guarantee that no
- * false positives are identified. Use same limit as the X3 net driver.
+/*
+ * Testing for X4-6998 and X4-6111 has shown that the maximum window values
+ * used for X2 and X3 are insufficient for X4. Using @MAX_SYNCHRONISATION_NS
+ * with X4 can result in a high number of falsely rejected samples. The window
+ * size rejection criteria is particular to the hardware and the system load,
+ * so it best to use a slightly generous maximum window size.
  */
-#define X4_MAX_SYNCHRONISATION_NS 1400
+#define X4_MAX_SYNCHRONISATION_NS 10000
 
 int efx_x4_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings)
 {
-	struct timespec64 diff, mc_time, delta, window, last_time_real, last_time_raw;
+	struct timespec64 delta, last_time_real, last_time_raw;
 	s64 diff_avg, diff_total, diff_min, d, time;
 	struct efx_ptp_data *ptp = efx->ptp_data;
 	struct system_time_snapshot last_time;
 	struct efx_x4_ptp_timeset *timeset;
-#ifdef EFX_NOT_UPSTREAM
-	struct timespec64 last_delta;
-#endif
 	u32 i, ngood, last_good;
-	ktime_t delay;
+	ktime_t delay, mc_time;
 	int rc;
 
 	ngood = last_good = diff_avg = diff_total = 0;
@@ -1714,21 +1687,21 @@ int efx_x4_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings)
 		return -ENOMEM;
 
 	for (i = 0; i < num_readings; i++) {
-		ktime_get_real_ts64(&timeset[ngood].host_start);
+		local_bh_disable();
+		timeset[ngood].host_start = ktime_get_real_ns();
 		time = efx_x4_ptp_read_time(efx);
-		ktime_get_real_ts64(&timeset[ngood].host_end);
-		mc_time = efx_x4_ptp_s64_qns_to_timespec64(time);
-		timeset[ngood].nic_time = mc_time;
-		window = timespec64_sub(timeset[ngood].host_end,
-					timeset[ngood].host_start);
-		timeset[ngood].window = timespec64_to_ktime(window);
+		timeset[ngood].host_end = ktime_get_real_ns();
+		local_bh_enable();
+		timeset[ngood].nic_time = efx_x4_ptp_s64_qns_to_ktime(time);
+
+		timeset[ngood].window = ktime_sub(timeset[ngood].host_end,
+						  timeset[ngood].host_start);
 		if (timeset[ngood].window > X4_MAX_SYNCHRONISATION_NS) {
 			++ptp->sw_stats.invalid_sync_windows;
 		} else {
-			diff = timespec64_sub(mc_time,
-					      timeset[ngood].host_start);
-			timeset[ngood].mc_host_diff = timespec64_to_ktime(diff);
-			diff_total += timeset[ngood].mc_host_diff;
+			timeset[ngood].mc_host_diff =
+				ktime_sub(timeset[ngood].nic_time,
+					  timeset[ngood].host_start);
 			ngood++;
 		}
 	}
@@ -1742,11 +1715,10 @@ int efx_x4_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings)
 		goto out;
 	}
 
-	if (ngood > 2) { /* No point doing this if only 1-2 valid samples */
-		diff_avg = div_s64(diff_total, ngood);
-		/* Find sample closest to the average */
+	if (ngood > 1) {
+		/* Find sample with the smallest host time window */
 		for (i = 0; i < ngood; i++) {
-			d = abs(timeset[i].mc_host_diff - diff_avg);
+			d = timeset[i].window;
 			if (d < diff_min) {
 				diff_min = d;
 				last_good = i;
@@ -1754,20 +1726,16 @@ int efx_x4_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings)
 		}
 	}
 
-	mc_time = timeset[last_good].nic_time;
-
-	/* Delay in reading THE_TIME
-	 * Assume delay is half the time taken to read THE_TIME
-	 */
-	delay = efx_x4_ptp_get_the_time_delay(efx);
-	mc_time = timespec64_sub(mc_time, ktime_to_timespec64(delay));
-	ptp->last_mc_time = mc_time;
+	delay = timeset[last_good].window / 2;
+	mc_time = ktime_sub(timeset[last_good].nic_time, delay);
+	ptp->last_mc_time = ktime_to_timespec64(mc_time);
 
 	/* Calculate delta between time taken immediately after taking
 	 * samples and the last good sample.
 	 */
-	delta = timespec64_sub(last_time_real,
-			       timeset[last_good].host_start);
+	delta = timespec64_sub(
+			last_time_real,
+			ktime_to_timespec64(timeset[last_good].host_start));
 	if (delta.tv_sec > 1) {
 		netif_warn(efx, hw, efx->net_dev,
 			   "PTP bad synchronisation seconds\n");
@@ -1779,8 +1747,9 @@ int efx_x4_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings)
 	ptp->last_host_time_raw = timespec64_sub(last_time_raw, delta);
 
 #ifdef EFX_NOT_UPSTREAM
-	last_delta = timespec64_sub(mc_time, ptp->last_host_time_real);
-	ptp->last_delta = last_delta;
+	ptp->last_delta = timespec64_sub(
+				ptp->last_mc_time,
+				ptp->last_host_time_real);
 	ptp->last_delta_valid = true;
 #endif
 
