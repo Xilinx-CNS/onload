@@ -213,74 +213,13 @@ static void efx_fini_rx_recycle_ring(struct efx_rx_queue *rx_queue)
 	rx_queue->page_ring = NULL;
 }
 
-/* Recycle Rx buffer directly back into the rx_queue.
- * If may be done on discard only when Rx buffers do not share page.
- * There is always room to add this buffer, because pipeline is empty and
- * we've just popped a buffer.
- */
-static void efx_recycle_rx_buf(struct efx_rx_queue *rx_queue,
-			       struct efx_rx_buffer *rx_buf)
-{
-	struct efx_rx_buffer *new_buf;
-	unsigned int index;
-
-	index = rx_queue->added_count & rx_queue->ptr_mask;
-	new_buf = efx_rx_buffer(rx_queue, index);
-
-	memcpy(new_buf, rx_buf, sizeof(*new_buf));
-	rx_buf->page = NULL;
-
-	/* Page is not shared, so it is always the last */
-	new_buf->flags = rx_buf->flags & EFX_RX_BUF_LAST_IN_PAGE;
-	if (likely(rx_queue->page_ring)) {
-		new_buf->flags |= rx_buf->flags & EFX_RX_PAGE_IN_RECYCLE_RING;
-		++rx_queue->recycle_count;
-	}
-
-	/* Since removed_count is updated after packet processing the
-	 * following can happen here:
-	 *   added_count > removed_count + rx_queue->ptr_mask + 1
-	 * efx_fast_push_rx_descriptors() asserts this is not true.
-	 * efx_fast_push_rx_descriptors() is only called at the end of
-	 * a NAPI poll cycle, at which point removed_count has been updated.
-	 */
-	++rx_queue->added_count;
-}
-
 void efx_discard_rx_packet(struct efx_channel *channel,
 			   struct efx_rx_buffer *rx_buf,
 			   unsigned int n_frags)
 {
 	struct efx_rx_queue *rx_queue = efx_channel_get_rx_queue(channel);
-	struct efx_rx_buffer *_rx_buf = rx_buf;
 
-	if (!rx_queue->efx->rx_buf_page_share) {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-		if (channel->zc) {
-			do {
-				rx_buf->flags |= EFX_RX_BUF_XSK_REUSE;
-				rx_buf = efx_rx_buf_next(rx_queue, rx_buf);
-			} while (--n_frags);
-		}
-#endif
-		efx_free_rx_buffers(rx_queue, _rx_buf, n_frags);
-		return;
-	}
-
-	do {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-		if (rx_buf->flags & EFX_RX_BUF_ZC)
-			rx_buf->flags |= EFX_RX_BUF_XSK_REUSE;
-		else
-#endif
-			efx_recycle_rx_buf(rx_queue, rx_buf);
-		rx_buf = efx_rx_buf_next(rx_queue, rx_buf);
-	} while (--n_frags);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-	if (channel->zc)
-		efx_free_rx_buffers(efx_channel_get_rx_queue(channel), _rx_buf,
-				    n_frags);
-#endif
+	efx_free_rx_buffers(rx_queue, rx_buf, n_frags);
 }
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
@@ -1780,25 +1719,25 @@ static void efx_filter_rfs_work(struct work_struct *data)
 		mutex_unlock(&efx->rps_mutex);
 
 		if (req->spec.ether_type == htons(ETH_P_IP))
-			netif_info(efx, rx_status, efx->net_dev,
-				   "steering %s %pI4:%u:%pI4:%u to queue %u [flow %u filter %d id %u]\n",
-				   (req->spec.ip_proto == IPPROTO_TCP) ?
+			netif_dbg(efx, rx_status, efx->net_dev,
+				  "steering %s %pI4:%u:%pI4:%u to queue %u [flow %u filter %d id %u]\n",
+				  (req->spec.ip_proto == IPPROTO_TCP) ?
 					"TCP" : "UDP",
-				   req->spec.rem_host,
-				   ntohs(req->spec.rem_port),
-				   req->spec.loc_host,
-				   ntohs(req->spec.loc_port),
-				   req->rxq_index, req->flow_id, rc, arfs_id);
+				  req->spec.rem_host,
+				  ntohs(req->spec.rem_port),
+				  req->spec.loc_host,
+				  ntohs(req->spec.loc_port),
+				  req->rxq_index, req->flow_id, rc, arfs_id);
 		else
-			netif_info(efx, rx_status, efx->net_dev,
-				   "steering %s [%pI6]:%u:[%pI6]:%u to queue %u [flow %u filter %d id %u]\n",
-				   (req->spec.ip_proto == IPPROTO_TCP) ?
+			netif_dbg(efx, rx_status, efx->net_dev,
+				  "steering %s [%pI6]:%u:[%pI6]:%u to queue %u [flow %u filter %d id %u]\n",
+				  (req->spec.ip_proto == IPPROTO_TCP) ?
 					"TCP" : "UDP",
-				   req->spec.rem_host,
-				   ntohs(req->spec.rem_port),
-				   req->spec.loc_host,
-				   ntohs(req->spec.loc_port),
-				   req->rxq_index, req->flow_id, rc, arfs_id);
+				  req->spec.rem_host,
+				  ntohs(req->spec.rem_port),
+				  req->spec.loc_host,
+				  ntohs(req->spec.loc_port),
+				  req->rxq_index, req->flow_id, rc, arfs_id);
 		channel->n_rfs_succeeded++;
 	} else {
 		if (req->spec.ether_type == htons(ETH_P_IP))
@@ -1921,9 +1860,9 @@ bool __efx_filter_rfs_expire(struct efx_channel *channel, unsigned int quota)
 		if (flow_id != RPS_FLOW_ID_INVALID) {
 			quota--;
 			if (expire_one(efx, flow_id, index)) {
-				netif_info(efx, rx_status, efx->net_dev,
-					   "expired filter %d [queue %u flow %u]\n",
-					   index, channel->channel, flow_id);
+				netif_dbg(efx, rx_status, efx->net_dev,
+					  "expired filter %d [queue %u flow %u]\n",
+					  index, channel->channel, flow_id);
 				channel->rps_flow_id[index] = RPS_FLOW_ID_INVALID;
 				channel->rfs_filter_count--;
 			}

@@ -92,7 +92,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.2.0.1000"
+#define EFX_DRIVER_VERSION	"6.2.0.1003"
 #endif
 
 #ifdef DEBUG
@@ -1464,6 +1464,9 @@ struct efx_mae;
  * @rx_bufs_per_page: Number of RX buffers per memory page
  * @rx_pages_per_batch: Preferred number of descriptors to fill at once
  * @rx_prefix_size: Size of RX prefix before packet data
+ * @rx_buf_page_share: sharing page by rx buffer (1: sharing, 0: non-sharing)
+ * @user_rx_page_sharing: sharing pages for rx buffer if jumbos
+ * @rx_max_frags: maximum rx frags based on current MTU
  * @rx_packet_hash_offset: Offset of RX flow hash from start of packet data
  *	(valid only if @rx_prefix_size != 0; always negative)
  * @rx_packet_len_offset: Offset of RX packet length from start of packet data
@@ -1714,7 +1717,8 @@ struct efx_nic {
 	unsigned int rx_bufs_per_page;
 	unsigned int rx_pages_per_batch;
 	unsigned int rx_prefix_size;
-	unsigned int rx_buf_page_share;
+	bool rx_buf_page_share;
+	bool user_rx_page_sharing;
 	unsigned int rx_max_frags;
 	int rx_packet_hash_offset;
 	int rx_packet_len_offset;

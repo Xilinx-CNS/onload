@@ -77,7 +77,7 @@ MODULE_PARM_DESC(disable_recovery,
  * BIST that another function started to complete.
  */
 #define BIST_WAIT_DELAY_MS      100
-#define BIST_WAIT_DELAY_COUNT   300
+#define BIST_WAIT_DELAY_COUNT   600
 
 /* Default stats update time */
 #define STATS_PERIOD_MS_DEFAULT 1000
@@ -361,7 +361,7 @@ int efx_change_mtu(struct net_device *net_dev, int new_mtu)
 		net_dev->mtu = old_mtu;
 	mutex_unlock(&efx->mac_lock);
 
-	if (net_dev->mtu > ETH_DATA_LEN)
+	if (net_dev->mtu > ETH_DATA_LEN && !efx->user_rx_page_sharing)
 		/* not sharing page for rx buffers */
 		efx->rx_buf_page_share = 0;
 	else

@@ -122,6 +122,44 @@ enum {
 	EF10_STAT_ctpio_fallback,
 	EF10_STAT_ctpio_poison,
 	EF10_STAT_ctpio_erase,
+	EF10_STAT_V3_COUNT,
+	EF10_STAT_ll_ctpio_win_bytes = EF10_STAT_V3_COUNT,
+	EF10_STAT_ll_ctpio_win_warm_packets,
+	EF10_STAT_ll_ctpio_win_warm_bytes,
+	EF10_STAT_ll_eth_tx_active,
+	EF10_STAT_ll_eth_tx_pause,
+	EF10_STAT_ll_eth_tx_packets,
+	EF10_STAT_ll_eth_tx_bytes,
+	EF10_STAT_ll_eth_tx_ctur_packets,
+	EF10_STAT_ll_eth_tx_ctur_bytes,
+	EF10_STAT_ll_eth_tx_rsp,
+	EF10_STAT_ll_ini_req_txev_coal,
+	EF10_STAT_ll_ini_req_txev_packets,
+	EF10_STAT_ll_ini_req_txev_bytes,
+	EF10_STAT_ll_eth_rx_active,
+	EF10_STAT_ll_eth_rx_pause,
+	EF10_STAT_ll_eth_rx_packets,
+	EF10_STAT_ll_eth_rx_bad_packets,
+	EF10_STAT_ll_eth_rx_bytes,
+	EF10_STAT_ll_eth_rx_en_dropped_packets,
+	EF10_STAT_ll_eth_rx_en_dropped_bytes,
+	EF10_STAT_ll_eth_rx_full_dropped_packets,
+	EF10_STAT_ll_eth_rx_full_dropped_bytes,
+	EF10_STAT_ll_eth_rx_qen_dropped_packets,
+	EF10_STAT_ll_eth_rx_qen_dropped_bytes,
+	EF10_STAT_ll_eth_rx_nodsc_dropped_packets,
+	EF10_STAT_ll_eth_rx_nodsc_dropped_bytes,
+	EF10_STAT_ll_ini_req_rxpkt_packets,
+	EF10_STAT_ll_ini_req_rxpkt_bytes,
+	EF10_STAT_ll_ini_req_rxmeta,
+	EF10_STAT_ll_ini_req_rxev_coal,
+	EF10_STAT_ll_ini_req_rxev_packets,
+	EF10_STAT_ll_ini_req_rxev_bytes,
+	EF10_STAT_ll_eth_rx_trunc_dropped_bytes,
+	EF10_STAT_ll_ctpio_win_drain_packets,
+	EF10_STAT_ll_ctpio_win_drain_bytes,
+	EF10_STAT_ll_tx_ev_backpressure,
+	EF10_STAT_ll_rx_ev_backpressure,
 	EF10_STAT_COUNT
 };
 
@@ -166,6 +204,8 @@ enum {
  *	%MC_CMD_GET_CAPABILITIES response)
  * @datapath_caps2: Further capabilities of datapath firmware (FLAGS2 field of
  *	%MC_CMD_GET_CAPABILITIES_V2 response)
+ * @must_enable_netport_events: Flag: netport link control events have to
+ *	be reenabled after MC reboot
  * @must_reprobe_sensors: Flag: sensors have yet to be reprobed after MC reboot
  * @must_probe_vswitching: Flag: vswitching has yet to be setup after MC reboot
  * @pf_index: The number for this PF, or the parent PF if this is a VF
@@ -201,6 +241,7 @@ struct efx_ef10_nic_data {
 	bool must_check_datapath_caps;
 	u32 datapath_caps;
 	u32 datapath_caps2;
+	bool must_enable_netport_events;
 	bool must_reprobe_sensors;
 	bool must_probe_vswitching;
 	unsigned int pf_index;

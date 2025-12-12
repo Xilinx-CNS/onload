@@ -187,15 +187,16 @@ struct efx_mcdi_iface {
 #endif
 };
 
+struct efx_dynamic_sensor;
+
 struct efx_mcdi_mon {
-	struct efx_nic *efx;
 	struct efx_buffer dma_buf;
 	struct mutex update_lock;
 	unsigned long last_update;
 	struct device *device;
 	struct efx_mcdi_mon_attribute *attrs;
 	unsigned int n_attrs;
-	void *sensor_list;
+	struct efx_dynamic_sensor *sensor_list;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE)
 	struct rhashtable sensor_table;
 #endif

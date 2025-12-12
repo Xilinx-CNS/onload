@@ -53,7 +53,7 @@ TRACE_EVENT(sfc_receive,
 #else
 		__assign_str(dev_name, skb->dev->name);
 #endif
-#ifdef CONFIG_NET_LL_RX_POLL
+#ifdef CONFIG_NET_RX_BUSY_POLL
 		__entry->napi_id = skb->napi_id;
 #else
 		__entry->napi_id = 0;
@@ -85,7 +85,7 @@ TRACE_EVENT(sfc_receive,
 
 			off = skb_gro_offset(skb);
 			hlen = off + sizeof(*eth);
-			eth = skb_gro_may_pull((struct sk_buff *) skb, hlen) ?
+			eth = !skb_gro_may_pull((struct sk_buff *) skb, hlen) ?
 			      skb_gro_header_slow((struct sk_buff *) skb, hlen, off) :
 			      skb_gro_header_fast((struct sk_buff *) skb, off);
 			__entry->protocol = gro && eth ?

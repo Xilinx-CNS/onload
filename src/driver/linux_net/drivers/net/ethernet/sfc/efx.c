@@ -84,6 +84,10 @@ MODULE_PARM_DESC(xdp_alloc_tx_resources,
 		 "[EXPERIMENTAL] Allocate resources for XDP TX");
 #endif
 
+static bool rx_buf_page_sharing = true;
+module_param(rx_buf_page_sharing, bool, 0444);
+MODULE_PARM_DESC(rx_buf_page_sharing,
+		 "Allow more than one rx buffer per page");
 /**************************************************************************
  *
  * Type name strings
@@ -815,7 +819,11 @@ static void efx_init_features(struct efx_nic *efx)
 #endif
 #endif
 #endif
-	/* with default mtu (1500 bytes) sharing page by rx buffers */
+	if (rx_buf_page_sharing)
+		/* user wants page sharing with MTU > ETH_DATA_LEN */
+		efx->user_rx_page_sharing = 1;
+
+	/* With default MTU always sharing */
 	efx->rx_buf_page_share = 1;
 }
 
