@@ -743,19 +743,29 @@ static int create_config_socket(shrub_controller_config *config)
   return 0;
 }
 
+static void poll_shrub_servers(shrub_controller_config *config)
+{
+  shrub_if_config_t *current_interface = config->server_config_head;
+  while ( current_interface != NULL ) {
+    ef_shrub_server_poll(current_interface->shrub_server);
+    current_interface = current_interface->next;
+  }
+}
+
+static void handle_controller_dump_requests(shrub_controller_config *config)
+{
+  if ( call_shrub_dump == 1 ) {
+    shrub_dump_to_file(config, "controller-signal.dump");
+    call_shrub_dump = 0;
+  }
+}
+
 static int reactor_loop(shrub_controller_config *config)
 {
   while ( is_running ) {
-    shrub_if_config_t *current_interface = config->server_config_head;
-    while ( current_interface != NULL ) {
-      ef_shrub_server_poll(current_interface->shrub_server);
-      current_interface = current_interface->next;
-    }
+    poll_shrub_servers(config);
     poll_socket(config);
-    if ( call_shrub_dump == 1 ) {
-      shrub_dump_to_file(config, "controller-signal.dump");
-      call_shrub_dump = 0;
-    }
+    handle_controller_dump_requests(config);
   }
   return 0;
 }
