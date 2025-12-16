@@ -87,7 +87,7 @@ MODULE_PARM_DESC(shrub_controller_path,
                  DEFAULT_SHRUB_CONTROLLER_PATH" if empty.");
 
 static int shrub_spawn_server(char* controller_id, bool debug,
-                              bool use_interrupts)
+                              bool use_interrupts, char* auto_close_delay)
 {
   int rc = 0;
   char* path;
@@ -97,6 +97,8 @@ static int shrub_spawn_server(char* controller_id, bool debug,
     controller_id,
     "-D",
     "-K",
+    "-C",
+    auto_close_delay,
     /* slots for extra args */
     NULL,
     NULL,
@@ -109,7 +111,7 @@ static int shrub_spawn_server(char* controller_id, bool debug,
     NULL
   };
   /* This must be the index of the first NULL slot in the argv array */
-  int extra_arg_idx = 5;
+  int extra_arg_idx = 7;
 
   path = kmalloc(PATH_MAX, GFP_KERNEL);
   if ( !path )
@@ -150,6 +152,7 @@ int oo_shrub_spawn_server(ci_private_t *priv, void *arg) {
   int rc;
   shrub_ioctl_data_t *shrub_data;
   char controller_id[EF_SHRUB_MAX_DIGITS];
+  char auto_close_delay[sizeof(OO_STRINGIFY(INT_MIN))];
   
   if ( !priv || !arg ) 
     return -EINVAL;
@@ -165,8 +168,14 @@ int oo_shrub_spawn_server(ci_private_t *priv, void *arg) {
   rc = snprintf(controller_id, sizeof(controller_id), "%u", shrub_data->controller_id);
   if ( rc < 0 || rc >= sizeof(controller_id) )
     return -EINVAL;
+
+  rc = snprintf(auto_close_delay, sizeof(auto_close_delay), "%d",
+                shrub_data->auto_close_delay);
+  if ( rc < 0 || rc >= sizeof(auto_close_delay) )
+    return -EINVAL;
+
   return shrub_spawn_server(controller_id, shrub_data->debug,
-                            shrub_data->use_interrupts);
+                            shrub_data->use_interrupts, auto_close_delay);
 }
 
 int oo_shrub_set_sockets(ci_private_t *priv, void* arg) {

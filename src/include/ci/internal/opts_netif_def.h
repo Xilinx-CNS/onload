@@ -1798,6 +1798,13 @@ CI_CFG_OPT("EF_SHRUB_USE_INTERRUPTS", shrub_use_interrupts, ci_uint32,
 "to be woken up.",
            1, , 1, 0, 1, yesno)
 
+#define EF_SHRUB_DEFAULT_AUTO_CLOSE_DELAY 15000
+CI_CFG_OPT("EF_SHRUB_AUTO_CLOSE_DELAY", shrub_auto_close_delay, ci_int32,
+"Set the number of milliseconds after which a shrub controller spawned by "
+"Onload will close after all clients have disconnected. The special value of "
+"-1 disables this feature, keeping a spawned controller alive indefinitely.",
+           , , EF_SHRUB_DEFAULT_AUTO_CLOSE_DELAY, -1, SMAX, time:msec)
+
 CI_CFG_OPT("EF_ENABLE_TX_ERROR_RECOVERY", tx_error_recovery, ci_uint32,
 "Recover a broken TXQ after observing a TX error event.\n"
 "If we see a TX error event for any reason, then the interface that saw it "
