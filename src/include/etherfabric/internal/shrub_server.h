@@ -58,5 +58,14 @@ void ef_shrub_server_close(struct ef_shrub_server* server);
  */
 void ef_shrub_server_poll(struct ef_shrub_server* server);
 
+/* Check if a shrub server has any connected shrub clients. */
+bool ef_shrub_server_has_clients(struct ef_shrub_server* server);
+
+/* Find the last time a shrub client disconnected from this server. Time is
+ * captured from CLOCK_MONOTONIC, so comparisons with other captures from
+ * that source (including later calls to this function) are valid. */
+struct timespec
+ef_shrub_server_get_last_disconnection_time(struct ef_shrub_server* server);
+
 #endif
 

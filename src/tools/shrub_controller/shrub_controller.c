@@ -59,6 +59,8 @@ static volatile sig_atomic_t call_shrub_dump = 0;
 #define SERVER_BIN "shrub_controller"
 #define SERVER_NAME "Onload Shrub Server"
 
+#define AUTO_CLOSE_DELAY_NEVER -1
+
 static char* shrub_log_prefix;
 
 struct shrub_controller_stats
@@ -107,6 +109,8 @@ typedef struct
   char config_socket[EF_SHRUB_NEGOTIATION_SOCKET_LEN];
   char config_socket_lock[EF_SHRUB_CONFIG_SOCKET_LOCK_LEN];
   struct shrub_controller_stats controller_stats;
+  int auto_close_delay;
+  bool had_any_clients;
 } shrub_controller_config;
 
 static void usage(void)
@@ -120,6 +124,7 @@ static void usage(void)
   fprintf(stderr, "  -c       Set controller_id\n");
   fprintf(stderr, "  -D       Daemonise on startup\n");
   fprintf(stderr, "  -K       Log to kmsg\n");
+  fprintf(stderr, "  -C <ms>  Close after <ms> if all clients disconnect\n");
 }
 
 static bool is_hwport_llct(shrub_controller_config *config, ci_hwport_id_t hwport)
@@ -760,12 +765,64 @@ static void handle_controller_dump_requests(shrub_controller_config *config)
   }
 }
 
+static int timespec_difference_ms(struct timespec lhs, struct timespec rhs)
+{
+  const int ms_per_sec = 1000;
+  const int ns_per_ms = 1000000;
+  return (lhs.tv_sec - rhs.tv_sec) * ms_per_sec +
+         (lhs.tv_nsec - rhs.tv_nsec) / ns_per_ms;
+}
+
+static void handle_controller_auto_close(shrub_controller_config *config)
+{
+  bool any_server_has_clients = false;
+  shrub_if_config_t *intf;
+  struct timespec now;
+
+  if( config->auto_close_delay == AUTO_CLOSE_DELAY_NEVER )
+    return;
+
+  for( intf = config->server_config_head;
+       intf && ! any_server_has_clients;
+       intf = intf->next )
+    any_server_has_clients |= ef_shrub_server_has_clients(intf->shrub_server);
+
+  /* If we have never had clients and still don't, or had clients and still do,
+   * then we aren't interested in updating any state. */
+  if( any_server_has_clients == config->had_any_clients )
+    return;
+
+  /* This is the first time we've seen clients, so update our state. */
+  if( any_server_has_clients ) {
+    config->had_any_clients = any_server_has_clients;
+    return;
+  }
+
+  /* At this point, we have had clients in the past, but don't anymore. Lets
+   * check how long we haven't had clients for to see if we should exit. */
+  clock_gettime(CLOCK_MONOTONIC, &now);
+  for( intf = config->server_config_head; intf; intf = intf->next ) {
+    struct timespec disconnection_time =
+      ef_shrub_server_get_last_disconnection_time(intf->shrub_server);
+    int time_since_last_disconnect =
+      timespec_difference_ms(now, disconnection_time);
+
+    if( time_since_last_disconnect < config->auto_close_delay )
+      return;
+  }
+
+  /* If we reach this point, we must have already had connections that are all
+   * now closed at least `config->auto_close_delay` milliseconds ago, so exit. */
+  is_running = false;
+}
+
 static int reactor_loop(shrub_controller_config *config)
 {
   while ( is_running ) {
     poll_shrub_servers(config);
     poll_socket(config);
     handle_controller_dump_requests(config);
+    handle_controller_auto_close(config);
   }
   return 0;
 }
@@ -1050,6 +1107,7 @@ int main(int argc, char *argv[])
   config.config_socket_fd = INVALID_SOCKET_FD;
   config.interface_token = 1;
   config.controller_id = 0;
+  config.auto_close_delay = AUTO_CLOSE_DELAY_NEVER;
 
   /* Set sutable prefix */
   ci_server_set_log_prefix(&shrub_log_prefix, SERVER_BIN);
@@ -1064,7 +1122,7 @@ int main(int argc, char *argv[])
     }
   }
 
-  while ( (option = getopt(argc, argv, "dic:DK")) != -1 ) {
+  while ( (option = getopt(argc, argv, "dic:DKC:")) != -1 ) {
     switch (option)
     {
     case 'd':
@@ -1082,6 +1140,9 @@ int main(int argc, char *argv[])
       break;
     case 'K':
       log_to_kern = true;
+      break;
+    case 'C':
+      config.auto_close_delay = atoi(optarg);
       break;
     default:
       usage();

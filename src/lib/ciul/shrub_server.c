@@ -21,6 +21,7 @@ struct ef_shrub_server {
   int client_fifo_fd;
   unsigned pd_excl_rxq_tok;
   bool use_interrupts;
+  struct timespec last_disconnection;
   char socket_path[EF_SHRUB_SERVER_SOCKET_LEN];
   struct ef_shrub_connection* closed_connections;
   struct ef_shrub_connection* pending_connections;
@@ -72,6 +73,23 @@ static void remove_connection(struct ef_shrub_connection** list,
       }
     }
   }
+}
+
+bool ef_shrub_server_has_clients(struct ef_shrub_server* server)
+{
+  int i;
+
+  for( i = 0; i < sizeof(server->queues) / sizeof(server->queues[0]); i++ )
+    if( server->queues[i].connections )
+      return true;
+
+  return false;
+}
+
+struct timespec
+ef_shrub_server_get_last_disconnection_time(struct ef_shrub_server* server)
+{
+  return server->last_disconnection;
 }
 
 static struct ef_shrub_queue*
@@ -252,6 +270,8 @@ static int server_connection_closed(struct ef_shrub_server* server,
 
   connection->next = server->closed_connections;
   server->closed_connections = connection;
+
+  clock_gettime(CLOCK_MONOTONIC, &server->last_disconnection);
 
   return 0;
 }
