@@ -448,6 +448,7 @@ typedef struct {
   ci_uint32 controller_id;
   ci_uint32 debug;
   ci_uint32 use_interrupts;
+  ci_int32 auto_close_delay;
 } shrub_ioctl_data_t;
 
 typedef struct {

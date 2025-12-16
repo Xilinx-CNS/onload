@@ -1354,6 +1354,9 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
   if( (s = getenv("EF_SHRUB_USE_INTERRUPTS")) )
     opts->shrub_use_interrupts = atoi(s);
 
+  if( (s = getenv("EF_SHRUB_AUTO_CLOSE_DELAY")) )
+    opts->shrub_auto_close_delay = atoi(s);
+
   if( (s = getenv("EF_ENABLE_TX_ERROR_RECOVERY")) )
     opts->tx_error_recovery = atoi(s);
 }
@@ -2046,6 +2049,7 @@ static int spawn_shrub_controller(ci_netif* ni)
   shrub_args.controller_id = NI_OPTS(ni).shrub_controller_id;
   shrub_args.debug = NI_OPTS(ni).shrub_debug;
   shrub_args.use_interrupts = NI_OPTS(ni).shrub_use_interrupts;
+  shrub_args.auto_close_delay = NI_OPTS(ni).shrub_auto_close_delay;
   return oo_resource_op(fp, OO_IOC_SHRUB_SPAWN_SERVER, &shrub_args);
 }
 
