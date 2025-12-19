@@ -70,6 +70,9 @@ int main(int argc, char* argv[])
 #define FTL_TFIELD_INT(ctx, type, field_name, flag)        \
   CI_BUILD_ASSERT2( TYPE_TEST(v.field_name, type) );
 
+#define FTL_TFIELD_EXPR(ctx, type, field_name, expr, flag) \
+  CI_BUILD_ASSERT2(sizeof(type) > 0);
+
 /* check for static string.
  * The second check might give false positive if static char array is actually defined
  * to be the size of a pointer */
