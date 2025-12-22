@@ -68,6 +68,7 @@ struct stack_mapping {
   int                   stack_id;
 };
 static struct stack_mapping* stack_mappings;
+static int libstack_mappings_ready;
 
 
 static int              signal_fired;
@@ -215,6 +216,9 @@ static int libstack_mappings_init(void)
 {
   int rc, i;
 
+  if( libstack_mappings_ready )
+    return 0;
+
   if( ! cfg_nopids ) {
     pid_t my_pid = getpid();
 
@@ -341,6 +345,7 @@ static int libstack_mappings_init(void)
     pm = pm->next;
   }
 
+  libstack_mappings_ready = 1;
   return 0;
 }
 
@@ -393,6 +398,31 @@ void libstack_stack_mapping_print_pids(int stack_id)
                            sm->pids[i]);
   }
   ci_log("%s", buf);
+}
+
+
+int libstack_stack_mapping_get_pids(int stack_id, const pid_t** pids,
+                                    int* n_pids)
+{
+  struct stack_mapping* sm;
+  int rc;
+
+  if( pids == NULL || n_pids == NULL )
+    return -EINVAL;
+
+  rc = libstack_mappings_init();
+  if( rc != 0 )
+    return rc;
+
+  for( sm = stack_mappings; sm && sm->stack_id != stack_id; sm = sm->next )
+    ;
+
+  if( sm == NULL )
+    return -ENOENT;
+
+  *pids = sm->pids;
+  *n_pids = sm->n_pids;
+  return 0;
 }
 
 

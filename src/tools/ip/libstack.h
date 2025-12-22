@@ -153,6 +153,8 @@ extern void sockets_watch(void);
 
 extern int /*rc*/ libstack_init(void);
 extern void libstack_stack_mapping_print(void);
+extern int libstack_stack_mapping_get_pids(int stack_id, const pid_t** pids,
+                                           int* n_pids);
 extern void libstack_pid_mapping_print(void);
 extern int libstack_env_print(void);
 extern int libstack_threads_print(void);
@@ -167,5 +169,4 @@ extern int libstack_netif_trylock(ci_netif* ni);
 
 
 #endif /* _CI_LIB_STACK_H */
-
 

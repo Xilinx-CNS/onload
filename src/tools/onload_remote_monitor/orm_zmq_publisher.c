@@ -40,8 +40,8 @@ int main(int argc, char** argv)
 {
   ci_app_standard_opts = 0;
   ci_app_getopt(
-    "[stats] [more_stats] [tcp_stats] [stack] [stack_state] [vis] [opts] "
-    "[lots] [extra] [all]",
+    "[stats] [more_stats] [tcp_stats] [stack] [stack_state] [pids] [vis] "
+    "[opts] [lots] [extra] [all]",
     &argc, argv, cfg_opts, N_CFG_OPTS);
   ++argv;  --argc;
 
