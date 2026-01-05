@@ -151,7 +151,7 @@ static int shrub_spawn_server(char* controller_id, bool debug,
 int oo_shrub_spawn_server(ci_private_t *priv, void *arg) {
   int rc;
   shrub_ioctl_data_t *shrub_data;
-  char controller_id[EF_SHRUB_MAX_DIGITS];
+  char controller_id[EF_SHRUB_MAX_DIGITS + 1];
   char auto_close_delay[sizeof(OO_STRINGIFY(INT_MIN))];
   
   if ( !priv || !arg ) 
