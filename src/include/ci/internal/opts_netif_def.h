@@ -1656,10 +1656,6 @@ CI_CFG_OPT("EF_RX_DATAPATH", multiarch_rx_datapath, ci_uint32,
            "  both (prefer express, fallback to enterprise)\n",
            2, , 2, 0, 2, oneof:enterprise;express;both)
 
-CI_CFG_OPT("EF_LLCT_TEST_SHRUB", llct_test_shrub, ci_uint32,
-           "Experimental: force llct datapath to use shrub not local rxqs",
-           1, , 0, 0, 1, yesno)
-
 CI_CFG_OPT("EF_KERNEL_PACKETS_BATCH_SIZE", kernel_packets_batch_size, ci_uint32,
 "In some cases (for example, when using scalable filters), packets that "
 "should be delivered to the kernel stack are "
