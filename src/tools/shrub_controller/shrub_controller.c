@@ -118,7 +118,8 @@ static void usage(void)
   fprintf(stderr, "Options:\n");
   fprintf(stderr, "  -d       Enable debug mode\n");
   fprintf(stderr, "  -i       Enable interrupts\n");
-  fprintf(stderr, "  -c       Set controller_id\n");
+  fprintf(stderr, "  -c <id>  Set controller_id (valid values 0 - %d)\n",
+          EF_SHRUB_MAX_CONTROLLER);
   fprintf(stderr, "  -D       Daemonise on startup\n");
   fprintf(stderr, "  -K       Log to kmsg\n");
   fprintf(stderr, "  -C <ms>  Close after <ms> if all clients disconnect\n");
@@ -1131,6 +1132,13 @@ int main(int argc, char *argv[])
       break;
     case 'c':
       config.controller_id = atoi(optarg);
+      if( config.controller_id < 0 ||
+          config.controller_id > EF_SHRUB_MAX_CONTROLLER ) {
+        ci_log("Error: shrub_controller id should be between 0 and %d",
+               EF_SHRUB_MAX_CONTROLLER);
+        usage();
+        return EXIT_FAILURE;
+      }
       break;
     case 'D':
       daemonise = true;
