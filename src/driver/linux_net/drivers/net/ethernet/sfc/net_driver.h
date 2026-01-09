@@ -92,7 +92,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.2.0.1003"
+#define EFX_DRIVER_VERSION	"6.2.0.1005"
 #endif
 
 #ifdef DEBUG
@@ -121,14 +121,15 @@
  *
  **************************************************************************/
 
-/* This limit is arbitrary, it only exists to impose a testing limit and
- * to avoid large memory allocations in case of a bug.
+/* Limit to 128 channels for now, so it is possible for all TX queues to
+ * have TSO
  */
-#define EFX_MAX_CHANNELS 255U
-#define EFX_MAX_RX_QUEUES EFX_MAX_CHANNELS
+#define EFX_MAX_DATAPATH_CHANNELS 128U
+#define EFX_MAX_RX_QUEUES EFX_MAX_DATAPATH_CHANNELS
 #define EFX_EXTRA_CHANNEL_PTP	0
 #define EFX_EXTRA_CHANNEL_TC	1
 #define EFX_MAX_EXTRA_CHANNELS	2U
+#define EFX_MAX_CHANNELS (EFX_MAX_DATAPATH_CHANNELS + EFX_MAX_EXTRA_CHANNELS)
 
 /* Checksum generation is a per-queue option in hardware, so each
  * queue visible to the networking core is backed by two hardware TX
