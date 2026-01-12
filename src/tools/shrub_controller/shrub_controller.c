@@ -364,8 +364,7 @@ static int create_directory(const char *path)
   return rc;
 }
 
-static void shrub_log_to_fd(int fd, char *buf, size_t buflen,
-                            const char* fmt, ...)
+void shrub_log_to_fd(int fd, char *buf, size_t buflen, const char* fmt, ...)
 {
   va_list args;
   int len;
