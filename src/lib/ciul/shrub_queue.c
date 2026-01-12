@@ -291,3 +291,20 @@ void ef_shrub_queue_detached(struct ef_shrub_queue* queue,
   if( --queue->connection_count == 0 )
     ef_shrub_queue_close(queue);
 }
+
+void ef_shrub_queue_dump_to_fd(struct ef_shrub_queue* queue, int fd,
+                               char* buf, size_t buflen)
+{
+  ef_vi_efct_rxq_state *rxq_state =
+    &queue->vi->ep_state->rxq.efct_state[queue->ix];
+
+  shrub_log_to_fd(fd, buf, buflen, "  rxq[%d]: hw: %d\n",
+                  queue->ix, rxq_state->qid);
+  shrub_log_to_fd(fd, buf, buflen, "    sbseq: %d free_head: %d "
+                  "fifo_head: %d\n", rxq_state->sbseq,
+                  rxq_state->free_head, rxq_state->fifo_head);
+  shrub_log_to_fd(fd, buf, buflen, "    tail_hw: %d tail_sw: %d "
+                  "count_hw: %d count_sw: %d\n", rxq_state->fifo_tail_hw,
+                  rxq_state->fifo_tail_sw, rxq_state->fifo_count_hw,
+                  rxq_state->fifo_count_sw);
+}

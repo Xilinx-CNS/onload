@@ -67,5 +67,8 @@ bool ef_shrub_server_has_clients(struct ef_shrub_server* server);
 struct timespec
 ef_shrub_server_get_last_disconnection_time(struct ef_shrub_server* server);
 
+void ef_shrub_server_dump_to_fd(struct ef_shrub_server* server, int fd,
+                                char* buf, size_t buflen);
+
 #endif
 

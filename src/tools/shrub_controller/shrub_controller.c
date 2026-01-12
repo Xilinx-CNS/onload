@@ -409,9 +409,7 @@ static void shrub_dump_server_to_fd(int fd, shrub_if_config_t *server_config,
   struct shrub_controller_vi *svi = &server_config->res;
   ef_vi *vi = &svi->vi;
   ef_vi_efct_rxqs *rxqs = &vi->efct_rxqs;
-  ef_vi_efct_rxq_state *rxq_state;
   char ifname[IFNAMSIZ];
-  int i;
 
   memset(ifname, 0, sizeof(ifname));
   if ( if_indextoname(server_config->ifindex, ifname) == NULL )
@@ -425,24 +423,10 @@ static void shrub_dump_server_to_fd(int fd, shrub_if_config_t *server_config,
   shrub_log_to_fd(fd, buf, buflen, "  buffer count: %d client count: %d "
                   "token: %x\n", server_config->buffer_count,
                   server_config->ref_count, server_config->token_id);
-  if( rxqs->active_qs ) {
-    shrub_log_to_fd(fd, buf, buflen, "  vi: %d active_qs: %x\n",
-                    vi->vi_i, *rxqs->active_qs);
-    for( i = 0; i < EF_VI_MAX_EFCT_RXQS; i++ ) {
-      if( (1ull << i) & *rxqs->active_qs ) {
-        rxq_state = &vi->ep_state->rxq.efct_state[i];
-        shrub_log_to_fd(fd, buf, buflen, "  rxq[%d]: hw: %d\n",
-                        i, rxq_state->qid);
-        shrub_log_to_fd(fd, buf, buflen, "    sbseq: %d free_head: %d "
-                        "fifo_head: %d\n", rxq_state->sbseq,
-                        rxq_state->free_head, rxq_state->fifo_head);
-        shrub_log_to_fd(fd, buf, buflen, "    tail_hw: %d tail_sw: %d "
-                        "count_hw: %d count_sw: %d\n", rxq_state->fifo_tail_hw,
-                        rxq_state->fifo_tail_sw, rxq_state->fifo_count_hw,
-                        rxq_state->fifo_count_sw);
-      }
-    }
-  }
+  shrub_log_to_fd(fd, buf, buflen, "  vi: %d active_qs: %x\n",
+                  vi->vi_i, rxqs->active_qs ? *rxqs->active_qs : 0);
+
+  ef_shrub_server_dump_to_fd(server_config->shrub_server, fd, buf, buflen);
 }
 
 static void shrub_dump_servers_to_fd(int fd, shrub_controller_config *config,

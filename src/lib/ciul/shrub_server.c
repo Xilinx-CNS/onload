@@ -347,3 +347,13 @@ void ef_shrub_server_close(struct ef_shrub_server* server)
     ef_shrub_server_remove(server->socket_path);
   free(server);
 }
+
+void ef_shrub_server_dump_to_fd(struct ef_shrub_server* server, int fd,
+                                char* buf, size_t buflen)
+{
+  int i;
+
+  for( i = 0; i < sizeof(server->queues) / sizeof(server->queues[0]); i++ )
+    if( server->queues[i].fifo_size )
+      ef_shrub_queue_dump_to_fd(&server->queues[i], fd, buf, buflen);
+}
