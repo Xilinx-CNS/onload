@@ -4,6 +4,10 @@
 #include "ef_vi_internal.h"
 #include <etherfabric/internal/shrub_client.h>
 #include <etherfabric/internal/shrub_socket.h>
+
+#include <ci/internal/transport_config_opt.h>
+#if CI_CFG_WANT_SHRUB
+
 #include <linux/net.h>
 #include <linux/file.h>
 #include <linux/skbuff.h>
@@ -336,4 +340,20 @@ fail:
   vm_munmap(user_addr, size);
   return rc;
 }
+
+#else /* CI_CFG_WANT_SHRUB */
+int ef_shrub_socket_open(uintptr_t*) {return -ENOTSUPP;}
+int ef_shrub_socket_close_socket(uintptr_t) {return -ENOTSUPP;}
+int ef_shrub_socket_close_file(uintptr_t) {return -ENOTSUPP;}
+int ef_shrub_socket_connect(uintptr_t, const char*) {return -ENOTSUPP;}
+int ef_shrub_socket_send(uintptr_t, void*, size_t) {return -ENOTSUPP;}
+int ef_shrub_socket_recv(uintptr_t, void*, size_t) {return -ENOTSUPP;}
+int ef_shrub_socket_recv_metrics(struct ef_shrub_shared_metrics*,
+                                 uintptr_t*, uintptr_t) {return -ENOTSUPP;}
+int ef_shrub_socket_mmap(uint64_t*, void*, size_t,
+                         uintptr_t, size_t, int) {return -ENOTSUPP;}
+int ef_shrub_socket_mmap_user(uint64_t __user*, uint64_t, size_t,
+                              uintptr_t, size_t, int) {return -ENOTSUPP;}
+void ef_shrub_socket_munmap(uint64_t, size_t, int) {}
+#endif
 
