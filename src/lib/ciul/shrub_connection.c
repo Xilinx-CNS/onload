@@ -109,3 +109,17 @@ int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection)
   return 0;
 }
 
+void ef_shrub_connection_dump_to_fd(struct ef_shrub_connection* connection,
+                                    int fd, char* buf, size_t buflen)
+{
+  struct ef_shrub_client_state* client_state =
+    ef_shrub_connection_client_state(connection);
+
+  shrub_log_to_fd(fd, buf, buflen, "    connection[fd %d]: "
+                  "server_fifo_index: %llu server_fifo_size: %llu\n",
+                  connection->socket, client_state->server_fifo_index,
+                  client_state->metrics.server_fifo_size);
+  shrub_log_to_fd(fd, buf, buflen, "      client_fifo_index: %llu "
+                  "client_fifo_size: %llu\n", client_state->client_fifo_index,
+                  client_state->metrics.client_fifo_size);
+}

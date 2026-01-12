@@ -295,8 +295,10 @@ void ef_shrub_queue_detached(struct ef_shrub_queue* queue,
 void ef_shrub_queue_dump_to_fd(struct ef_shrub_queue* queue, int fd,
                                char* buf, size_t buflen)
 {
+  struct ef_shrub_connection *connection;
   ef_vi_efct_rxq_state *rxq_state =
     &queue->vi->ep_state->rxq.efct_state[queue->ix];
+  int fifo_index;
 
   shrub_log_to_fd(fd, buf, buflen, "  rxq[%d]: hw: %d\n",
                   queue->ix, rxq_state->qid);
@@ -307,4 +309,22 @@ void ef_shrub_queue_dump_to_fd(struct ef_shrub_queue* queue, int fd,
                   "count_hw: %d count_sw: %d\n", rxq_state->fifo_tail_hw,
                   rxq_state->fifo_tail_sw, rxq_state->fifo_count_hw,
                   rxq_state->fifo_count_sw);
+
+  shrub_log_to_fd(fd, buf, buflen, "    fifo_size: %d\n", queue->fifo_size);
+  for( fifo_index = prev_fifo_index(queue, queue->fifo_index);
+       queue->fifo[fifo_index] != EF_SHRUB_INVALID_BUFFER;
+       fifo_index = prev_fifo_index(queue, fifo_index) ) {
+    ef_shrub_buffer_id buffer_id = queue->fifo[fifo_index];
+    int buffer_index = ef_shrub_buffer_index(buffer_id);
+    shrub_log_to_fd(fd, buf, buflen, "    fifo[%d]: buffer_id: %llu "
+                    "ref_count: %d\n", fifo_index, buffer_id,
+                    queue->buffers[buffer_index].ref_count);
+  }
+
+  shrub_log_to_fd(fd, buf, buflen, "    connection_count: %llu\n",
+                  queue->connection_count);
+  for( connection = queue->connections;
+       connection != NULL;
+       connection = connection->next )
+    ef_shrub_connection_dump_to_fd(connection, fd, buf, buflen);
 }
