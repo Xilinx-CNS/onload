@@ -538,6 +538,9 @@ static void efct_ubufs_dump_stats(ef_vi* vi, ef_vi_dump_log_fn_t logger,
                " buffers_acquired=%" CI_PRIu64, ix,
                EF10CT_STATS_GET(vi, ix, buffers_posted),
                EF10CT_STATS_GET(vi, ix, buffers_acquired));
+
+        logger(log_arg, "  rxq[%d]: rollover_failed_no_evq_space=%" CI_PRIu64,
+               ix, EF10CT_STATS_GET(vi, ix, rollover_failed_no_evq_space));
       }
 
       if( client_state ) {

@@ -1020,6 +1020,9 @@ typedef struct {
     uint64_t buffers_posted;
     /** Number of shared buffers acquired. (valid only for ubufs) */
     uint64_t buffers_acquired;
+    /** Number of times we tried to move onto the next buffer, but lacked the
+     ** necessary EVQ space to avoid an overflow. */
+    uint64_t rollover_failed_no_evq_space;
   } efct_rxq_stats[EF_VI_MAX_EFCT_RXQS];
 } ef_vi_stats;
 
