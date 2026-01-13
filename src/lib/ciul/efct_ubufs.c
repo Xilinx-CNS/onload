@@ -15,8 +15,11 @@
 #define EF10CT_STATS_INC(vi, ix, counter) \
   do { \
     if ((vi)->vi_stats) \
-      (vi)->vi_stats->ef10ct_stats[ix].counter++; \
+      (vi)->vi_stats->efct_rxq_stats[ix].counter++; \
   } while(0)
+
+#define EF10CT_STATS_GET(vi, ix, counter) \
+  (vi)->vi_stats ? (vi)->vi_stats->efct_rxq_stats[ix].counter : 0
 
 struct efct_ubufs_rxq
 {
@@ -512,20 +515,20 @@ static void efct_ubufs_dump_stats(ef_vi* vi, ef_vi_dump_log_fn_t logger,
       if ( vi->vi_stats != NULL ) {
         logger(log_arg, "  rxq[%d]: buffers freed=%" CI_PRIu64
                " torn_down_out_of_order=%" CI_PRIu64 " corrupt_rxq_state=%" CI_PRIu64,
-               ix, vi->vi_stats->ef10ct_stats[ix].buffers_freed,
-               vi->vi_stats->ef10ct_stats[ix].torn_down_out_of_order,
-               vi->vi_stats->ef10ct_stats[ix].corrupt_rxq_state);
+               ix, EF10CT_STATS_GET(vi, ix, buffers_freed),
+               EF10CT_STATS_GET(vi, ix, torn_down_out_of_order),
+               EF10CT_STATS_GET(vi, ix, corrupt_rxq_state));
 
         logger(log_arg, "  rxq[%d]: sw_fifo_empty=%" CI_PRIu64 
                " hw_fifo_empty=%" CI_PRIu64 " free_list_empty=%" CI_PRIu64, ix,
-               vi->vi_stats->ef10ct_stats[ix].sw_fifo_empty,
-               vi->vi_stats->ef10ct_stats[ix].hw_fifo_empty,
-               vi->vi_stats->ef10ct_stats[ix].free_list_empty);
+               EF10CT_STATS_GET(vi, ix, sw_fifo_empty),
+               EF10CT_STATS_GET(vi, ix, hw_fifo_empty),
+               EF10CT_STATS_GET(vi, ix, free_list_empty));
 
         logger(log_arg, "  rxq[%d]: sentinel_wait=%" CI_PRIu64
                " post_fifo_full=%" CI_PRIu64, ix,
-               vi->vi_stats->ef10ct_stats[ix].sentinel_wait,
-               vi->vi_stats->ef10ct_stats[ix].post_fifo_full);
+               EF10CT_STATS_GET(vi, ix, sentinel_wait),
+               EF10CT_STATS_GET(vi, ix, post_fifo_full));
       }
 
       if( client_state ) {
@@ -540,8 +543,8 @@ static void efct_ubufs_dump_stats(ef_vi* vi, ef_vi_dump_log_fn_t logger,
         if ( vi->vi_stats != NULL ) {
           logger(log_arg, "  rxq[%d]: acquire_failures=%" CI_PRIu64 
                  " release_count=%" CI_PRIu64, ix,
-                 vi->vi_stats->ef10ct_stats[ix].acquire_failures,
-                 vi->vi_stats->ef10ct_stats[ix].release_count);
+                 EF10CT_STATS_GET(vi, ix, acquire_failures),
+                 EF10CT_STATS_GET(vi, ix, release_count));
         }
       } else {
         logger(log_arg, "  rxq[%d]: fifo_count_hw=%" CI_PRIu16

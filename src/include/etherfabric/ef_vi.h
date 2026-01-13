@@ -983,7 +983,7 @@ typedef struct {
   /** Gaps in the event queue (empty slot followed by event) */
   uint32_t evq_gap;
 
-  // EF10CT-specific stats per RXQ
+  /** Stats tracked per efct RXQ */
   struct {
     uint64_t buffers_freed;
     uint64_t post_fifo_full;
@@ -995,7 +995,7 @@ typedef struct {
     uint64_t release_count;
     uint64_t torn_down_out_of_order;
     uint64_t corrupt_rxq_state;
-  } ef10ct_stats[EF_VI_MAX_EFCT_RXQS];
+  } efct_rxq_stats[EF_VI_MAX_EFCT_RXQS];
 } ef_vi_stats;
 
 /*! \brief The type of NIC in use
