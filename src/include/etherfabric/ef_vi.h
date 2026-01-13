@@ -1016,6 +1016,10 @@ typedef struct {
      ** for full buffers. This is only known to happen on shutdown. (valid only
      ** for ubufs) */
     uint64_t corrupt_rxq_state;
+    /** Number of buffers posted to the NIC. (valid only for ubufs) */
+    uint64_t buffers_posted;
+    /** Number of shared buffers acquired. (valid only for ubufs) */
+    uint64_t buffers_acquired;
   } efct_rxq_stats[EF_VI_MAX_EFCT_RXQS];
 } ef_vi_stats;
 

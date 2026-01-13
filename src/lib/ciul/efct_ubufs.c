@@ -160,6 +160,7 @@ static void post_buffers(ef_vi* vi, int ix)
     state->fifo_count_sw++;
 
     vi->efct_rxqs.ops->post(vi, ix, id, desc->sentinel);
+    EF10CT_STATS_INC(vi, ix, buffers_posted);
   }
 
   if ( free_list_was_empty )
@@ -181,6 +182,9 @@ static int efct_ubufs_next_shared(ef_vi* vi, int ix, bool* sentinel,
     EF10CT_STATS_INC(vi, ix, acquire_failures);
     return rc;
   }
+
+  EF10CT_STATS_INC(vi, ix, buffers_acquired);
+
   *sbseq = shrub_sbseq;
   return buffer_index;
 }
@@ -529,6 +533,11 @@ static void efct_ubufs_dump_stats(ef_vi* vi, ef_vi_dump_log_fn_t logger,
                " post_fifo_full=%" CI_PRIu64, ix,
                EF10CT_STATS_GET(vi, ix, sentinel_wait),
                EF10CT_STATS_GET(vi, ix, post_fifo_full));
+
+        logger(log_arg, "  rxq[%d]: buffers_posted=%" CI_PRIu64
+               " buffers_acquired=%" CI_PRIu64, ix,
+               EF10CT_STATS_GET(vi, ix, buffers_posted),
+               EF10CT_STATS_GET(vi, ix, buffers_acquired));
       }
 
       if( client_state ) {
