@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <time.h>
 #include <errno.h>
 
 #include "../ip/sockbuf_filter.h"
@@ -628,6 +629,7 @@ static void orm_dump_struct_ci_netif_config_opts(char* label, ci_netif_config_op
 #undef FTL_TSTRUCT_BEGIN
 #undef FTL_TUNION_BEGIN
 #undef FTL_TFIELD_INT
+#undef FTL_TFIELD_EXPR
 #undef FTL_TFIELD_CONSTINT
 #undef FTL_TFIELD_STRUCT
 #undef FTL_TSTRUCT_END
@@ -664,6 +666,12 @@ static void orm_dump_struct_ci_netif_config_opts(char* label, ci_netif_config_op
   if (output_flags & display_flags) {                                   \
     dump_buf_literal("\"" #field_name "\":");                           \
     dump_buf_int_comma_##type(stats->field_name);                       \
+  }
+
+#define FTL_TFIELD_EXPR(ctx, type, field_name, expr, display_flags) \
+  if (output_flags & display_flags) {                                   \
+    dump_buf_literal("\"" #field_name "\":");                           \
+    dump_buf_cat_comma(type##_fmt, (type)(expr));                       \
   }
 
 #define FTL_TFIELD_CONSTINT(ctx, type, field_name, display_flags) \

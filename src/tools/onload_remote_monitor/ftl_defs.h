@@ -470,6 +470,9 @@ typedef struct oo_p_dllink oo_p_dllink_t;
   FTL_TFIELD_INT(ctx, ci_int32, nic_n, ORM_OUTPUT_STACK)                  \
   FTL_TFIELD_INT(ctx, ci_uint64, evq_last_prime, ORM_OUTPUT_STACK)        \
   FTL_TFIELD_INT(ctx, ci_uint32, stack_id, ORM_OUTPUT_STACK)              \
+  FTL_TFIELD_INT(ctx, ci_uint32, creation_time_sec, ORM_OUTPUT_STACK)     \
+  FTL_TFIELD_EXPR(ctx, ci_uint32, creation_time_delta_sec,               \
+                  time(NULL) - stats->creation_time_sec, ORM_OUTPUT_STACK) \
   FTL_TFIELD_SSTR(ctx, pretty_name,  ORM_OUTPUT_STACK)                    \
   FTL_TFIELD_INT(ctx, ci_uint32, netif_mmap_bytes, ORM_OUTPUT_STACK)      \
   FTL_TFIELD_INT(ctx, ci_uint16, max_mss, ORM_OUTPUT_STACK)               \
