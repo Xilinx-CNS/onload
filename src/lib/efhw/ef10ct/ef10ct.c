@@ -1254,8 +1254,6 @@ static int ef10ct_fini_rxq(struct efhw_nic *nic, int rxq_num)
   atomic_inc(&ef10ct_evq->queues_flushing);
   if (!ef10ct_is_shared_evq(nic, ef10ct_get_queue_num(evq_id)))
     schedule_delayed_work(&ef10ct_evq->check_flushes_polled, 0);
-  else
-    efhw_handle_efct_rxq_flushed(nic, rxq_num);
 
   return rc;
 }
