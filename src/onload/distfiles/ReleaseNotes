@@ -1,12 +1,10 @@
 Onload-9.1.1
 ============
 
- Placeholder release notes for work in progress.
-
  This is an update release of Onload that includes a new version
  of the sfc net driver and various fixes.
 
- This release adds full support for X3 along side X2 and X4 adapters.
+ This release adds full support for X3 alongside X2 and X4 adapters.
 
  Please see the ChangeLog for a full list of changes.
 
@@ -43,6 +41,13 @@ To use this build profile, build as follows:
  - with debuild, --build-profiles=pkg.onload.profile-no_shrub
  - with rpmbuild, --define "build_profile no_shrub"
  - with onload_install, --build-profile no_shrub
+
+
+SHRUB controller lifecycle tunable
+----------------------------------
+
+A new option, EF_SHRUB_AUTO_CLOSE_DELAY tunes the behaviour of the new
+automatic closing of the shrub controller after all clients have disconnected.
 
 
 Onload-9.1.0.24
