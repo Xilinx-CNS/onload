@@ -12,6 +12,7 @@
 #define ORM_OUTPUT_VIS 0x40
 #define ORM_OUTPUT_OPTS 0x100
 #define ORM_OUTPUT_EXTRA 0x100000
+#define ORM_OUTPUT_PIDS 0x200000
 #define ORM_OUTPUT_LOTS 0xFFFFF
 #define ORM_OUTPUT_SUM (ORM_OUTPUT_STATS | ORM_OUTPUT_MORE_STATS | \
                         ORM_OUTPUT_TCP_STATS_COUNT | \
@@ -35,4 +36,3 @@ extern int orm_parse_output_flags(int argc, const char* const* argv);
  */
 extern int orm_do_dump(const struct orm_cfg* cfg, int output_flags,
                        FILE* output_stream);
-
