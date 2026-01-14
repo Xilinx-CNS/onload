@@ -122,6 +122,8 @@ static const struct {
 	[EF10_STAT_ ## ef10_name] = { STAT_ID(RXDP, mcdi_index) }
 #define LL_STAT(ef10_name, mcdi_index)		\
 	[EF10_STAT_ ## ef10_name] = { STAT_ID(LL, mcdi_index) }
+#define FC_STAT(ef10_name, mcdi_index)		\
+	[EF10_STAT_ ## ef10_name] = { STAT_ID(FC, mcdi_index) }
 
 	MAC_STAT(port_tx_bytes, TX_BYTES),
 	MAC_STAT(port_tx_packets, TX_PKTS),
@@ -178,49 +180,47 @@ static const struct {
 	PHY_STAT(fec_corrected_symbols_lane1, FEC_CORRECTED_SYMBOLS_LANE1),
 	PHY_STAT(fec_corrected_symbols_lane2, FEC_CORRECTED_SYMBOLS_LANE2),
 	PHY_STAT(fec_corrected_symbols_lane3, FEC_CORRECTED_SYMBOLS_LANE3),
-	/* Low latency datapath stats */
-	LL_STAT(ll_ctpio_win_bytes, LL_CTPIO_WIN_BYTES),
-	LL_STAT(ll_ctpio_win_warm_packets, LL_CTPIO_WIN_WARM_PKTS),
-	LL_STAT(ll_ctpio_win_warm_bytes, LL_CTPIO_WIN_WARM_BYTES),
-	LL_STAT(ll_eth_tx_active, LL_ETH_TX_ACTIVE),
-	LL_STAT(ll_eth_tx_pause, LL_ETH_TX_PAUSE),
-	LL_STAT(ll_eth_tx_packets, LL_ETH_TX_PKTS),
-	LL_STAT(ll_eth_tx_bytes, LL_ETH_TX_BYTES),
-	LL_STAT(ll_eth_tx_ctur_packets, LL_ETH_TX_CTUR_PKTS),
-	LL_STAT(ll_eth_tx_ctur_bytes, LL_ETH_TX_CTUR_BYTES),
-	LL_STAT(ll_eth_tx_rsp, LL_ETH_TX_RSP),
-	LL_STAT(ll_ini_req_txev_coal, LL_INI_REQ_TXEV_COAL),
-	LL_STAT(ll_ini_req_txev_packets, LL_INI_REQ_TXEV_PKTS),
-	LL_STAT(ll_ini_req_txev_bytes, LL_INI_REQ_TXEV_BYTES),
-	LL_STAT(ll_eth_rx_active, LL_ETH_RX_ACTIVE),
-	LL_STAT(ll_eth_rx_pause, LL_ETH_RX_PAUSE),
-	LL_STAT(ll_eth_rx_packets, LL_ETH_RX_PKTS),
-	LL_STAT(ll_eth_rx_bad_packets, LL_ETH_RX_BAD_PKTS),
-	LL_STAT(ll_eth_rx_bytes, LL_ETH_RX_BYTES),
-	LL_STAT(ll_eth_rx_en_dropped_packets, LL_ETH_RX_EN_DROPPED_PKTS),
-	LL_STAT(ll_eth_rx_en_dropped_bytes, LL_ETH_RX_EN_DROPPED_BYTES),
-	LL_STAT(ll_eth_rx_full_dropped_packets, LL_ETH_RX_FULL_DROPPED_PKTS),
-	LL_STAT(ll_eth_rx_full_dropped_bytes, LL_ETH_RX_FULL_DROPPED_BYTES),
-	LL_STAT(ll_eth_rx_qen_dropped_packets, LL_ETH_RX_QEN_DROPPED_PKTS),
-	LL_STAT(ll_eth_rx_qen_dropped_bytes, LL_ETH_RX_QEN_DROPPED_BYTES),
-	LL_STAT(ll_eth_rx_nodsc_dropped_packets, LL_ETH_RX_NODSC_DROPPED_PKTS),
-	LL_STAT(ll_eth_rx_nodsc_dropped_bytes, LL_ETH_RX_NODSC_DROPPED_BYTES),
-	LL_STAT(ll_ini_req_rxpkt_packets, LL_INI_REQ_RXPKT_PKTS),
-	LL_STAT(ll_ini_req_rxpkt_bytes, LL_INI_REQ_RXPKT_BYTES),
-	LL_STAT(ll_ini_req_rxmeta, LL_INI_REQ_RXMETA),
-	LL_STAT(ll_ini_req_rxev_coal, LL_INI_REQ_RXEV_COAL),
-	LL_STAT(ll_ini_req_rxev_packets, LL_INI_REQ_RXEV_PKTS),
-	LL_STAT(ll_ini_req_rxev_bytes, LL_INI_REQ_RXEV_BYTES),
-	LL_STAT(ll_eth_rx_trunc_dropped_bytes, LL_ETH_RX_TRUNC_DROPPED_BYTES),
-	LL_STAT(ll_ctpio_win_drain_packets, LL_CTPIO_WIN_DRAIN_PKTS),
-	LL_STAT(ll_ctpio_win_drain_bytes, LL_CTPIO_WIN_DRAIN_BYTES),
-	LL_STAT(ll_tx_ev_backpressure, LL_TX_EV_BACKPRESSURE),
-	LL_STAT(ll_rx_ev_backpressure, LL_RX_EV_BACKPRESSURE),
+	/* Express datapath stats */
+	LL_STAT(exp_ctpio_write_bytes, LL_CTPIO_WIN_BYTES),
+	LL_STAT(exp_ctpio_packets, LL_ETH_TX_PKTS),
+	LL_STAT(exp_ctpio_bytes, LL_ETH_TX_BYTES),
+	LL_STAT(exp_ctpio_warm_packets, LL_CTPIO_WIN_WARM_PKTS),
+	LL_STAT(exp_ctpio_warm_bytes, LL_CTPIO_WIN_WARM_BYTES),
+	LL_STAT(exp_ctpio_underflow_packets, LL_ETH_TX_CTUR_PKTS),
+	LL_STAT(exp_ctpio_underflow_bytes, LL_ETH_TX_CTUR_BYTES),
+	LL_STAT(exp_ctpio_drain_packets, LL_CTPIO_WIN_DRAIN_PKTS),
+	LL_STAT(exp_ctpio_drain_bytes, LL_CTPIO_WIN_DRAIN_BYTES),
+	LL_STAT(exp_tx_merge_packets, LL_INI_REQ_TXEV_COAL),
+	LL_STAT(exp_tx_event_tlps, LL_INI_REQ_TXEV_PKTS),
+	LL_STAT(exp_tx_event_bytes, LL_INI_REQ_TXEV_BYTES),
+	LL_STAT(exp_rx_packets, LL_ETH_RX_PKTS),
+	LL_STAT(exp_rx_bytes, LL_ETH_RX_BYTES),
+	LL_STAT(exp_rx_bad_packets, LL_ETH_RX_BAD_PKTS),
+	LL_STAT(exp_rx_port_disabled_packets, LL_ETH_RX_EN_DROPPED_PKTS),
+	LL_STAT(exp_rx_port_disabled_bytes, LL_ETH_RX_EN_DROPPED_BYTES),
+	LL_STAT(exp_rx_vfifo_full_drop_packets, LL_ETH_RX_FULL_DROPPED_PKTS),
+	LL_STAT(exp_rx_vfifo_full_drop_bytes, LL_ETH_RX_FULL_DROPPED_BYTES),
+	LL_STAT(exp_rx_dp_q_disabled_packets, LL_ETH_RX_QEN_DROPPED_PKTS),
+	LL_STAT(exp_rx_dp_q_disabled_bytes, LL_ETH_RX_QEN_DROPPED_BYTES),
+	LL_STAT(exp_rx_nodesc_drop_packets, LL_ETH_RX_NODSC_DROPPED_PKTS),
+	LL_STAT(exp_rx_nodesc_drop_bytes, LL_ETH_RX_NODSC_DROPPED_BYTES),
+	LL_STAT(exp_rx_oversize_trunc_bytes, LL_ETH_RX_TRUNC_DROPPED_BYTES),
+	LL_STAT(exp_rx_data_tlps, LL_INI_REQ_RXPKT_PKTS),
+	LL_STAT(exp_rx_data_bytes, LL_INI_REQ_RXPKT_BYTES),
+	LL_STAT(exp_rx_meta_tlps, LL_INI_REQ_RXMETA),
+	LL_STAT(exp_rx_merge_packets, LL_INI_REQ_RXEV_COAL),
+	LL_STAT(exp_rx_merge_event_tlps, LL_INI_REQ_RXEV_PKTS),
+	LL_STAT(exp_rx_merge_event_bytes, LL_INI_REQ_RXEV_BYTES),
+	/* Fast classifier stats */
+	FC_STAT(fc_ecc_errors, FC_ECC_ERRORS),
+	FC_STAT(fc_ecc_overflow, FC_ECC_OVERFLOW),
+	FC_STAT(fc_tcam_errors, FC_TCAM_ERRORS),
 #undef MAC_STAT
 #undef PHY_STAT
 #undef PM_STAT
 #undef RXDP_STAT
 #undef LL_STAT
+#undef FC_STAT
 };
 
 static bool efx_x4_lookup_ef10_stat(u32 mcdi_stat_id, u32 *ef10_stat)

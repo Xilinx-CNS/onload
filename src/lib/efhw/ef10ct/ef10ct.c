@@ -1062,6 +1062,9 @@ static void ef10ct_vi_free_hw(struct efhw_nic *nic, int evq_num)
 
   EFHW_TRACE("%s: q 0x%x", __func__, evq_id);
 
+  /* As soon as we've freed the EVQ it becomes available for re-use, so ensure we've
+   * reset state first. */
+  ef10ct->evq[evq_num].txq_num = EF10CT_QUEUE_NUM_NO_QUEUE;
   ef10ct_free_evq(nic, evq_id);
 
   if( txq_num != EF10CT_QUEUE_NUM_NO_QUEUE ) {
@@ -1069,8 +1072,6 @@ static void ef10ct_vi_free_hw(struct efhw_nic *nic, int evq_num)
                                                  EF10CT_QUEUE_HANDLE_TYPE_TXQ);
     ef10ct_free_txq(nic, txq_id);
   }
-
-  ef10ct->evq[evq_num].txq_num = EF10CT_QUEUE_NUM_NO_QUEUE;
 }
 
 static void ef10ct_vi_free_sw(struct efhw_nic *nic, int evq_num)

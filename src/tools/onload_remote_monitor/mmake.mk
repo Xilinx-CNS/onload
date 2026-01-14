@@ -6,6 +6,7 @@ APPS := orm_json
 SRCS := orm_json orm_json_lib
 
 OBJS := $(patsubst %,%.o,$(SRCS))
+OBJS += $(TOPPATH)/src/tools/ip/libstack.o
 
 MMAKE_LIB_DEPS	:= $(CIIP_LIB_DEPEND) $(CIAPP_LIB_DEPEND) \
 		   $(CITOOLS_LIB_DEPEND) $(CIUL_LIB_DEPEND) \
@@ -41,7 +42,7 @@ all: $(APPS)
 orm_json: $(DEPS)
 	(libs="$(LIBS)"; $(MMakeLinkCApp))
 
-orm_zmq_publisher: orm_zmq_publisher.o orm_json_lib.o
+orm_zmq_publisher: orm_zmq_publisher.o orm_json_lib.o $(TOPPATH)/src/tools/ip/libstack.o
 	(libs="$(LIBS)"; $(MMakeLinkCApp))
 
 zmq_subscriber: zmq_subscriber.o

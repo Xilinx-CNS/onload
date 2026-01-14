@@ -26,8 +26,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <time.h>
 #include <errno.h>
 
+#include "../ip/libstack.h"
 #include "../ip/sockbuf_filter.h"
 #include <ci/internal/more_stats.h>
 #include "orm_json_lib.h"
@@ -628,6 +630,7 @@ static void orm_dump_struct_ci_netif_config_opts(char* label, ci_netif_config_op
 #undef FTL_TSTRUCT_BEGIN
 #undef FTL_TUNION_BEGIN
 #undef FTL_TFIELD_INT
+#undef FTL_TFIELD_EXPR
 #undef FTL_TFIELD_CONSTINT
 #undef FTL_TFIELD_STRUCT
 #undef FTL_TSTRUCT_END
@@ -664,6 +667,12 @@ static void orm_dump_struct_ci_netif_config_opts(char* label, ci_netif_config_op
   if (output_flags & display_flags) {                                   \
     dump_buf_literal("\"" #field_name "\":");                           \
     dump_buf_int_comma_##type(stats->field_name);                       \
+  }
+
+#define FTL_TFIELD_EXPR(ctx, type, field_name, expr, display_flags) \
+  if (output_flags & display_flags) {                                   \
+    dump_buf_literal("\"" #field_name "\":");                           \
+    dump_buf_cat_comma(type##_fmt, (type)(expr));                       \
   }
 
 #define FTL_TFIELD_CONSTINT(ctx, type, field_name, display_flags) \
@@ -858,14 +867,48 @@ static void orm_waitable_dump(ci_netif* ni, const char* sock_type,
 }
 
 
-static int orm_shared_state_dump(ci_netif* ni, int output_flags,
+static int orm_stack_dump_pids(int stack_id)
+{
+  const pid_t* pids = NULL;
+  int n_pids = 0;
+  int i;
+  int rc;
+
+  rc = libstack_stack_mapping_get_pids(stack_id, &pids, &n_pids);
+  if( rc == -ENOENT ) {
+    LOG("Warning: No stack_mapping for stack %d found\n", stack_id);
+    n_pids = 0;
+    rc = 0;
+  }
+  else if( rc != 0 ) {
+    LOG("ERROR: Failed to get pids for stack %d (rc=%d)\n", stack_id, rc);
+    return rc;
+  }
+
+  dump_buf_literal("\"pids\":[");
+  for( i = 0; i < n_pids; ++i )
+    dump_buf_cat_comma("%d", (int) pids[i]);
+  dump_buf_cleanup();
+  dump_buf_literal_comma("]");
+  return 0;
+}
+
+
+static int orm_shared_state_dump(struct orm_stack* stack, int output_flags,
                                  const sockbuf_filter_t* sft)
 {
+  ci_netif* ni = &stack->os_ni;
   ci_netif_state* ns = ni->state;
+  int rc;
 
   dump_buf_literal("\"stack\":{");
   if( output_flags & ORM_OUTPUT_STACK )
     orm_dump_struct_ci_netif_state("stack_state", ns, output_flags);
+  if( output_flags & ORM_OUTPUT_PIDS ) {
+    rc = orm_stack_dump_pids(stack->os_id);
+    if( rc != 0 )
+      return rc;
+  }
   if( output_flags & ORM_OUTPUT_SOCKETS ) {
     orm_waitable_dump(ni, "tcp_listen", output_flags, sft);
     orm_waitable_dump(ni, "tcp", output_flags, sft);
@@ -909,10 +952,13 @@ static int orm_vis_dump(ci_netif* ni, int output_flags)
 /* Main */
 /**********************************************************/
 
-static int orm_netif_dump(ci_netif* ni, int id, int output_flags, bool cfg_flat,
-                          const char* stackname, const sockbuf_filter_t* sft)
+static int orm_netif_dump(struct orm_stack* stack, int output_flags,
+                          bool cfg_flat, const char* stackname,
+                          const sockbuf_filter_t* sft)
 {
   int rc;
+  ci_netif* ni = &stack->os_ni;
+  int id = stack->os_id;
 
   if (stackname != NULL)
     if ( strcmp(stackname, ni->state->name) != 0 )
@@ -951,8 +997,8 @@ static int orm_netif_dump(ci_netif* ni, int id, int output_flags, bool cfg_flat,
       return rc;
     }
   }
-  if (output_flags & (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS)) {
-    if( (rc = orm_shared_state_dump(ni, output_flags, sft)) != 0 ) {
+  if (output_flags & (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS | ORM_OUTPUT_PIDS)) {
+    if( (rc = orm_shared_state_dump(stack, output_flags, sft)) != 0 ) {
       LOG("stack error code %d\n",rc);
       return rc;
     }
@@ -1033,6 +1079,8 @@ int orm_parse_output_flags(int argc, const char* const* argv)
       output_flags |= ORM_OUTPUT_TCP_EXT_STATS_COUNT;
     else if ( !strcmp(argv[i], "stack_state") )
       output_flags |= ORM_OUTPUT_STACK;
+    else if ( !strcmp(argv[i], "pids") )
+      output_flags |= ORM_OUTPUT_PIDS;
     else if ( !strcmp(argv[i], "sockets") )
       output_flags |= ORM_OUTPUT_SOCKETS;
     else if ( !strcmp(argv[i], "stack") )
@@ -1046,7 +1094,7 @@ int orm_parse_output_flags(int argc, const char* const* argv)
     else if ( !strcmp(argv[i], "extra") )
       output_flags |= ORM_OUTPUT_EXTRA;
     else if ( !strcmp(argv[i], "all") )
-      output_flags |= ORM_OUTPUT_LOTS | ORM_OUTPUT_EXTRA;
+      output_flags |= ORM_OUTPUT_LOTS | ORM_OUTPUT_EXTRA | ORM_OUTPUT_PIDS;
     else
       valid = false;
   }
@@ -1174,10 +1222,8 @@ int orm_do_dump(const struct orm_cfg* cfg, int output_flags,
   if( cfg->flat )
     dump_buf_literal("\"stacks\":[");
   for( i = 0; i < state.n_stacks; ++i ) {
-    ci_netif* ni = &state.stacks[i]->os_ni;
-    int id       = state.stacks[i]->os_id;
-
-    if( (rc = orm_netif_dump(ni, id, output_flags, cfg->flat, cfg->stackname, &sft)) != 0 )
+    if( (rc = orm_netif_dump(state.stacks[i], output_flags, cfg->flat,
+                             cfg->stackname, &sft)) != 0 )
       goto done;
   }
 

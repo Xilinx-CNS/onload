@@ -140,6 +140,8 @@ struct eflatency_vi {
   ef_memreg memreg;
   bool      needs_rx_post;
   int       rx_prefix_len;
+  uint32_t  release_pkt_id;
+  bool      release_pkt_needed;
 };
 
 static ef_driver_handle  driver_handle;
@@ -401,13 +403,24 @@ static void handle_rx_ref(struct eflatency_vi * vi, unsigned pkt_id)
     const void *p = efct_vi_rxpkt_get(&vi->vi, pkt_id);
     read_pkt_data(p);
   }
-  efct_vi_rxpkt_release(&vi->vi, pkt_id);
+  /* About to send so delay pkt release until after. */
+  vi->release_pkt_id = pkt_id;
+  vi->release_pkt_needed = true;
 }
 
 
 static void handle_rx_ref_discard(struct eflatency_vi * vi, unsigned pkt_id)
 {
   efct_vi_rxpkt_release(&vi->vi, pkt_id);
+}
+
+
+static inline void rx_ref_release(struct eflatency_vi* vi)
+{
+  if( vi->release_pkt_needed ) {
+    efct_vi_rxpkt_release(&vi->vi, vi->release_pkt_id);
+    vi->release_pkt_needed = false;
+  }
 }
 
 
@@ -583,6 +596,8 @@ generic_desc_check(struct eflatency_vi* vi, struct eflatency_vi *tx_vi,
   ef_request_id   tx_ids[EF_VI_TRANSMIT_BATCH];
   ef_request_id   rx_ids[EF_VI_RECEIVE_BATCH];
 
+  rx_ref_release(vi);
+
   while( 1 ) {
     for( ; i < n_ev; vi->i = ++i )
       switch( EF_EVENT_TYPE(evs[i]) ) {
@@ -657,6 +672,8 @@ static void rx_wait_poll_rx(struct eflatency_vi* vi,
                             struct eflatency_vi* tx_vi)
 {
   ef_event ev;
+
+  rx_ref_release(vi);
 
   while( 1 ) {
     if( cfg_data_peek ) {
@@ -827,6 +844,7 @@ static void prepare(struct eflatency_vi* rx_vi)
       rx_post(&rx_vi->vi);
   }
   rx_vi->rx_prefix_len = ef_vi_receive_prefix_len(&rx_vi->vi);
+  rx_vi->release_pkt_needed = false;
 }
 
 

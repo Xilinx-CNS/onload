@@ -65,24 +65,45 @@ static inline uint32_t ef_shrub_buffer_sbseq(ef_shrub_buffer_id id)
 #define EF_SHRUB_DUMP_LOG_SIZE 40
 #define EF_SHRUB_SOCK_DIR_PATH "/run/onload/"
 #define EF_SHRUB_DUMP_LOG_DIR "/var/log/"
-#define EF_SHRUB_CONTROLLER_PATH_FORMAT "%scontroller-%d/"
-#define EF_SHRUB_SHRUB_FORMAT "shrub-%d"
+#define EF_SHRUB_CONTROLLER_PREFIX "controller-"
+#define EF_SHRUB_SHRUB_PREFIX "shrub-"
+#define EF_SHRUB_NEGOTIATION_SOCKET "shrub_config"
+#define EF_SHRUB_CONFIG_SOCKET_LOCK EF_SHRUB_NEGOTIATION_SOCKET "_lock"
+#define EF_SHRUB_CONTROLLER_PATH_FORMAT "%s" EF_SHRUB_CONTROLLER_PREFIX "%d/"
+#define EF_SHRUB_SHRUB_FORMAT EF_SHRUB_SHRUB_PREFIX "%d"
 #define EF_SHRUB_MAX_CONTROLLER 9999
 #define EF_SHRUB_MAX_SHRUB 9999
 #define EF_SHRUB_NO_SHRUB -1
 #define EF_SHRUB_MAX_DIGITS 4
-#define EF_SHRUB_CONTROLLER_LEN (sizeof("controller-") + EF_SHRUB_MAX_DIGITS)
-#define EF_SHRUB_SHRUB_LEN (sizeof("shrub-") + EF_SHRUB_MAX_DIGITS)
-#define EF_SHRUB_NEGOTIATION_SOCKET "shrub_config"
-#define EF_SHRUB_SOCKET_DIR_LEN                                                \
-  (sizeof(EF_SHRUB_SOCK_DIR_PATH) + EF_SHRUB_CONTROLLER_LEN + sizeof("/"))
+
+/* Lengths of path snippets without string terminator.
+ * Only used in other length calculations.
+ */
+#define _SHRUB_SOCK_DIR_PATH_LEN (sizeof(EF_SHRUB_SOCK_DIR_PATH)-1)
+#define _SHRUB_DUMP_LOG_DIR_LEN (sizeof(EF_SHRUB_DUMP_LOG_DIR)-1)
+#define _SHRUB_CONTROLLER_PREFIX_LEN (sizeof(EF_SHRUB_CONTROLLER_PREFIX)-1)
+#define _SHRUB_SHRUB_PREFIX_LEN (sizeof(EF_SHRUB_SHRUB_PREFIX)-1)
+#define _SHRUB_NEGOTIATION_SOCKET_LEN (sizeof(EF_SHRUB_NEGOTIATION_SOCKET)-1)
+#define _SHRUB_CONFIG_SOCKET_LOCK_LEN (sizeof(EF_SHRUB_CONFIG_SOCKET_LOCK)-1)
+#define _SHRUB_PATH_SEP_LEN (sizeof("/")-1)
+#define _SHRUB_CONTROLLER_LEN                                                  \
+  (_SHRUB_CONTROLLER_PREFIX_LEN + EF_SHRUB_MAX_DIGITS)
+#define _SHRUB_SHRUB_LEN                                                       \
+  (_SHRUB_SHRUB_PREFIX_LEN + EF_SHRUB_MAX_DIGITS)
+#define _SHRUB_SOCKET_DIR_LEN                                                  \
+  (_SHRUB_SOCK_DIR_PATH_LEN + _SHRUB_CONTROLLER_LEN + _SHRUB_PATH_SEP_LEN)
+
+/* Lengths of paths including string terminator */
+#define EF_SHRUB_SOCKET_DIR_LEN (_SHRUB_SOCKET_DIR_LEN + 1)
 #define EF_SHRUB_NEGOTIATION_SOCKET_LEN                                        \
-  (EF_SHRUB_SOCKET_DIR_LEN + sizeof(EF_SHRUB_NEGOTIATION_SOCKET))
+  (_SHRUB_SOCKET_DIR_LEN + _SHRUB_NEGOTIATION_SOCKET_LEN + 1)
 #define EF_SHRUB_SERVER_SOCKET_LEN                                             \
-  (EF_SHRUB_SOCKET_DIR_LEN + EF_SHRUB_SHRUB_LEN)
+  (_SHRUB_SOCKET_DIR_LEN + _SHRUB_SHRUB_LEN + 1)
 #define EF_SHRUB_LOG_LEN                                                       \
-  (sizeof(EF_SHRUB_DUMP_LOG_DIR) + EF_SHRUB_CONTROLLER_LEN +                   \
-   EF_SHRUB_DUMP_LOG_SIZE + sizeof("/"))
+  (_SHRUB_DUMP_LOG_DIR_LEN + _SHRUB_CONTROLLER_LEN +                           \
+   EF_SHRUB_DUMP_LOG_SIZE + _SHRUB_PATH_SEP_LEN + 1)
+#define EF_SHRUB_CONFIG_SOCKET_LOCK_LEN                                        \
+  (_SHRUB_SOCKET_DIR_LEN + _SHRUB_CONFIG_SOCKET_LOCK_LEN + 1)
 
 enum ef_shrub_controller_command {
   EF_SHRUB_CONTROLLER_DESTROY,
