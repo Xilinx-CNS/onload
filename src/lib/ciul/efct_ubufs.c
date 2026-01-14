@@ -217,7 +217,6 @@ static int efct_ubufs_next(ef_vi* vi, int ix, bool* sentinel, unsigned* sbseq)
 static void efct_ubufs_free_local(ef_vi* vi, int ix, int sbid)
 {
   struct efct_rx_descriptor* desc = efct_rx_desc_for_sb(vi, ix, sbid);
-  ef_vi_efct_rxq_state* state = &vi->ep_state->rxq.efct_state[ix];
 
   /* If we are consuming packets, we will already have poisoned them in
    * efct_vi_rxpkt_release. We also need to handle the case, for example in
@@ -231,31 +230,6 @@ static void efct_ubufs_free_local(ef_vi* vi, int ix, int sbid)
   /* Order is important: make sure the hardware tail is advanced beyond this
    * buffer before freeing it; free it before attempting to post more. */
   update_filled(vi, ix);
-
-  /* It's possible that this function is called where `sbid` is not full, and
-   * so won't be consumed during `update_filled`. In this case, we pretend that
-   * it was full and carry on, as we would otherwise corrupt the list state by
-   * adding `fifo_tail_hw` to the free list and losing the actual HW fifo. */
-  if( state->fifo_count_hw > 0 ) {
-    if( state->fifo_tail_hw == sbid ) {
-      state->fifo_tail_hw = efct_rx_desc_for_sb(vi, ix, sbid)->sbid_next;
-      state->fifo_count_hw--;
-    }
-#ifndef NDEBUG
-    /* If sbid isn't fifo_tail_hw, then it best not be anywhere else in that
-     * fifo as otherwise we've violated our fifo requirements. This is
-     * equivalent to asserting that `sbid` must have been full and handled by
-     * update_filled before this point. */
-    else {
-      int iter;
-
-      for( iter = state->fifo_tail_hw; iter != -1;
-           iter = efct_rx_desc_for_sb(vi, ix, iter)->sbid_next )
-        EF_VI_ASSERT(iter != sbid);
-    }
-#endif
-  }
-
   efct_rx_sb_free_push(vi, ix, sbid);
   post_buffers(vi, ix);
 }
