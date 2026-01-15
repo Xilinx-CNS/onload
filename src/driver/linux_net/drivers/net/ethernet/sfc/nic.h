@@ -153,9 +153,6 @@ enum {
 	EF10_STAT_exp_rx_merge_packets,
 	EF10_STAT_exp_rx_merge_event_tlps,
 	EF10_STAT_exp_rx_merge_event_bytes,
-	EF10_STAT_fc_ecc_errors,
-	EF10_STAT_fc_ecc_overflow,
-	EF10_STAT_fc_tcam_errors,
 	EF10_STAT_COUNT
 };
 

@@ -122,8 +122,6 @@ static const struct {
 	[EF10_STAT_ ## ef10_name] = { STAT_ID(RXDP, mcdi_index) }
 #define LL_STAT(ef10_name, mcdi_index)		\
 	[EF10_STAT_ ## ef10_name] = { STAT_ID(LL, mcdi_index) }
-#define FC_STAT(ef10_name, mcdi_index)		\
-	[EF10_STAT_ ## ef10_name] = { STAT_ID(FC, mcdi_index) }
 
 	MAC_STAT(port_tx_bytes, TX_BYTES),
 	MAC_STAT(port_tx_packets, TX_PKTS),
@@ -211,16 +209,11 @@ static const struct {
 	LL_STAT(exp_rx_merge_packets, LL_INI_REQ_RXEV_COAL),
 	LL_STAT(exp_rx_merge_event_tlps, LL_INI_REQ_RXEV_PKTS),
 	LL_STAT(exp_rx_merge_event_bytes, LL_INI_REQ_RXEV_BYTES),
-	/* Fast classifier stats */
-	FC_STAT(fc_ecc_errors, FC_ECC_ERRORS),
-	FC_STAT(fc_ecc_overflow, FC_ECC_OVERFLOW),
-	FC_STAT(fc_tcam_errors, FC_TCAM_ERRORS),
 #undef MAC_STAT
 #undef PHY_STAT
 #undef PM_STAT
 #undef RXDP_STAT
 #undef LL_STAT
-#undef FC_STAT
 };
 
 static bool efx_x4_lookup_ef10_stat(u32 mcdi_stat_id, u32 *ef10_stat)

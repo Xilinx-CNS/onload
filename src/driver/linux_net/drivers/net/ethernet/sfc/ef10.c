@@ -1912,9 +1912,6 @@ static const struct efx_hw_stat_desc efx_ef10_stat_desc[EF10_STAT_COUNT] = {
 	X4_DMA_STAT(exp_rx_merge_packets),
 	X4_DMA_STAT(exp_rx_merge_event_tlps),
 	X4_DMA_STAT(exp_rx_merge_event_bytes),
-	X4_DMA_STAT(fc_ecc_errors),
-	X4_DMA_STAT(fc_ecc_overflow),
-	X4_DMA_STAT(fc_tcam_errors),
 };
 
 static void efx_ef10_common_stat_mask(unsigned long *mask)
