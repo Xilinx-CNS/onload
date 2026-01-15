@@ -40,9 +40,9 @@ void ef_shrub_queue_close(struct ef_shrub_queue* queue);
 void ef_shrub_queue_poll(struct ef_shrub_queue* queue);
 
 void ef_shrub_queue_attached(struct ef_shrub_queue* queue,
-                             struct ef_shrub_client_state* client);
+                             struct ef_shrub_connection* connection);
 void ef_shrub_queue_detached(struct ef_shrub_queue* queue,
-                             struct ef_shrub_client_state* client);
+                             struct ef_shrub_connection* connection);
 
 void ef_shrub_queue_dump_to_fd(struct ef_shrub_queue* queue, int fd,
                                char* buf, size_t buflen);

@@ -210,9 +210,8 @@ ef_shrub_connection_client_state(struct ef_shrub_connection* connection)
 }
 
 void ef_shrub_queue_attached(struct ef_shrub_queue* queue,
-                             struct ef_shrub_client_state* client)
+                             struct ef_shrub_connection* connection)
 {
-  struct ef_shrub_connection* connection = (void*)client;
   CHECK(connection->queue, ==, queue);
   CHECK(find_connection(connection, queue), ==, connection);
   calls->attach++;
@@ -221,9 +220,8 @@ void ef_shrub_queue_attached(struct ef_shrub_queue* queue,
 }
 
 void ef_shrub_queue_detached(struct ef_shrub_queue* queue,
-                             struct ef_shrub_client_state* client)
+                             struct ef_shrub_connection* connection)
 {
-  struct ef_shrub_connection* connection = (void*)client;
   CHECK(connection->queue, ==, NULL);
   CHECK(find_connection(connection, queue), ==, NULL);
   calls->detach++;

@@ -75,6 +75,12 @@ struct mock_connection
   struct ef_shrub_client_state state;
 };
 
+struct ef_shrub_client_state*
+ef_shrub_connection_client_state(struct ef_shrub_connection* connection)
+{
+  return &((struct mock_connection*)connection)->state;
+}
+
 static int mock_attach(struct ef_vi* vi_, int qid_, int buf_fd,
                        unsigned n_superbufs, bool shared, bool interrupt)
 {
@@ -168,7 +174,7 @@ static struct mock_connection* open_connection(void)
     mock->connection.fifo[i] = EF_SHRUB_INVALID_BUFFER;
   STATE_STASH(mock);
 
-  ef_shrub_queue_attached(queue, &mock->state);
+  ef_shrub_queue_attached(queue, &mock->connection);
   return mock;
 }
 
@@ -288,7 +294,7 @@ static void test_shrub_queue_connections(void)
   STATE_UPDATE(c[2], connection.fifo_index, 2);
 
   expect_free = 5;
-  ef_shrub_queue_detached(queue, &c[3]->state);
+  ef_shrub_queue_detached(queue, &c[3]->connection);
   CHECK(expect_free, ==, -1);
   STATE_UPDATE(queue, connection_count, 3);
   for( i = 0; i < 6; ++i )
