@@ -96,11 +96,6 @@ efct_nic_rxq_free(struct efhw_nic *nic, struct efhw_efct_rxq *rxq,
   EFCT_PRE(dev, edev, cli, nic, rc)
   __efct_nic_rxq_free(edev, cli, rxq, freer);
   EFCT_POST(dev, edev, cli, nic, rc);
-
-  /* The X3 driver keeps all RXQs initialised from net up to net down, even if
-   * there are no active users of an RXQ. So we must manufacture a flush
-   * completion event as a real one will never come. */
-  efhw_handle_efct_rxq_flushed(nic, rxq->qid);
 }
 
 #define REFRESH_BATCH_SIZE  8
