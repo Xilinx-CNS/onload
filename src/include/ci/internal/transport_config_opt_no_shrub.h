@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0 */
+/* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
 /* X-SPDX-Copyright-Text: (c) Copyright 2025 Advanced Micro Devices, Inc. */
 #ifndef __CI_INTERNAL_TRANSPORT_CONFIG_OPT_NO_SHRUB_H__
 #define __CI_INTERNAL_TRANSPORT_CONFIG_OPT_NO_SHRUB_H__
