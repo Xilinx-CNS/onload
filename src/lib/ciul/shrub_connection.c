@@ -6,6 +6,8 @@
 #include "shrub_connection.h"
 #include "shrub_server_sockets.h"
 
+#include <stdio.h>
+
 struct ef_shrub_client_state*
 ef_shrub_connection_client_state(struct ef_shrub_connection* connection)
 {
@@ -138,6 +140,9 @@ void ef_shrub_connection_dump_to_fd(struct ef_shrub_connection* connection,
 {
   struct ef_shrub_client_state* client_state =
     ef_shrub_connection_client_state(connection);
+  bool print_comma = false;
+  int printed_chars = 0;
+  int buffer_index;
 
   shrub_log_to_fd(fd, buf, buflen, "    connection[fd %d]: "
                   "server_fifo_index: %llu server_fifo_size: %llu\n",
@@ -146,4 +151,41 @@ void ef_shrub_connection_dump_to_fd(struct ef_shrub_connection* connection,
   shrub_log_to_fd(fd, buf, buflen, "      client_fifo_index: %llu "
                   "client_fifo_size: %llu\n", client_state->client_fifo_index,
                   client_state->metrics.client_fifo_size);
+
+#define SHRUB_DUMP_CONN_BUF_REFS_LINE "      buffer_refs: {"
+  shrub_log_to_fd(fd, buf, buflen, SHRUB_DUMP_CONN_BUF_REFS_LINE);
+  for( buffer_index = 0;
+       buffer_index < connection->queue->buffer_count;
+       buffer_index++ ) {
+    if( connection->buffer_refs[buffer_index] ) {
+      const int line_chars = sizeof(SHRUB_DUMP_SECTION_SEPARATOR) -
+                             sizeof(SHRUB_DUMP_CONN_BUF_REFS_LINE);
+      bool new_line = false;
+      int print_len;
+
+      print_len = snprintf(NULL, 0, "%s%d",
+                           print_comma ? ", ": "",
+                           buffer_index);
+      /* If we can't figure out how long the string would be for whatever
+       * reason, lets just assume some arbitrary value that will still keep
+       * the numbers tightly grouped over multiple lines. */
+      if( print_len <= 0 )
+        print_len = 5;
+
+      if( printed_chars + print_len > line_chars ) {
+        new_line = true;
+        printed_chars = 0;
+      }
+
+      printed_chars += print_len;
+
+      shrub_log_to_fd(fd, buf, buflen, "%s%s%d",
+                      print_comma ? ", ": "",
+                      new_line ? "\n                    " : "",
+                      buffer_index);
+
+      print_comma = true;
+    }
+  }
+  shrub_log_to_fd(fd, buf, buflen, "}\n");
 }
