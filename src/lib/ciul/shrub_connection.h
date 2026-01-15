@@ -39,4 +39,7 @@ ef_shrub_connection_client_state(struct ef_shrub_connection* connection);
 void ef_shrub_connection_dump_to_fd(struct ef_shrub_connection* connection,
                                     int fd, char* buf, size_t buflen);
 
+int ef_shrub_connection_attach_queue(struct ef_shrub_connection* connection,
+                                     struct ef_shrub_queue* queue);
+
 #endif

@@ -139,7 +139,10 @@ static int server_request_queue(struct ef_shrub_server* server,
       return rc;
   }
 
-  connection->queue = queue;
+  rc = ef_shrub_connection_attach_queue(connection, queue);
+  if( rc < 0 )
+    return rc;
+
   rc = ef_shrub_connection_send_metrics(connection);
   if( rc < 0 )
     return rc;

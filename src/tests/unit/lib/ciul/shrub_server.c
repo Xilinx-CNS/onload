@@ -195,6 +195,13 @@ ef_shrub_connection_alloc(struct ef_shrub_connection** connection_out,
   return 0;
 }
 
+int ef_shrub_connection_attach_queue(struct ef_shrub_connection* connection,
+                                     struct ef_shrub_queue* queue)
+{
+  connection->queue = queue;
+  return 0;
+}
+
 static struct ef_shrub_connection*
 find_connection(struct ef_shrub_connection* target, struct ef_shrub_queue* queue)
 {

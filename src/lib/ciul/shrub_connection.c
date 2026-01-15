@@ -109,6 +109,17 @@ int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection)
   return 0;
 }
 
+int ef_shrub_connection_attach_queue(struct ef_shrub_connection* connection,
+                                     struct ef_shrub_queue* queue)
+{
+  if( ! connection || ! queue )
+    return -EINVAL;
+
+  connection->queue = queue;
+
+  return 0;
+}
+
 void ef_shrub_connection_dump_to_fd(struct ef_shrub_connection* connection,
                                     int fd, char* buf, size_t buflen)
 {
