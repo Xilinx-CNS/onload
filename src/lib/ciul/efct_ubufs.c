@@ -502,12 +502,9 @@ static void efct_ubufs_cleanup(ef_vi* vi)
 static void efct_ubufs_dump_stats(ef_vi* vi, ef_vi_dump_log_fn_t logger,
                                   void* log_arg)
 {
-  const struct efct_ubufs* ubufs = const_ubufs(vi);
   int ix;
 
   for( ix = 0; ix < vi->efct_rxqs.max_qs; ++ix ) {
-    const struct ef_shrub_client* client = &ubufs->q[ix].shrub_client;
-    const struct ef_shrub_client_state* client_state = ef_shrub_client_get_state(client);
     const ef_vi_efct_rxq* efct_rxq = &vi->efct_rxqs.q[ix];
     const ef_vi_efct_rxq_state *efct_state = efct_get_rxq_state(vi, ix);
 
@@ -523,7 +520,7 @@ static void efct_ubufs_dump_stats(ef_vi* vi, ef_vi_dump_log_fn_t logger,
                EF10CT_STATS_GET(vi, ix, torn_down_out_of_order),
                EF10CT_STATS_GET(vi, ix, corrupt_rxq_state));
 
-        logger(log_arg, "  rxq[%d]: sw_fifo_empty=%" CI_PRIu64 
+        logger(log_arg, "  rxq[%d]: sw_fifo_empty=%" CI_PRIu64
                " hw_fifo_empty=%" CI_PRIu64 " free_list_empty=%" CI_PRIu64, ix,
                EF10CT_STATS_GET(vi, ix, sw_fifo_empty),
                EF10CT_STATS_GET(vi, ix, hw_fifo_empty),
@@ -541,28 +538,16 @@ static void efct_ubufs_dump_stats(ef_vi* vi, ef_vi_dump_log_fn_t logger,
 
         logger(log_arg, "  rxq[%d]: rollover_failed_no_evq_space=%" CI_PRIu64,
                ix, EF10CT_STATS_GET(vi, ix, rollover_failed_no_evq_space));
+
+        logger(log_arg, "  rxq[%d]: acquire_failures=%" CI_PRIu64
+               " release_count=%" CI_PRIu64, ix,
+               EF10CT_STATS_GET(vi, ix, acquire_failures),
+               EF10CT_STATS_GET(vi, ix, release_count));
       }
 
-      if( client_state ) {
-        logger(log_arg, "  rxq[%d]: server_fifo_size=%" CI_PRIu64
-               " server_fifo_idx=%" CI_PRIu64, ix,
-               client_state->metrics.server_fifo_size,
-               client_state->server_fifo_index);
-        logger(log_arg, "  rxq[%d]: client_fifo_size=%" CI_PRIu64
-               " client_fifo_idx=%" CI_PRIu64, ix,
-               client_state->metrics.client_fifo_size,
-               client_state->client_fifo_index);
-        if ( vi->vi_stats != NULL ) {
-          logger(log_arg, "  rxq[%d]: acquire_failures=%" CI_PRIu64 
-                 " release_count=%" CI_PRIu64, ix,
-                 EF10CT_STATS_GET(vi, ix, acquire_failures),
-                 EF10CT_STATS_GET(vi, ix, release_count));
-        }
-      } else {
-        logger(log_arg, "  rxq[%d]: fifo_count_hw=%" CI_PRIu16
-               " fifo_count_sw=%" CI_PRIu16, ix, efct_state->fifo_count_hw,
-               efct_state->fifo_count_sw);
-      }
+      logger(log_arg, "  rxq[%d]: fifo_count_hw=%" CI_PRIu16
+             " fifo_count_sw=%" CI_PRIu16, ix, efct_state->fifo_count_hw,
+             efct_state->fifo_count_sw);
     }
   }
 }
