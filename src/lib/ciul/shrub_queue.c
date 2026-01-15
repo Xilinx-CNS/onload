@@ -308,15 +308,10 @@ void ef_shrub_queue_attached(struct ef_shrub_queue* queue,
 void ef_shrub_queue_detached(struct ef_shrub_queue* queue,
                              struct ef_shrub_connection* connection)
 {
-  struct ef_shrub_client_state* client =
-    ef_shrub_connection_client_state(connection);
-  int fifo_index = client->server_fifo_index;
-  while( fifo_index != queue->fifo_index ) {
-    ef_shrub_buffer_id buffer_id = queue->fifo[fifo_index];
-    assert(buffer_id != EF_SHRUB_INVALID_BUFFER);
-    release_buffer(queue, connection, ef_shrub_buffer_index(buffer_id));
-    fifo_index = next_fifo_index(queue, fifo_index);
-  }
+  int buffer_index;
+
+  for( buffer_index = 0; buffer_index < queue->buffer_count; buffer_index++ )
+    release_buffer(queue, connection, buffer_index);
 
   if( --queue->connection_count == 0 )
     ef_shrub_queue_close(queue);
