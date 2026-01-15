@@ -100,10 +100,26 @@ static int queue_alloc_shared(struct ef_shrub_queue* queue)
   return 0;
 }
 
-static void release_buffer(struct ef_shrub_queue* queue, int buffer_index)
+static void release_buffer(struct ef_shrub_queue* queue,
+                           struct ef_shrub_connection* connection,
+                           int buffer_index)
 {
   struct ef_shrub_queue_buffer* buffer = &queue->buffers[buffer_index];
+
+  EF_VI_ASSERT(buffer_index != EF_SHRUB_INVALID_BUFFER);
+
+  if( ! connection->buffer_refs[buffer_index] )
+    return;
+
+  connection->buffer_refs[buffer_index] = false;
   if( --buffer->ref_count == 0 ) {
+#ifndef NDEBUG
+    struct ef_shrub_connection* conn;
+
+    for( conn = queue->connections; conn; conn = conn->next )
+      EF_VI_ASSERT(!conn->buffer_refs[buffer_index]);
+#endif
+
     /* Remove all FIFO entries older than the buffer being freed. All
      * clients must have taken these (or they wouldn't be releasing a later
      * buffer), and we don't want a client holding on to a buffer to prevent
@@ -143,7 +159,7 @@ static void poll_connection(struct ef_shrub_queue* queue,
   if( buffer_index >= queue->buffer_count )
     return; /* TBD: the client is misbehaving, should we disconnect? */
 
-  release_buffer(queue, buffer_index);
+  release_buffer(queue, connection, buffer_index);
 }
 
 static void poll_connections(struct ef_shrub_queue* queue)
@@ -156,6 +172,7 @@ static void poll_connections(struct ef_shrub_queue* queue)
 static void poll_fifo(struct ef_shrub_queue* queue)
 {
   while( fifo_has_space(queue) ) {
+    struct ef_shrub_connection* conn;
     bool sentinel;
     unsigned sbseq;
     int buffer_index =
@@ -171,6 +188,10 @@ static void poll_fifo(struct ef_shrub_queue* queue)
     assert(buffer->ref_count == 0);
     buffer->ref_count = queue->connection_count;
     buffer->fifo_index = fifo_index;
+    for( conn = queue->connections; conn; conn = conn->next ) {
+      EF_VI_ASSERT(!conn->buffer_refs[buffer_index]);
+      conn->buffer_refs[buffer_index] = true;
+    }
 
     queue->fifo_index = next_fifo_index(queue, fifo_index);
   }
@@ -259,12 +280,17 @@ void ef_shrub_queue_attached(struct ef_shrub_queue* queue,
    * provide the earliest valid buffer we find to the client. The client will
    * scan forwards from there to find the synchronisation point. */
   while( queue->fifo[prev_index] != EF_SHRUB_INVALID_BUFFER ) {
+    int buffer_index;
+
     fifo_index = prev_index;
 
     /* Take a reference to this buffer */
     ef_shrub_buffer_id buffer_id = queue->fifo[fifo_index];
     assert(buffer_id != EF_SHRUB_INVALID_BUFFER);
-    queue->buffers[ef_shrub_buffer_index(buffer_id)].ref_count++;
+    buffer_index = ef_shrub_buffer_index(buffer_id);
+    queue->buffers[buffer_index].ref_count++;
+    EF_VI_ASSERT(!connection->buffer_refs[buffer_index]);
+    connection->buffer_refs[buffer_index] = true;
 
     /* This should never happen since the FIFO should never be completely full,
      * but we shouldn't loop forever if it does happen somehow. */
@@ -288,7 +314,7 @@ void ef_shrub_queue_detached(struct ef_shrub_queue* queue,
   while( fifo_index != queue->fifo_index ) {
     ef_shrub_buffer_id buffer_id = queue->fifo[fifo_index];
     assert(buffer_id != EF_SHRUB_INVALID_BUFFER);
-    release_buffer(queue, ef_shrub_buffer_index(buffer_id));
+    release_buffer(queue, connection, ef_shrub_buffer_index(buffer_id));
     fifo_index = next_fifo_index(queue, fifo_index);
   }
 

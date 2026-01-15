@@ -168,10 +168,16 @@ static struct mock_connection* open_connection(void)
   STATE_ACCEPT(queue, connections);
 
   mock->connection.fifo = calloc(fifo_size, sizeof(ef_shrub_buffer_id));
+  mock->connection.buffer_refs = calloc(queue->buffer_count,
+                                        sizeof(mock->connection.buffer_refs[0]));
   mock->connection.fifo_size = fifo_size;
 
   for( i = 0; i < fifo_size; ++i )
     mock->connection.fifo[i] = EF_SHRUB_INVALID_BUFFER;
+
+  for( i = 0; i < queue->buffer_count; ++i )
+    mock->connection.buffer_refs[i] = false;
+
   STATE_STASH(mock);
 
   ef_shrub_queue_attached(queue, &mock->connection);

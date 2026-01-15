@@ -8,6 +8,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 #include <etherfabric/internal/shrub_shared.h>
 
 struct ef_shrub_queue;
@@ -20,6 +21,10 @@ struct ef_shrub_connection {
   size_t fifo_index;
   size_t fifo_size;
   size_t fifo_mmap_offset;
+
+  /* If buffer_refs[buffer_idx] is true, then this client has taken a reference
+   * to the buffer at queue->buffers[buffer_idx] and has not returned it. */
+  bool *buffer_refs;
 
   ef_shrub_buffer_id* fifo;
 };

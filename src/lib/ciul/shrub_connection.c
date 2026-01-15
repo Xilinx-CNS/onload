@@ -112,10 +112,23 @@ int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection)
 int ef_shrub_connection_attach_queue(struct ef_shrub_connection* connection,
                                      struct ef_shrub_queue* queue)
 {
+  void* buffer_refs;
+  int i;
+
   if( ! connection || ! queue )
     return -EINVAL;
 
   connection->queue = queue;
+
+  buffer_refs = reallocarray(connection->buffer_refs,
+                             queue->buffer_count,
+                             sizeof(connection->buffer_refs[0]));
+  if( buffer_refs == NULL )
+    return -ENOMEM;
+
+  connection->buffer_refs = buffer_refs;
+  for( i = 0; i < queue->buffer_count; ++i )
+    connection->buffer_refs[i] = false;
 
   return 0;
 }

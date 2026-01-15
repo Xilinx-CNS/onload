@@ -199,6 +199,8 @@ int ef_shrub_connection_attach_queue(struct ef_shrub_connection* connection,
                                      struct ef_shrub_queue* queue)
 {
   connection->queue = queue;
+  /* This test doesn't interact with the queue's buffers, so we don't need to
+   * allocate the space for the reference tracking. */
   return 0;
 }
 
