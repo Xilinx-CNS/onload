@@ -323,7 +323,7 @@ void ef_shrub_queue_dump_to_fd(struct ef_shrub_queue* queue, int fd,
   struct ef_shrub_connection *connection;
   ef_vi_efct_rxq_state *rxq_state =
     &queue->vi->ep_state->rxq.efct_state[queue->ix];
-  int fifo_index;
+  int fifo_index, buffer_index;
 
   shrub_log_to_fd(fd, buf, buflen, "  rxq[%d]: hw: %d\n",
                   queue->ix, rxq_state->qid);
@@ -346,6 +346,17 @@ void ef_shrub_queue_dump_to_fd(struct ef_shrub_queue* queue, int fd,
     shrub_log_to_fd(fd, buf, buflen, "             buffer_sentinel: %d "
                     "buffer_sbseq: %d\n", ef_shrub_buffer_sentinel(buffer_id),
                     ef_shrub_buffer_sbseq(buffer_id));
+  }
+
+  shrub_log_to_fd(fd, buf, buflen, "    buffer_count: %llu\n",
+                  queue->buffer_count);
+  for( buffer_index = 0; buffer_index < queue->buffer_count; buffer_index++ ) {
+    struct ef_shrub_queue_buffer* buffer = &queue->buffers[buffer_index];
+    if( buffer->ref_count != 0 ) {
+      shrub_log_to_fd(fd, buf, buflen, "    buffer[%d]: ref_count: %d "
+                      "fifo_index: %d\n", buffer_index, buffer->ref_count,
+                      buffer->fifo_index);
+    }
   }
 
   shrub_log_to_fd(fd, buf, buflen, "    connection_count: %llu\n",
