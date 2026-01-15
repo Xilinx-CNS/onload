@@ -340,10 +340,12 @@ void ef_shrub_queue_dump_to_fd(struct ef_shrub_queue* queue, int fd,
        queue->fifo[fifo_index] != EF_SHRUB_INVALID_BUFFER;
        fifo_index = prev_fifo_index(queue, fifo_index) ) {
     ef_shrub_buffer_id buffer_id = queue->fifo[fifo_index];
-    int buffer_index = ef_shrub_buffer_index(buffer_id);
-    shrub_log_to_fd(fd, buf, buflen, "    fifo[%d]: buffer_id: %llu "
-                    "ref_count: %d\n", fifo_index, buffer_id,
-                    queue->buffers[buffer_index].ref_count);
+    shrub_log_to_fd(fd, buf, buflen, "    fifo[%d]: buffer_id: %#llx "
+                    "buffer_index: %d\n", fifo_index, buffer_id,
+                    ef_shrub_buffer_index(buffer_id));
+    shrub_log_to_fd(fd, buf, buflen, "             buffer_sentinel: %d "
+                    "buffer_sbseq: %d\n", ef_shrub_buffer_sentinel(buffer_id),
+                    ef_shrub_buffer_sbseq(buffer_id));
   }
 
   shrub_log_to_fd(fd, buf, buflen, "    connection_count: %llu\n",
