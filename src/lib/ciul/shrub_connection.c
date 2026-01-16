@@ -114,7 +114,9 @@ int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection)
 int ef_shrub_connection_attach_queue(struct ef_shrub_connection* connection,
                                      struct ef_shrub_queue* queue)
 {
+  size_t buffer_refs_bytes;
   void* buffer_refs;
+  size_t ref_size;
   int i;
 
   if( ! connection || ! queue )
@@ -122,9 +124,14 @@ int ef_shrub_connection_attach_queue(struct ef_shrub_connection* connection,
 
   connection->queue = queue;
 
-  buffer_refs = reallocarray(connection->buffer_refs,
-                             queue->buffer_count,
-                             sizeof(connection->buffer_refs[0]));
+  /* If our calculation has overflowed, then we can't do much about it except
+   * complain that we can't satisfy the memory allocation request. */
+  ref_size = sizeof(connection->buffer_refs[0]);
+  buffer_refs_bytes = queue->buffer_count * ref_size;
+  if( buffer_refs_bytes / ref_size != queue->buffer_count )
+    return -ENOMEM;
+
+  buffer_refs = realloc(connection->buffer_refs, buffer_refs_bytes);
   if( buffer_refs == NULL )
     return -ENOMEM;
 
