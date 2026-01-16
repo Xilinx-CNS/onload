@@ -114,6 +114,7 @@ enum ef_shrub_controller_command {
 };
 
 #define EF_SHRUB_DEFAULT_BUFFER_COUNT 4
+#define EF_SHRUB_MAX_BUFFER_COUNT 100000
 
 /* This enum specifies the type of request being made to the shrub server. */
 enum ef_shrub_request_type {

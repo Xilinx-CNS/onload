@@ -227,9 +227,9 @@ static int add_server_config(shrub_controller_config *config,
 
   shrub_if_config_t *new_shrub_config;
 
-  if ( buffer_count == 0 ) {
-    ci_log("Error: shrub_controller was unable to add interface "
-           "with buffer size of 0");
+  if( buffer_count == 0 || buffer_count > EF_SHRUB_MAX_BUFFER_COUNT ) {
+    ci_log("Error: shrub_controller was unable to add interface with buffer size of %d, valid range is 1-%d",
+           buffer_count, EF_SHRUB_MAX_BUFFER_COUNT);
     return -EINVAL;
   }
 
