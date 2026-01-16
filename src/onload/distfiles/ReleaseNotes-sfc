@@ -1,6 +1,6 @@
 Solarflare 6.X Linux network driver
 ===================================
-Version:  v6_2_0_1000
+Version:  v6_2_1_1000
 
 
 Overview
@@ -60,7 +60,7 @@ kernel
 Installation of the driver can be confirmed by typing:
    modinfo sfc | grep version
 and checking for the line:
-   version: v6_2_0_1000
+   version: v6_2_1_1000
 
 All network interfaces available on the system can be found with:
   ifconfig -a
@@ -75,7 +75,7 @@ This driver package is supported on:
  - RedHat Enterprise Linux                        10.0
  - Canonical Ubuntu Server LTS                    22.04, 24.04
  - Debian 12 "Bookworm"                           12.0
- - Kernel.org linux kernels                       5.1 to 6.13
+ - Kernel.org linux kernels                       5.1 to 6.15
 
 
 AMD aims to support the current and previous major release of each
@@ -94,6 +94,29 @@ Please contact your local AMD support representative or email
 
 Changelog
 ---------
+### v6_2_1_1000
+SWNETLINUX-5804
+~ Add 'exp_*' counters for the X4 Express datapath to the ethtool -S output.
+
+X4-7141
+~ The maximum number of RSS channels has been changed to 128, ensuring better
+  compatibility and performance.
+
+X4-7170
+~ Improved Built-In Self-Test (BIST) processing for X4, so adapter is left in
+  an operational state after the self-test.
+
+X4-6998
+~ Improvements to clock comparison between adapter and host time e.g. for
+  sys_offset_precise.
+
+SWNETLINUX-5656
+~ Addressed IOMMU errors while RX buffer page sharing is enabled, by skipping
+  page recycling when jumbo packets are discarded.
+~ Re-introduce RX buffer page sharing as the default behavior. Users now have
+  control over this functionality via a new module parameter
+  "rx_buf_page_sharing".
+
 ### v6_2_0_1000
 [General changes]
 ~ Fixed various kernel compatibility issues.
@@ -3098,5 +3121,5 @@ Issue 50868:
 Copyright
 ---------
 Copyright (C) 2019-2022, Xilinx, Inc.
-Copyright (C) 2022-2025, Advanced Micro Devices, Inc.
+Copyright (C) 2022-2026, Advanced Micro Devices, Inc.
 All rights reserved. Use is subject to license terms.

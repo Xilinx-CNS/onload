@@ -2925,4 +2925,4 @@ openonload-20090409.1
 - Performance improvement for UDP recv() when spinning is enabled.
 
 
-(c) Copyright 2009-2024 Advanced Micro Devices, Inc.
+(c) Copyright 2009-2026 Advanced Micro Devices, Inc.
