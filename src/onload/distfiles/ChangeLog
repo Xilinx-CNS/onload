@@ -5,14 +5,20 @@ Update src net driver to v6.2.1.1000
 
 Changes:
 
+ON-15879: expand stat coverage for X4 express and shrub
 ON-16197: Heed RX packet buffer limit for X3
 ON-16306: Handle zeroed out IP_TOS field
+ON-16669: add "no_shrub" build profile
 ON-16871: add missing EF_EVENT_TYPE_MAX to enum
 ON-16887: X4 Express: poison packet data early, at release of packet
 ON-16935: close shrub controller after all clients disconnect
+ON-16947: ensure stackdump prints the correct stats for X4 express queues
 ON-17016: enable TX error recovery on X3
 ON-17059: X3: avoid segfault in opportunistic packet polling under stress
 ON-17069: add no-stats option to eflatency test application
+ON-17133: move eflatency packet management off the critical path
+ON-17135: ensure a valid shrub controller ID is used when manually created
+ON-17146: fix potential buffer leak on shrub client disconnect
 #311: onload_remote_monitor: add creation time fields to ORM JSON output
 #312: orm_json: add optional stack pids via libstack mappings
 
