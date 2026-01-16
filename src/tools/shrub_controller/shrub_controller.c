@@ -375,11 +375,10 @@ void shrub_log_to_fd(int fd, char *buf, size_t buflen, const char* fmt, ...)
   write(fd, buf, len + 1);
 }
 
-#define SECTION_SEP "---------------------------------------------------------"
 static void shrub_dump_summary_to_fd(int fd, shrub_controller_config *config,
                                      char *buf, size_t buflen)
 {
-  shrub_log_to_fd(fd, buf, buflen, SECTION_SEP);
+  shrub_log_to_fd(fd, buf, buflen, SHRUB_DUMP_SECTION_SEPARATOR);
   shrub_log_to_fd(fd, buf, buflen, "\nshrub controller\n");
   shrub_log_to_fd(fd, buf, buflen, "  name: "EF_SHRUB_CONTROLLER_PREFIX"%d%s\n",
                   config->controller_id, config->debug_mode ? " (debug)" : "");
@@ -391,7 +390,7 @@ static void shrub_dump_summary_to_fd(int fd, shrub_controller_config *config,
 static void shrub_dump_stats_to_fd(int fd, shrub_controller_config *config,
                                    char *buf, size_t buflen)
 {
-  shrub_log_to_fd(fd, buf, buflen, SECTION_SEP);
+  shrub_log_to_fd(fd, buf, buflen, SHRUB_DUMP_SECTION_SEPARATOR);
   shrub_log_to_fd(fd, buf, buflen, "\ncontroller statistics:\n");
   shrub_log_to_fd(fd, buf, buflen, "  client negotiation failures: %lu\n",
                   config->controller_stats.controller_failed_to_neg_client);
@@ -415,7 +414,7 @@ static void shrub_dump_server_to_fd(int fd, shrub_if_config_t *server_config,
   if ( if_indextoname(server_config->ifindex, ifname) == NULL )
     snprintf(ifname, sizeof(ifname), "unknown");
 
-  shrub_log_to_fd(fd, buf, buflen, SECTION_SEP);
+  shrub_log_to_fd(fd, buf, buflen, SHRUB_DUMP_SECTION_SEPARATOR);
   shrub_log_to_fd(fd, buf, buflen, "\nshrub server\n");
   shrub_log_to_fd(fd, buf, buflen, "ifname: %.*s ifindex: %d hw_port: %x\n",
                   IFNAMSIZ - 1, ifname, server_config->ifindex,

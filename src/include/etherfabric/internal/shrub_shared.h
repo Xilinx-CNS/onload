@@ -215,6 +215,9 @@ struct ef_shrub_controller_request {
   };
 };
 
+#define SHRUB_DUMP_SECTION_SEPARATOR \
+  "---------------------------------------------------------"
+
 void shrub_log_to_fd(int fd, char* buf, size_t buflen, const char* fmt, ...);
 
 #endif
