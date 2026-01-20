@@ -230,6 +230,8 @@ enum {
 #define OO_IOC_EFCT_SUPERBUF_POST \
                                OO_IOC_W(EFCT_SUPERBUF_POST, \
                                         oo_efct_superbuf_post_t)
+  OO_OP_EFCT_RXQ_ALLOC,
+#define OO_IOC_EFCT_RXQ_ALLOC OO_IOC_W(EFCT_RXQ_ALLOC, oo_efct_rxq_alloc_t)
 
   OO_OP_PKT_BUF_MAP,
 #define OO_IOC_PKT_BUF_MMAP OO_IOC_RW(PKT_BUF_MAP, oo_pkt_buf_map_t)

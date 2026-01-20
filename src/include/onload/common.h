@@ -295,6 +295,10 @@ typedef struct {
 } oo_efct_superbuf_post_t;
 
 typedef struct {
+  uint32_t intf_i;
+} oo_efct_rxq_alloc_t;
+
+typedef struct {
   ci_uint64     offset;
   ci_user_ptr_t addr;
 } oo_pkt_buf_map_t;
