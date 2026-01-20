@@ -47,4 +47,7 @@ void ef_shrub_queue_detached(struct ef_shrub_queue* queue,
 void ef_shrub_queue_dump_to_fd(struct ef_shrub_queue* queue, int fd,
                                char* buf, size_t buflen);
 
+int ef_shrub_queue_buffer_get_ref_count(struct ef_shrub_queue* queue,
+                                        int buffer_index);
+
 #endif

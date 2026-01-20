@@ -366,3 +366,12 @@ void ef_shrub_queue_dump_to_fd(struct ef_shrub_queue* queue, int fd,
        connection = connection->next )
     ef_shrub_connection_dump_to_fd(connection, fd, buf, buflen);
 }
+
+int ef_shrub_queue_buffer_get_ref_count(struct ef_shrub_queue* queue,
+                                        int buffer_index)
+{
+  if( buffer_index < 0 || buffer_index >= queue->buffer_count )
+    return 0;
+
+  return queue->buffers[buffer_index].ref_count;
+}
