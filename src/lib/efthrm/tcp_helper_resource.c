@@ -1068,17 +1068,10 @@ static int tcp_helper_rxq_map(tcp_helper_resource_t* trs, int intf_i, int qix,
   return rc;
 }
 
-
-int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
-                               const struct efx_filter_spec* spec, int rxq,
-                               unsigned token)
+static int tcp_helper_rxq_alloc(tcp_helper_resource_t* trs,
+                                int intf_i, int rxq, unsigned token)
 {
-  int intf_i;
   struct efhw_nic* nic;
-
-  ci_assert_lt((unsigned) hwport, CI_CFG_MAX_HWPORTS);
-  if( (intf_i = trs->netif.hwport_to_intf_i[hwport]) < 0 )
-    return 0;
 
   nic = efrm_client_get_nic(trs->nic[intf_i].thn_oo_nic->efrm_client);
   if( efhw_nic_max_shared_rxqs(nic) ) {
@@ -1210,6 +1203,18 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
   return 0;
 }
 
+int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
+                               const struct efx_filter_spec* spec, int rxq,
+                               unsigned token)
+{
+  int intf_i;
+
+  ci_assert_lt((unsigned) hwport, CI_CFG_MAX_HWPORTS);
+  if( (intf_i = trs->netif.hwport_to_intf_i[hwport]) < 0 )
+    return 0;
+
+  return tcp_helper_rxq_alloc(trs, intf_i, rxq, token);
+}
 
 #if CI_CFG_PIO
 
