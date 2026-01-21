@@ -219,9 +219,6 @@ extern int efab_tcp_helper_listen_os_sock(ci_private_t *priv, void *p_backlog);
 extern int efab_tcp_helper_shutdown_os_sock (tcp_helper_endpoint_t* ep,
                                              ci_int32 how);
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,7,0)
-struct file *sock_alloc_file(struct socket *sock, int flags, void *unused);
-#endif
 
 extern int efab_tcp_helper_more_bufs(tcp_helper_resource_t* trs);
 

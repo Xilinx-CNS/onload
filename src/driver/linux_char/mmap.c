@@ -56,7 +56,7 @@ static vm_fault_t vm_op_fault(
   struct vm_area_struct *vma = vmf->vma;
 #endif
   struct efrm_resource *rs = vma->vm_private_data;
-  unsigned long address = VM_FAULT_ADDRESS(vmf);
+  unsigned long address = vmf->address;
   efch_resource_ops *ops;
 
   ops = efch_ops_table[rs->rs_type];

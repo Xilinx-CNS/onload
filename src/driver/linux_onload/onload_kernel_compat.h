@@ -28,13 +28,6 @@
 #define reinit_completion(c) INIT_COMPLETION(*c)
 #endif
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,14,0))
-#define ci_call_usermodehelper call_usermodehelper
-#else
-extern int
-ci_call_usermodehelper(char *path, char **argv, char **envp, int wait);
-#endif
-
 
 static inline struct file *ci_get_file_rcu(struct file **f)
 {

@@ -125,19 +125,15 @@ find_el_sync(void)
    */
   vectors += AARCH64_INSN_SIZE;
 #endif
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
   /* Skip code that was added in 4.15:
    * d53bd07e        mrs     x30, tpidrro_el0
    * d51bd07f        msr     tpidrro_el0, xzr
    */
   vectors += 2 * AARCH64_INSN_SIZE;
-#endif
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
   vectors += sizeof(ci_uint32);
 #if defined(CONFIG_VMAP_STACK)
   vectors += 5 * sizeof(ci_uint32);
-#endif
 #endif
   if (ci_aarch64_insn_read(vectors, &insn)) {
     EFRM_WARN("%s: cannot read vbar_el1", __func__);

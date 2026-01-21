@@ -25,21 +25,6 @@
 
 #include "onload_kernel_compat.h"
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0)
-#define OO_SOCK_OPS_GETNAME(sock, addr, peer) \
-  sock->ops->getname(sock, addr, peer)
-#else
-static inline int OO_SOCK_OPS_GETNAME(struct socket* sock,
-                                      struct sockaddr* addr, int peer)
-{
-  int addrlen, rc;
-  rc = sock->ops->getname(sock, addr, &addrlen, peer);
-  if( rc < 0 )
-    return rc;
-  return addrlen;
-}
-#endif
-  
 
 static void efab_ep_handover_setup(ci_private_t* priv, int* in_epoll_p)
 {
@@ -689,7 +674,7 @@ int efab_tcp_helper_bind_os_sock_common(struct socket* sock,
      * (which might be different to asked for if asked for 0)
      * This is the getsockname, as mentioned in description above
      */
-    OO_SOCK_OPS_GETNAME(sock, addr, 0);
+    sock->ops->getname(sock, addr, 0);
 
     *out_port = ((struct sockaddr_in*)addr)->sin_port;
   }
@@ -944,7 +929,7 @@ efab_tcp_helper_os_sock_accept(ci_private_t* priv, void *arg)
     char address[sizeof(struct sockaddr_in6)];
     int len, ulen;
 
-    len = OO_SOCK_OPS_GETNAME(newsock, (struct sockaddr *)address, 2);
+    len = sock->ops->getname(newsock, (struct sockaddr *)address, 2);
     if( len < 0 )
       return -ECONNABORTED;
     rc = get_user(ulen, (int *)CI_USER_PTR_GET(op->addrlen));
@@ -1078,4 +1063,3 @@ int oo_clone_fd(struct file* filp, int do_cloexec)
 
   return new_fd;
 }
-

@@ -677,7 +677,7 @@ static void vm_op_close(struct vm_area_struct* vma)
 
 static int cp_fault_mib(struct vm_area_struct *vma, struct vm_fault *vmf)
 {
-  unsigned long offset = VM_FAULT_ADDRESS(vmf) - vma->vm_start;
+  unsigned long offset = vmf->address - vma->vm_start;
   struct cp_vm_private_data* vm_data = cp_get_vm_data(vma);
   struct oo_cplane_handle* cp = vm_data->cp;
 
@@ -697,7 +697,7 @@ static int cp_fault_mib(struct vm_area_struct *vma, struct vm_fault *vmf)
 
 static int cp_fault_fwd(struct vm_area_struct *vma, struct vm_fault *vmf)
 {
-  unsigned long offset = VM_FAULT_ADDRESS(vmf) - vma->vm_start;
+  unsigned long offset = vmf->address - vma->vm_start;
   struct cp_vm_private_data* vm_data = cp_get_vm_data(vma);
   struct oo_cplane_handle* cp = vm_data->cp;
   struct cp_fwd_row* fwd_rows = cp->fwd_tables[vm_data->u.fwd.table_id].rows;
@@ -710,7 +710,7 @@ static int cp_fault_fwd(struct vm_area_struct *vma, struct vm_fault *vmf)
 
 static int cp_fault_fwd_rw(struct vm_area_struct *vma, struct vm_fault *vmf)
 {
-  unsigned long offset = VM_FAULT_ADDRESS(vmf) - vma->vm_start;
+  unsigned long offset = vmf->address - vma->vm_start;
   struct cp_vm_private_data* vm_data = cp_get_vm_data(vma);
   struct oo_cplane_handle* cp = vm_data->cp;
   cp_fwd_table_id fwd_table_id = vm_data->u.fwd.table_id;
@@ -2168,7 +2168,7 @@ static int cp_spawn_server(ci_uint32 flags)
   argv[direct_param_base + direct_param++] = NULL;
   ci_assert_le(direct_param, DIRECT_PARAM_MAX);
 
-  rc = ci_call_usermodehelper(path, argv, envp, UMH_WAIT_EXEC
+  rc = call_usermodehelper(path, argv, envp, UMH_WAIT_EXEC
 #ifdef UMH_KILLABLE
                                                 | UMH_KILLABLE
 #endif
@@ -2946,9 +2946,7 @@ cicp_ip4_route_output(struct net* netns, struct cp_fwd_key* key, uid_t uid,
   fl4.saddr = key->src.ip4;
   fl4.flowi4_tos = key->tos;
   fl4.flowi4_oif = key->ifindex;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,10,0)
   fl4.flowi4_uid = make_kuid(current_user_ns(), uid);
-#endif
 
   ci_assert_equal(key->iif_ifindex, CI_IFID_BAD);
   ci_assert_nflags(key->flag, CP_FWD_KEY_TRANSPARENT);
@@ -3111,9 +3109,7 @@ cicp_ip6_route(struct net* netns, struct cp_fwd_key* key, uid_t uid,
   fl6.flowlabel = 0;
   fl6.flowi6_oif = key->ifindex;
   fl6.flowi6_iif = iif;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,10,0)
   fl6.flowi6_uid = make_kuid(current_user_ns(), uid);
-#endif
 
   /* Now that we've built up the key, ask the kernel to resolve the route.  On
    * recent kernels, we need to distinguish between input and output routes.

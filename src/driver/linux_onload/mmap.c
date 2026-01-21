@@ -199,7 +199,7 @@ static vm_fault_t vm_op_fault(
   struct vm_area_struct *vma = vmf->vma;
 #endif
   tcp_helper_resource_t* trs = (tcp_helper_resource_t*) vma->vm_private_data;
-  unsigned long address = VM_FAULT_ADDRESS(vmf);
+  unsigned long address = vmf->address;
   vm_fault_t rc = 0;
 
   TCP_HELPER_RESOURCE_ASSERT_VALID(trs, 0);

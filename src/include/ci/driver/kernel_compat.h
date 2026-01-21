@@ -200,11 +200,7 @@ static inline bool page_maybe_dma_pinned(struct page *page)
 }
 #endif
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,10,0)
 #define VM_FAULT_ADDRESS(_vmf) (_vmf)->address
-#else
-#define VM_FAULT_ADDRESS(_vmf) (unsigned long)(_vmf)->virtual_address
-#endif
 
 /* ioremap_nocache() was removed in linux-5.6 */
 #ifdef EFRM_HAVE_IOREMAP_NOCACHE
@@ -224,13 +220,7 @@ typedef int vm_fault_t;
 #endif
 
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)
 #define get_netns_id(net_ns)     ((net_ns)->ns.inum)
-#elif defined(EFRM_NET_HAS_PROC_INUM)
-#define get_netns_id(net_ns)     ((net_ns)->proc_inum)
-#else
-#define get_netns_id(net_ns)     0
-#endif
 
 
 /* Correct sequence for per-cpu variable access is: disable preemption to
@@ -274,13 +264,7 @@ static inline struct inode *file_inode(const struct file *f)
 }
 #endif
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)
 #define get_netns_id(net_ns)     ((net_ns)->ns.inum)
-#elif defined(EFRM_NET_HAS_PROC_INUM)
-#define get_netns_id(net_ns)     ((net_ns)->proc_inum)
-#else
-#define get_netns_id(net_ns)     0
-#endif
 
 
 /* Compat for linux < 5.5 */
