@@ -100,10 +100,26 @@ static int queue_alloc_shared(struct ef_shrub_queue* queue)
   return 0;
 }
 
-static void release_buffer(struct ef_shrub_queue* queue, int buffer_index)
+static void release_buffer(struct ef_shrub_queue* queue,
+                           struct ef_shrub_connection* connection,
+                           int buffer_index)
 {
   struct ef_shrub_queue_buffer* buffer = &queue->buffers[buffer_index];
+
+  EF_VI_ASSERT(buffer_index != EF_SHRUB_INVALID_BUFFER);
+
+  if( ! connection->buffer_refs[buffer_index] )
+    return;
+
+  connection->buffer_refs[buffer_index] = false;
   if( --buffer->ref_count == 0 ) {
+#ifndef NDEBUG
+    struct ef_shrub_connection* conn;
+
+    for( conn = queue->connections; conn; conn = conn->next )
+      EF_VI_ASSERT(!conn->buffer_refs[buffer_index]);
+#endif
+
     /* Remove all FIFO entries older than the buffer being freed. All
      * clients must have taken these (or they wouldn't be releasing a later
      * buffer), and we don't want a client holding on to a buffer to prevent
@@ -143,7 +159,7 @@ static void poll_connection(struct ef_shrub_queue* queue,
   if( buffer_index >= queue->buffer_count )
     return; /* TBD: the client is misbehaving, should we disconnect? */
 
-  release_buffer(queue, buffer_index);
+  release_buffer(queue, connection, buffer_index);
 }
 
 static void poll_connections(struct ef_shrub_queue* queue)
@@ -156,6 +172,7 @@ static void poll_connections(struct ef_shrub_queue* queue)
 static void poll_fifo(struct ef_shrub_queue* queue)
 {
   while( fifo_has_space(queue) ) {
+    struct ef_shrub_connection* conn;
     bool sentinel;
     unsigned sbseq;
     int buffer_index =
@@ -171,6 +188,10 @@ static void poll_fifo(struct ef_shrub_queue* queue)
     assert(buffer->ref_count == 0);
     buffer->ref_count = queue->connection_count;
     buffer->fifo_index = fifo_index;
+    for( conn = queue->connections; conn; conn = conn->next ) {
+      EF_VI_ASSERT(!conn->buffer_refs[buffer_index]);
+      conn->buffer_refs[buffer_index] = true;
+    }
 
     queue->fifo_index = next_fifo_index(queue, fifo_index);
   }
@@ -247,8 +268,10 @@ void ef_shrub_queue_poll(struct ef_shrub_queue* queue)
 }
 
 void ef_shrub_queue_attached(struct ef_shrub_queue* queue,
-                             struct ef_shrub_client_state* client)
+                             struct ef_shrub_connection* connection)
 {
+  struct ef_shrub_client_state* client =
+    ef_shrub_connection_client_state(connection);
   int fifo_index = queue->fifo_index;
   int prev_index = prev_fifo_index(queue, fifo_index);
 
@@ -257,12 +280,17 @@ void ef_shrub_queue_attached(struct ef_shrub_queue* queue,
    * provide the earliest valid buffer we find to the client. The client will
    * scan forwards from there to find the synchronisation point. */
   while( queue->fifo[prev_index] != EF_SHRUB_INVALID_BUFFER ) {
+    int buffer_index;
+
     fifo_index = prev_index;
 
     /* Take a reference to this buffer */
     ef_shrub_buffer_id buffer_id = queue->fifo[fifo_index];
     assert(buffer_id != EF_SHRUB_INVALID_BUFFER);
-    queue->buffers[ef_shrub_buffer_index(buffer_id)].ref_count++;
+    buffer_index = ef_shrub_buffer_index(buffer_id);
+    queue->buffers[buffer_index].ref_count++;
+    EF_VI_ASSERT(!connection->buffer_refs[buffer_index]);
+    connection->buffer_refs[buffer_index] = true;
 
     /* This should never happen since the FIFO should never be completely full,
      * but we shouldn't loop forever if it does happen somehow. */
@@ -278,16 +306,63 @@ void ef_shrub_queue_attached(struct ef_shrub_queue* queue,
 }
 
 void ef_shrub_queue_detached(struct ef_shrub_queue* queue,
-                             struct ef_shrub_client_state* client)
+                             struct ef_shrub_connection* connection)
 {
-  int fifo_index = client->server_fifo_index;
-  while( fifo_index != queue->fifo_index ) {
-    ef_shrub_buffer_id buffer_id = queue->fifo[fifo_index];
-    assert(buffer_id != EF_SHRUB_INVALID_BUFFER);
-    release_buffer(queue, ef_shrub_buffer_index(buffer_id));
-    fifo_index = next_fifo_index(queue, fifo_index);
-  }
+  int buffer_index;
+
+  for( buffer_index = 0; buffer_index < queue->buffer_count; buffer_index++ )
+    release_buffer(queue, connection, buffer_index);
 
   if( --queue->connection_count == 0 )
     ef_shrub_queue_close(queue);
+}
+
+void ef_shrub_queue_dump_to_fd(struct ef_shrub_queue* queue, int fd,
+                               char* buf, size_t buflen)
+{
+  struct ef_shrub_connection *connection;
+  ef_vi_efct_rxq_state *rxq_state =
+    &queue->vi->ep_state->rxq.efct_state[queue->ix];
+  int fifo_index, buffer_index;
+
+  shrub_log_to_fd(fd, buf, buflen, "  rxq[%d]: hw: %d\n",
+                  queue->ix, rxq_state->qid);
+  shrub_log_to_fd(fd, buf, buflen, "    sbseq: %d free_head: %d "
+                  "fifo_head: %d\n", rxq_state->sbseq,
+                  rxq_state->free_head, rxq_state->fifo_head);
+  shrub_log_to_fd(fd, buf, buflen, "    tail_hw: %d tail_sw: %d "
+                  "count_hw: %d count_sw: %d\n", rxq_state->fifo_tail_hw,
+                  rxq_state->fifo_tail_sw, rxq_state->fifo_count_hw,
+                  rxq_state->fifo_count_sw);
+
+  shrub_log_to_fd(fd, buf, buflen, "    fifo_size: %d\n", queue->fifo_size);
+  for( fifo_index = prev_fifo_index(queue, queue->fifo_index);
+       queue->fifo[fifo_index] != EF_SHRUB_INVALID_BUFFER;
+       fifo_index = prev_fifo_index(queue, fifo_index) ) {
+    ef_shrub_buffer_id buffer_id = queue->fifo[fifo_index];
+    shrub_log_to_fd(fd, buf, buflen, "    fifo[%d]: buffer_id: %#llx "
+                    "buffer_index: %d\n", fifo_index, buffer_id,
+                    ef_shrub_buffer_index(buffer_id));
+    shrub_log_to_fd(fd, buf, buflen, "             buffer_sentinel: %d "
+                    "buffer_sbseq: %d\n", ef_shrub_buffer_sentinel(buffer_id),
+                    ef_shrub_buffer_sbseq(buffer_id));
+  }
+
+  shrub_log_to_fd(fd, buf, buflen, "    buffer_count: %llu\n",
+                  queue->buffer_count);
+  for( buffer_index = 0; buffer_index < queue->buffer_count; buffer_index++ ) {
+    struct ef_shrub_queue_buffer* buffer = &queue->buffers[buffer_index];
+    if( buffer->ref_count != 0 ) {
+      shrub_log_to_fd(fd, buf, buflen, "    buffer[%d]: ref_count: %d "
+                      "fifo_index: %d\n", buffer_index, buffer->ref_count,
+                      buffer->fifo_index);
+    }
+  }
+
+  shrub_log_to_fd(fd, buf, buflen, "    connection_count: %llu\n",
+                  queue->connection_count);
+  for( connection = queue->connections;
+       connection != NULL;
+       connection = connection->next )
+    ef_shrub_connection_dump_to_fd(connection, fd, buf, buflen);
 }

@@ -983,19 +983,47 @@ typedef struct {
   /** Gaps in the event queue (empty slot followed by event) */
   uint32_t evq_gap;
 
-  // EF10CT-specific stats per RXQ
+  /** Stats tracked per efct RXQ */
   struct {
+    /** Number of buffers freed. (valid only for ubufs) */
     uint64_t buffers_freed;
+    /** Number of times we tried posting buffers but had already posted the
+     ** maximum number allowed. (valid only for ubufs) */
     uint64_t post_fifo_full;
+    /** Number of times we tried posting buffers but has no free buffers to
+     ** post. (valid only for ubufs) */
     uint64_t free_list_empty;
+    /** Number of times we tried moving on to the next buffer, but had no more
+     ** buffers posted to the NIC that had not already been used. (valid only
+     ** for ubufs) */
     uint64_t sw_fifo_empty;
+    /** Number of times that all outstanding buffers posted to the NIC had been
+     ** filled. (valid only for ubufs) */
     uint64_t hw_fifo_empty;
+    /** Number of times that a buffer posted to the NIC had not been entirely
+     ** filled with data yet when checking. (valid only for ubufs) */
     uint64_t sentinel_wait;
+    /** Number of times we were unable to move onto a new shared buffer. (valid
+     ** only for ubufs) */
     uint64_t acquire_failures;
+    /** Number of times we released a shared buffer. (valid only for ubufs) */
     uint64_t release_count;
+    /** Number of times we attempted to check which buffers are filled when a
+     ** queue is not in use or has no buffers to be filled. (valid only for
+     ** ubufs) */
     uint64_t torn_down_out_of_order;
+    /** Number of times a broken queue state was encountered while checking
+     ** for full buffers. This is only known to happen on shutdown. (valid only
+     ** for ubufs) */
     uint64_t corrupt_rxq_state;
-  } ef10ct_stats[EF_VI_MAX_EFCT_RXQS];
+    /** Number of buffers posted to the NIC. (valid only for ubufs) */
+    uint64_t buffers_posted;
+    /** Number of shared buffers acquired. (valid only for ubufs) */
+    uint64_t buffers_acquired;
+    /** Number of times we tried to move onto the next buffer, but lacked the
+     ** necessary EVQ space to avoid an overflow. */
+    uint64_t rollover_failed_no_evq_space;
+  } efct_rxq_stats[EF_VI_MAX_EFCT_RXQS];
 } ef_vi_stats;
 
 /*! \brief The type of NIC in use

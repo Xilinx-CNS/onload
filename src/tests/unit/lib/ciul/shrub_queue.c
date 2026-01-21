@@ -75,6 +75,12 @@ struct mock_connection
   struct ef_shrub_client_state state;
 };
 
+struct ef_shrub_client_state*
+ef_shrub_connection_client_state(struct ef_shrub_connection* connection)
+{
+  return &((struct mock_connection*)connection)->state;
+}
+
 static int mock_attach(struct ef_vi* vi_, int qid_, int buf_fd,
                        unsigned n_superbufs, bool shared, bool interrupt)
 {
@@ -162,13 +168,19 @@ static struct mock_connection* open_connection(void)
   STATE_ACCEPT(queue, connections);
 
   mock->connection.fifo = calloc(fifo_size, sizeof(ef_shrub_buffer_id));
+  mock->connection.buffer_refs = calloc(queue->buffer_count,
+                                        sizeof(mock->connection.buffer_refs[0]));
   mock->connection.fifo_size = fifo_size;
 
   for( i = 0; i < fifo_size; ++i )
     mock->connection.fifo[i] = EF_SHRUB_INVALID_BUFFER;
+
+  for( i = 0; i < queue->buffer_count; ++i )
+    mock->connection.buffer_refs[i] = false;
+
   STATE_STASH(mock);
 
-  ef_shrub_queue_attached(queue, &mock->state);
+  ef_shrub_queue_attached(queue, &mock->connection);
   return mock;
 }
 
@@ -288,7 +300,7 @@ static void test_shrub_queue_connections(void)
   STATE_UPDATE(c[2], connection.fifo_index, 2);
 
   expect_free = 5;
-  ef_shrub_queue_detached(queue, &c[3]->state);
+  ef_shrub_queue_detached(queue, &c[3]->connection);
   CHECK(expect_free, ==, -1);
   STATE_UPDATE(queue, connection_count, 3);
   for( i = 0; i < 6; ++i )

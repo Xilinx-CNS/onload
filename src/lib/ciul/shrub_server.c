@@ -139,14 +139,17 @@ static int server_request_queue(struct ef_shrub_server* server,
       return rc;
   }
 
-  connection->queue = queue;
+  rc = ef_shrub_connection_attach_queue(connection, queue);
+  if( rc < 0 )
+    return rc;
+
   rc = ef_shrub_connection_send_metrics(connection);
   if( rc < 0 )
     return rc;
 
   connection->next = queue->connections;
   queue->connections = connection;
-  ef_shrub_queue_attached(queue, ef_shrub_connection_client_state(connection));
+  ef_shrub_queue_attached(queue, connection);
 
   return 0;
 }
@@ -260,7 +263,7 @@ static int server_connection_closed(struct ef_shrub_server* server,
   else {
     connection->queue = NULL;
     remove_connection(&queue->connections, connection);
-    ef_shrub_queue_detached(queue, ef_shrub_connection_client_state(connection));
+    ef_shrub_queue_detached(queue, connection);
   }
 
   if( connection->socket >= 0 ) {
@@ -346,4 +349,17 @@ void ef_shrub_server_close(struct ef_shrub_server* server)
   if ( server->socket_path[0] != '\0' )
     ef_shrub_server_remove(server->socket_path);
   free(server);
+}
+
+void ef_shrub_server_dump_to_fd(struct ef_shrub_server* server, int fd,
+                                char* buf, size_t buflen)
+{
+  int i;
+
+  shrub_log_to_fd(fd, buf, buflen, "  pd token: %u buffer count: %llu\n",
+                  server->pd_excl_rxq_tok, server->buffer_count);
+
+  for( i = 0; i < sizeof(server->queues) / sizeof(server->queues[0]); i++ )
+    if( server->queues[i].fifo_size )
+      ef_shrub_queue_dump_to_fd(&server->queues[i], fd, buf, buflen);
 }

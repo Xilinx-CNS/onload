@@ -227,9 +227,9 @@ static int add_server_config(shrub_controller_config *config,
 
   shrub_if_config_t *new_shrub_config;
 
-  if ( buffer_count == 0 ) {
-    ci_log("Error: shrub_controller was unable to add interface "
-           "with buffer size of 0");
+  if( buffer_count == 0 || buffer_count > EF_SHRUB_MAX_BUFFER_COUNT ) {
+    ci_log("Error: shrub_controller was unable to add interface with buffer size of %d, valid range is 1-%d",
+           buffer_count, EF_SHRUB_MAX_BUFFER_COUNT);
     return -EINVAL;
   }
 
@@ -364,8 +364,7 @@ static int create_directory(const char *path)
   return rc;
 }
 
-static void shrub_log_to_fd(int fd, char *buf, size_t buflen,
-                            const char* fmt, ...)
+void shrub_log_to_fd(int fd, char *buf, size_t buflen, const char* fmt, ...)
 {
   va_list args;
   int len;
@@ -376,11 +375,10 @@ static void shrub_log_to_fd(int fd, char *buf, size_t buflen,
   write(fd, buf, len + 1);
 }
 
-#define SECTION_SEP "---------------------------------------------------------"
 static void shrub_dump_summary_to_fd(int fd, shrub_controller_config *config,
                                      char *buf, size_t buflen)
 {
-  shrub_log_to_fd(fd, buf, buflen, SECTION_SEP);
+  shrub_log_to_fd(fd, buf, buflen, SHRUB_DUMP_SECTION_SEPARATOR);
   shrub_log_to_fd(fd, buf, buflen, "\nshrub controller\n");
   shrub_log_to_fd(fd, buf, buflen, "  name: "EF_SHRUB_CONTROLLER_PREFIX"%d%s\n",
                   config->controller_id, config->debug_mode ? " (debug)" : "");
@@ -392,7 +390,7 @@ static void shrub_dump_summary_to_fd(int fd, shrub_controller_config *config,
 static void shrub_dump_stats_to_fd(int fd, shrub_controller_config *config,
                                    char *buf, size_t buflen)
 {
-  shrub_log_to_fd(fd, buf, buflen, SECTION_SEP);
+  shrub_log_to_fd(fd, buf, buflen, SHRUB_DUMP_SECTION_SEPARATOR);
   shrub_log_to_fd(fd, buf, buflen, "\ncontroller statistics:\n");
   shrub_log_to_fd(fd, buf, buflen, "  client negotiation failures: %lu\n",
                   config->controller_stats.controller_failed_to_neg_client);
@@ -410,15 +408,13 @@ static void shrub_dump_server_to_fd(int fd, shrub_if_config_t *server_config,
   struct shrub_controller_vi *svi = &server_config->res;
   ef_vi *vi = &svi->vi;
   ef_vi_efct_rxqs *rxqs = &vi->efct_rxqs;
-  ef_vi_efct_rxq_state *rxq_state;
   char ifname[IFNAMSIZ];
-  int i;
 
   memset(ifname, 0, sizeof(ifname));
   if ( if_indextoname(server_config->ifindex, ifname) == NULL )
     snprintf(ifname, sizeof(ifname), "unknown");
 
-  shrub_log_to_fd(fd, buf, buflen, SECTION_SEP);
+  shrub_log_to_fd(fd, buf, buflen, SHRUB_DUMP_SECTION_SEPARATOR);
   shrub_log_to_fd(fd, buf, buflen, "\nshrub server\n");
   shrub_log_to_fd(fd, buf, buflen, "ifname: %.*s ifindex: %d hw_port: %x\n",
                   IFNAMSIZ - 1, ifname, server_config->ifindex,
@@ -426,24 +422,10 @@ static void shrub_dump_server_to_fd(int fd, shrub_if_config_t *server_config,
   shrub_log_to_fd(fd, buf, buflen, "  buffer count: %d client count: %d "
                   "token: %x\n", server_config->buffer_count,
                   server_config->ref_count, server_config->token_id);
-  if( rxqs->active_qs ) {
-    shrub_log_to_fd(fd, buf, buflen, "  vi: %d active_qs: %x\n",
-                    vi->vi_i, *rxqs->active_qs);
-    for( i = 0; i < EF_VI_MAX_EFCT_RXQS; i++ ) {
-      if( (1ull << i) & *rxqs->active_qs ) {
-        rxq_state = &vi->ep_state->rxq.efct_state[i];
-        shrub_log_to_fd(fd, buf, buflen, "  rxq[%d]: hw: %d\n",
-                        i, rxq_state->qid);
-        shrub_log_to_fd(fd, buf, buflen, "    sbseq: %d free_head: %d "
-                        "fifo_head: %d\n", rxq_state->sbseq,
-                        rxq_state->free_head, rxq_state->fifo_head);
-        shrub_log_to_fd(fd, buf, buflen, "    tail_hw: %d tail_sw: %d "
-                        "count_hw: %d count_sw: %d\n", rxq_state->fifo_tail_hw,
-                        rxq_state->fifo_tail_sw, rxq_state->fifo_count_hw,
-                        rxq_state->fifo_count_sw);
-      }
-    }
-  }
+  shrub_log_to_fd(fd, buf, buflen, "  vi: %d active_qs: %x\n",
+                  vi->vi_i, rxqs->active_qs ? *rxqs->active_qs : 0);
+
+  ef_shrub_server_dump_to_fd(server_config->shrub_server, fd, buf, buflen);
 }
 
 static void shrub_dump_servers_to_fd(int fd, shrub_controller_config *config,

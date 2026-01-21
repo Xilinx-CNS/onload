@@ -50,6 +50,13 @@ A new option, EF_SHRUB_AUTO_CLOSE_DELAY tunes the behaviour of the new
 automatic closing of the shrub controller after all clients have disconnected.
 
 
+AMD Alveo(TM) X3 Series Low Latency Ethernet Adapter
+----------------------------------------------------
+
+The minimum compatible X3522 driver version to use with this version of
+Onload is v1.6.9.0.
+
+
 Known issues
 ------------
 
@@ -212,4 +219,4 @@ onload_stackdump statistic, except with X3, when behaviour is unchanged. This
 is only relevant when MTU exceeds 1500.
 
 
-(c) Copyright 2025 Advanced Micro Devices, Inc.
+(c) Copyright 2025,2026 Advanced Micro Devices, Inc.

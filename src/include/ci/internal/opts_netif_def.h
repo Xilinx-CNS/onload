@@ -1770,12 +1770,14 @@ CI_CFG_OPT("EF_SHRUB_CONTROLLER", shrub_controller_id ,ci_int32,
 "Spawn or join onto a shrub controller with the given shrub controller id. ",
            , ,-1, -1, EF_SHRUB_MAX_CONTROLLER, count)
 
+/* These should remain in-sync with the values in shrub_shared.h */
 #define EF_SHRUB_DEFAULT_BUFFER_COUNT 4
+#define EF_SHRUB_MAX_BUFFER_COUNT 100000
 CI_CFG_OPT("EF_SHRUB_BUFFER_COUNT", shrub_buffer_count, ci_uint32,
 "Default value of superbufs that an onload client requests from "
 "a shrub controller. ",
            , , EF_SHRUB_DEFAULT_BUFFER_COUNT, EF_SHRUB_DEFAULT_BUFFER_COUNT,
-           100000, count)
+           EF_SHRUB_MAX_BUFFER_COUNT, count)
 
 CI_CFG_OPT("EF_SHRUB_UNICAST", shrub_unicast, ci_uint32,
 "Direct unicast traffic to shrub managed queues.\n"

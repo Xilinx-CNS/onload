@@ -45,6 +45,11 @@
   ((((q)->ep_state->evq.evq_ptr + sizeof(ef_vi_qword) * (i)) &    \
     ((q)->evq_mask + 1)) != 0)
 
+#define EFCT_RXQ_STAT_INC(vi, ix, counter) \
+  do { \
+    if ((vi)->vi_stats) \
+      (vi)->vi_stats->efct_rxq_stats[ix].counter++; \
+  } while(0)
 
 static int efct_ef_eventq_has_many_events(const ef_vi* vi, int n_events)
 {
@@ -887,8 +892,10 @@ static int rx_rollover(ef_vi* vi, int qix)
   /* If this RXQ generates events, then we must make sure our EVQ has space to
    * handle enough events for this superbuf. */
   if( rxq_efct_state->generates_events &&
-      rxq_state->n_evq_rx_pkts < pkts_per_superbuf )
+      rxq_state->n_evq_rx_pkts < pkts_per_superbuf ) {
+    EFCT_RXQ_STAT_INC(vi, qix, rollover_failed_no_evq_space);
     return -EAGAIN;
+  }
 
   rc = vi->efct_rxqs.ops->next(vi, qix, &sentinel, &sbseq);
   if( rc < 0 )
