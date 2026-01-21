@@ -155,6 +155,11 @@ static bool efct_rxq_is_active(const ef_vi_efct_rxq* rxq)
   return *rxq->live.superbuf_pkts != 0;
 }
 
+bool efct_vi_rxq_is_active(const ef_vi* vi, int ix)
+{
+  return efct_rxq_is_active(&vi->efct_rxqs.q[ix]);
+}
+
 /* The superbuf descriptor for this packet */
 static struct efct_rx_descriptor* efct_rx_desc(ef_vi* vi, uint32_t pkt_id)
 {

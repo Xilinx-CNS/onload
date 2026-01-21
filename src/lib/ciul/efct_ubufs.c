@@ -311,7 +311,6 @@ void efct_ubufs_local_attach_internal(ef_vi* vi, int ix, int qid, unsigned n_sup
     efct_rx_sb_free_push(vi, ix, id);
   }
 
-  qs->efct_state[ix].config_generation = 1; /* force an initial refresh */
   qs->efct_state[ix].superbuf_pkts = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
   qs->efct_active_qs |= 1 << ix;
   efct_vi_start_rxq(vi, ix, qid);

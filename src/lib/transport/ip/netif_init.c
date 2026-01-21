@@ -2011,6 +2011,21 @@ static int oo_efct_superbuf_config_refresh(ef_vi* vi, int ix)
   return rc;
 }
 
+static int efct_superbuf_config_refresh_all(ef_vi* vi)
+{
+  int i, rc;
+
+  for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
+    if( efct_vi_rxq_is_active(vi, i) ) {
+      rc = oo_efct_superbuf_config_refresh(vi, i);
+      if( rc < 0 )
+        return rc;
+    }
+  }
+
+  return 0;
+}
+
 static void oo_efct_superbuf_post_ioctl(ef_vi* vi, int ix, int sbid,
                                         bool sentinel)
 {
@@ -2048,10 +2063,6 @@ static int alloc_efct_exclusive_rxq(ci_netif* ni, uint32_t intf_i)
   oo_efct_rxq_alloc_t alloc = { .intf_i = intf_i };
 
   return oo_resource_op(fp, OO_IOC_EFCT_RXQ_ALLOC, &alloc);
-
-  /* The user-side queue state will be refreshed on the next ef_vi poll.
-   * TODO it would be neater to do it (and handle errors) here.
-   */
 }
 
 static int spawn_shrub_controller(ci_netif* ni)
@@ -2574,6 +2585,21 @@ fail1:
 
 #ifndef __KERNEL__
 
+static int restore_efct_resources(ci_netif* ni)
+{
+  int rc, nic_i;
+
+  OO_STACK_FOR_EACH_INTF_I(ni, nic_i) {
+    ef_vi* vi = ci_netif_vi(ni, nic_i);
+
+    rc = efct_superbuf_config_refresh_all(vi);
+    if( rc < 0 )
+      return rc;
+  }
+
+  return 0;
+}
+
 static int
 netif_tcp_helper_restore(ci_netif* ni, unsigned netif_mmap_bytes)
 {
@@ -2594,11 +2620,20 @@ netif_tcp_helper_restore(ci_netif* ni, unsigned netif_mmap_bytes)
   rc = netif_tcp_helper_build(ni);
   if( rc < 0 ) {
     ci_log("%s: netif_tcp_helper_build %d", __FUNCTION__, rc);
-    oo_resource_munmap(ci_netif_get_driver_handle(ni),
-                       ni->state, netif_mmap_bytes);
-    return rc;
+    goto fail;
   }
 
+  rc = restore_efct_resources(ni);
+  if( rc < 0 ) {
+    ci_log("%s: restore_efct_resources %d", __FUNCTION__, rc);
+    goto fail;
+  }
+
+  return 0;
+
+fail:
+  oo_resource_munmap(ci_netif_get_driver_handle(ni),
+                     ni->state, netif_mmap_bytes);
   return rc;
 }
 
@@ -2682,6 +2717,10 @@ static int alloc_efct_resources(ci_netif* ni)
         NI_OPTS(ni).multiarch_rx_datapath != EF_MULTIARCH_DATAPATH_FF &&
         nsn->vi_arch == EFHW_ARCH_EF10CT ) {
       rc = alloc_efct_exclusive_rxq(ni, nic_i);
+      if( rc < 0 )
+        return rc;
+
+      rc = efct_superbuf_config_refresh_all(vi);
       if( rc < 0 )
         return rc;
     }
