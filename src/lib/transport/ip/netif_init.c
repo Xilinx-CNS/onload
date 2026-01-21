@@ -2042,6 +2042,18 @@ static void unmap_efct_ubuf_rxq_io_windows(ef_vi* vi)
   }
 }
 
+static int alloc_efct_exclusive_rxq(ci_netif* ni, uint32_t intf_i)
+{
+  ci_fd_t fp = ci_netif_get_driver_handle(ni);
+  oo_efct_rxq_alloc_t alloc = { .intf_i = intf_i };
+
+  return oo_resource_op(fp, OO_IOC_EFCT_RXQ_ALLOC, &alloc);
+
+  /* The user-side queue state will be refreshed on the next ef_vi poll.
+   * TODO it would be neater to do it (and handle errors) here.
+   */
+}
+
 static int spawn_shrub_controller(ci_netif* ni)
 {
   ci_fd_t fp = ci_netif_get_driver_handle(ni);
@@ -2657,6 +2669,26 @@ static void init_resource_alloc(ci_resource_onload_alloc_t* ra,
   }
 }
 
+static int alloc_efct_resources(ci_netif* ni)
+{
+  int rc, nic_i;
+
+  OO_STACK_FOR_EACH_INTF_I(ni, nic_i) {
+    ci_netif_state_nic_t* nsn = &(ni->state->nic[nic_i]);
+    ef_vi* vi = ci_netif_vi(ni, nic_i);
+
+    /* FIXME shouldn't have architecture check here */
+    if( vi->efct_rxqs.active_qs &&
+        NI_OPTS(ni).multiarch_rx_datapath != EF_MULTIARCH_DATAPATH_FF &&
+        nsn->vi_arch == EFHW_ARCH_EF10CT ) {
+      rc = alloc_efct_exclusive_rxq(ni, nic_i);
+      if( rc < 0 )
+        return rc;
+    }
+  }
+
+  return 0;
+}
 
 static int
 netif_tcp_helper_alloc_u(ef_driver_handle fd, ci_netif* ni,
@@ -2760,6 +2792,12 @@ netif_tcp_helper_alloc_u(ef_driver_handle fd, ci_netif* ni,
   rc = netif_tcp_helper_build(ni);
   if( rc < 0 ) {
     LOG_E(ci_log("%s: netif_tcp_helper_build failed rc=%d", __FUNCTION__, rc));
+    goto fail;
+  }
+
+  rc = alloc_efct_resources(ni);
+  if( rc < 0 ) {
+    LOG_E(ci_log("%s: alloc_efct_resources failed rc=%d", __FUNCTION__, rc));
     goto fail;
   }
 
