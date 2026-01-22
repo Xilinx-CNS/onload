@@ -142,6 +142,7 @@ struct ef_shrub_token_response {
 struct ef_shrub_queue_request {
   /* Queue ID that the client intends to connect to */
   uint64_t qid;
+#define EF_SHRUB_QUEUE_ANY ((uint64_t)-1)
   /* Whether we expect to use interrupts */
   uint64_t use_interrupts;
   /* The number of buffers we can accept from the server at any time */
@@ -190,6 +191,10 @@ struct ef_shrub_shared_metrics {
    *   sizeof(ef_shrub_buffer_id) * size + sizeof(struct ef_shrub_client_state) */
   uint64_t client_fifo_offset;
   uint64_t client_fifo_size;
+
+  /* Identifier for the queue (from the queue request, or allocated by the
+   * server if EF_SHRUB_QUEUE_ANY was requested) */
+  uint64_t qid;
 };
 
 /* Structure containing connection state sharable between instances */

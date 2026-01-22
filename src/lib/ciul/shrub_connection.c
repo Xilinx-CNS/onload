@@ -122,6 +122,7 @@ int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection)
   metrics->server_fifo_size = connection->fifo_size;
   metrics->client_fifo_offset = connection->client_fifo_mmap_offset;
   metrics->client_fifo_size = connection->fifo_size;
+  metrics->qid = queue->qid;
 
   cmsg->cmsg_level = SOL_SOCKET;
   cmsg->cmsg_type = SCM_RIGHTS;

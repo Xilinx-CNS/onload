@@ -95,7 +95,7 @@ ef_shrub_server_get_last_disconnection_time(struct ef_shrub_server* server)
 }
 
 static struct ef_shrub_queue*
-find_queue(struct ef_shrub_server* server, uint64_t qid)
+find_queue(struct ef_shrub_server* server, int qid)
 {
   int i;
   struct ef_shrub_queue* unused = NULL;
@@ -103,7 +103,7 @@ find_queue(struct ef_shrub_server* server, uint64_t qid)
     struct ef_shrub_queue* queue = &server->queues[i];
     if( queue->connections == NULL )
       unused = queue;
-    else if( queue->qid == qid )
+    else if( qid < 0 || queue->qid == qid )
       return queue;
   }
 
@@ -219,6 +219,7 @@ static int server_request_received(struct ef_shrub_server* server,
 {
   struct ef_shrub_request request;
   int rc;
+  int qid;
 
   rc = ef_shrub_server_recv(connection->socket, &request, sizeof(request));
   if( rc < sizeof(request)) {
@@ -242,7 +243,8 @@ static int server_request_received(struct ef_shrub_server* server,
      * the epoll set */
     goto out_close;
   case EF_SHRUB_REQUEST_QUEUE:
-    rc = server_request_queue(server, connection, request.queue.qid,
+    qid = request.queue.qid == EF_SHRUB_QUEUE_ANY ? -1 : request.queue.qid;
+    rc = server_request_queue(server, connection, qid,
                               request.queue.use_interrupts,
                               request.queue.max_connection_buffers);
     if( rc < 0 )
