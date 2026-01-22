@@ -229,7 +229,7 @@ static void free_vi(ef_vi* vi)
 /* Test cases */
 static void test_efct_ubufs(void)
 {
-  int i, rep;
+  int i, rep, rxq;
   int bufs[SUPERBUF_COUNT];
   bool sentinel;
   unsigned sbseq, expect_seq=0;
@@ -237,7 +237,7 @@ static void test_efct_ubufs(void)
   ef_vi* vi = alloc_vi();
   ef_vi_efct_rxq_ops* ops = vi->efct_rxqs.ops;
 
-  CHECK(ops->attach(vi, 0, -1, SUPERBUF_COUNT, false, false), ==, 0);
+  CHECK(ops->attach(vi, 0, -1, SUPERBUF_COUNT, false, false, &rxq), ==, 0);
   STATE_CHECK(vi->ep_state, rxq.efct_active_qs, 1);
 
   for( rep = 0; rep < 3; ++rep ) {
@@ -274,12 +274,12 @@ static void test_sentinel(void)
 {
   bool sentinel;
   unsigned sbseq;
-  int buf;
+  int buf, rxq;
 
   ef_vi* vi = alloc_vi();
   ef_vi_efct_rxq_ops* ops = vi->efct_rxqs.ops;
 
-  CHECK(ops->attach(vi, 0, -1, 1, false, false), ==, 0);
+  CHECK(ops->attach(vi, 0, -1, 1, false, false, &rxq), ==, 0);
   STATE_CHECK(vi->ep_state, rxq.efct_active_qs, 1);
 
   buf = ops->next(vi, 0, &sentinel, &sbseq);
@@ -315,14 +315,14 @@ static void test_poison(void)
 {
   bool sentinel;
   unsigned sbseq;
-  int buf;
+  int buf, rxq;
   void* data;
 
   ef_vi* vi = alloc_vi();
   ef_vi_efct_rxq_ops* ops = vi->efct_rxqs.ops;
 
   ops = vi->efct_rxqs.ops;
-  CHECK(ops->attach(vi, 0, -1, 1, false, false), ==, 0);
+  CHECK(ops->attach(vi, 0, -1, 1, false, false, &rxq), ==, 0);
   STATE_CHECK(vi->ep_state, rxq.efct_active_qs, 1);
 
   buf = ops->next(vi, 0, &sentinel, &sbseq);
@@ -339,6 +339,7 @@ static void test_poison(void)
 
 static void test_failure(void)
 {
+  int rxq;
   ef_vi* vi = alloc_vi();
   ef_vi_efct_rxq_ops* ops = vi->efct_rxqs.ops;
 
@@ -346,20 +347,20 @@ static void test_failure(void)
   checks = cks;
 
   checks->fail_find_free = true;
-  CHECK(ops->attach(vi, 0, -1, 1, false, false), <, 0);
+  CHECK(ops->attach(vi, 0, -1, 1, false, false, &rxq), <, 0);
   STATE_CHECK(checks, called_init_resource, 0);
   STATE_CHECK(checks, called_free_resource, 0);
 
   checks->fail_find_free = false;
   checks->fail_init_resource = true;
-  CHECK(ops->attach(vi, 0, -1, 1, false, false), <, 0);
+  CHECK(ops->attach(vi, 0, -1, 1, false, false, &rxq), <, 0);
   STATE_CHECK(checks, called_init_resource, 1);
   STATE_CHECK(checks, called_init_buffers,  0);
   STATE_CHECK(checks, called_free_resource, 0);
 
   checks->fail_init_resource = false;
   checks->fail_init_buffers = true;
-  CHECK(ops->attach(vi, 0, -1, 1, false, false), <, 0);
+  CHECK(ops->attach(vi, 0, -1, 1, false, false, &rxq), <, 0);
   STATE_CHECK(checks, called_init_resource, 1);
   STATE_CHECK(checks, called_init_buffers,  1);
   STATE_CHECK(checks, called_free_resource, 1);

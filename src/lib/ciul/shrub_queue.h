@@ -19,7 +19,7 @@ struct ef_shrub_queue {
   size_t fifo_size;
   int connection_count;
   int ix;
-  uint64_t qid;
+  int qid;
 
   size_t reserved_buffer_count;
 

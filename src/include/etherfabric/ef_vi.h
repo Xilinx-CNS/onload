@@ -908,13 +908,14 @@ typedef struct {
   void (*post)(struct ef_vi*, int ix, int sbid, bool sentinel);
   /** To be called before inserting a filter. */
   int (*pre_attach)(struct ef_vi*, bool shared_mode);
-  /** Attach a queue */
+  /** Attach a queue, allocating a new one if (qid_in < 0) */
   int  (*attach)(struct ef_vi*,
-                 int qid,
+                 int qid_in,
                  int buf_fd,
                  unsigned n_superbufs,
                  bool shared_mode,
-                 bool interrupt_mode);
+                 bool interrupt_mode,
+                 int* qid_out);
   /** Detach a queue from this vi (affects all users of this vi ) */
   void (*detach)(struct ef_vi*, int ix);
   /** Refresh the internal config; called if config_generation changes */

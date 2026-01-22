@@ -400,7 +400,8 @@ static int efct_ubufs_attach(ef_vi* vi,
                              int fd,
                              unsigned n_superbufs,
                              bool shared_mode,
-                             bool interrupt_mode)
+                             bool interrupt_mode,
+                             int* qid_out)
 {
   int ix, rc;
   struct efct_ubufs* ubufs = get_ubufs(vi);
@@ -420,6 +421,11 @@ static int efct_ubufs_attach(ef_vi* vi,
     LOGVV(ef_log("%s: efct_ubufs_init_rxq_resource %d", __FUNCTION__, rc));
     return rc;
   }
+
+  if( qid < 0 )
+    qid = rc;
+  else
+    EF_VI_ASSERT(rc == qid);
 
   if( shared_mode ) {
     void* superbufs = (void*)efct_superbuf_access(vi, ix, 0);
@@ -441,6 +447,7 @@ static int efct_ubufs_attach(ef_vi* vi,
     efct_ubufs_local_attach_internal(vi, ix, qid, n_superbufs);
   }
 
+  *qid_out = qid;
   return ix;
 
 fail:

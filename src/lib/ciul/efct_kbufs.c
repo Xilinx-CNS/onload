@@ -140,7 +140,8 @@ static int efct_kbufs_attach(ef_vi* vi,
                              int buf_fd,
                              unsigned n_superbufs,
                              bool shared_mode,
-                             bool interrupt_mode)
+                             bool interrupt_mode,
+                             int* qid_out)
 {
 #ifdef __KERNEL__
   /* Onload does its own thing before calling attach_internal */
@@ -218,6 +219,7 @@ static int efct_kbufs_attach(ef_vi* vi,
 
   get_kbufs(vi)->q[ix].resource_id = ra.out_id;
   efct_vi_start_rxq(vi, ix, qid);
+  *qid_out = qid;
   return 0;
 #endif
 }
