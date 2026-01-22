@@ -196,8 +196,8 @@ static int efct_kbufs_attach(ef_vi* vi,
 
   ef_vi_init_resource_alloc(&ra, EFRM_RESOURCE_EFCT_RXQ);
   ra.u.rxq.in_abi_version = CI_EFCT_SWRXQ_ABI_VERSION;
-  ra.u.rxq.in_flags = 0;
-  ra.u.rxq.in_qid = qid;
+  ra.u.rxq.in_flags = qid < 0 ? EFCH_EFCT_RXQ_FLAG_NEW : 0;
+  ra.u.rxq.in_out_qid = qid;
   ra.u.rxq.in_shm_ix = ix;
   ra.u.rxq.in_vi_rs_id = efch_make_resource_id(vi->vi_resource_id);
   ra.u.rxq.in_n_hugepages = n_hugepages;
@@ -210,6 +210,11 @@ static int efct_kbufs_attach(ef_vi* vi,
     LOGVV(ef_log("%s: ci_resource_alloc rxq %d", __FUNCTION__, rc));
     return rc;
   }
+
+  if( qid < 0 )
+    qid = ra.u.rxq.in_out_qid;
+  else
+    EF_VI_ASSERT(qid == ra.u.rxq.in_out_qid);
 
   get_kbufs(vi)->q[ix].resource_id = ra.out_id;
   efct_vi_start_rxq(vi, ix, qid);
