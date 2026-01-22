@@ -2944,9 +2944,9 @@ cicp_ip4_route_output(struct net* netns, struct cp_fwd_key* key, uid_t uid,
   memset(&fl4, 0, sizeof(fl4));
   fl4.daddr = key->dst.ip4;
   fl4.saddr = key->src.ip4;
-  fl4.flowi4_tos = key->tos;
   fl4.flowi4_oif = key->ifindex;
   fl4.flowi4_uid = make_kuid(current_user_ns(), uid);
+  oo_set_flowi4_dscp(&fl4, key->tos);
 
   ci_assert_equal(key->iif_ifindex, CI_IFID_BAD);
   ci_assert_nflags(key->flag, CP_FWD_KEY_TRANSPARENT);
