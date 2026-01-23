@@ -318,7 +318,7 @@ loff_t
 oo_hugetlb_page_offset(struct page *page)
 {
 #ifdef EFRM_HUGETLB_INDEX_BY_PAGE
-	return page->index * PAGE_SIZE;
+	return page_folio(page)->index * PAGE_SIZE;
 #else
 	return page->index * OO_HUGEPAGE_SIZE;
 #endif
