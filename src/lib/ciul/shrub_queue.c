@@ -141,8 +141,8 @@ static void release_buffer(struct ef_shrub_queue* queue,
   }
 }
 
-static void poll_connection(struct ef_shrub_queue* queue,
-                            struct ef_shrub_connection* connection)
+static void poll_client_fifo(struct ef_shrub_queue* queue,
+                             struct ef_shrub_connection* connection)
 {
   int fifo_index = connection->client_fifo_index;
 
@@ -163,14 +163,14 @@ static void poll_connection(struct ef_shrub_queue* queue,
   release_buffer(queue, connection, buffer_index);
 }
 
-static void poll_connections(struct ef_shrub_queue* queue)
+static void poll_client_fifos(struct ef_shrub_queue* queue)
 {
   struct ef_shrub_connection* c;
   for( c = queue->connections; c != NULL; c = c->next )
-    poll_connection(queue, c);
+    poll_client_fifo(queue, c);
 }
 
-static void poll_fifo(struct ef_shrub_queue* queue)
+static void poll_queue_fifo(struct ef_shrub_queue* queue)
 {
   while( fifo_has_space(queue->fifo, queue->fifo_size, queue->fifo_index) ) {
     struct ef_shrub_connection* conn;
@@ -264,8 +264,11 @@ void ef_shrub_queue_close(struct ef_shrub_queue* queue)
 
 void ef_shrub_queue_poll(struct ef_shrub_queue* queue)
 {
-  poll_connections(queue);
-  poll_fifo(queue);
+  /* Handle client requests to free buffers */
+  poll_client_fifos(queue);
+
+  /* Update our own fifo with any newly postable buffers */
+  poll_queue_fifo(queue);
 }
 
 void ef_shrub_queue_attached(struct ef_shrub_queue* queue,
