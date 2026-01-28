@@ -9,6 +9,7 @@
 
 /* Dependencies */
 #include <sys/socket.h>
+#include <assert.h>
 #include "shrub_queue.h"
 #include "shrub_server_sockets.h"
 
@@ -30,12 +31,17 @@ struct ef_shrub_queue queue = {
 };
 
 static size_t new_offset;
-static void* mmap_addr;
+static void* client_mmap_addr;
+static void* server_mmap_addr;
 
 int ef_shrub_server_memfd_resize(int fd, size_t size)
 {
-  CHECK(fd, ==, client_fifo_fd);
-  CHECK(size, >=, fifo_offset + total_bytes);
+  if( fd == client_fifo_fd ) {
+    CHECK(size, >=, fifo_offset + total_bytes);
+  } else {
+    CHECK(fd, ==, server_fifo_fd);
+    CHECK(size, >=, fifo_offset + fifo_bytes);
+  }
 
   new_offset = size;
   return 0;
@@ -44,14 +50,24 @@ int ef_shrub_server_memfd_resize(int fd, size_t size)
 int ef_shrub_server_mmap(void** addr_out, size_t size,
                          int prot, int flags, int fd, size_t offset)
 {
-  CHECK(size, >=, total_bytes);
-  CHECK(size, <=, new_offset - fifo_offset);
   CHECK(prot, ==, PROT_READ | PROT_WRITE);
   CHECK(flags, ==, MAP_SHARED | MAP_POPULATE);
-  CHECK(fd, ==, client_fifo_fd);
   CHECK(offset, ==, fifo_offset);
 
-  *addr_out = mmap_addr = calloc(1, size);
+  *addr_out = calloc(1, size);
+  assert(*addr_out != NULL);
+
+  if( fd == client_fifo_fd ) {
+    CHECK(size, >=, total_bytes);
+    CHECK(size, <=, new_offset - fifo_offset);
+    client_mmap_addr = *addr_out;
+  } else {
+    CHECK(fd, ==, server_fifo_fd);
+    CHECK(size, >=, fifo_bytes);
+    CHECK(size, <=, new_offset - fifo_offset);
+    server_mmap_addr = *addr_out;
+  }
+
   return 0;
 }
 
@@ -68,7 +84,7 @@ int ef_shrub_server_sendmsg(int fd, struct msghdr* msg)
   CHECK(metrics->server_version, ==, EF_SHRUB_VERSION);
   CHECK(metrics->buffer_bytes, ==, queue.buffer_bytes);
   CHECK(metrics->buffer_count, ==, queue.buffer_count);
-  CHECK(metrics->server_fifo_size, ==, queue.fifo_size);
+  CHECK(metrics->server_fifo_size, ==, fifo_size);
   CHECK(metrics->client_fifo_offset, ==, fifo_offset);
   CHECK(metrics->client_fifo_size, ==, fifo_size);
 
@@ -90,14 +106,18 @@ void test_shrub_connection(void)
 {
   int rc;
   size_t offset = fifo_offset;
+  size_t server_offset = fifo_offset;
   struct ef_shrub_connection* connection;
-  rc = ef_shrub_connection_alloc(&connection, client_fifo_fd, &offset, fifo_size);
+  rc = ef_shrub_connection_alloc(&connection, client_fifo_fd, &offset,
+                                 server_fifo_fd, &server_offset, fifo_size);
   CHECK(rc, ==, 0);
-  CHECK(offset, ==, new_offset);
+  CHECK(offset, >, fifo_offset);
+  CHECK(server_offset, >, fifo_offset);
   CHECK(connection, !=, NULL);
   CHECK(connection->next, ==, NULL);
   CHECK(connection->queue, ==, NULL);
-  CHECK(connection->client_fifo, ==, mmap_addr);
+  CHECK(connection->client_fifo, ==, client_mmap_addr);
+  CHECK(connection->server_fifo, ==, server_mmap_addr);
   CHECK(connection->client_fifo_index, ==, 0);
   CHECK(connection->fifo_size, ==, fifo_size);
   CHECK(connection->client_fifo_mmap_offset, ==, fifo_offset);
@@ -114,7 +134,7 @@ void test_shrub_connection(void)
   CHECK(metrics->server_version, ==, EF_SHRUB_VERSION);
   CHECK(metrics->buffer_bytes, ==, queue.buffer_bytes);
   CHECK(metrics->buffer_count, ==, queue.buffer_count);
-  CHECK(metrics->server_fifo_size, ==, queue.fifo_size);
+  CHECK(metrics->server_fifo_size, ==, fifo_size);
   CHECK(metrics->client_fifo_offset, ==, fifo_offset);
   CHECK(metrics->client_fifo_size, ==, fifo_size);
 }

@@ -34,6 +34,7 @@ static int map_shared_state(void** map, int fd, size_t offset, size_t bytes)
 int
 ef_shrub_connection_alloc(struct ef_shrub_connection** connection_out,
                           int client_fifo_fd, size_t* client_fifo_offset,
+                          int server_fifo_fd, size_t* server_fifo_offset,
                           size_t fifo_size)
 {
   int i, rc;
@@ -51,16 +52,27 @@ ef_shrub_connection_alloc(struct ef_shrub_connection** connection_out,
   if( rc < 0 )
     goto fail_client_map;
 
+  rc = map_shared_state((void**)&connection->server_fifo, server_fifo_fd,
+                        *server_fifo_offset, fifo_bytes);
+  if( rc < 0 )
+    goto fail_server_map;
+
   connection->client_fifo_mmap_offset = *client_fifo_offset;
   *client_fifo_offset += total_client_bytes;
+  connection->server_fifo_mmap_offset = *server_fifo_offset;
+  *server_fifo_offset += fifo_bytes;
 
   connection->fifo_size = fifo_size;
   for( i = 0; i < fifo_size; ++i )
     connection->client_fifo[i] = EF_SHRUB_INVALID_BUFFER;
+  for( i = 0; i < fifo_size; ++i )
+    connection->server_fifo[i] = EF_SHRUB_INVALID_BUFFER;
 
   *connection_out = connection;
   return 0;
 
+fail_server_map:
+  munmap(connection->client_fifo, total_client_bytes);
 fail_client_map:
   free(connection);
   return rc;
@@ -106,7 +118,8 @@ int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection)
   metrics->server_version = EF_SHRUB_VERSION;
   metrics->buffer_bytes = queue->buffer_bytes;
   metrics->buffer_count = queue->buffer_count;
-  metrics->server_fifo_size = queue->fifo_size;
+  metrics->server_fifo_offset = connection->server_fifo_mmap_offset;
+  metrics->server_fifo_size = connection->fifo_size;
   metrics->client_fifo_offset = connection->client_fifo_mmap_offset;
   metrics->client_fifo_size = connection->fifo_size;
 
@@ -125,6 +138,8 @@ int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection)
 int ef_shrub_connection_attach_queue(struct ef_shrub_connection* connection,
                                      struct ef_shrub_queue* queue)
 {
+  struct ef_shrub_client_state* client_state =
+    ef_shrub_connection_client_state(connection);
   size_t buffer_refs_bytes;
   void* buffer_refs;
   size_t ref_size;
@@ -134,6 +149,9 @@ int ef_shrub_connection_attach_queue(struct ef_shrub_connection* connection,
     return -EINVAL;
 
   connection->queue = queue;
+
+  connection->client_fifo_index = client_state->client_fifo_index = 0;
+  connection->server_fifo_index = client_state->server_fifo_index = 0;
 
   /* If our calculation has overflowed, then we can't do much about it except
    * complain that we can't satisfy the memory allocation request. */

@@ -15,8 +15,8 @@ struct ef_shrub_queue {
   int shared_fds[EF_SHRUB_FD_COUNT];
 
   size_t buffer_bytes, buffer_count;
-  int fifo_index;
-  int fifo_size;
+  size_t fifo_index;
+  size_t fifo_size;
   int connection_count;
   int ix;
   uint64_t qid;
@@ -33,6 +33,7 @@ int ef_shrub_queue_open(struct ef_shrub_queue* queue,
                         size_t buffer_count,
                         size_t fifo_size,
                         int client_fifo_fd,
+                        int server_fifo_fd,
                         int qid,
                         bool use_interrupts);
 

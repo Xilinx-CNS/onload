@@ -44,6 +44,8 @@ static size_t map_offset(const struct ef_shrub_shared_metrics* metrics,
   switch( fd_type ) {
   case EF_SHRUB_FD_CLIENT_FIFO:
     return metrics->client_fifo_offset;
+  case EF_SHRUB_FD_SERVER_FIFO:
+    return metrics->server_fifo_offset;
   default:
     return 0;
   }
