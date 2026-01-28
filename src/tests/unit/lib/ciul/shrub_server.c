@@ -188,7 +188,8 @@ int ef_shrub_server_memfd_create(const char* name, size_t size, bool huge)
 
 int
 ef_shrub_connection_alloc(struct ef_shrub_connection** connection_out,
-                          int fifo_fd, size_t* fifo_offset, size_t fifo_size)
+                          int client_fifo_fd, size_t* client_fifo_offset,
+                          size_t fifo_size)
 {
   *connection_out = calloc(1, sizeof(struct ef_shrub_connection));
   CHECK(*connection_out, !=, NULL);

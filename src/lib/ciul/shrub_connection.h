@@ -31,7 +31,8 @@ struct ef_shrub_connection {
 
 int
 ef_shrub_connection_alloc(struct ef_shrub_connection** connection_out,
-                          int fifo_fd, size_t* fifo_offset, size_t fifo_size);
+                          int client_fifo_fd, size_t* client_fifo_offset,
+                          size_t fifo_size);
 
 int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection);
 

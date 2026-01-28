@@ -15,42 +15,53 @@ ef_shrub_connection_client_state(struct ef_shrub_connection* connection)
                  connection->fifo_size * sizeof(ef_shrub_buffer_id));
 }
 
+static int map_shared_state(void** map, int fd, size_t offset, size_t bytes)
+{
+  int rc;
+
+  rc = ef_shrub_server_memfd_resize(fd, offset + bytes);
+  if( rc < 0 )
+    return rc;
+
+  rc = ef_shrub_server_mmap(map, bytes, PROT_READ | PROT_WRITE,
+                            MAP_SHARED | MAP_POPULATE, fd, offset);
+  if( rc < 0 )
+    return rc;
+
+  return 0;
+}
+
 int
 ef_shrub_connection_alloc(struct ef_shrub_connection** connection_out,
-                          int fifo_fd, size_t* fifo_offset, size_t fifo_size)
+                          int client_fifo_fd, size_t* client_fifo_offset,
+                          size_t fifo_size)
 {
   int i, rc;
   struct ef_shrub_connection* connection;
-  void* map;
   size_t fifo_bytes = fifo_size * sizeof(ef_shrub_buffer_id);
-  size_t total_bytes = fifo_bytes +
+  size_t total_client_bytes = fifo_bytes +
     EF_VI_ROUND_UP(sizeof(struct ef_shrub_client_state), PAGE_SIZE);
 
   connection = calloc(1, sizeof(struct ef_shrub_connection));
   if( connection == NULL )
     return -ENOMEM;
 
-  rc = ef_shrub_server_memfd_resize(fifo_fd, *fifo_offset + total_bytes);
+  rc = map_shared_state((void**)&connection->fifo, client_fifo_fd,
+                        *client_fifo_offset, total_client_bytes);
   if( rc < 0 )
-    goto fail_fifo;
+    goto fail_client_map;
 
-  rc = ef_shrub_server_mmap(&map, total_bytes, PROT_READ | PROT_WRITE,
-                            MAP_SHARED | MAP_POPULATE, fifo_fd, *fifo_offset);
-  if( rc < 0 )
-    goto fail_fifo;
+  connection->fifo_mmap_offset = *client_fifo_offset;
+  *client_fifo_offset += total_client_bytes;
 
-  connection->fifo = map;
   connection->fifo_size = fifo_size;
-  connection->fifo_mmap_offset = *fifo_offset;
-  *fifo_offset += total_bytes;
-
   for( i = 0; i < fifo_size; ++i )
     connection->fifo[i] = EF_SHRUB_INVALID_BUFFER;
 
   *connection_out = connection;
   return 0;
 
-fail_fifo:
+fail_client_map:
   free(connection);
   return rc;
 }
