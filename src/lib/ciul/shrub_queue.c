@@ -144,17 +144,17 @@ static void release_buffer(struct ef_shrub_queue* queue,
 static void poll_connection(struct ef_shrub_queue* queue,
                             struct ef_shrub_connection* connection)
 {
-  int fifo_index = connection->fifo_index;
+  int fifo_index = connection->client_fifo_index;
 
   /* The client doesn't post the sentinel value, just the buffer index,
    * so there's no need to call get_buffer_index */
-  ef_shrub_buffer_id buffer_index = connection->fifo[fifo_index];
+  ef_shrub_buffer_id buffer_index = connection->client_fifo[fifo_index];
 
   if( buffer_index == EF_SHRUB_INVALID_BUFFER )
     return;
 
-  connection->fifo[fifo_index] = EF_SHRUB_INVALID_BUFFER;
-  connection->fifo_index = next_fifo_index(queue, fifo_index);
+  connection->client_fifo[fifo_index] = EF_SHRUB_INVALID_BUFFER;
+  connection->client_fifo_index = next_fifo_index(queue, fifo_index);
 
   if( buffer_index >= queue->buffer_count )
     return; /* TBD: the client is misbehaving, should we disconnect? */

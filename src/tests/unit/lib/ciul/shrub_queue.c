@@ -178,13 +178,13 @@ static struct mock_connection* open_connection(void)
   queue->connections = &mock->connection;
   STATE_ACCEPT(queue, connections);
 
-  mock->connection.fifo = calloc(fifo_size, sizeof(ef_shrub_buffer_id));
+  mock->connection.client_fifo = calloc(fifo_size, sizeof(ef_shrub_buffer_id));
   mock->connection.buffer_refs = calloc(queue->buffer_count,
                                         sizeof(mock->connection.buffer_refs[0]));
   mock->connection.fifo_size = fifo_size;
 
   for( i = 0; i < fifo_size; ++i )
-    mock->connection.fifo[i] = EF_SHRUB_INVALID_BUFFER;
+    mock->connection.client_fifo[i] = EF_SHRUB_INVALID_BUFFER;
 
   mock->buffer_refs = 0ull;
   for( i = 0; i < queue->buffer_count; ++i )
@@ -329,9 +329,9 @@ static void test_shrub_queue_connections(void)
   STATE_UPDATE(c[1], state.server_fifo_index, 0);
 
   /* Free the oldest buffer by releasing it from both connections */
-  c[0]->connection.fifo[0] = 0;
+  c[0]->connection.client_fifo[0] = 0;
   ef_shrub_queue_poll(queue);
-  STATE_UPDATE(c[0], connection.fifo_index, 1);
+  STATE_UPDATE(c[0], connection.client_fifo_index, 1);
   CHECK(queue->fifo[0], ==, buffer_id(0));
 
   for( i = 0; i < buffer_count; ++i )
@@ -339,10 +339,10 @@ static void test_shrub_queue_connections(void)
   mock_connection_drop_buffer_ref(c[0], 0);
   assert_queue_ref_counts_valid(queue);
 
-  c[1]->connection.fifo[0] = 0;
+  c[1]->connection.client_fifo[0] = 0;
   expect_free = 0;
   ef_shrub_queue_poll(queue);
-  STATE_UPDATE(c[1], connection.fifo_index, 1);
+  STATE_UPDATE(c[1], connection.client_fifo_index, 1);
   STATE_UPDATE(queue, fifo_index, buffer_count + 1);
 
   CHECK(expect_free, ==, -1);
@@ -367,13 +367,13 @@ static void test_shrub_queue_connections(void)
 
   /* Free a more recent buffer */
   expect_free = 3;
-  c[0]->connection.fifo[1] = expect_free;
-  c[1]->connection.fifo[1] = expect_free;
-  c[2]->connection.fifo[0] = expect_free;
+  c[0]->connection.client_fifo[1] = expect_free;
+  c[1]->connection.client_fifo[1] = expect_free;
+  c[2]->connection.client_fifo[0] = expect_free;
   ef_shrub_queue_poll(queue);
-  STATE_UPDATE(c[0], connection.fifo_index, 2);
-  STATE_UPDATE(c[1], connection.fifo_index, 2);
-  STATE_UPDATE(c[2], connection.fifo_index, 1);
+  STATE_UPDATE(c[0], connection.client_fifo_index, 2);
+  STATE_UPDATE(c[1], connection.client_fifo_index, 2);
+  STATE_UPDATE(c[2], connection.client_fifo_index, 1);
   CHECK(expect_free, ==, -1);
 
   /* The older buffers are removed to make space in the FIFO, but not freed */
@@ -405,13 +405,13 @@ static void test_shrub_queue_connections(void)
   assert_queue_ref_counts_valid(queue);
 
   /* Release a buffer from three connections and close the fourth */
-  c[0]->connection.fifo[2] = 5;
-  c[1]->connection.fifo[2] = 5;
-  c[2]->connection.fifo[1] = 5;
+  c[0]->connection.client_fifo[2] = 5;
+  c[1]->connection.client_fifo[2] = 5;
+  c[2]->connection.client_fifo[1] = 5;
   ef_shrub_queue_poll(queue);
-  STATE_UPDATE(c[0], connection.fifo_index, 3);
-  STATE_UPDATE(c[1], connection.fifo_index, 3);
-  STATE_UPDATE(c[2], connection.fifo_index, 2);
+  STATE_UPDATE(c[0], connection.client_fifo_index, 3);
+  STATE_UPDATE(c[1], connection.client_fifo_index, 3);
+  STATE_UPDATE(c[2], connection.client_fifo_index, 2);
 
   mock_connection_drop_buffer_ref(c[0], 5);
   mock_connection_drop_buffer_ref(c[1], 5);
@@ -453,15 +453,15 @@ static void test_shrub_queue_connections(void)
   /* Leave buffer 1 until we have reused its old slot. */
   for( i = 0; i < 3; ++i ) {
     expect_free = (i + 1) * 2; /* 2,4,6 */
-    c[0]->connection.fifo[3+i] = expect_free;
-    c[1]->connection.fifo[3+i] = expect_free;
-    c[2]->connection.fifo[2+i] = expect_free;
+    c[0]->connection.client_fifo[3+i] = expect_free;
+    c[1]->connection.client_fifo[3+i] = expect_free;
+    c[2]->connection.client_fifo[2+i] = expect_free;
     ef_shrub_queue_poll(queue);
     /* all references to this buffer dropped and reacquired */
     assert_queue_ref_counts_valid(queue);
-    STATE_UPDATE(c[0], connection.fifo_index, 4+i);
-    STATE_UPDATE(c[1], connection.fifo_index, 4+i);
-    STATE_UPDATE(c[2], connection.fifo_index, 3+i);
+    STATE_UPDATE(c[0], connection.client_fifo_index, 4+i);
+    STATE_UPDATE(c[1], connection.client_fifo_index, 4+i);
+    STATE_UPDATE(c[2], connection.client_fifo_index, 3+i);
     CHECK(expect_free, ==, -1);
     STATE_UPDATE(queue, fifo_index, i);
     CHECK(queue->fifo[i], ==, buffer_id(expect_free));
@@ -481,13 +481,13 @@ static void test_shrub_queue_connections(void)
 
   /* Free buffer 1, whose old slot has been reused */
   expect_free = 1;
-  c[0]->connection.fifo[6] = 1;
-  c[1]->connection.fifo[6] = 1;
-  c[2]->connection.fifo[5] = 1;
+  c[0]->connection.client_fifo[6] = 1;
+  c[1]->connection.client_fifo[6] = 1;
+  c[2]->connection.client_fifo[5] = 1;
   ef_shrub_queue_poll(queue);
-  STATE_UPDATE(c[0], connection.fifo_index, 7);
-  STATE_UPDATE(c[1], connection.fifo_index, 7);
-  STATE_UPDATE(c[2], connection.fifo_index, 6);
+  STATE_UPDATE(c[0], connection.client_fifo_index, 7);
+  STATE_UPDATE(c[1], connection.client_fifo_index, 7);
+  STATE_UPDATE(c[2], connection.client_fifo_index, 6);
   CHECK(expect_free, ==, -1);
   STATE_UPDATE(queue, fifo_index, 3);
 

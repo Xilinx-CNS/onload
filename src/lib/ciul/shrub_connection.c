@@ -11,7 +11,7 @@
 struct ef_shrub_client_state*
 ef_shrub_connection_client_state(struct ef_shrub_connection* connection)
 {
-  return (void*)((char*)connection->fifo +
+  return (void*)((char*)connection->client_fifo +
                  connection->fifo_size * sizeof(ef_shrub_buffer_id));
 }
 
@@ -46,17 +46,17 @@ ef_shrub_connection_alloc(struct ef_shrub_connection** connection_out,
   if( connection == NULL )
     return -ENOMEM;
 
-  rc = map_shared_state((void**)&connection->fifo, client_fifo_fd,
+  rc = map_shared_state((void**)&connection->client_fifo, client_fifo_fd,
                         *client_fifo_offset, total_client_bytes);
   if( rc < 0 )
     goto fail_client_map;
 
-  connection->fifo_mmap_offset = *client_fifo_offset;
+  connection->client_fifo_mmap_offset = *client_fifo_offset;
   *client_fifo_offset += total_client_bytes;
 
   connection->fifo_size = fifo_size;
   for( i = 0; i < fifo_size; ++i )
-    connection->fifo[i] = EF_SHRUB_INVALID_BUFFER;
+    connection->client_fifo[i] = EF_SHRUB_INVALID_BUFFER;
 
   *connection_out = connection;
   return 0;
@@ -107,7 +107,7 @@ int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection)
   metrics->buffer_bytes = queue->buffer_bytes;
   metrics->buffer_count = queue->buffer_count;
   metrics->server_fifo_size = queue->fifo_size;
-  metrics->client_fifo_offset = connection->fifo_mmap_offset;
+  metrics->client_fifo_offset = connection->client_fifo_mmap_offset;
   metrics->client_fifo_size = connection->fifo_size;
 
   cmsg->cmsg_level = SOL_SOCKET;

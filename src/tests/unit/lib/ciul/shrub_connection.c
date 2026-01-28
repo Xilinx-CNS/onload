@@ -97,10 +97,10 @@ void test_shrub_connection(void)
   CHECK(connection, !=, NULL);
   CHECK(connection->next, ==, NULL);
   CHECK(connection->queue, ==, NULL);
-  CHECK(connection->fifo, ==, mmap_addr);
-  CHECK(connection->fifo_index, ==, 0);
+  CHECK(connection->client_fifo, ==, mmap_addr);
+  CHECK(connection->client_fifo_index, ==, 0);
   CHECK(connection->fifo_size, ==, fifo_size);
-  CHECK(connection->fifo_mmap_offset, ==, fifo_offset);
+  CHECK(connection->client_fifo_mmap_offset, ==, fifo_offset);
 
   connection->queue = &queue;
   connection->socket = socket_fd;
