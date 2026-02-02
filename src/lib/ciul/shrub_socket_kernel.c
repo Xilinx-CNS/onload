@@ -43,13 +43,15 @@ int ef_shrub_socket_open(uintptr_t* socket_out)
 
 int ef_shrub_socket_close_socket(uintptr_t socket)
 {
-  sock_release((struct socket*)socket);
+  if( socket != 0 )
+    sock_release((struct socket*)socket);
   return 0;
 }
 
 int ef_shrub_socket_close_file(uintptr_t file)
 {
-  fput((struct file*)file);
+  if( file != 0 )
+    fput((struct file*)file);
   return 0;
 }
 
