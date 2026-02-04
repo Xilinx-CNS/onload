@@ -573,9 +573,6 @@
 /* We don't support CXL by default */
 #define CI_CFG_CXL 0
 
-/* Enable shrub by default */
-#define CI_CFG_WANT_SHRUB 1
-
 /*****************************************************************************
  * New options should be added above here, otherwise they will overwrite the *
  * values set in the build profile below!                                    *
