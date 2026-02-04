@@ -334,7 +334,7 @@ ci_inline void citp_fdinfo_init(citp_fdinfo* fdi, citp_protocol_impl* p) {
   fdi->can_cache = 0;
 #endif
   fdi->protocol = p;
-  fdi->seq = fdtable_seq_no++;
+  fdi->seq = __sync_fetch_and_add(&fdtable_seq_no, 1);
   fdi->epoll_fd = -1;
   fdi->thread_id = PTHREAD_NULL;
 }
