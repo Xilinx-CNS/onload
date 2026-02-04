@@ -845,10 +845,10 @@ static int efx_register_netdev(struct efx_nic *efx)
 	netif_set_tso_max_segs(net_dev, EFX_TSO_MAX_SEGS);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NETDEV_MTU_LIMITS)
 	net_dev->min_mtu = EFX_MIN_MTU;
-	net_dev->max_mtu = EFX_MAX_MTU;
+	net_dev->max_mtu = efx_max_mtu(efx);
 #elif defined(EFX_HAVE_NETDEV_EXT_MTU_LIMITS)
 	net_dev->extended->min_mtu = EFX_MIN_MTU;
-	net_dev->extended->max_mtu = EFX_MAX_MTU;
+	net_dev->extended->max_mtu = efx_max_mtu(efx);
 #endif
 
 	rtnl_lock();

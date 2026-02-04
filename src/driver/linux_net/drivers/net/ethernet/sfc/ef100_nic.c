@@ -1783,6 +1783,9 @@ void ef100_remove(struct efx_nic *efx)
 	NETIF_F_HW_VLAN_CTAG_TX | NETIF_F_HW_VLAN_CTAG_FILTER)
 #endif
 
+/* Maximum possible MTU the driver supports */
+#define EFX_EF100_DEFAULT_MAX_MTU 9600
+
 const struct efx_nic_type ef100_pf_nic_type = {
 	.revision = EFX_REV_EF100,
 	.is_vf = false,
@@ -1921,6 +1924,7 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	},
 #endif
 #endif
+	.default_max_mtu = EFX_EF100_DEFAULT_MAX_MTU,
 };
 
 const struct efx_nic_type ef100_vf_nic_type = {
@@ -2030,4 +2034,5 @@ const struct efx_nic_type ef100_vf_nic_type = {
 	},
 #endif
 #endif
+	.default_max_mtu = EFX_EF100_DEFAULT_MAX_MTU,
 };

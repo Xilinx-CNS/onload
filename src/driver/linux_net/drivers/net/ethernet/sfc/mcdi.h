@@ -200,7 +200,6 @@ struct efx_mcdi_mon {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE)
 	struct rhashtable sensor_table;
 #endif
-	unsigned int generation_count;
 	unsigned int n_dynamic_sensors;
 	int pend_sensor_state_handle;
 };

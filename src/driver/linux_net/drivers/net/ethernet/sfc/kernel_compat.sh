@@ -128,6 +128,7 @@ EFX_NEED_PAGE_REF_ADD		nfile				include/linux/page_ref.h
 EFX_NEED_HWMON_DEVICE_REGISTER_WITH_INFO	nsymbol	hwmon_device_register_with_info	include/linux/hwmon.h
 EFX_HAVE_NDO_UDP_TUNNEL_ADD	member	struct_net_device_ops	ndo_udp_tunnel_add	include/linux/netdevice.h
 EFX_HAVE_UDP_TUNNEL_NIC_INFO	symbol	udp_tunnel_nic_info	include/net/udp_tunnel.h
+EFX_HAVE_UDP_TUNNEL_NIC_INFO_MAY_SLEEP	symbol UDP_TUNNEL_NIC_INFO_MAY_SLEEP	include/net/udp_tunnel.h
 EFX_HAVE_NEW_FLOW_KEYS		member	struct_flow_keys	basic		include/net/flow_dissector.h
 EFX_HAVE_NDO_ADD_GENEVE_PORT	member	struct_net_device_ops	ndo_add_geneve_port	include/linux/netdevice.h
 EFX_HAVE_NETDEV_LLTX		nsymbol	NETIF_F_LLTX	include/linux/netdev_features.h
@@ -291,6 +292,7 @@ EFX_HAVE_NET_RPS_H                     file       include/net/rps.h
 EFX_HAVE_IP_TUNNEL_FLAGS_TO_BE16	symbol	ip_tunnel_flags_to_be16	include/net/ip_tunnels.h
 EFX_NEED_TIME64_TO_TM			nsymbol	time64_to_tm		include/linux/time.h
 EFX_HAVE_ASSIGN_STR_NO_SRC_ARG      custom
+EFX_NEED_TRY_LOOKUP_NOPERM	nsymbol	try_lookup_noperm	include/linux/namei.h
 " | grep -E -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
 

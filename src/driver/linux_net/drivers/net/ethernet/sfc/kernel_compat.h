@@ -1977,4 +1977,11 @@ static inline void time64_to_tm(time64_t totalsecs, int offset, struct tm *resul
 #define skb_gro_may_pull(_s, _l) !skb_gro_header_hard(_s, _l)
 #endif
 
+#ifdef EFX_NEED_TRY_LOOKUP_NOPERM
+static inline struct dentry *try_lookup_noperm(struct qstr *name, struct dentry *base)
+{
+	return d_hash_and_lookup(base, name);
+}
+#endif
+
 #endif /* EFX_KERNEL_COMPAT_H */

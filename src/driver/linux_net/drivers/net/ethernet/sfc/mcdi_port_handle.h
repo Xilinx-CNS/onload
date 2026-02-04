@@ -49,6 +49,8 @@ struct efx_x4_mcdi_port_data {
 
 int efx_mcdi_get_port_handle(struct efx_nic *efx, u32 *handle);
 
+unsigned int efx_x4_hw_max_mtu(struct efx_nic *efx);
+
 int efx_x4_mcdi_mac_ctrl(struct efx_nic *efx);
 int efx_x4_mcdi_set_mtu(struct efx_nic *efx);
 
