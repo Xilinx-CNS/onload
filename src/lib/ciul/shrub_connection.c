@@ -177,6 +177,11 @@ int ef_shrub_connection_attach_queue(struct ef_shrub_connection* connection,
   for( i = 0; i < queue->buffer_count; ++i )
     connection->buffer_refs[i] = false;
 
+  for( i = 0; i < connection->fifo_size; i++ ) {
+    connection->client_fifo[i] = EF_SHRUB_INVALID_BUFFER;
+    connection->server_fifo[i] = EF_SHRUB_INVALID_BUFFER;
+  }
+
   /* We must not fail after setting this, or we should reduce the amount if
    * we do fail. */
   queue->reserved_buffer_count = new_reserved_bufs;
