@@ -164,18 +164,6 @@ static inline bool efrm_close_on_exec(unsigned int fd,
 }
 #endif
 
-#ifdef EFRM_HAVE_SKB_RECV_NOBLOCK_PARAM
-static inline struct sk_buff *efrm_skb_recv_datagram(struct sock *sk,
-                                                     unsigned flags,
-                                                     int *err)
-{
-  return skb_recv_datagram(sk, flags, flags & MSG_DONTWAIT ? 1 : 0, err);
-}
-#else
-/* linux 5.19+ */
-#define efrm_skb_recv_datagram skb_recv_datagram
-#endif
-
 #ifdef EFRM_HAVE_TIMER_DELETE_SYNC
 /* linux 6.1+ */
 #define efrm_timer_delete_sync timer_delete_sync
