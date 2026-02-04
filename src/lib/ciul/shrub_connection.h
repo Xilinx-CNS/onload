@@ -34,6 +34,10 @@ struct ef_shrub_connection {
 
   ef_shrub_buffer_id* client_fifo;
   ef_shrub_buffer_id* server_fifo;
+
+  struct {
+    uint64_t dropped_buffers;
+  } stats;
 };
 
 int

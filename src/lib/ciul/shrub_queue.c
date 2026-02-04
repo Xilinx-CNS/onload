@@ -142,6 +142,12 @@ static void release_buffer(struct ef_shrub_queue* queue,
         if( ! SEQ_BTW((size_t)conn->queue_fifo_index,
                       (size_t)next_valid_fifo_index,
                       (size_t)queue->fifo_index) ) {
+          /* We need to offset the amount here by the fifo size to account
+           * for fifo sizes that aren't powers of two. */
+          int n_dropped =
+            (next_valid_fifo_index + queue->fifo_size - conn->queue_fifo_index)
+              % queue->fifo_size;
+          conn->stats.dropped_buffers += n_dropped;
           conn->queue_fifo_index = next_valid_fifo_index;
         }
         /* Either this connection is looking at a valid buffer, or it's waiting

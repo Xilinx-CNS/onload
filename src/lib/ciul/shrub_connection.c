@@ -160,6 +160,8 @@ int ef_shrub_connection_attach_queue(struct ef_shrub_connection* connection,
   connection->client_fifo_index = client_state->client_fifo_index = 0;
   connection->server_fifo_index = client_state->server_fifo_index = 0;
 
+  memset(&connection->stats, 0, sizeof(connection->stats));
+
   /* If our calculation has overflowed, then we can't do much about it except
    * complain that we can't satisfy the memory allocation request. */
   ref_size = sizeof(connection->buffer_refs[0]);
@@ -287,4 +289,7 @@ void ef_shrub_connection_dump_to_fd(struct ef_shrub_connection* connection,
     }
   }
   shrub_log_to_fd(fd, buf, buflen, "}\n");
+
+  shrub_log_to_fd(fd, buf, buflen, "      dropped_buffers: %llu\n",
+                  connection->stats.dropped_buffers);
 }
