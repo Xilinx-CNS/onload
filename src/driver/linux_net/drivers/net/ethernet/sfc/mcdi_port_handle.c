@@ -33,7 +33,24 @@ static u32 efx_x4_mcdi_max_frame_len(struct efx_nic *efx)
 	 * that includes an obsolete workaround for Siena hardware that is
 	 * ABI for the legacy MC_CMD_SET_MAC command.
 	 */
-	return efx->net_dev->mtu + ETH_HLEN + VLAN_HLEN + 4 /*FCS*/;
+	return efx->net_dev->mtu + ETH_HLEN + VLAN_HLEN + ETH_FCS_LEN;
+}
+
+unsigned int efx_x4_hw_max_mtu(struct efx_nic *efx)
+{
+	struct efx_x4_mcdi_port_data *port_data = efx->port_data;
+	unsigned int max_mtu;
+
+	if (efx_nic_port_handle_supported(efx)) {
+
+		/* Must be the inverse of efx_x4_mcdi_max_frame_len */
+		max_mtu = port_data->fixed_port.max_frame_len
+			- (ETH_HLEN + VLAN_HLEN + ETH_FCS_LEN);
+
+		if (max_mtu >= ETH_MIN_MTU && max_mtu <= ETH_MAX_MTU)
+			return max_mtu;
+	}
+	return efx->type->default_max_mtu;
 }
 
 int efx_x4_mcdi_mac_ctrl(struct efx_nic *efx)
@@ -1104,6 +1121,9 @@ int efx_x4_mcdi_fixed_port_props(struct efx_nic *efx,
 	caps = MCDI_PTR(outbuf, GET_FIXED_PORT_PROPERTIES_OUT_ABILITIES_TECH_MASK);
 	efx_x4_mcdi_tech_to_bitmap(port_data->fixed_port.tech_mask,
 				   (const efx_oword_t *)caps);
+
+	port_data->fixed_port.max_frame_len =
+		MCDI_DWORD(outbuf, GET_FIXED_PORT_PROPERTIES_OUT_MAX_FRAME_LEN);
 
 	port_data->fixed_port.fec =
 		MCDI_DWORD(outbuf, GET_FIXED_PORT_PROPERTIES_OUT_ABILITIES_FEC_MASK);

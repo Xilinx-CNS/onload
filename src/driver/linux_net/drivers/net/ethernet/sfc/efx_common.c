@@ -324,10 +324,10 @@ int efx_change_mtu(struct net_device *net_dev, int new_mtu)
 		return rc;
 
 #if defined(EFX_USE_KCOMPAT) && !(defined(EFX_HAVE_NETDEV_MTU_LIMITS) || defined(EFX_HAVE_NETDEV_EXT_MTU_LIMITS))
-	if (new_mtu > (efx_nic_rev(efx) == EFX_REV_EF100? EFX_100_MAX_MTU: EFX_MAX_MTU)) {
+	if (new_mtu > efx_max_mtu(efx)) {
 		netif_err(efx, drv, efx->net_dev,
 			  "Requested MTU of %d too big (max: %d)\n",
-			  new_mtu, EFX_MAX_MTU);
+			  new_mtu, efx_max_mtu(efx));
 		return -EINVAL;
 	}
 	if (new_mtu < EFX_MIN_MTU) {
@@ -501,8 +501,9 @@ static int efx_start_datapath(struct efx_nic *efx)
 		/* Each packet can consume up to
 		 * ceil(max_frame_len / buffer_size) buffers
 		 */
-		efx->rx_max_frags = DIV_ROUND_UP(EFX_MAX_FRAME_LEN(EFX_MAX_MTU),
-						 efx->rx_dma_len);
+		efx->rx_max_frags =
+			DIV_ROUND_UP(EFX_MAX_FRAME_LEN(efx_max_mtu(efx)),
+				     efx->rx_dma_len);
 		efx->rx_buffer_order = 0;
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
 		efx->lro_available = false;

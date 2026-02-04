@@ -12,6 +12,7 @@
 #include <linux/pci.h>
 #include <linux/debugfs.h>
 #include <linux/dcache.h>
+#include <linux/namei.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include "net_driver.h"
@@ -87,7 +88,7 @@ void efx_fini_debugfs_child(struct dentry *dir, const char *name)
 	struct qstr child_name = QSTR_INIT(name, strlen(name));
 	struct dentry *child;
 
-	child = d_hash_and_lookup(dir, &child_name);
+	child = try_lookup_noperm(&child_name, dir);
 	if (!IS_ERR_OR_NULL(child)) {
 		/* If it's a "regular" file, free its parameter binding */
 		if (S_ISREG(child->d_inode->i_mode))

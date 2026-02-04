@@ -312,7 +312,8 @@ static void efx_mcdi_handle_dynamic_sensor_state_change(struct efx_nic *efx,
 	struct efx_mcdi_mon *hwmon = efx_mcdi_mon(efx);
 	struct efx_dynamic_sensor *sensor;
 	unsigned int handle, state, value;
-	const char *name, *state_txt;
+	const char *name = NULL;
+	const char *state_txt;
 
 	/* Ignore event if dynamic sensors have not been initialised */
 	if (!hwmon || !hwmon->sensor_list)
@@ -593,7 +594,6 @@ static int efx_mcdi_read_dynamic_sensor_list(struct efx_nic *efx)
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_DYNAMIC_SENSORS_LIST_OUT_LENMAX);
 	struct efx_mcdi_mon *hwmon = efx_mcdi_mon(efx);
 	unsigned int n_sensors;
-	unsigned int gen_count;
 	void *new_sensor_list;
 	void *old_sensor_list;
 	size_t outlen;
@@ -605,12 +605,6 @@ static int efx_mcdi_read_dynamic_sensor_list(struct efx_nic *efx)
 			  sizeof(outbuf), &outlen);
 	if (rc)
 		return rc;
-
-	gen_count = MCDI_DWORD(outbuf, DYNAMIC_SENSORS_LIST_OUT_GENERATION);
-	/* check if generation count changed */
-	if (gen_count == hwmon->generation_count)
-		return 0;
-	hwmon->generation_count = gen_count;
 
 	n_sensors = MCDI_DWORD(outbuf, DYNAMIC_SENSORS_LIST_OUT_COUNT);
 	if (outlen < MC_CMD_DYNAMIC_SENSORS_LIST_OUT_LEN(n_sensors)) {

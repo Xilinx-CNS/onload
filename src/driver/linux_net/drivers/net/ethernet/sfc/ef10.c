@@ -3055,6 +3055,13 @@ got_buffer:
 	}
 }
 
+/* Check that we assume that we don't need to fragment a descriptor due to
+ * a DMA boundary for a single output packet. Use for initialising the
+ * default_max_mtu field of struct efx_nic_type.
+ */
+#define EFX_EF10_VERIFY_MAX_MTU(mtu) \
+	(BUILD_BUG_ON_ZERO((mtu) > EFX_EF10_MAX_TX_DESCRIPTOR_LEN) + (mtu))
+
 /* Maximum number of descriptors required for a single SKB */
 static unsigned int efx_ef10_tx_max_skb_descs(struct efx_nic *efx)
 {
@@ -3062,9 +3069,9 @@ static unsigned int efx_ef10_tx_max_skb_descs(struct efx_nic *efx)
 	unsigned int max_descs;
 
 	/* In all cases we assume that we don't need to fragment a descriptor
-	 * due to a DMA boundary for a single output packet.
+	 * due to a DMA boundary for a single output packet. Checked by using
+	 * EFX_EF10_VERIFY_MAX_MTU().
 	 */
-	BUILD_BUG_ON(EFX_MAX_MTU > EFX_EF10_MAX_TX_DESCRIPTOR_LEN);
 
 	if (efx_ef10_has_cap(nic_data->datapath_caps, TX_TSO)) {
 		/* We need a header, option and payload descriptor for each
@@ -5181,7 +5188,9 @@ static int efx_ef10_udp_tnl_unset_port(struct net_device *dev,
 static const struct udp_tunnel_nic_info efx_ef10_udp_tunnels = {
 	.set_port	= efx_ef10_udp_tnl_set_port,
 	.unset_port	= efx_ef10_udp_tnl_unset_port,
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_UDP_TUNNEL_NIC_INFO_MAY_SLEEP)
 	.flags          = UDP_TUNNEL_NIC_INFO_MAY_SLEEP,
+#endif
 	.tables         = {
 		{
 			.n_entries = 16,
@@ -6214,6 +6223,10 @@ static bool efx_ef10_vf_client_supported(struct efx_nic *efx,
 	 NETIF_F_RXHASH |		\
 	 NETIF_F_NTUPLE)
 
+/* Maximum possible MTU the driver supports */
+#define EFX_EF10_DEFAULT_MAX_MTU	EFX_EF10_VERIFY_MAX_MTU(9216)
+#define EFX_X4_DEFAULT_MAX_MTU		EFX_EF10_VERIFY_MAX_MTU(9100)
+
 #ifdef CONFIG_SFC_SRIOV
 const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 	.is_vf = true,
@@ -6376,6 +6389,7 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 	.check_caps = ef10_check_caps,
 	.rx_recycle_ring_size = efx_ef10_recycle_ring_size,
 	.has_fw_variants = true,
+	.default_max_mtu = EFX_EF10_DEFAULT_MAX_MTU,
 };
 
 const struct efx_nic_type efx_x4_vf_nic_type = {
@@ -6406,6 +6420,7 @@ const struct efx_nic_type efx_x4_vf_nic_type = {
 	.stop_stats = efx_ef10_stop_stats_vf,
 	.update_stats_period = efx_ef10_vf_schedule_stats_work,
 	.push_irq_moderation = efx_ef10_push_irq_moderation,
+	.hw_max_mtu = efx_x4_hw_max_mtu,
 	.reconfigure_mac = efx_x4_mac_reconfigure,
 	.check_mac_fault = efx_x4_mcdi_mac_check_fault,
 	.reconfigure_port = efx_x4_mcdi_port_reconfigure,
@@ -6540,6 +6555,7 @@ const struct efx_nic_type efx_x4_vf_nic_type = {
 	.rx_recycle_ring_size = efx_ef10_recycle_ring_size,
 	.has_dynamic_sensors = ef10_has_dynamic_sensors,
 	.has_fw_variants = true,
+	.default_max_mtu = EFX_X4_DEFAULT_MAX_MTU,
 };
 #endif
 
@@ -6746,6 +6762,7 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.check_caps = ef10_check_caps,
 	.rx_recycle_ring_size = efx_ef10_recycle_ring_size,
 	.has_fw_variants = true,
+	.default_max_mtu = EFX_EF10_DEFAULT_MAX_MTU,
 };
 
 const struct efx_nic_type efx_x4_nic_type = {
@@ -6775,6 +6792,7 @@ const struct efx_nic_type efx_x4_nic_type = {
 	.update_stats = efx_ef10_update_stats_pf,
 	.pull_stats = efx_ef10_pull_stats_pf,
 	.push_irq_moderation = efx_ef10_push_irq_moderation,
+	.hw_max_mtu = efx_x4_hw_max_mtu,
 	.reconfigure_mac = efx_x4_mac_reconfigure,
 	.check_mac_fault = efx_x4_mcdi_mac_check_fault,
 	.reconfigure_port = efx_x4_mcdi_port_reconfigure,
@@ -6952,5 +6970,6 @@ const struct efx_nic_type efx_x4_nic_type = {
 	.rx_recycle_ring_size = efx_ef10_recycle_ring_size,
 	.has_dynamic_sensors = ef10_has_dynamic_sensors,
 	.has_fw_variants = true,
+	.default_max_mtu = EFX_X4_DEFAULT_MAX_MTU,
 };
 

@@ -92,7 +92,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.2.1.1000"
+#define EFX_DRIVER_VERSION	"6.2.1.1001"
 #endif
 
 #ifdef DEBUG
@@ -141,10 +141,6 @@
 #define EFX_TXQ_TYPE_BOTH_CSUM_OFFLOAD  3
 #define EFX_TXQ_TYPES			3
 #define EFX_MAX_TX_QUEUES	(EFX_TXQ_TYPES * EFX_MAX_CORE_TX_QUEUES)
-
-/* Maximum possible MTU the driver supports */
-#define EFX_MAX_MTU (9 * 1024)
-#define EFX_100_MAX_MTU 9600
 
 /* Minimum MTU, from RFC791 (IP) */
 #define EFX_MIN_MTU 68
@@ -2118,6 +2114,7 @@ struct mae_mport_desc;
  * @reconfigure_port: Push loopback/power/txdis changes to the MAC and PHY
  * @check_link_change: Poll once to check for link state changes
  * @check_module_caps: Check advertised abilities after module change
+ * @hw_max_mtu: Get max MTU from fixed port properties (may be %NULL)
  * @reconfigure_mac: Push MAC address, MTU, flow control and filter settings
  *	to the hardware.  Serialised by the mac_lock.
  *	Only change MTU if mtu_only is set.
@@ -2289,6 +2286,7 @@ struct mae_mport_desc;
  * @mcdi_max_ver: Maximum MCDI version supported
  * @hwtstamp_filters: Mask of hardware timestamp filter types supported
  * @has_fw_variants: NIC supports multiple datapath firmware variants
+ * @default_max_mtu: Maximum MTU supported
  */
 struct efx_nic_type {
 	bool is_vf;
@@ -2327,6 +2325,7 @@ struct efx_nic_type {
 	int (*reconfigure_port)(struct efx_nic *efx);
 	bool (*check_link_change)(struct efx_nic *efx);
 	void (*check_module_caps)(struct efx_nic *efx);
+	unsigned int (*hw_max_mtu)(struct efx_nic *efx);
 	int (*reconfigure_mac)(struct efx_nic *efx, bool mtu_only);
 	bool (*check_mac_fault)(struct efx_nic *efx);
 	void (*get_wol)(struct efx_nic *efx, struct ethtool_wolinfo *wol);
@@ -2569,6 +2568,7 @@ struct efx_nic_type {
 	int mcdi_max_ver;
 	u32 hwtstamp_filters;
 	bool has_fw_variants;
+	unsigned int default_max_mtu;
 };
 
 /**************************************************************************
@@ -2779,7 +2779,14 @@ efx_rx_buf_next(struct efx_rx_queue *rx_queue, struct efx_rx_buffer *rx_buf)
  * this by adding a further 16 bytes.
  */
 #define EFX_MAX_FRAME_LEN(mtu) \
-	((((mtu) + ETH_HLEN + VLAN_HLEN + 4/* FCS */ + 7) & ~7) + 16)
+	((((mtu) + ETH_HLEN + VLAN_HLEN + ETH_FCS_LEN + 7) & ~7) + 16)
+
+static inline unsigned int efx_max_mtu(struct efx_nic *efx)
+{
+	if (efx->type->hw_max_mtu)
+		return efx->type->hw_max_mtu(efx);
+	return efx->type->default_max_mtu;
+}
 
 /*
  * WARNING: This calculation must match with the value of page_offset

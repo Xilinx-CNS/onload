@@ -326,10 +326,10 @@ static struct efx_rep *efx_ef100_rep_create_netdev(struct efx_nic *efx,
 	net_dev->ethtool_ops = &efx_ef100_rep_ethtool_ops;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NETDEV_MTU_LIMITS)
 	net_dev->min_mtu = EFX_MIN_MTU;
-	net_dev->max_mtu = EFX_100_MAX_MTU;
+	net_dev->max_mtu = efx_max_mtu(efx);
 #elif defined(EFX_HAVE_NETDEV_EXT_MTU_LIMITS)
 	net_dev->extended->min_mtu = EFX_MIN_MTU;
-	net_dev->extended->max_mtu = EFX_100_MAX_MTU;
+	net_dev->extended->max_mtu = efx_max_mtu(efx);
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NETDEV_LLTX)
 	net_dev->lltx = true;
