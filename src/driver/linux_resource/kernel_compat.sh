@@ -190,6 +190,8 @@ EFRM_HAVE_FOLLOW_PTE_VMA symtype follow_pte include/linux/mm.h int(struct vm_are
 
 EFRM_HAVE_IBT symbol X86_FEATURE_IBT arch/x86/include/asm/cpufeatures.h
 
+EFRM_HAVE_FLOWI4_DSCP	member	struct_flowi_common flowic_dscp	include/net/flow.h
+
 # TODO move onload-related stuff from net kernel_compat
 " | grep -E -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }

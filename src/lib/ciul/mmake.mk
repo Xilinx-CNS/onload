@@ -54,6 +54,7 @@ LIB_SRCS	+=		\
 		shrub_queue.c   \
 		shrub_connection.c \
 		shrub_server_sockets.c \
+		shrub_utils.c \
 		syscall_stubs.c \
 
 # librt is needed on old glibc, e.g. on RHEL 6

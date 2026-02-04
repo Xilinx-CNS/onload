@@ -364,17 +364,6 @@ static int create_directory(const char *path)
   return rc;
 }
 
-void shrub_log_to_fd(int fd, char *buf, size_t buflen, const char* fmt, ...)
-{
-  va_list args;
-  int len;
-
-  va_start(args, fmt);
-  len = vsnprintf(buf, buflen, fmt, args);
-  va_end(args);
-  write(fd, buf, len + 1);
-}
-
 static void shrub_dump_summary_to_fd(int fd, shrub_controller_config *config,
                                      char *buf, size_t buflen)
 {

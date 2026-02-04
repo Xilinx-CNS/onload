@@ -485,11 +485,7 @@ struct tcp_helper_endpoint_s {
 static inline struct pid_namespace*
 ci_get_pid_ns(struct nsproxy* proxy)
 {
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,11,0))
   return proxy->pid_ns_for_children;
-#else
-  return proxy->pid_ns;
-#endif
 }
 
 /* Return the PID namespace in which the given ci_netif lives.

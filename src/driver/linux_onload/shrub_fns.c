@@ -136,7 +136,7 @@ static int shrub_spawn_server(char* controller_id, bool debug,
   OO_DEBUG_TCPH(ci_log("%s: pid=%d path=%s controller_id=%s", __FUNCTION__,
                        task_tgid_nr(current), path, controller_id));
 
-  rc = ci_call_usermodehelper(path, argv, envp, UMH_WAIT_EXEC
+  rc = call_usermodehelper(path, argv, envp, UMH_WAIT_EXEC
     #ifdef UMH_KILLABLE
                                                     | UMH_KILLABLE
     #endif

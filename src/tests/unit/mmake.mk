@@ -31,11 +31,16 @@ ALL_UNIT_TESTS := \
   lib/ciul/shrub_connection \
   lib/ciul/shrub_queue \
   lib/ciul/shrub_server \
+  lib/ciul/linking_dynamic \
+  lib/ciul/linking_static \
 
 # The tests to be run, and their corresponding files
 TESTS := $(filter $(UNIT_TEST_FILTER)%, $(ALL_UNIT_TESTS))
 TARGETS := $(TESTS:%=$(AppPattern))
-OBJECTS := $(TESTS:%=%.o)
+# Exclude linking tests from OBJECTS as they share a source file
+LINKING_TEST_NAMES := lib/ciul/linking_dynamic lib/ciul/linking_static
+STANDARD_TESTS := $(filter-out $(LINKING_TEST_NAMES), $(TESTS))
+OBJECTS := $(STANDARD_TESTS:%=%.o)
 PASSED := $(TESTS:%=%.passed)
 
 # Library object names are mangled with a prefix. Deal with that madness here.
@@ -86,18 +91,51 @@ $(TARGETS): MMAKE_DIR_CFLAGS += -I$(TOPPATH)/src/lib
 # be rebuilt if out of date. A top-level build is needed to make sure it's up
 # to date before building the tests. This sadly means we can't reliably run an
 # invididual test without waiting for several seconds of flappery first.
+
+# The linking tests are special and handled separately - exclude them here
+LINKING_TESTS := lib/ciul/linking_dynamic lib/ciul/linking_static
+STANDARD_LIB_TESTS := $(filter-out $(LINKING_TESTS), $(filter lib/%, $(TARGETS)))
+
 $(TARGETS): MMAKE_DIR_LINKFLAGS += -Wl,--unresolved-symbols=ignore-all $(NO_PIE)
 $(TARGETS): MMAKE_LIBS += -ldl
-$(filter lib/%, $(TARGETS)): $$(call lib_object,$$@)
-$(TARGETS): %: %.o stubs.o
+$(STANDARD_LIB_TESTS): $$(call lib_object,$$@)
+$(filter-out $(LINKING_TESTS), $(TARGETS)): %: %.o stubs.o
 	(libs=$(MMAKE_LIBS); $(MMakeLinkCApp))
 
 # We want to use ef_vi_transmit_unbundle in this test, but it's hidden away
 # elsewhere, so lets also link against that object.
 lib/ciul/efct_vi: ../../lib/ciul/pt_tx.o
 
+# The linking tests are special: they link the same source file against the
+# full libciul library (not individual object files) to verify that all
+# symbols are properly resolved. They do NOT use --unresolved-symbols=ignore-all.
+LIBCIUL_PATH := ../../lib/ciul
+
+# Dynamic linking test - links against libciul.so
+# Uses --no-undefined to reject undefined symbols in the shared library
+# Uses --no-as-needed to force the library to be linked even if symbols appear unused
+lib/ciul/linking_dynamic: MMAKE_DIR_LINKFLAGS := -L$(LIBCIUL_PATH) -Wl,-rpath,$(LIBCIUL_PATH) -Wl,--no-undefined -Wl,--no-as-needed
+lib/ciul/linking_dynamic: MMAKE_LIBS := -lciul -ldl -lrt -lpthread
+lib/ciul/linking_dynamic: lib/ciul/linking.o stubs.o
+	(libs="$(MMAKE_LIBS)"; $(MMakeLinkCApp))
+
+# Static linking test - links against libciul1.a
+# Uses --whole-archive to force all object files to be included,
+# which will expose any undefined symbols in the library
+lib/ciul/linking_static: MMAKE_DIR_LINKFLAGS :=
+lib/ciul/linking_static: MMAKE_LIBS := -Wl,--whole-archive $(LIBCIUL_PATH)/libciul1.a -Wl,--no-whole-archive -ldl -lrt -lpthread
+lib/ciul/linking_static: lib/ciul/linking.o stubs.o
+	(libs="$(MMAKE_LIBS)"; $(MMakeLinkCApp))
+
+# Both linking tests share the same source file (in the test directory, not src/lib)
+lib/ciul/linking.o: $(TOPPATH)/src/tests/unit/lib/ciul/linking.c lib/ciul/.unit_test_dir
+	$(MMakeCompileC)
+
+# Add the linking.o to the list of objects that need dependency tracking
+LINKING_OBJ := lib/ciul/linking.o
+
 # The build system relies on a convoluted web of makefiles in subdirectories
 # of both source and build trees to generate the dependencies. Lets do it the
 # easy way instead. TODO remove this once the build system is more sensible.
-$(OBJECTS): MMAKE_DIR_CFLAGS += -MMD -MP
--include $(subst .o,.d,$(OBJECTS))
+$(OBJECTS) $(LINKING_OBJ): MMAKE_DIR_CFLAGS += -MMD -MP
+-include $(subst .o,.d,$(OBJECTS)) $(subst .o,.d,$(LINKING_OBJ))

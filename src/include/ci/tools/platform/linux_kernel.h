@@ -41,8 +41,8 @@
 # include <linux/version.h>
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
-# error "Linux 3.10+ required"
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,18,0)
+# error "Linux 4.18+ required"
 #endif
 
 

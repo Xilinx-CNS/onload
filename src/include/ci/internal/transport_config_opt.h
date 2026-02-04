@@ -567,11 +567,7 @@
  *
  *  * temporary disabled for linux-5.10 (ON-12686)
  */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,18,0)
 #define CI_HAVE_BPF_NATIVE 1
-#else
-#define CI_HAVE_BPF_NATIVE 0
-#endif
 #endif
 
 /* We don't support CXL by default */

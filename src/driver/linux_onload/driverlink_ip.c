@@ -90,86 +90,20 @@ static int oo_nf_skb_get_payload(struct sk_buff* skb, void** pdata, int* plen)
   }
 }
 
-#if defined (RHEL_MAJOR) && defined (RHEL_MINOR)
-#if RHEL_MAJOR == 7 && RHEL_MINOR >= 2
-/* RHEL 7.2 kernel is crazy and can't be parsed by kernel_compat.sh correctly */
-#define EFRM_HAVE_NETFILTER_INDEV_OUTDEV yes
-#endif
-#endif
 
-
-#if defined(FUTURE_LINUX_RELEASE)
-        /* put future variants here */
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,0)
-        /* Linux >= 4.4 : nf_hook_ops were replaced by void;
-         * it is too hard to detect this from kernel_compat.sh */
-# define NFHOOK_PARAMS \
-    void *priv,         \
-    struct sk_buff* skb,\
-    const struct nf_hook_state *state
-# define nfhook_skb skb
-# define nfhook_indev state->in
-#elif  defined(EFRM_HAVE_NETFILTER_HOOK_STATE) && \
-      !defined(EFRM_HAVE_NETFILTER_INDEV_OUTDEV)
-        /* linux < 4.4 */
-# define NFHOOK_PARAMS \
-    const struct nf_hook_ops* ops,  \
-    struct sk_buff* skb,            \
-    const struct nf_hook_state *state
-# define nfhook_skb skb
-# define nfhook_indev state->in
-#elif defined(EFRM_HAVE_NETFILTER_HOOK_STATE) && \
-      defined(EFRM_HAVE_NETFILTER_INDEV_OUTDEV)
-        /* RHEL7 3.10 */
-# define NFHOOK_PARAMS \
-    const struct nf_hook_ops* ops,  \
-    struct sk_buff* skb,            \
-    const struct net_device* indev, \
-    const struct net_device* outdev,\
-    const struct nf_hook_state *state
-# define nfhook_skb skb
-# define nfhook_indev indev
-#elif !defined(EFRM_HAVE_NETFILTER_HOOK_STATE) && \
-       defined(EFRM_HAVE_NETFILTER_HOOK_OPS)
-        /* linux < 4.1 */
-# define NFHOOK_PARAMS \
-    const struct nf_hook_ops* ops,  \
-    struct sk_buff* skb,            \
-    const struct net_device* indev, \
-    const struct net_device* outdev,\
-    int (*okfn)(struct sk_buff*)
-# define nfhook_skb skb
-# define nfhook_indev indev
-#elif !defined(EFRM_HAVE_NETFILTER_HOOK_STATE) && \
-      !defined(EFRM_HAVE_NETFILTER_HOOK_OPS) && \
-      !defined(EFRM_HAVE_NETFILTER_INDIRECT_SKB)
-        /* linux < 3.13 */
-# define NFHOOK_PARAMS \
-    unsigned int hooknum,           \
-    struct sk_buff* skb,            \
-    const struct net_device* indev, \
-    const struct net_device* outdev,\
-    int (*okfn)(struct sk_buff*)
-# define nfhook_skb skb
-# define nfhook_indev indev
-#else
-# error "Unsupported kernel version"
-#endif
-
-
-
-static unsigned int oo_netfilter_ip(NFHOOK_PARAMS)
+static unsigned int oo_netfilter_ip(void *priv, struct sk_buff* skb,
+                                    const struct nf_hook_state *state)
 {
   void* data;
   int len;
 
-  if( oo_nf_dev_match(nfhook_indev) &&
-      oo_nf_skb_get_payload(nfhook_skb, &data, &len) &&
-      efx_dlfilter_handler(dev_net(nfhook_indev), nfhook_indev->ifindex,
+  if( oo_nf_dev_match(state->in) &&
+      oo_nf_skb_get_payload(skb, &data, &len) &&
+      efx_dlfilter_handler(dev_net(state->in), state->in->ifindex,
                            efab_tcp_driver.dlfilter,
-                           (const ci_ether_hdr*) skb_mac_header(nfhook_skb),
+                           (const ci_ether_hdr*) skb_mac_header(skb),
                            data, len) ) {
-    kfree_skb(nfhook_skb);
+    kfree_skb(skb);
     return NF_STOLEN;
   } else {
     return NF_ACCEPT;

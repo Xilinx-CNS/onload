@@ -189,14 +189,8 @@ MODULE_PARM_DESC(gcov_link, "If non-zero, create links to additional "
  *
  **************************************************************************/
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,10)
-/*rhel4 */
-#define efx_module_sections module_sections
-#else
-/* fc4 */
 #define efx_module_sections module_sect_attrs
 #define EFX_NEED_NOVERS
-#endif
 
 #ifdef EFX_NEED_NOVERS
 #define EXPORT_SYMBOL_NOVERS(sym)				\

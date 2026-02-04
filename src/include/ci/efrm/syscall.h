@@ -12,8 +12,7 @@
    ptregs argument.
    (The user-space calling convention is the same as before, though).
 */
-#if (defined(__x86_64__) || defined(__aarch64__)) &&    \
-    (LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0))
+#if (defined(__x86_64__) || defined(__aarch64__))
 #define EFRM_SYSCALL_PTREGS 1
 #endif
 

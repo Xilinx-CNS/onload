@@ -28,13 +28,6 @@
 #define reinit_completion(c) INIT_COMPLETION(*c)
 #endif
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,14,0))
-#define ci_call_usermodehelper call_usermodehelper
-#else
-extern int
-ci_call_usermodehelper(char *path, char **argv, char **envp, int wait);
-#endif
-
 
 static inline struct file *ci_get_file_rcu(struct file **f)
 {
@@ -189,5 +182,18 @@ static inline struct sk_buff *efrm_skb_recv_datagram(struct sock *sk,
 #else
 #define efrm_timer_delete_sync del_timer_sync
 #endif
+
+static inline void oo_set_flowi4_dscp(struct flowi4 *flow, uint8_t tos)
+{
+#ifdef EFRM_HAVE_FLOWI4_DSCP
+/* linux 6.18+ */
+  /* This masks out the top ECN bits which should be ignored for routing. When
+   * we have dropped support for older kernels we can replace our internal
+   * type with dscp_t and use that directly. */
+  flow->flowi4_dscp = inet_dsfield_to_dscp(tos);
+#else
+  flow->flowi4_tos = tos;
+#endif
+}
 
 #endif /* __ONLOAD_KERNEL_COMPAT_H__ */
