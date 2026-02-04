@@ -1357,6 +1357,9 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
   if( (s = getenv("EF_SHRUB_AUTO_CLOSE_DELAY")) )
     opts->shrub_auto_close_delay = atoi(s);
 
+  if( (s = getenv("EF_SHRUB_MAX_CLIENT_BUFFERS")) )
+    opts->shrub_max_client_buffers = atoi(s);
+
   if( (s = getenv("EF_ENABLE_TX_ERROR_RECOVERY")) )
     opts->tx_error_recovery = atoi(s);
 }
@@ -2183,6 +2186,8 @@ static int oo_init_shrub(ci_netif* ni, ef_vi* vi, ci_hwport_id_t hw_port, int ni
         return rc;
 
       efct_ubufs_set_shared(vi, NI_OPTS(ni).shrub_controller_id, rc);
+      ef_vi_set_shrub_client_buffer_count(vi,
+                                          NI_OPTS(ni).shrub_max_client_buffers);
 
       rc = set_shrub_token(ni, shrub_socket_id, nic_i);
       if (rc < 0)
