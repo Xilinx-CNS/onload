@@ -206,32 +206,6 @@ int oo_shrub_set_sockets(ci_private_t *priv, void* arg) {
   return efct_ubufs_set_shared(vi, shrub_data->controller_id, shrub_data->shrub_socket_id);
 }
 
-static int shrub_pre_attach(shrub_socket_ioctl_data_t *shrub_data,
-                            struct efrm_pd *pd)
-{
-  char attach_path[EF_SHRUB_SERVER_SOCKET_LEN];
-  struct ef_shrub_token_response response;
-  int rc;
-
-  memset(attach_path, 0, sizeof(attach_path));
-  rc = snprintf(attach_path, sizeof(attach_path),
-                EF_SHRUB_CONTROLLER_PATH_FORMAT EF_SHRUB_SHRUB_FORMAT,
-                EF_SHRUB_SOCK_DIR_PATH, shrub_data->controller_id,
-                shrub_data->shrub_socket_id);
-  if ( rc < 0 || rc >= sizeof(attach_path) )
-    return -EINVAL;
-  attach_path[sizeof(attach_path) - 1] = '\0';
-
-
-  rc = ef_shrub_client_request_token(attach_path, &response);
-  if (rc)
-    return rc;
-
-  efrm_pd_shared_rxq_token_set(pd, response.shared_rxq_token);
-
-  return rc;
-}
-
 int oo_shrub_set_token(ci_private_t *priv, void *arg)
 {
   shrub_socket_ioctl_data_t *shrub_data = (shrub_socket_ioctl_data_t *) arg;
@@ -246,7 +220,11 @@ int oo_shrub_set_token(ci_private_t *priv, void *arg)
 
   trs = priv->thr;
   virs = tcp_helper_vi(trs, shrub_data->intf_i);
-  return shrub_pre_attach(shrub_data, efrm_vi_get_pd(virs));
+
+  trs->netif.state->nic[shrub_data->intf_i].shrub_queues[shrub_data->qix] = true;
+  efrm_pd_shared_rxq_token_set(efrm_vi_get_pd(virs), shrub_data->shared_rxq_token);
+
+  return 0;
 }
 
 int

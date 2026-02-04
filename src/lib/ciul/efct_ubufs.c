@@ -322,6 +322,7 @@ int efct_ubufs_shared_attach_internal(ef_vi* vi, int ix, int qid,
   int rc;
   struct efct_ubufs* ubufs = get_ubufs(vi);
   struct ef_shrub_client* client = &ubufs->q[ix].shrub_client;
+  const struct ef_shrub_shared_metrics* metrics;
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
 
   rc = ef_shrub_client_open(client, superbuf, ubufs->server_address, qid,
@@ -331,12 +332,11 @@ int efct_ubufs_shared_attach_internal(ef_vi* vi, int ix, int qid,
     return rc;
   }
 
-  qs->efct_state[ix].config_generation = 1; /* force an initial refresh */
-  qs->efct_state[ix].superbuf_pkts =
-    ef_shrub_client_get_state(client)->metrics.buffer_bytes / EFCT_PKT_STRIDE;
+  metrics = &ef_shrub_client_get_state(client)->metrics;
+  qs->efct_state[ix].superbuf_pkts = metrics->buffer_bytes / EFCT_PKT_STRIDE;
   qs->efct_active_qs |= 1 << ix;
 
-  rc = efct_vi_sync_rxq(vi, ix, qid);
+  rc = efct_vi_sync_rxq(vi, ix, metrics->qid);
   if ( rc < 0 ) {
     LOG(ef_log("%s: ERROR syncing shrub_client to rxq! rc=%d", __FUNCTION__,
                rc));
@@ -455,7 +455,11 @@ static void efct_ubufs_detach(ef_vi* vi, int ix)
   if( rxq_is_local(vi, ix) )
     efct_ubufs_free_rxq_buffers(vi, ix, rxq->rx_post_buffer_reg);
   else
+#ifdef __KERNEL__
+    efct_ubufs_unmap_kernel(rxq->shrub_client.mappings);
+#else
     ef_shrub_client_close(&rxq->shrub_client);
+#endif
 
   efct_ubufs_free_resource(vi, rxq->rxq_id);
   efct_ubufs_free_resource(vi, rxq->memreg_id);
@@ -500,8 +504,14 @@ static int efct_ubufs_refresh_mappings(ef_vi* vi, int ix,
                                        uint64_t user_superbuf,
                                        uint64_t* user_mappings)
 {
-  return ef_shrub_client_refresh_mappings(&get_ubufs(vi)->q[ix].shrub_client,
-                                          user_superbuf, user_mappings);
+#ifdef __KERNEL__
+  return efct_ubufs_map_kernel(get_ubufs(vi)->q[ix].shrub_client.mappings,
+                               user_mappings,
+                               vi->efct_rxqs.q[ix].superbufs,
+                               user_superbuf);
+#else
+  return -EOPNOTSUPP;
+#endif
 }
 
 static void efct_ubufs_cleanup(ef_vi* vi)
