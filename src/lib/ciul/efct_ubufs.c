@@ -553,6 +553,18 @@ static void efct_ubufs_dump_stats(ef_vi* vi, ef_vi_dump_log_fn_t logger,
   }
 }
 
+static int efct_ubufs_set_shrub_max_client_bufs(ef_vi* vi,
+                                                size_t max_client_bufs)
+{
+  struct efct_ubufs* ubufs = get_ubufs(vi);
+
+  if( max_client_bufs < EF_SHRUB_CLIENT_BUFFER_COUNT_MIN )
+    return -EINVAL;
+
+  ubufs->shrub_max_client_bufs = max_client_bufs;
+  return 0;
+}
+
 int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
 {
   struct efct_ubufs* ubufs;
@@ -612,6 +624,7 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
   ubufs->ops.cleanup = efct_ubufs_cleanup;
   ubufs->ops.dump_stats = efct_ubufs_dump_stats;
   ubufs->ops.post = efct_ubufs_post_direct;
+  ubufs->ops.set_client_buf_count = efct_ubufs_set_shrub_max_client_bufs;
 
 #ifndef __KERNEL__
   if( ! (vi->vi_flags & EF_VI_RX_PHYS_ADDR) )
