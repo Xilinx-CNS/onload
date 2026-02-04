@@ -178,34 +178,6 @@ int oo_shrub_spawn_server(ci_private_t *priv, void *arg) {
                             shrub_data->use_interrupts, auto_close_delay);
 }
 
-int oo_shrub_set_sockets(ci_private_t *priv, void* arg) {
-  shrub_socket_ioctl_data_t *shrub_data = (shrub_socket_ioctl_data_t *) arg;
-  tcp_helper_resource_t* trs;
-  struct ef_vi* vi;
-
-  if ( !priv || !arg ) 
-    return -EINVAL;
-
-  if ( priv->thr == NULL )
-    return -EINVAL;
-
-  if ( shrub_data->controller_id > EF_SHRUB_MAX_CONTROLLER ) {
-    LOG_E(ci_log("%s: ERROR: controller_id out of range: %d\n",
-      __FUNCTION__, shrub_data->controller_id));
-    return -EINVAL;
-  }
-
-  if ( shrub_data->shrub_socket_id > EF_SHRUB_MAX_SHRUB ) {
-    LOG_E(ci_log("%s: ERROR: shrub_socket_id out of range: %d\n",
-      __FUNCTION__, shrub_data->shrub_socket_id));
-    return -EINVAL;
-  }
-
-  trs = priv->thr;
-  vi = ci_netif_vi(&trs->netif, shrub_data->intf_i);
-  return efct_ubufs_set_shared(vi, shrub_data->controller_id, shrub_data->shrub_socket_id);
-}
-
 int oo_shrub_set_token(ci_private_t *priv, void *arg)
 {
   shrub_socket_ioctl_data_t *shrub_data = (shrub_socket_ioctl_data_t *) arg;
