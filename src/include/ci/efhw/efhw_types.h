@@ -537,6 +537,7 @@ struct efhw_func_ops {
 			     resource_size_t dma_addr, bool sentinel,
 			     bool rollover, int owner_id);
 
+	int (*shared_rxq_alloc)(struct efhw_nic* nic);
 	int (*shared_rxq_bind)(struct efhw_nic* nic,
 			       struct efhw_shared_bind_params *params);
 	/*! Unbind from a shared rxq.

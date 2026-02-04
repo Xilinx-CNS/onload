@@ -223,7 +223,7 @@ static void free_rxq(struct efhw_efct_rxq *rxq)
 int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix, bool timestamp_req,
                    bool interrupt_req, size_t n_hugepages,
                    struct oo_hugetlb_allocator *hugetlb_alloc,
-                   struct efrm_efct_rxq **rxq_out)
+                   struct efrm_efct_rxq **rxq_out, int *qid_out)
 {
 #if CI_HAVE_EFCT_COMMON
 	int rc;
@@ -262,6 +262,13 @@ int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix, bool timestamp_req,
 	if (shm_ix >= 0)
 		params.shm = &vi->efct_shm->q[shm_ix];
 
+	if (qid < 0) {
+		qid = efhw_nic_shared_rxq_alloc(nic);
+		if (qid < 0)
+		  return qid;
+		params.qid = qid;
+	}
+
 	rxq->vi = vi;
 	rc = efhw_nic_shared_rxq_bind(nic, &params);
 	if (rc < 0)
@@ -282,6 +289,7 @@ int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix, bool timestamp_req,
 	list_add_tail(&rxq->vi_link, &vi->efct_rxq_list);
 	efrm_init_debugfs_efct_rxq(rxq, shm_ix >= 0);
 	*rxq_out = rxq;
+	*qid_out = qid;
 	return 0;
 
 fail_rxq_window:

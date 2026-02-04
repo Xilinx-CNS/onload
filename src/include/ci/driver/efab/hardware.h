@@ -277,6 +277,9 @@
 	 (nic)->efhw_func->post_superbuf((nic), (instance), (addr), \
 					 (sentinel), (rollover), (owner_id)) : \
 	 -EOPNOTSUPP)
+#define efhw_nic_shared_rxq_alloc(nic) \
+	((nic)->efhw_func->shared_rxq_alloc ? \
+	 (nic)->efhw_func->shared_rxq_alloc((nic)) : -EOPNOTSUPP)
 #define efhw_nic_shared_rxq_bind(nic, params) \
 	((nic)->efhw_func->shared_rxq_bind ? \
 	 (nic)->efhw_func->shared_rxq_bind((nic), (params)) : -EOPNOTSUPP)

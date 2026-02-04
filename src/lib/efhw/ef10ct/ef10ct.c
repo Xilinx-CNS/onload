@@ -1688,7 +1688,7 @@ struct filter_insert_params {
 };
 
 
-static int alloc_new_rxq(struct efhw_nic *nic)
+static int ef10ct_shared_rxq_alloc(struct efhw_nic *nic)
 {
   int rc;
 
@@ -1749,7 +1749,7 @@ static int select_rxq(struct efhw_nic *nic, int rxq_in, unsigned flags,
     rxq_num = rxq_in;
   }
   else {
-    rxq_num = alloc_new_rxq(nic);
+    rxq_num = ef10ct_shared_rxq_alloc(nic);
     *allocated = true;
   }
 
@@ -2300,6 +2300,7 @@ struct efhw_func_ops ef10ct_char_functional_units = {
   .post_superbuf =  ef10ct_rxq_post_superbuf,
   .design_parameters = ef10ct_design_parameters,
   .max_shared_rxqs = ef10ct_max_shared_rxqs,
+  .shared_rxq_alloc = ef10ct_shared_rxq_alloc,
   .shared_rxq_bind = ef10ct_shared_rxq_bind,
   .shared_rxq_unbind = ef10ct_shared_rxq_unbind,
   .shared_rxq_refresh = ef10ct_nic_shared_rxq_refresh,

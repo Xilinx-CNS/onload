@@ -1130,7 +1130,7 @@ static int tcp_helper_rxq_alloc(tcp_helper_resource_t* trs,
     rc = efrm_rxq_alloc(vi_rs, rxq,
                         nic->flags & NIC_FLAG_RX_KERNEL_SHARED ? qix : -1,
                         true, interrupt_req, hugepages, trs->trs_efct_alloc,
-                        &trs->nic[intf_i].thn_efct_rxq[qix]);
+                        &trs->nic[intf_i].thn_efct_rxq[qix], &rxq);
     if( rc < 0 ) {
       if( rc != -EINTR )
         LOG_E(ci_log("%s: ERROR: efrm_rxq_alloc failed (%d)", __func__, rc));

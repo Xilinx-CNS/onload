@@ -29,6 +29,7 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
   struct oo_hugetlb_allocator *hugetlb_alloc = NULL;
   efch_resource_t* vi_rs;
   int shm_ix;
+  int qid;
   int rc;
 
   if ((alloc->in_flags & ~EFCH_EFCT_RXQ_GOOD_FLAGS) != 0) {
@@ -85,7 +86,7 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
 
   rc = efrm_rxq_alloc(vi, alloc->in_qid, shm_ix, alloc->in_timestamp_req,
                       !!(alloc->in_flags & EFCH_EFCT_RXQ_FLAG_IRQ),
-                      alloc->in_n_hugepages, hugetlb_alloc, &rxq);
+                      alloc->in_n_hugepages, hugetlb_alloc, &rxq, &qid);
   if( (alloc->in_flags & EFCH_EFCT_RXQ_FLAG_UBUF) == 0 )
     oo_hugetlb_allocator_put(hugetlb_alloc);
 
