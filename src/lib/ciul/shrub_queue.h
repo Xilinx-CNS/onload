@@ -21,6 +21,8 @@ struct ef_shrub_queue {
   int ix;
   uint64_t qid;
 
+  size_t reserved_buffer_count;
+
   struct ef_vi* vi;
   ef_shrub_buffer_id* fifo;
   struct ef_shrub_queue_buffer* buffers;

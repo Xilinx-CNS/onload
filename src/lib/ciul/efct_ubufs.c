@@ -37,6 +37,7 @@ struct efct_ubufs
   int shrub_server_socket_id;
   ef_driver_handle pd_dh;
   bool is_shrub_token_set;
+  size_t shrub_max_client_bufs;
   struct efct_ubufs_rxq q[EF_VI_MAX_EFCT_RXQS];
 };
 
@@ -342,7 +343,7 @@ int efct_ubufs_shared_attach_internal(ef_vi* vi, int ix, int qid,
   attach_path[sizeof(attach_path) - 1] = '\0';
 
   rc = ef_shrub_client_open(client, superbuf, attach_path, qid,
-                            use_interrupts);
+                            use_interrupts, ubufs->shrub_max_client_bufs);
   if ( rc < 0 ) {
     LOG(ef_log("%s: ERROR initializing shrub client! rc=%d", __FUNCTION__, rc));
     return rc;
@@ -597,6 +598,7 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
   ubufs->is_shrub_token_set = false;
   ubufs->shrub_controller_id = EF_SHRUB_NO_SHRUB;
   ubufs->shrub_server_socket_id = -1;
+  ubufs->shrub_max_client_bufs = EF_SHRUB_DEFAULT_MAX_CLIENT_BUFFERS;
 
   ubufs->ops.free = efct_ubufs_free;
   ubufs->ops.next = efct_ubufs_next;

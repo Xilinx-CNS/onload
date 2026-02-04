@@ -45,7 +45,7 @@ static inline uint32_t ef_shrub_buffer_sbseq(ef_shrub_buffer_id id)
 }
 
 /* Protocol version, to check compatibility between client and server */
-#define EF_SHRUB_VERSION 6
+#define EF_SHRUB_VERSION 7
 #define SHRUB_ERR_INCOMPATIBLE_VERSION -1000
 
 /* An identifier that does not represent a buffer, used to indicate empty
@@ -115,6 +115,10 @@ enum ef_shrub_controller_command {
 
 #define EF_SHRUB_DEFAULT_BUFFER_COUNT 4
 #define EF_SHRUB_MAX_BUFFER_COUNT 100000
+/* The attachment dance may fail due to the way we try to find the first unfull
+ * buffer/packet with only one buffer. */
+#define EF_SHRUB_CLIENT_BUFFER_COUNT_MIN 2
+#define EF_SHRUB_DEFAULT_MAX_CLIENT_BUFFERS 2
 
 /* This enum specifies the type of request being made to the shrub server. */
 enum ef_shrub_request_type {
@@ -140,6 +144,8 @@ struct ef_shrub_queue_request {
   uint64_t qid;
   /* Whether we expect to use interrupts */
   uint64_t use_interrupts;
+  /* The number of buffers we can accept from the server at any time */
+  uint64_t max_connection_buffers;
 };
 
 /* This structure is sent to the shrub server to make various requests. */

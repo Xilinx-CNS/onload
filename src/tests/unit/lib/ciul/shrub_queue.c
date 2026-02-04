@@ -193,8 +193,15 @@ static struct mock_connection* open_connection(void)
   for( i = 0; i < queue->buffer_count; ++i )
     mock->connection.buffer_refs[i] = false;
 
+  /* Allow a connection to reference all buffers by default. This does not
+   * accurately reflect any allowable state. */
+  mock->connection.max_referenced_buffers = buffer_count;
+  STATE_ACCEPT(mock, connection.max_referenced_buffers);
+
   STATE_STASH(mock);
 
+  queue->reserved_buffer_count += mock->connection.max_referenced_buffers;
+  STATE_ACCEPT(queue, reserved_buffer_count);
   ef_shrub_queue_attached(queue, &mock->connection);
   return mock;
 }
@@ -217,6 +224,7 @@ static void close_connection(struct mock_connection* conn)
   STATE_ACCEPT(conn, connection.queue);
   remove_connection(&queue->connections, &conn->connection);
   STATE_ACCEPT(queue, connections);
+  STATE_UPDATE(conn, connection.referenced_buffer_count, 0);
 }
 
 static void assert_queue_ref_counts_valid(struct ef_shrub_queue* queue)
@@ -318,6 +326,7 @@ static void test_shrub_queue_connections(void)
   ef_shrub_queue_poll(queue);
   STATE_UPDATE(c[0], connection.server_fifo_index, buffer_count);
   STATE_UPDATE(c[0], connection.queue_fifo_index, buffer_count);
+  STATE_UPDATE(c[0], connection.referenced_buffer_count, buffer_count);
   STATE_UPDATE(queue, fifo_index, buffer_count);
   CHECK(buffer_seq, ==, old_seq + buffer_count);
   for( i = 0; i < buffer_count; ++i )
@@ -338,6 +347,8 @@ static void test_shrub_queue_connections(void)
   c[0]->connection.client_fifo[0] = 0;
   ef_shrub_queue_poll(queue);
   STATE_UPDATE(c[0], connection.client_fifo_index, 1);
+  STATE_UPDATE(c[0], connection.referenced_buffer_count, buffer_count - 1);
+  STATE_UPDATE(c[1], connection.referenced_buffer_count, buffer_count);
   CHECK(queue->fifo[0], ==, buffer_id(0));
 
   for( i = 0; i < buffer_count; ++i )
@@ -354,6 +365,7 @@ static void test_shrub_queue_connections(void)
   STATE_UPDATE(c[0], connection.queue_fifo_index, buffer_count + 1);
   STATE_UPDATE(c[1], connection.server_fifo_index, buffer_count + 1);
   STATE_UPDATE(c[1], connection.queue_fifo_index, buffer_count + 1);
+  STATE_UPDATE(c[0], connection.referenced_buffer_count, buffer_count);
 
   CHECK(expect_free, ==, -1);
   CHECK(buffer_seq, ==, old_seq + buffer_count + 1);
@@ -393,6 +405,7 @@ static void test_shrub_queue_connections(void)
   STATE_UPDATE(c[1], connection.queue_fifo_index, buffer_count + 2);
   STATE_UPDATE(c[2], connection.server_fifo_index, buffer_count + 1);
   STATE_UPDATE(c[2], connection.queue_fifo_index, buffer_count + 2);
+  STATE_UPDATE(c[2], connection.referenced_buffer_count, buffer_count);
 
   /* The older buffers are removed to make space in the FIFO, but not freed */
   CHECK(buffer_seq, ==, old_seq + buffer_count + 2);
@@ -415,6 +428,7 @@ static void test_shrub_queue_connections(void)
   STATE_UPDATE(c[3], state.server_fifo_index, 0);
   STATE_UPDATE(c[3], connection.server_fifo_index, buffer_count - 2);
   STATE_UPDATE(c[3], connection.queue_fifo_index, buffer_count + 2);
+  STATE_UPDATE(c[3], connection.referenced_buffer_count, buffer_count - 2);
 
   /* By this point, 0 has been freed and reposted at the end, and 3 has been
    * freed by all (and reposted to the fifo). So the new connection has refs
@@ -440,6 +454,7 @@ static void test_shrub_queue_connections(void)
 
   expect_free = 5;
   ef_shrub_queue_detached(queue, &c[3]->connection);
+  STATE_ACCEPT(queue, reserved_buffer_count);
   CHECK(expect_free, ==, -1);
   STATE_UPDATE(queue, connection_count, 3);
   for( i = 0; i < 6; ++i )
