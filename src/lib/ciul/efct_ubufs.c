@@ -345,20 +345,34 @@ int efct_ubufs_shared_attach_internal(ef_vi* vi, int ix, int qid,
   return ix;
 }
 
+int efct_ubufs_get_shared_rxq_token(ef_vi* vi, unsigned* token)
+{
+  struct efct_ubufs *ubufs = get_ubufs(vi);
+  struct ef_shrub_token_response response;
+  int rc;
+
+  rc = ef_shrub_client_request_token(ubufs->server_address, &response);
+  if( rc < 0 )
+    return rc;
+
+  *token = response.shared_rxq_token;
+  return 0;
+}
+
 static int efct_ubufs_pre_attach(ef_vi* vi, bool shared_mode)
 {
-  struct ef_shrub_token_response response;
   struct efct_ubufs *ubufs = get_ubufs(vi);
+  unsigned token;
   int rc;
 
   if( ! shared_mode || ubufs->is_shrub_token_set )
     return 0;
 
-  rc = ef_shrub_client_request_token(ubufs->server_address, &response);
-  if( rc )
+  rc = efct_ubufs_get_shared_rxq_token(vi, &token);
+  if( rc < 0 )
     return rc;
 
-  rc = efct_ubufs_set_shared_rxq_token(vi, response.shared_rxq_token);
+  rc = efct_ubufs_set_shared_rxq_token(vi, token);
   if( rc == 0 )
     ubufs->is_shrub_token_set = true;
 

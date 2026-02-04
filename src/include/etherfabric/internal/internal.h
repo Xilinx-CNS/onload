@@ -117,6 +117,7 @@ extern void efct_ubufs_local_attach_internal(ef_vi* vi, int ix, int qid, unsigne
 extern int efct_ubufs_shared_attach_internal(ef_vi* vi, int ix, int qid,
                                              void* bufs, bool use_interrupts);
 extern int efct_ubufs_set_shared(ef_vi* vi, int shrub_controller_id, int shrub_server_id);
+extern int efct_ubufs_get_shared_rxq_token(ef_vi* vi, unsigned* token);
 volatile uint64_t* efct_ubufs_get_rxq_io_window(ef_vi* vi, int ix);
 void efct_ubufs_set_rxq_io_window(ef_vi* vi, int ix, volatile uint64_t* p);
 int efct_vi_find_free_rxq(ef_vi* vi, int qid);
