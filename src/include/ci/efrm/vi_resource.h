@@ -169,6 +169,10 @@ extern void efrm_vi_attr_set_instance(struct efrm_vi_attr *attr,
  */
 extern void efrm_vi_attr_set_interrupt_core(struct efrm_vi_attr *, int core);
 
+/** Set an IRQ affinity mask hint for onload managed interrupts. */
+extern void efrm_vi_attr_set_irq_affinity(struct efrm_vi_attr *,
+					  const struct cpumask *mask);
+
 /** The VI should use the given net-driver channel for wakeups. */
 extern void efrm_vi_attr_set_wakeup_channel(struct efrm_vi_attr *,
 					    int channel_id);
@@ -336,6 +340,7 @@ struct efrm_vi_alloc_params {
 	int rx_q_tag;
 	int wakeup_cpu_core;
 	int wakeup_channel;
+	const struct cpumask *irq_affinity;
 	int print_resource_warnings;
 };
 

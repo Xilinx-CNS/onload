@@ -77,6 +77,7 @@ struct vi_attr {
 	int32_t             ps_buffer_size;
 	bool                want_rxq;
 	bool                want_txq;
+	const struct cpumask *irq_affinity;
 };
 
 CI_BUILD_ASSERT(sizeof(struct vi_attr) <= sizeof(struct efrm_vi_attr));
@@ -254,7 +255,8 @@ static void efrm_interrupt_vector_release(struct efrm_interrupt_vector *vec)
 
 
 static int
-efrm_interrupt_vector_choose(struct efrm_nic *nic, struct efrm_vi *virs)
+efrm_interrupt_vector_choose(struct efrm_nic *nic, struct efrm_vi *virs,
+			     const struct cpumask *affinity)
 {
 	struct efrm_interrupt_vector *current_vec = NULL, *selected_vec = NULL;
 	uint32_t irq, channel;
@@ -383,11 +385,12 @@ void efrm_interrupt_vectors_release(struct efrm_nic *nic)
 }
 
 
-static int efrm_vi_request_irq(struct efhw_nic *nic, struct efrm_vi *virs)
+static int efrm_vi_request_irq(struct efhw_nic *nic, struct efrm_vi *virs,
+				const struct cpumask *affinity)
 {
 	int rc;
 
-	rc = efrm_interrupt_vector_choose(efrm_nic(nic), virs);
+	rc = efrm_interrupt_vector_choose(efrm_nic(nic), virs, affinity);
 	if (rc != 0) {
 		EFRM_ERR("%s: Failed to assign IRQ: %d\n", __FUNCTION__, rc);
 		return rc;
@@ -1381,6 +1384,8 @@ efrm_vi_resource_alloc(const struct efrm_vi_alloc_params *params,
 		efrm_vi_attr_set_interrupt_core(&attr, params->wakeup_cpu_core);
 	if (params->wakeup_channel >= 0)
 		efrm_vi_attr_set_wakeup_channel(&attr, params->wakeup_channel);
+	if (params->irq_affinity != NULL)
+		efrm_vi_attr_set_irq_affinity(&attr, params->irq_affinity);
 	if (params->evq_virs == NULL)
 		efrm_vi_attr_set_want_interrupt(&attr);
 	efrm_vi_attr_set_queue_types(&attr, rxq_capacity != 0,
@@ -1584,6 +1589,15 @@ void efrm_vi_attr_set_wakeup_channel(struct efrm_vi_attr *attr, int channel_id)
 EXPORT_SYMBOL(efrm_vi_attr_set_wakeup_channel);
 
 
+void efrm_vi_attr_set_irq_affinity(struct efrm_vi_attr *attr,
+				   const struct cpumask *mask)
+{
+	struct vi_attr *a = VI_ATTR_FROM_O_ATTR(attr);
+	a->irq_affinity = mask;
+}
+EXPORT_SYMBOL(efrm_vi_attr_set_irq_affinity);
+
+
 void efrm_vi_attr_set_want_interrupt(struct efrm_vi_attr *attr)
 {
 	struct vi_attr *a = VI_ATTR_FROM_O_ATTR(attr);
@@ -1745,7 +1759,7 @@ int  efrm_vi_alloc(struct efrm_client *client,
 	 * See ON-10914.
 	 */
 	if ((client->nic->flags & NIC_FLAG_EVQ_IRQ) && attr->want_interrupt) {
-		rc = efrm_vi_request_irq(client->nic, virs);
+		rc = efrm_vi_request_irq(client->nic, virs, attr->irq_affinity);
 		if (rc != 0)
 			goto fail_irq;
 	}

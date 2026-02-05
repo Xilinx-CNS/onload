@@ -1736,6 +1736,7 @@ static int allocate_vi(ci_netif* ni, struct vi_allocate_info* info)
         .rx_q_tag = 0,
         .wakeup_cpu_core = info->wakeup_cpu_core,
         .wakeup_channel = info->wakeup_channel,
+        .irq_affinity = info->irq_affinity,
         .print_resource_warnings = info->log_resource_warnings,
       };
       rc = efrm_vi_resource_alloc(&alloc_params, info->virs,
@@ -1949,6 +1950,8 @@ static int allocate_vis(tcp_helper_resource_t* trs,
    * across all interfaces.
    */
   alloc_info.wakeup_channel = NI_OPTS(ni).irq_channel,
+  alloc_info.irq_affinity = cpumask_empty(&trs->onload_irq_cores) ?
+                                              NULL : &trs->onload_irq_cores;
   alloc_info.name = vf_name;
   alloc_info.cluster = thc;
 

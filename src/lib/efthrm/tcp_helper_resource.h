@@ -21,6 +21,7 @@ struct vi_allocate_info {
   int txq_capacity;
   int rxq_capacity;
   int wakeup_channel;
+  const struct cpumask *irq_affinity;
   struct efrm_vi **virs;
   tcp_helper_cluster_t* cluster;
   unsigned vi_io_mmap_bytes;
