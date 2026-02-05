@@ -1721,17 +1721,26 @@ static int allocate_vi(ci_netif* ni, struct vi_allocate_info* info)
     /* This is a loop to try double allocation. If it fails initialy an attempt
      * is made to find and release orphaned stack and try allocation again.  */
     for( i = 0; i < 2; ++i ) {
-      rc = efrm_vi_resource_alloc(info->client, NULL, info->vi_set, -1,
-                                  info->pd, info->name,
-                                  info->efhw_flags,
-                                  info->evq_capacity, info->txq_capacity,
-                                  info->rxq_capacity, 0, 0,
-                                  info->wakeup_cpu_core,
-                                  info->wakeup_channel,
-                                  info->virs,
+      struct efrm_vi_alloc_params alloc_params = {
+        .client = info->client,
+        .evq_virs = NULL,
+        .vi_set = info->vi_set,
+        .vi_set_instance = -1,
+        .pd = info->pd,
+        .name = info->name,
+        .vi_flags = info->efhw_flags,
+        .evq_capacity = info->evq_capacity,
+        .txq_capacity = info->txq_capacity,
+        .rxq_capacity = info->rxq_capacity,
+        .tx_q_tag = 0,
+        .rx_q_tag = 0,
+        .wakeup_cpu_core = info->wakeup_cpu_core,
+        .wakeup_channel = info->wakeup_channel,
+        .print_resource_warnings = info->log_resource_warnings,
+      };
+      rc = efrm_vi_resource_alloc(&alloc_params, info->virs,
                                   &info->vi_io_mmap_bytes,
-                                  &info->vi_ctpio_mmap_bytes, NULL, NULL,
-                                  info->log_resource_warnings);
+                                  &info->vi_ctpio_mmap_bytes, NULL, NULL);
       /* If we succeeded, there is no need to find and release orphan stack. */
       if( rc != -EBUSY )
         break;

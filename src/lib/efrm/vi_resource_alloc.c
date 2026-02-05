@@ -1354,20 +1354,12 @@ EXPORT_SYMBOL(efrm_vi_q_alloc);
  * what is returned from efrm_vi_set_get_pd().
  */
 int
-efrm_vi_resource_alloc(struct efrm_client *client,
-		       struct efrm_vi *evq_virs,
-		       struct efrm_vi_set *vi_set, int vi_set_instance,
-		       struct efrm_pd *pd, const char *name,
-		       unsigned vi_flags,
-		       int evq_capacity, int txq_capacity, int rxq_capacity,
-		       int tx_q_tag, int rx_q_tag, int wakeup_cpu_core,
-		       int wakeup_channel,
+efrm_vi_resource_alloc(const struct efrm_vi_alloc_params *params,
 		       struct efrm_vi **virs_out,
 		       uint32_t *out_io_mmap_bytes,
 		       uint32_t *out_ctpio_mmap_bytes,
 		       uint32_t *out_txq_capacity,
-		       uint32_t *out_rxq_capacity,
-		       int print_resource_warnings)
+		       uint32_t *out_rxq_capacity)
 {
 	struct efrm_vi_attr attr;
 	struct efrm_vi *virs;
@@ -1375,23 +1367,28 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 	int rc;
 	size_t io_size;
 	resource_size_t io_addr;
+	int evq_capacity = params->evq_capacity;
+	int txq_capacity = params->txq_capacity;
+	int rxq_capacity = params->rxq_capacity;
 
-	EFRM_ASSERT(pd != NULL);
+	EFRM_ASSERT(params->pd != NULL);
 	efrm_vi_attr_init(&attr);
-	if (vi_set != NULL)
-		efrm_vi_attr_set_instance(&attr, vi_set, vi_set_instance);
-	efrm_vi_attr_set_pd(&attr, pd);
-	if (wakeup_cpu_core >= 0)
-		efrm_vi_attr_set_interrupt_core(&attr, wakeup_cpu_core);
-	if (wakeup_channel >= 0)
-		efrm_vi_attr_set_wakeup_channel(&attr, wakeup_channel);
-	if (evq_virs == NULL)
+	if (params->vi_set != NULL)
+		efrm_vi_attr_set_instance(&attr, params->vi_set,
+					  params->vi_set_instance);
+	efrm_vi_attr_set_pd(&attr, params->pd);
+	if (params->wakeup_cpu_core >= 0)
+		efrm_vi_attr_set_interrupt_core(&attr, params->wakeup_cpu_core);
+	if (params->wakeup_channel >= 0)
+		efrm_vi_attr_set_wakeup_channel(&attr, params->wakeup_channel);
+	if (params->evq_virs == NULL)
 		efrm_vi_attr_set_want_interrupt(&attr);
 	efrm_vi_attr_set_queue_types(&attr, rxq_capacity != 0,
 	                             txq_capacity != 0);
 
-	if ((rc = efrm_vi_alloc(client, &attr, print_resource_warnings,
-				name, &virs)) < 0)
+	if ((rc = efrm_vi_alloc(params->client, &attr,
+				params->print_resource_warnings,
+				params->name, &virs)) < 0)
 		goto fail_vi_alloc;
 
 	/* We have to jump through some hoops here:
@@ -1412,31 +1409,34 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 		goto fail_q_alloc;
 	rxq_capacity = rc;
 
-	if (evq_virs == NULL) {
+	if (params->evq_virs == NULL) {
 		if (evq_capacity < 0)
 			evq_capacity = rxq_capacity + txq_capacity;
 
 		/* TODO AF_XDP: allocation order must match the order that
-	 	* ef_vi expects the queues to be mapped into user memory. */
+		 * ef_vi expects the queues to be mapped into user memory. */
 		if ((rc = efrm_vi_q_alloc(virs, EFHW_EVQ, evq_capacity,
-				  	  0, vi_flags, NULL)) < 0)
+					  0, params->vi_flags, NULL)) < 0)
 			goto fail_q_alloc;
 	}
 	if ((rc = efrm_vi_q_alloc(virs, EFHW_RXQ, rxq_capacity,
-				  rx_q_tag, vi_flags, evq_virs)) < 0)
+				  params->rx_q_tag, params->vi_flags,
+				  params->evq_virs)) < 0)
 		goto fail_q_alloc;
 	if ((rc = efrm_vi_q_alloc(virs, EFHW_TXQ, txq_capacity,
-				  tx_q_tag, vi_flags, evq_virs)) < 0)
+				  params->tx_q_tag, params->vi_flags,
+				  params->evq_virs)) < 0)
 		goto fail_q_alloc;
 
-	if( vi_flags & EFHW_VI_TX_CTPIO )
+	if (params->vi_flags & EFHW_VI_TX_CTPIO)
 		ctpio_mmap_bytes = EF_VI_CTPIO_APERTURE_SIZE;
 
 	if (out_io_mmap_bytes != NULL) {
-		rc = efhw_nic_vi_io_region(client->nic,
-					evq_virs ? evq_virs->rs.rs_instance :
-						   virs->rs.rs_instance,
-					&io_size, &io_addr);
+		rc = efhw_nic_vi_io_region(params->client->nic,
+					   params->evq_virs ?
+						params->evq_virs->rs.rs_instance :
+						virs->rs.rs_instance,
+					   &io_size, &io_addr);
 		if (rc == 0)
 			*out_io_mmap_bytes = io_size;
 		else

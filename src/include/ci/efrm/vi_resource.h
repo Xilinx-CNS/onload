@@ -320,21 +320,43 @@ efrm_resource *efrm_from_vi_resource(struct efrm_vi *rs)
 #define EFAB_VI_RESOURCE_PRI_ARG(virs) \
     (efrm_from_vi_resource(virs)->rs_instance)
 
+/** Input parameters for efrm_vi_resource_alloc(). */
+struct efrm_vi_alloc_params {
+	struct efrm_client *client;
+	struct efrm_vi *evq_virs;
+	struct efrm_vi_set *vi_set;
+	int vi_set_instance;
+	struct efrm_pd *pd;
+	const char *name;
+	unsigned vi_flags;
+	int evq_capacity;
+	int txq_capacity;
+	int rxq_capacity;
+	int tx_q_tag;
+	int rx_q_tag;
+	int wakeup_cpu_core;
+	int wakeup_channel;
+	int print_resource_warnings;
+};
+
+/**
+ * Allocate a VI resource.
+ *
+ * @param params  Input parameters for the allocation.
+ * @param virs_out  On success, set to the allocated VI resource.
+ * @param out_io_mmap_bytes  If non-NULL, set to IO mmap size.
+ * @param out_ctpio_mmap_bytes  If non-NULL, set to CTPIO mmap size.
+ * @param out_txq_capacity  If non-NULL, set to actual TX queue capacity.
+ * @param out_rxq_capacity  If non-NULL, set to actual RX queue capacity.
+ * @return  0 on success, negative error code on failure.
+ */
 extern int
-efrm_vi_resource_alloc(struct efrm_client *client,
-		       struct efrm_vi *evq_virs,
-		       struct efrm_vi_set *vi_set, int vi_set_instance,
-		       struct efrm_pd *pd, const char *name,
-		       unsigned vi_flags,
-		       int evq_capacity, int txq_capacity, int rxq_capacity,
-		       int tx_q_tag, int rx_q_tag, int wakeup_cpu_core,
-		       int wakeup_channel,
-		       struct efrm_vi **virs_in_out,
+efrm_vi_resource_alloc(const struct efrm_vi_alloc_params *params,
+		       struct efrm_vi **virs_out,
 		       uint32_t *out_io_mmap_bytes,
 		       uint32_t *out_ctpio_mmap_bytes,
 		       uint32_t *out_txq_capacity,
-		       uint32_t *out_rxq_capacity,
-		       int print_resource_warnings);
+		       uint32_t *out_rxq_capacity);
 
 extern int
 efrm_vi_resource_deferred(struct efrm_vi *evq_virs,
