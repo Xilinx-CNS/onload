@@ -4445,6 +4445,27 @@ static void generate_efct_filter_irqmask(cpumask_t* result)
     cpumask_andnot(result, result, current_cpus);
 }
 
+
+/* Set up irq mask for use with onload managed interrupts. Default to an
+ * empty mask if not configured by the user or parsing fails.
+ */
+static void init_onload_irq_cores(ci_netif* ni, const char* str,
+                                  cpumask_t* result)
+{
+  int rc;
+
+  cpumask_clear(result);
+
+  if( str == NULL || str[0] == '\0' )
+    return;
+
+  rc = cpulist_parse(str, result);
+  if( rc < 0 ) {
+    NI_LOG(ni, CONFIG_WARNINGS,
+           "WARNING: failed to parse EF_ONLOAD_IRQ_CORES '%s': %d", str, rc);
+  }
+}
+
 int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
                         const ci_netif_config_opts* opts,
                         int ifindices_len, tcp_helper_cluster_t* thc,
@@ -4581,6 +4602,24 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
 #endif
   strcpy(rs->name, alloc->in_name);
   generate_efct_filter_irqmask(&rs->filter_irqmask);
+  init_onload_irq_cores(ni, NI_OPTS(ni).onload_irq_cores,
+                        &rs->onload_irq_cores);
+
+  /* Warn if user specified IRQ mask but no NICs support it */
+  if( NI_OPTS(ni).onload_irq_cores[0] != '\0' ) {
+    int intf_i;
+    bool have_evq_irq = false;
+    OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
+      struct efhw_nic* nic = efrm_client_get_nic(rs->nic[intf_i].thn_oo_nic->efrm_client);
+      if( nic->flags & NIC_FLAG_EVQ_IRQ ) {
+        have_evq_irq = true;
+        break;
+      }
+    }
+    if( !have_evq_irq )
+      NI_LOG(ni, CONFIG_WARNINGS,
+             "WARNING: EF_ONLOAD_IRQ_CORES set but not supported by any available NIC");
+  }
 
   spin_lock_init(&ni->swf_update_lock);
   ni->swf_update_last =  ni->swf_update_first = NULL;

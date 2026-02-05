@@ -924,9 +924,10 @@ CI_CFG_OPT("EF_DEFER_WORK_LIMIT", defer_work_limit, ci_uint16,
 CI_CFG_OPT("EF_IRQ_CORE", irq_core, ci_int16,
 "Specify which CPU core interrupts for this stack should be handled on."
 "\n"
-"Onload interrupts are handled via net driver receive channel interrupts.  "
-"The sfc_affinity driver is normally used to choose which net-driver receive "
-"channel is used, however this value may be used to override that "
+"This option applies for interfaces where onload interrupts are handled "
+"via net driver receive channel interrupts (currently X2 and X4 enterprise). "
+"The sfc_affinity driver is normally used to choose which net-driver "
+"receive channel is used, however this value may be used to override that "
 "mechanism.  It is only possible for interrupts to be handled on the "
 "requested core if a net driver interrupt is assigned to the selected core.  "
 "Otherwise a nearby core will be selected."
@@ -1817,3 +1818,10 @@ CI_CFG_OPT("EF_ENABLE_TX_ERROR_RECOVERY", tx_error_recovery, ci_uint32,
 "retransmitted, but TCP data can be subsequently retransmitted via normal "
 "TCP operation.",
            1, , 1, 0, 1, yesno)
+
+CI_CFG_STR_OPT("EF_ONLOAD_IRQ_CORES", onload_irq_cores, ci_string256,
+"Specifies a CPU mask to use as an IRQ affinity hint on interfaces where \n"
+"interrupts are managed by onload. The format is a comma-separated list \n"
+"of CPU ranges, similar to the format used by the kernel for CPU masks \n"
+"(e.g., \"0-3,8-11\" or \"0,2,4,6\").\n",
+               ,  , "", none, none, )
