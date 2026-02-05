@@ -319,12 +319,6 @@ extern enum ef_pd_flags ef_pd_flags_from_env(enum ef_pd_flags flags,
                                              ef_driver_handle pd_dh,
                                              int ifindex);
 
-struct ef_shrub_client;
-extern int
-ef_shrub_client_refresh_mappings(const struct ef_shrub_client* client,
-                                 uint64_t user_superbuf,
-                                 uint64_t* user_mappings);
-
 typedef uint64_t efct_tx_aperture_t;
 ci_inline uint64_t efct_tx_scale_offset_bytes(uint64_t offset_bytes)
 {

@@ -195,10 +195,3 @@ void ef_shrub_socket_munmap(uint64_t mapping, size_t size, int type)
   munmap((void*)mapping, size);
 }
 
-int ef_shrub_socket_mmap_user(uint64_t* user_mapping, uint64_t user_addr,
-                              size_t size, uintptr_t file, size_t offset,
-                              int type)
-{
-  return -EOPNOTSUPP;
-}
-

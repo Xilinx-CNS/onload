@@ -75,25 +75,6 @@ static int client_mmap(uint64_t* mappings,
   return 0;
 }
 
-static int client_mmap_user(uint64_t* umappings, const uint64_t* kmappings,
-                            const struct ef_shrub_shared_metrics* metrics,
-                            uint64_t user_buffers)
-{
-  int i;
-  for( i = 0; i < EF_SHRUB_FD_COUNT; ++i ) {
-    int rc;
-    uint64_t user_addr = i == EF_SHRUB_FD_BUFFERS ? user_buffers : 0;
-
-    rc = ef_shrub_socket_mmap_user(&umappings[EF_SHRUB_FD_COUNT + i], user_addr,
-                                   map_size(metrics, i), kmappings[i],
-                                   map_offset(metrics, i), i);
-    if( rc < 0 )
-      return rc;
-  }
-
-  return 0;
-}
-
 void client_munmap(uint64_t* mappings,
                    const struct ef_shrub_shared_metrics* metrics)
 {
@@ -188,19 +169,6 @@ void ef_shrub_client_close(struct ef_shrub_client* client)
 {
   client_munmap(client->mappings, &get_state(client)->metrics);
   ef_shrub_socket_close_socket(client->socket);
-}
-
-int ef_shrub_client_refresh_mappings(const struct ef_shrub_client* client,
-                                     uint64_t user_buffers,
-                                     uint64_t* user_mappings)
-{
-  const struct ef_shrub_client_state* state = ef_shrub_client_get_state(client);
-
-  if( state == NULL )
-    return -EOPNOTSUPP;
-
-  return client_mmap_user(user_mappings, client->mappings, &state->metrics,
-                          user_buffers);
 }
 
 int ef_shrub_client_acquire_buffer(struct ef_shrub_client* client,
