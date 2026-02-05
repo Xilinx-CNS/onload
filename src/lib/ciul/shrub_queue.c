@@ -449,6 +449,7 @@ void ef_shrub_queue_dump_to_fd(struct ef_shrub_queue* queue, int fd,
   ef_vi_efct_rxq_state *rxq_state =
     &queue->vi->ep_state->rxq.efct_state[queue->ix];
   int fifo_index, buffer_index;
+  int idx, iter;
 
   shrub_log_to_fd(fd, buf, buflen, "  rxq[%d]: hw: %d\n",
                   queue->ix, rxq_state->qid);
@@ -459,6 +460,30 @@ void ef_shrub_queue_dump_to_fd(struct ef_shrub_queue* queue, int fd,
                   "count_hw: %d count_sw: %d\n", rxq_state->fifo_tail_hw,
                   rxq_state->fifo_tail_sw, rxq_state->fifo_count_hw,
                   rxq_state->fifo_count_sw);
+
+  shrub_log_to_fd(fd, buf, buflen, "    free_list: ");
+  for( idx = 0, iter = rxq_state->free_head;
+       idx < queue->buffer_count && iter != -1;
+       idx++, iter = efct_rx_desc_for_sb(queue->vi, queue->ix, iter)->sbid_next ) {
+    shrub_log_to_fd(fd, buf, buflen, "%s%d", idx == 0 ? "" : " -> ", iter);
+  }
+  shrub_log_to_fd(fd, buf, buflen, "\n");
+
+  shrub_log_to_fd(fd, buf, buflen, "    hw_list: ");
+  for( idx = 0, iter = rxq_state->fifo_tail_hw;
+       idx < rxq_state->fifo_count_hw && iter != -1;
+       idx++, iter = efct_rx_desc_for_sb(queue->vi, queue->ix, iter)->sbid_next ) {
+    shrub_log_to_fd(fd, buf, buflen, "%s%d", idx == 0 ? "" : " -> ", iter);
+  }
+  shrub_log_to_fd(fd, buf, buflen, "\n");
+
+  shrub_log_to_fd(fd, buf, buflen, "    sw_list: ");
+  for( idx = 0, iter = rxq_state->fifo_tail_sw;
+       idx < rxq_state->fifo_count_sw && iter != -1;
+       idx++, iter = efct_rx_desc_for_sb(queue->vi, queue->ix, iter)->sbid_next ) {
+    shrub_log_to_fd(fd, buf, buflen, "%s%d", idx == 0 ? "" : " -> ", iter);
+  }
+  shrub_log_to_fd(fd, buf, buflen, "\n");
 
   shrub_log_to_fd(fd, buf, buflen, "    fifo_size: %d\n", queue->fifo_size);
   for( fifo_index = prev_fifo_index(queue->fifo_index, queue->fifo_size);
