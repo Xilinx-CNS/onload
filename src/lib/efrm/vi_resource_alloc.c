@@ -254,11 +254,51 @@ static void efrm_interrupt_vector_release(struct efrm_interrupt_vector *vec)
 }
 
 
+static struct efrm_interrupt_vector*
+efrm_find_least_used_vector(struct efrm_nic *nic)
+{
+	struct efrm_interrupt_vector *current_vec = NULL;
+	struct efrm_interrupt_vector *least_used_vec = NULL;
+
+	list_for_each_entry(current_vec, &nic->irq_list, link) {
+		/* The num_vis could be changing under our feet, but
+		 * it's not worth locking each vector to prevent this.
+		 */
+		if (least_used_vec == NULL ||
+		    current_vec->num_vis < least_used_vec->num_vis)
+			least_used_vec = current_vec;
+		if (current_vec->num_vis == 0)
+			break;
+	}
+
+	return least_used_vec;
+}
+
+
+static struct efrm_interrupt_vector*
+efrm_setup_free_vector(struct efrm_nic *nic, uint32_t irq, uint32_t channel)
+{
+	struct efrm_interrupt_vector *current_vec = NULL;
+	struct efrm_interrupt_vector *selected_vec = NULL;
+
+	list_for_each_entry(current_vec, &nic->irq_list, link) {
+		if (current_vec->irq == IRQ_NOTCONNECTED) {
+			selected_vec = current_vec;
+			selected_vec->irq = irq;
+			selected_vec->channel = channel;
+			break;
+		}
+	}
+
+	return selected_vec;
+}
+
+
 static int
 efrm_interrupt_vector_choose(struct efrm_nic *nic, struct efrm_vi *virs,
 			     const struct cpumask *affinity)
 {
-	struct efrm_interrupt_vector *current_vec = NULL, *selected_vec = NULL;
+	struct efrm_interrupt_vector *selected_vec = NULL;
 	uint32_t irq, channel;
 	int rc;
 
@@ -267,29 +307,11 @@ efrm_interrupt_vector_choose(struct efrm_nic *nic, struct efrm_vi *virs,
 	if (rc < 0) {
 		/* IRQ allocation failed. Find the least used vector of those
 		 * that have already been allocated.*/
-		struct efrm_interrupt_vector *least_used_vec = NULL;
-		list_for_each_entry(current_vec, &nic->irq_list, link) {
-			/* The num_vis could be changing under our feet, but
-			 * it's not worth locking each vector to prevent this.
-			 */
-			if (least_used_vec == NULL ||
-				current_vec->num_vis < least_used_vec->num_vis)
-				least_used_vec = current_vec;
-			if (current_vec->num_vis == 0)
-				break;
-		}
-		selected_vec = least_used_vec;
+		selected_vec = efrm_find_least_used_vector(nic);
 	} else {
 		/* IRQ allocation succeeded. Find an unconnected vector and
 		 * update it with the new irq and channel values. */
-		list_for_each_entry(current_vec, &nic->irq_list, link) {
-			if (current_vec->irq == IRQ_NOTCONNECTED) {
-				selected_vec = current_vec;
-				selected_vec->irq = irq;
-				selected_vec->channel = channel;
-				break;
-			}
-		}
+		selected_vec = efrm_setup_free_vector(nic, irq, channel);
 	}
 	mutex_unlock(&nic->irq_list_lock);
 
