@@ -156,7 +156,8 @@ vi_interrupt(int irq, void *dev_id)
 
 
 static int
-efrm_vi_irq_setup(struct efrm_interrupt_vector *vec)
+efrm_vi_irq_setup(struct efrm_interrupt_vector *vec,
+		  const struct cpumask *affinity)
 {
 	char name_local[80];
 	int rc;
@@ -192,6 +193,16 @@ efrm_vi_irq_setup(struct efrm_interrupt_vector *vec)
 		if (name != default_irq_name)
 			kfree(name);
 	}
+	else if (affinity != NULL) {
+		/* Set IRQ affinity to the specified cpumask. This is best effort
+		 * so just log gently if it fails. */
+		rc = irq_set_affinity_hint(vec->irq, affinity);
+		if (rc != 0) {
+			EFRM_NOTICE("failed to set IRQ affinity for IRQ %d on NIC "
+				    "%d: %d", vec->irq, vec->nic->index, rc);
+			rc = 0;
+		}
+	}
 #ifndef EFRM_IRQ_FREE_RETURNS_NAME
 	vec->irq_name = name;
 #endif
@@ -211,6 +222,8 @@ efrm_vi_irq_free(struct efrm_interrupt_vector *vec)
 	if( vec->irq == IRQ_NOTCONNECTED )
 		return;
 
+	irq_set_affinity_hint(vec->irq, NULL);
+
 	/* linux>=4.13: free_irq() returns name */
 #ifdef EFRM_IRQ_FREE_RETURNS_NAME
 	name = free_irq(vec->irq, &vec->tasklet);
@@ -229,13 +242,14 @@ efrm_vi_irq_free(struct efrm_interrupt_vector *vec)
 }
 
 
-static int efrm_interrupt_vector_acquire(struct efrm_interrupt_vector *vec)
+static int efrm_interrupt_vector_acquire(struct efrm_interrupt_vector *vec,
+					 const struct cpumask *affinity)
 {
 	int rc = 0;
 
 	mutex_lock(&vec->vec_acquire_lock);
 	if (vec->num_vis == 0)
-		rc = efrm_vi_irq_setup(vec);
+		rc = efrm_vi_irq_setup(vec, affinity);
 	if (rc == 0)
 		++vec->num_vis;
 	mutex_unlock(&vec->vec_acquire_lock);
@@ -317,7 +331,7 @@ efrm_interrupt_vector_choose(struct efrm_nic *nic, struct efrm_vi *virs,
 
 	EFRM_ASSERT(selected_vec);
 
-	rc = efrm_interrupt_vector_acquire(selected_vec);
+	rc = efrm_interrupt_vector_acquire(selected_vec, affinity);
 
 	if (rc >= 0) {
 		virs->vec = selected_vec;
