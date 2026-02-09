@@ -1949,7 +1949,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
   /* Outside the per-interface loop we initialise some values that are common
    * across all interfaces.
    */
-  alloc_info.wakeup_channel = NI_OPTS(ni).irq_channel,
+  alloc_info.wakeup_channel = NI_OPTS(ni).irq_channel;
   alloc_info.irq_affinity = cpumask_empty(&trs->onload_irq_cores) ?
                                               NULL : &trs->onload_irq_cores;
   alloc_info.name = vf_name;
