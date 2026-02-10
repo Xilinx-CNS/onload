@@ -76,6 +76,7 @@ struct mock_connection
   struct ef_shrub_connection connection;
   uint64_t buffer_refs;
   struct ef_shrub_client_state state;
+  int max_bufs;
 };
 
 struct ef_shrub_client_state*
@@ -169,7 +170,7 @@ static void open_queue(void)
   STATE_STASH(queue);
 }
 
-static struct mock_connection* open_connection(void)
+static struct mock_connection* open_connection(int max_bufs)
 {
   int i;
   STATE_ALLOC(struct mock_connection, mock);
@@ -193,9 +194,9 @@ static struct mock_connection* open_connection(void)
   for( i = 0; i < queue->buffer_count; ++i )
     mock->connection.buffer_refs[i] = false;
 
-  /* Allow a connection to reference all buffers by default. This does not
-   * accurately reflect any allowable state. */
-  mock->connection.max_referenced_buffers = buffer_count;
+  mock->max_bufs = max_bufs;
+  STATE_ACCEPT(mock, max_bufs);
+  mock->connection.max_referenced_buffers = max_bufs;
   STATE_ACCEPT(mock, connection.max_referenced_buffers);
 
   STATE_STASH(mock);
@@ -315,7 +316,7 @@ static void test_shrub_queue_connections(void)
   open_queue();
 
   /* Empty queue: first index is zero */
-  c[0] = open_connection();
+  c[0] = open_connection(buffer_count);
   STATE_UPDATE(queue, connection_count, 1);
   STATE_UPDATE(c[0], state.server_fifo_index, 0);
   assert_queue_ref_counts_valid(queue);
@@ -337,7 +338,7 @@ static void test_shrub_queue_connections(void)
   assert_queue_ref_counts_valid(queue);
 
   /* New connection: oldest buffer is still at index zero */
-  c[1] = open_connection();
+  c[1] = open_connection(buffer_count);
   STATE_UPDATE(queue, connection_count, 2);
   STATE_UPDATE(c[1], state.server_fifo_index, 0);
   STATE_UPDATE(c[1], connection.server_fifo_index, buffer_count);
@@ -380,7 +381,7 @@ static void test_shrub_queue_connections(void)
   assert_queue_ref_counts_valid(queue);
 
   /* A new connection will start at the next index (1) */
-  c[2] = open_connection();
+  c[2] = open_connection(buffer_count);
   STATE_UPDATE(queue, connection_count, 3);
   STATE_UPDATE(c[2], state.server_fifo_index, 0);
   STATE_UPDATE(c[2], connection.server_fifo_index, buffer_count);
@@ -423,7 +424,7 @@ static void test_shrub_queue_connections(void)
   assert_queue_ref_counts_valid(queue);
 
   /* A new connection will start after the gap at index 4 */
-  c[3] = open_connection();
+  c[3] = open_connection(buffer_count);
   STATE_UPDATE(queue, connection_count, 4);
   STATE_UPDATE(c[3], state.server_fifo_index, 0);
   STATE_UPDATE(c[3], connection.server_fifo_index, buffer_count - 2);
