@@ -158,6 +158,7 @@ static void init_test(void)
   STATE_ALLOC(struct ef_vi, vi_);
   vi = vi_;
   vi->efct_rxqs.ops = &mock_ops;
+  used_buffers = 0;
   STATE_STASH(vi);
 }
 
@@ -276,6 +277,66 @@ static void mock_connection_drop_buffer_ref(struct mock_connection* conn,
 {
   conn->buffer_refs &= ~(1ull << buffer_idx);
   STATE_ACCEPT(conn, buffer_refs);
+}
+
+static void connection_free_buffer(struct mock_connection* conn,
+                                   int buffer_index)
+{
+  int fifo_index = conn->state.client_fifo_index;
+  conn->state.client_fifo_index = (fifo_index + 1) % fifo_size;
+  STATE_ACCEPT(conn, state.client_fifo_index);
+  conn->connection.client_fifo[fifo_index] = buffer_index;
+}
+
+static ef_shrub_buffer_id
+connection_peek_next_buffer(struct mock_connection* conn, int lookahead)
+{
+  int fifo_index = (conn->state.server_fifo_index + lookahead) % fifo_size;
+  return conn->connection.server_fifo[fifo_index];
+}
+
+static ef_shrub_buffer_id
+connection_consume_next_buffer(struct mock_connection* conn)
+{
+  int fifo_index = conn->state.server_fifo_index;
+  conn->state.server_fifo_index = (fifo_index + 1) % fifo_size;
+  STATE_ACCEPT(conn, state.server_fifo_index);
+  return conn->connection.server_fifo[fifo_index];
+}
+
+static void
+connection_check_buffers_posted_freed_dropped(struct mock_connection* conn,
+                                              int n_posted, int n_freed,
+                                              int n_dropped)
+{
+  struct mock_connection* copy = conn + 1;
+
+  STATE_UPDATE(conn, connection.client_fifo_index,
+               (copy->connection.client_fifo_index + n_freed) % fifo_size);
+  STATE_UPDATE(conn, connection.server_fifo_index,
+               (copy->connection.server_fifo_index + n_posted) % fifo_size);
+  STATE_UPDATE(conn, connection.queue_fifo_index,
+               (copy->connection.queue_fifo_index + n_posted + n_dropped)
+                % fifo_size);
+  STATE_UPDATE(conn, connection.referenced_buffer_count,
+               copy->connection.referenced_buffer_count + n_posted - n_freed);
+  STATE_UPDATE(conn, connection.stats.dropped_buffers,
+               copy->connection.stats.dropped_buffers + n_dropped);
+}
+
+static void poll_queue_expect_free(int free_buf)
+{
+  struct ef_shrub_queue* copy = queue + 1;
+
+  assert(free_buf != -1);
+
+  expect_free = free_buf;
+  ef_shrub_queue_poll(queue);
+  CHECK(expect_free, ==, -1);
+
+  /* If a queue frees a buffer, then it should be able to immediately repost
+   * that same buffer. */
+  STATE_UPDATE(queue, fifo_index, (copy->fifo_index + 1) % fifo_size);
 }
 
 /* Tests */
@@ -572,9 +633,104 @@ static void test_shrub_queue_connections(void)
   STATE_FREE(vi);
 }
 
+static void test_shrub_queue_no_buffer_starvation(void)
+{
+  int i, j, connection_count = 2;
+  struct mock_connection* c[connection_count];
+  const int c0_max_bufs = 2, c1_max_bufs = 5;
+
+  assert(c0_max_bufs + c1_max_bufs <= buffer_count);
+
+  init_test();
+  open_queue();
+
+  /* Open a couple of connections. These connections should only get a number
+   * of buffers that they request, and strictly no more, but they should get
+   * the same buffers. */
+  c[0] = open_connection(c0_max_bufs);
+  CHECK(c[0]->max_bufs, ==, c0_max_bufs);
+  STATE_UPDATE(queue, connection_count, 1);
+
+  ef_shrub_queue_poll(queue);
+  STATE_UPDATE(queue, fifo_index, buffer_count);
+  connection_check_buffers_posted_freed_dropped(c[0], c[0]->max_bufs, 0, 0);
+  for( i = 0; i < buffer_count; ++i )
+    CHECK(queue->fifo[i], ==, buffer_id(i));
+  for( i = 0; i < c[0]->max_bufs; ++i )
+    CHECK(connection_peek_next_buffer(c[0], i), ==, buffer_id(i));
+  CHECK(connection_peek_next_buffer(c[0], c[0]->max_bufs), ==,
+        EF_SHRUB_INVALID_BUFFER);
+
+  c[1] = open_connection(c1_max_bufs);
+  CHECK(c[1]->max_bufs, ==, c1_max_bufs);
+  STATE_UPDATE(queue, connection_count, 2);
+  connection_check_buffers_posted_freed_dropped(c[1], c[1]->max_bufs, 0, 0);
+  for( i = 0; i < c[1]->max_bufs; ++i )
+    CHECK(connection_peek_next_buffer(c[1], i), ==, buffer_id(i));
+  CHECK(connection_peek_next_buffer(c[1], c[1]->max_bufs), ==,
+        EF_SHRUB_INVALID_BUFFER);
+
+  /* Free, from connection 0, all buffers held by both connections. */
+  assert(c[1]->max_bufs > c[0]->max_bufs);
+  for( i = 0; i < c[1]->max_bufs; i++ ) {
+    ef_shrub_buffer_id next_buf = connection_consume_next_buffer(c[0]);
+    int buffer_index = ef_shrub_buffer_index(next_buf);
+    connection_free_buffer(c[0], buffer_index);
+    ef_shrub_queue_poll(queue);
+    connection_check_buffers_posted_freed_dropped(c[0], 1, 1, 0);
+  }
+  CHECK(c[1]->connection.stats.dropped_buffers, ==, 0);
+  for( i = 0; i < c[1]->max_bufs; ++i )
+    CHECK(queue->fifo[i], ==, buffer_id(i));
+
+  /* Continue freeing buffers that have been posted to connection 0 and ensure
+   * it continues to get fresh buffers as this happens. */
+  for( i = 0; i < 3*buffer_count; i++ ) {
+    ef_shrub_buffer_id next_buf = connection_consume_next_buffer(c[0]);
+    int buffer_index = ef_shrub_buffer_index(next_buf);
+    int j;
+
+    /* We shouldn't get any of c[1]'s buffers as they haven't been freed */
+    for( j = 0; j < c[1]->max_bufs; j++ )
+      CHECK(ef_shrub_buffer_index(connection_peek_next_buffer(c[1], j)), !=,
+            buffer_index);
+
+    connection_free_buffer(c[0], buffer_index);
+    poll_queue_expect_free(buffer_index);
+    connection_check_buffers_posted_freed_dropped(c[0], 1, 1, 0);
+    connection_check_buffers_posted_freed_dropped(c[1], 0, 0, 1);
+
+    CHECK(queue->fifo[c[1]->connection.queue_fifo_index], !=,
+          EF_SHRUB_INVALID_BUFFER);
+  }
+
+  /* Free all of the old buffers that connection 1 had been holding on to and
+   * ensure it correctly synchronises with the other connection. */
+  for( j = 0; j < c[1]->max_bufs; j++ ) {
+    ef_shrub_buffer_id next_buf = connection_consume_next_buffer(c[1]);
+    int buffer_index = ef_shrub_buffer_index(next_buf);
+
+    connection_free_buffer(c[1], buffer_index);
+    poll_queue_expect_free(buffer_index);
+    connection_check_buffers_posted_freed_dropped(c[0], 0, 0, 0);
+    connection_check_buffers_posted_freed_dropped(c[1], 1, 1, 0);
+  }
+
+  /* c1 should sync up with c0, though will have acquired more buffers */
+  for( i = 0; i < c[0]->max_bufs; i++ )
+    CHECK(connection_peek_next_buffer(c[0], i), ==,
+          connection_peek_next_buffer(c[1], i));
+
+  for( i = 0; i < connection_count; ++i )
+    STATE_FREE(c[i]);
+  STATE_FREE(queue);
+  STATE_FREE(vi);
+}
+
 int main(void)
 {
   TEST_RUN(test_shrub_queue_open);
   TEST_RUN(test_shrub_queue_connections);
+  TEST_RUN(test_shrub_queue_no_buffer_starvation);
   TEST_END();
 }
