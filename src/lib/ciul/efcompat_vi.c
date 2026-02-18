@@ -238,6 +238,10 @@ int ef10compat_capability_get(enum ef_vi_capability cap, unsigned long* value)
   UNSUPPORTED_CAP(EF_VI_CAP_RX_POLL);
   UNSUPPORTED_CAP(EF_VI_CAP_RX_REF);
   SUPPORTED_CAP_VAL(EF_VI_CAP_EXTRA_DATAPATHS, 0);
+  /* RX_REF events to support returning the filter ID, but RX events retrieve
+   * this from the packet prefix. We already stuff the packet prefix with the
+   * timestamp, so don't have enough space for a 16-bit filter ID. */
+  UNSUPPORTED_CAP(EF_VI_CAP_RX_FILTER_ID);
   default:
     /* Anything else should fall through to the underlying hardware support */
     return -EINVAL;

@@ -253,6 +253,8 @@ typedef union {
 #define NIC_FLAG_RX_POLL 0x200000000000000LL
 /* NIC attaches to an exclusive RXQ by default */
 #define NIC_FLAG_EXCL_RXQ_ATTACH_IS_DEFAULT 0x400000000000000LL
+/* NIC supports attached matched filter ID to RX events */
+#define NIC_FLAG_RX_FILTER_ID 0x800000000000000LL
 
 /* Filter type flags */
 #define NIC_FILTER_FLAG_RX_TYPE_IP_LOCAL 0x1

@@ -157,6 +157,7 @@ ef10ct_nic_init_hardware(struct efhw_nic *nic,
              | NIC_FLAG_RX_REF
              | NIC_FLAG_RX_POLL
              | NIC_FLAG_EXCL_RXQ_ATTACH_IS_DEFAULT
+             | NIC_FLAG_RX_FILTER_ID
              ;
   nic->filter_flags |= ef10ct_nic_supported_filter_flags(nic);
 

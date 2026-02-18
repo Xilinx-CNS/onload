@@ -69,6 +69,7 @@ static const char* names[EF_VI_CAP_MAX + 1] = {
   [EF_VI_CAP_RX_POLL] = "Ability to independently poll for RX",
   [EF_VI_CAP_RX_REF] = "VI uses RX_REF events",
   [EF_VI_CAP_EXTRA_DATAPATHS] = "Supported extra datapaths (see enum ef_vi_extra_datapaths)",
+  [EF_VI_CAP_RX_FILTER_ID] = "RX events support lookup of matched filter ID",
   [EF_VI_CAP_MAX] = "Unknown",
 };
 
