@@ -230,7 +230,7 @@ int main(int argc, char* argv[])
   ef_pd pd;
   ef_pio pio;
   enum ef_pd_flags pd_flags = EF_PD_DEFAULT;
-  int vi_flags = EF_VI_FLAGS_DEFAULT;
+  enum ef_vi_flags vi_flags = EF_VI_FLAGS_DEFAULT;
   pthread_t trigger_thread_id;
   cpu_set_t cpuset;
   ef_memreg mr;

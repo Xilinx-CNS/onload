@@ -109,7 +109,7 @@ enum mode {
   MODE_DEFAULT = MODE_CTPIO | MODE_ALT | MODE_PIO | MODE_DMA
 };
 static unsigned         cfg_mode = MODE_DEFAULT;
-static enum ef_vi_flags cfg_vi_flags = 0;
+static enum ef_vi_flags cfg_vi_flags = EF_VI_FLAGS_DEFAULT;
 static enum ef_pd_flags cfg_rx_pd_flags = EF_PD_EXPRESS;
 static enum ef_pd_flags cfg_tx_pd_flags = EF_PD_EXPRESS;
 
@@ -1198,7 +1198,7 @@ int main(int argc, char* argv[])
         fprintf(yaml_fp, "tx_mode: %s\n", t->name);
         fprintf(yaml_fp, "rx_event_type: %s\n",
                 use_rx_ref ? "EF_EVENT_TYPE_RX_REF" : "EF_EVENT_TYPE_RX");
-        fprintf(yaml_fp, "vi_flags: 0x%x\n", (unsigned)cfg_vi_flags);
+        fprintf(yaml_fp, "vi_flags: 0x%x\n", cfg_vi_flags);
         fprintf(yaml_fp, "ping_or_pong: %s\n", ping ? "ping" : "pong");
         if( ping )
           fprintf(yaml_fp, "results:\n");

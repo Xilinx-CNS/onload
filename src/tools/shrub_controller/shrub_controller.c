@@ -294,8 +294,8 @@ static int shrub_server_init(shrub_controller_config *config,
                              shrub_if_config_t *interface_config)
 {
   int rc;
-  unsigned vi_flags = EF_VI_FLAGS_DEFAULT;
-  unsigned pd_flags = EF_PD_DEFAULT | EF_PD_EXPRESS;
+  enum ef_vi_flags vi_flags = EF_VI_FLAGS_DEFAULT;
+  enum ef_pd_flags pd_flags = EF_PD_DEFAULT | EF_PD_EXPRESS;
   struct shrub_controller_vi *res = &interface_config->res;
 
   char server_path[EF_SHRUB_SERVER_SOCKET_LEN];

@@ -557,7 +557,8 @@ int main(int argc, char* argv[])
   char* interface;
   pthread_t thread_id;
   struct resources* res;
-  unsigned pd_flags, vi_flags;
+  enum ef_pd_flags pd_flags;
+  enum ef_vi_flags vi_flags;
   unsigned long use_rx_ref;
   struct in_addr sa_mcast;
   int c, sock, ifindex;

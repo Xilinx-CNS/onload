@@ -76,7 +76,7 @@ extern int  ef_vi_rx_ring_bytes(struct ef_vi*);
 extern int  ef_vi_tx_ring_bytes(struct ef_vi*);
 
 extern int  ef_vi_init(struct ef_vi*, int arch, int variant, int revision,
-		       unsigned ef_vi_flags, unsigned char nic_flags,
+		       enum ef_vi_flags ef_vi_flags, unsigned char nic_flags,
 		       ef_vi_state*);
 
 extern void ef_vi_init_io(struct ef_vi*, void* io_area);

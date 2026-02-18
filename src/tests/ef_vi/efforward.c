@@ -345,7 +345,7 @@ static int init(const char* intf, int vi_i)
 {
   struct vi* vi = &vis[vi_i];
   int i;
-  unsigned vi_flags = EF_VI_FLAGS_DEFAULT;
+  enum ef_vi_flags vi_flags = EF_VI_FLAGS_DEFAULT;
 
   TRY(ef_driver_open(&vi->dh));
   /* check that RX merge is supported */

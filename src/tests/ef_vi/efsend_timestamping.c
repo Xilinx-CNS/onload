@@ -97,7 +97,7 @@ int main(int argc, char* argv[])
   ef_addr dma_buf_addr;
   enum ef_pd_flags pd_flags = EF_PD_DEFAULT;
   /* Set flag to allow tx timestamping */
-  int vi_flags = EF_VI_FLAGS_DEFAULT | EF_VI_TX_TIMESTAMPS;
+  enum ef_vi_flags vi_flags = EF_VI_FLAGS_DEFAULT | EF_VI_TX_TIMESTAMPS;
   unsigned long val;
   bool ctpio_only;
 
