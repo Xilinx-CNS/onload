@@ -96,6 +96,7 @@ static bool cfg_exclusive = false;
 static bool cfg_shared = false;
 static int cfg_qid = -1;
 static bool cfg_filter_id = false;
+static unsigned long rx_filter_id_supported;
 
 
 /* Mutex to protect printing from different threads */
@@ -207,7 +208,8 @@ static void handle_rx_core(struct resources* res, const void* dma_ptr,
 }
 
 
-static void handle_rx(struct resources* res, int pkt_buf_i, int len)
+static void handle_rx(struct resources* res, int pkt_buf_i, int len,
+                      ef_event *rx_event)
 {
   struct pkt_buf* pkt_buf;
   void* dma_ptr;
@@ -216,20 +218,29 @@ static void handle_rx(struct resources* res, int pkt_buf_i, int len)
 
   pkt_buf = pkt_buf_from_id(res, pkt_buf_i);
   dma_ptr = (char*) pkt_buf + RX_DMA_OFF;
+  if( cfg_filter_id && rx_filter_id_supported ) {
+    int32_t filter_id = ef_vi_receive_get_filter_id(&res->vi, rx_event,
+                                                    dma_ptr);
+    TEST(filter_id >= 0 || filter_id == -ENODATA);
+    LOGI("PKT: filter_id %#x%s\n",
+         filter_id >= 0 ? filter_id : -1,
+         filter_id == -ENODATA ? " (invalid filter ID)" : "");
+  }
   handle_rx_core(res, dma_ptr, pkt_buf->rx_ptr, len);
   pkt_buf_free(res, pkt_buf);
 }
 
 
 static void handle_rx_discard(struct resources* res,
-                              int pkt_buf_i, int len, int discard_type)
+                              int pkt_buf_i, int len, int discard_type,
+                              ef_event* rx_event)
 {
   struct pkt_buf* pkt_buf;
 
   LOGE("ERROR: discard type=%d\n", discard_type);
 
   if( /* accept_discard_pkts */ 1 ) {
-    handle_rx(res, pkt_buf_i, len);
+    handle_rx(res, pkt_buf_i, len, rx_event);
   }
   else {
     pkt_buf = pkt_buf_from_id(res, pkt_buf_i);
@@ -238,14 +249,15 @@ static void handle_rx_discard(struct resources* res,
 }
 
 
-static void handle_batched_rx(struct resources* res, int pkt_buf_i)
+static void handle_batched_rx(struct resources* res, int pkt_buf_i,
+                              ef_event* rx_event)
 {
   struct pkt_buf* pkt_buf = pkt_buf_from_id(res, pkt_buf_i);
   void* dma_ptr = (char*) pkt_buf + RX_DMA_OFF;
   uint16_t len = *(uint16_t*) ((uint8_t*) dma_ptr + res->pktlen_offset);
   len = le16toh(len);
 
-  handle_rx(res, pkt_buf_i, len);
+  handle_rx(res, pkt_buf_i, len, rx_event);
 }
 
 
@@ -304,7 +316,7 @@ static int poll_evq(struct resources* res)
       TEST( EF_EVENT_RX_SOP(evs[i]) && ! EF_EVENT_RX_CONT(evs[i]) );
       assert( ! cfg_rx_merge );
       handle_rx(res, EF_EVENT_RX_RQ_ID(evs[i]),
-                EF_EVENT_RX_BYTES(evs[i]) - res->rx_prefix_len);
+                EF_EVENT_RX_BYTES(evs[i]) - res->rx_prefix_len, &evs[i]);
       break;
     case EF_EVENT_TYPE_RX_MULTI:
     case EF_EVENT_TYPE_RX_MULTI_DISCARD:
@@ -313,13 +325,13 @@ static int poll_evq(struct resources* res)
       assert( cfg_rx_merge );
       n_rx = ef_vi_receive_unbundle(&res->vi, &evs[i], ids);
       for( j = 0; j < n_rx; ++j )
-        handle_batched_rx(res, ids[j]);
+        handle_batched_rx(res, ids[j], &evs[i]);
       res->n_ht_events += 1;
       break;
     case EF_EVENT_TYPE_RX_DISCARD:
       handle_rx_discard(res, EF_EVENT_RX_DISCARD_RQ_ID(evs[i]),
                         EF_EVENT_RX_DISCARD_BYTES(evs[i]) - res->rx_prefix_len,
-                        EF_EVENT_RX_DISCARD_TYPE(evs[i]));
+                        EF_EVENT_RX_DISCARD_TYPE(evs[i]), &evs[i]);
       break;
     case EF_EVENT_TYPE_RX_REF:
       handle_rx_ref(res, evs[i].rx_ref.pkt_id, evs[i].rx_ref.len, &evs[i]);
@@ -663,11 +675,26 @@ int main(int argc, char* argv[])
   else
     TRY(ef_pd_alloc(&res->pd, res->dh, ifindex, pd_flags));
 
-  TRY(ef_vi_alloc_from_pd(&res->vi, res->dh, &res->pd, res->dh,
-                          -1, cfg_max_fill, 0, NULL, -1, vi_flags));
   if( ef_pd_capabilities_get(res->dh, &res->pd, res->dh,
                              EF_VI_CAP_RX_REF, &use_rx_ref) )
     use_rx_ref = 0;
+
+  if( cfg_filter_id ) {
+    /* If we want to have the filter ID provided alongside an RX packet, we
+     * should make sure we ask for it. If this isn't supported, lets warn the
+     * user but continue anyway. */
+    if( ! ef_pd_capabilities_get(res->dh, &res->pd, res->dh,
+                                 EF_VI_CAP_RX_FILTER_ID,
+                                 &rx_filter_id_supported) &&
+        rx_filter_id_supported ) {
+      vi_flags |= EF_VI_RX_FILTER_ID;
+    } else {
+      LOGW("Filter ID requested, but retrieving from RX events is unsupported\n");
+    }
+  }
+
+  TRY(ef_vi_alloc_from_pd(&res->vi, res->dh, &res->pd, res->dh,
+                          -1, cfg_max_fill, 0, NULL, -1, vi_flags));
 
   if ( cfg_discard > -1 )
     TRY(ef_vi_receive_set_discards(&res->vi, cfg_discard));
