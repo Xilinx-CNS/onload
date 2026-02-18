@@ -608,6 +608,9 @@ enum ef_vi_flags {
   /** Tag mode to use for SDCI TPH tags: 0 = no ST mode; 1 = use steering tags
    ** Depends on EF_VI_ENABLE_TPH being set */
   EF_VI_TPH_TAG_MODE = 0x80000000,
+  /** Request the filter ID to be stored alongside RX events in the packet
+   ** prefix. */
+  EF_VI_RX_FILTER_ID = 0x100000000ull,
 };
 
 /*! \brief Flags that can be returned when an ef_vi has been allocated */

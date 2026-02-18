@@ -969,7 +969,7 @@ typedef struct {
   ci_int16              rx_ts_correction;
   ci_int16              tx_ts_correction;
   enum ef_timestamp_format ts_format;
-  ci_uint32             vi_flags;
+  ci_uint64             vi_flags;
   ci_uint32             vi_out_flags;
   /* set of vi_flags that need to be accessed by onload  */
   ci_uint32             oo_vi_flags;

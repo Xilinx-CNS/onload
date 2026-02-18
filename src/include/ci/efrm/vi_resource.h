@@ -115,6 +115,8 @@ enum efrm_vi_q_flags {
 	EFRM_VI_TPH_TAG_MODE          = 0x100000,
 	/** RXQ: Enable PCIe TPH steering hints */
 	EFRM_VI_ENABLE_TPH            = 0x200000,
+	/** RXQ: Request RX prefix with filter ID */
+	EFRM_VI_RX_FILTER_ID          = 0x400000,
 };
 
 

@@ -792,6 +792,8 @@ static unsigned q_flags_to_vi_flags(unsigned q_flags, enum efhw_q_type q_type)
 			vi_flags |= EFHW_VI_ENABLE_TPH;
 		if (q_flags & EFRM_VI_TPH_TAG_MODE)
 			vi_flags |= EFHW_VI_TPH_TAG_MODE;
+		if (q_flags & EFRM_VI_RX_FILTER_ID)
+			vi_flags |= EFHW_VI_RX_PREFIX | EFHW_VI_RX_FILTER_ID;
 		break;
 	case EFHW_EVQ:
 		if (q_flags & EFRM_VI_RX_TIMESTAMPS)
@@ -857,6 +859,8 @@ static unsigned vi_flags_to_q_flags(unsigned vi_flags, enum efhw_q_type q_type)
 			q_flags |= EFRM_VI_ENABLE_TPH;
 		if (vi_flags & EFHW_VI_TPH_TAG_MODE)
 			q_flags |= EFRM_VI_TPH_TAG_MODE;
+		if (vi_flags & EFHW_VI_RX_FILTER_ID)
+			q_flags |= EFRM_VI_RX_FILTER_ID;
 		break;
 	case EFHW_EVQ:
 		if (vi_flags & EFHW_VI_RX_TIMESTAMPS)

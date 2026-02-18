@@ -133,6 +133,12 @@ vi_resource_alloc(struct efrm_vi_attr *attr,
 
   nic = efrm_client_get_nic(virs->rs.rs_client);
 
+  if( (vi_flags & EFHW_VI_RX_FILTER_ID) &&
+      ! (nic->flags & NIC_FLAG_RX_FILTER_ID) ) {
+    rc = -EINVAL;
+    goto fail_q_alloc;
+  }
+
   /* Size EVQ sensibly based on RX and TX Q sizes */
   if (evq_virs == NULL && evq_capacity < 0) {
     if (vi_flags & EFHW_VI_RX_PACKED_STREAM) {
