@@ -1745,6 +1745,19 @@ static int efct_ef_vi_receive_get_timestamp(struct ef_vi* vi, const void* pkt,
   return efct_vi_rxpkt_get_precise_timestamp(vi, pkt_id, ts_out);
 }
 
+int32_t efct_ef_vi_receive_get_filter_id(ef_vi* vi, const ef_event *rx_event,
+                                         const void* rx_packet)
+{
+  switch( EF_EVENT_TYPE(*rx_event) ) {
+  case EF_EVENT_TYPE_RX_REF:
+    return rx_event->rx_ref.filter_id;
+  case EF_EVENT_TYPE_RX_REF_DISCARD:
+    return rx_event->rx_ref_discard.filter_id;
+  default:
+    return -EINVAL;
+  }
+}
+
 int efct_vi_get_wakeup_params(ef_vi* vi, int qix, unsigned* sbseq,
                               unsigned* pktix)
 {
@@ -1895,6 +1908,7 @@ static void efct_vi_initialise_ops(ef_vi* vi)
   vi->internal_ops.post_filter_add = efct_post_filter_add;
   vi->ops.eventq_poll = efct_ef_eventq_poll;
   vi->ops.receive_poll = efct_ef_receive_poll;
+  vi->ops.receive_get_filter_id = efct_ef_vi_receive_get_filter_id;
 }
 
 int efct_vi_init(ef_vi* vi)
