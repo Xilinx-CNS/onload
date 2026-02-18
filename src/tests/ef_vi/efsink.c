@@ -250,14 +250,17 @@ static void handle_batched_rx(struct resources* res, int pkt_buf_i)
 
 
 static void handle_rx_ref(struct resources* res, unsigned pkt_id, int len,
-                          unsigned filter_id)
+                          ef_event* rx_event)
 {
   const void *p;
 
   LOGV("PKT: received pkt=%u len=%d\n", pkt_id, len);
-  if( cfg_filter_id )
-    LOGI("PKT: filter_id %#x\n", filter_id);
   p = efct_vi_rxpkt_get(&res->vi, pkt_id);
+  if( cfg_filter_id ) {
+    int32_t filter_id = ef_vi_receive_get_filter_id(&res->vi, rx_event, p);
+    TEST(filter_id >= 0);
+    LOGI("PKT: filter_id %#x\n", filter_id);
+  }
   handle_rx_core(res, p, p, len);
   efct_vi_rxpkt_release(&res->vi, pkt_id);
 }
@@ -319,14 +322,12 @@ static int poll_evq(struct resources* res)
                         EF_EVENT_RX_DISCARD_TYPE(evs[i]));
       break;
     case EF_EVENT_TYPE_RX_REF:
-      handle_rx_ref(res, evs[i].rx_ref.pkt_id, evs[i].rx_ref.len,
-                    evs[i].rx_ref.filter_id);
+      handle_rx_ref(res, evs[i].rx_ref.pkt_id, evs[i].rx_ref.len, &evs[i]);
       break;
     case EF_EVENT_TYPE_RX_REF_DISCARD:
       LOGE("ERROR: ref discard flags=%x\n", evs[i].rx_ref_discard.flags);
       handle_rx_ref(res, evs[i].rx_ref_discard.pkt_id,
-                    evs[i].rx_ref_discard.len,
-                    evs[i].rx_ref_discard.filter_id);
+                    evs[i].rx_ref_discard.len, &evs[i]);
       break;
     case EF_EVENT_TYPE_RESET:
       LOGE("ERROR: NIC has been Reset and VI is no longer valid\n");
