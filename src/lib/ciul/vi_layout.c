@@ -26,6 +26,9 @@
 #define COMPAT_TS_DESCRIPTION			\
   "Hardware timestamp (compat)"
 
+#define FILTER_ID_DESCRIPTION			\
+  "Filter ID"
+
 
 static const ef_vi_layout_entry frame_entry_no_prefix = {
   .evle_type = EF_VI_LAYOUT_FRAME,
@@ -52,11 +55,19 @@ static const ef_vi_layout_entry compat_timestamp_entry = {
   .evle_offset = 0,
   .evle_description = COMPAT_TS_DESCRIPTION,
 };
+static const ef_vi_layout_entry filter_id_entry = {
+  .evle_type = EF_VI_LAYOUT_FILTER_ID,
+  .evle_offset = ES_DZ_RX_PREFIX_FILTER_ID_OFST,
+  .evle_description = FILTER_ID_DESCRIPTION,
+};
 static const ef_vi_layout_entry layout_prefix_none[] = {
   frame_entry_no_prefix
 };
 static const ef_vi_layout_entry layout_prefix_full[] = {
-  frame_entry, packet_length_entry, timestamp_entry
+  frame_entry, packet_length_entry, timestamp_entry, filter_id_entry
+};
+static const ef_vi_layout_entry layout_prefix_no_ts[] = {
+  frame_entry, packet_length_entry, filter_id_entry
 };
 static const ef_vi_layout_entry compat_layout_prefix[] = {
   frame_entry, compat_timestamp_entry
@@ -67,7 +78,7 @@ static int
 ef10_query_layout(ef_vi* vi, const ef_vi_layout_entry**const ef_vi_layout_out,
                   int* len_out)
 {
-  bool rx_ts;
+  bool rx_ts, rx_filter_id;
 
   /* We have no prefix, so the packet immediately starts here */
   if( ! vi->rx_prefix_len ) {
@@ -84,8 +95,19 @@ ef10_query_layout(ef_vi* vi, const ef_vi_layout_entry**const ef_vi_layout_out,
   }
 
   rx_ts = !!(vi->vi_flags & EF_VI_RX_TIMESTAMPS);
+  rx_filter_id = !!(vi->vi_flags & EF_VI_RX_FILTER_ID);
 
-  if( rx_ts ) {
+  if( rx_ts && rx_filter_id ) {
+    /* frame, length, timestamp, filter */
+    *ef_vi_layout_out = layout_prefix_full;
+    *len_out = 4;
+  }
+  else if( rx_filter_id ) {
+    /* frame, length, filter */
+    *ef_vi_layout_out = layout_prefix_no_ts;
+    *len_out = 3;
+  }
+  else if( rx_ts ) {
     /* frame, length, timestamp */
     *ef_vi_layout_out = layout_prefix_full;
     *len_out = 3;
