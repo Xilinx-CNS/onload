@@ -8,7 +8,7 @@ include $(src)/../../../mk/site/cplane.mk
 
 LIB_OBJS  := $(LIB_SRCS:%.c=%.o)
 lib-y     := $(LIB_OBJS)
-ccflags-y := -include $(CP_INTF_VER_HDR)
+ccflags-y := -include $(CP_INTF_VER_HDR) -DMODULE
 
 $(addprefix $(obj)/,$(LIB_OBJS)) : $(CP_INTF_VER_HDR)
 KBUILD_BUILTIN := 1
