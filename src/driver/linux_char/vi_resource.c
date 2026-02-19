@@ -67,10 +67,12 @@ static void efch_vi_rm_dump(struct efrm_resource* rs, ci_resource_table_t *rt,
          virs->q[EFHW_TXQ].capacity,
          virs->q[EFHW_RXQ].capacity);
 
-  ci_log("%s  tx_tag=0x%x  rx_tag=0x%x  flags=0x%x", line_prefix,
+  ci_log("%s  tx_tag=0x%x  rx_tag=0x%x  efhw_flags=0x%x efrm_flags=0x%x",
+         line_prefix,
          virs->q[EFHW_TXQ].tag,
          virs->q[EFHW_RXQ].tag,
-         (unsigned) virs->flags);
+         (unsigned) virs->efhw_vi_flags,
+         virs->efrm_vi_flags);
 
   ci_log("%s  flush: TX=%d RX=%d time=0x%"CI_PRIx64" count=%d",
          line_prefix, virs->q[EFHW_TXQ].flushing,

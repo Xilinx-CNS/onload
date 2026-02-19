@@ -102,10 +102,6 @@ typedef union {
 #define EFHW_VI_TX_CTPIO           0x8000000  /*! Cut-through PIO */
 #define EFHW_VI_TX_CTPIO_NO_POISON 0x10000000 /*! Prevent CTPIO poisoning */
 
-/* Note that the EFRM_VI_* flags (0x20000000 and above) are stored in
- * the same word and so no more bits are available for use as new
- * EFHW_VI_* flags. */
-
 #define HIGH_THROUGHPUT_EFHW_VI_FLAGS (EFHW_VI_RX_PREFIX | \
 				       EFHW_VI_NO_EV_CUT_THROUGH | \
 				       EFHW_VI_NO_RX_CUT_THROUGH | \
