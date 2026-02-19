@@ -124,7 +124,7 @@ int ef_shrub_socket_recv(uintptr_t socket, void* data, size_t bytes)
 }
 
 int ef_shrub_socket_recv_metrics(struct ef_shrub_shared_metrics* metrics,
-                                 uintptr_t* shared_files,
+                                 uint64_t* shared_files,
                                  uintptr_t socket)
 {
   int rc, i;

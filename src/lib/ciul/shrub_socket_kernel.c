@@ -105,7 +105,7 @@ int ef_shrub_socket_recv(uintptr_t socket, void* data, size_t bytes)
 /* Sadly kernel_recvmsg doesn't offer any way to extract files from a unix
  * socket, so we'll need to dig into the socket buffer to find them.
  */
-static int shrub_socket_get_files(struct socket* sock, uintptr_t* files)
+static int shrub_socket_get_files(struct socket* sock, uint64_t* files)
 {
   int i, rc = 0;
   struct sk_buff* skb;
@@ -130,7 +130,7 @@ static int shrub_socket_get_files(struct socket* sock, uintptr_t* files)
 }
 
 int ef_shrub_socket_recv_metrics(struct ef_shrub_shared_metrics* metrics_out,
-                                 uintptr_t* shared_files_out,
+                                 uint64_t* shared_files_out,
                                  uintptr_t socket)
 {
   int i, rc;
@@ -349,7 +349,7 @@ int ef_shrub_socket_connect(uintptr_t, const char*) {return -ENOTSUPP;}
 int ef_shrub_socket_send(uintptr_t, void*, size_t) {return -ENOTSUPP;}
 int ef_shrub_socket_recv(uintptr_t, void*, size_t) {return -ENOTSUPP;}
 int ef_shrub_socket_recv_metrics(struct ef_shrub_shared_metrics*,
-                                 uintptr_t*, uintptr_t) {return -ENOTSUPP;}
+                                 uint64_t*, uintptr_t) {return -ENOTSUPP;}
 int ef_shrub_socket_mmap(uint64_t*, void*, size_t,
                          uintptr_t, size_t, int) {return -ENOTSUPP;}
 int ef_shrub_socket_mmap_user(uint64_t __user*, uint64_t, size_t,
