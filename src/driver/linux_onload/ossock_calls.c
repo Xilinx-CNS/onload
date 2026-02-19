@@ -666,7 +666,7 @@ int efab_tcp_helper_bind_os_sock_common(struct socket* sock,
 {
   int rc;
 
-  rc = sock->ops->bind(sock, addr, addrlen);
+  rc = sock->ops->bind(sock, EFRM_SOCKADDR_UNSIZED_PTR(addr), addrlen);
   LOG_TV(ci_log("%s: rc=%d", __FUNCTION__, rc));
 
   if (rc >= 0) {

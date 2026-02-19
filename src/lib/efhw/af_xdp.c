@@ -376,7 +376,7 @@ static int xdp_bind(struct socket* sock, int ifindex, unsigned queue, unsigned f
   sxdp.sxdp_queue_id = queue;
   sxdp.sxdp_flags = flags;
 
-  return kernel_bind(sock, (struct sockaddr*)&sxdp, sizeof(sxdp));
+  return kernel_bind(sock, EFRM_SOCKADDR_UNSIZED_PTR(&sxdp), sizeof(sxdp));
 }
 
 /* Link an XDP program to an interface */

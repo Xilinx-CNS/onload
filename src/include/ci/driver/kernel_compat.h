@@ -542,5 +542,12 @@ static inline int efrm_follow_pfn(struct vm_area_struct *vma,
 #define EFRM_HUGETLB_INDEX_BY_PAGE yes
 #endif
 
+#ifdef EFRM_HAVE_SOCKADDR_UNSIZED
+/* linux 6.19+ */
+#define EFRM_SOCKADDR_UNSIZED_PTR(x) ((struct sockaddr_unsized*)(x))
+#else
+#define EFRM_SOCKADDR_UNSIZED_PTR(x) ((struct sockaddr*)(x))
+#endif
+
 
 #endif /* DRIVER_LINUX_RESOURCE_KERNEL_COMPAT_H */
