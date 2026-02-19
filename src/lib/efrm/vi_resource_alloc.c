@@ -1558,6 +1558,7 @@ int __efrm_vi_attr_init(struct efrm_client *client_obsolete,
 	a->packed_stream = 0;
 	a->want_rxq = true;
 	a->want_txq = true;
+	a->irq_affinity = NULL;
 	return 0;
 }
 EXPORT_SYMBOL(__efrm_vi_attr_init);
