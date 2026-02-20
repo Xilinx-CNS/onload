@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
 # X-SPDX-Copyright-Text: (c) Copyright 2014-2020 Xilinx, Inc.
 
-APPS := orm_json
+APPS :=
 
 SRCS := orm_json orm_json_lib
 

@@ -448,8 +448,10 @@ void ef_shrub_queue_dump_to_fd(struct ef_shrub_queue* queue, int fd,
   struct ef_shrub_connection *connection;
   ef_vi_efct_rxq_state *rxq_state =
     &queue->vi->ep_state->rxq.efct_state[queue->ix];
+#ifndef NDEBUG
   int fifo_index, buffer_index;
   int idx, iter;
+#endif
 
   shrub_log_to_fd(fd, buf, buflen, "  rxq[%d]: hw: %d\n",
                   queue->ix, rxq_state->qid);
@@ -461,6 +463,7 @@ void ef_shrub_queue_dump_to_fd(struct ef_shrub_queue* queue, int fd,
                   rxq_state->fifo_tail_sw, rxq_state->fifo_count_hw,
                   rxq_state->fifo_count_sw);
 
+#ifndef NDEBUG
   shrub_log_to_fd(fd, buf, buflen, "    free_list: ");
   for( idx = 0, iter = rxq_state->free_head;
        idx < queue->buffer_count && iter != -1;
@@ -484,8 +487,10 @@ void ef_shrub_queue_dump_to_fd(struct ef_shrub_queue* queue, int fd,
     shrub_log_to_fd(fd, buf, buflen, "%s%d", idx == 0 ? "" : " -> ", iter);
   }
   shrub_log_to_fd(fd, buf, buflen, "\n");
+#endif
 
   shrub_log_to_fd(fd, buf, buflen, "    fifo_size: %d\n", queue->fifo_size);
+#ifndef NDEBUG
   for( fifo_index = prev_fifo_index(queue->fifo_index, queue->fifo_size);
        queue->fifo[fifo_index] != EF_SHRUB_INVALID_BUFFER;
        fifo_index = prev_fifo_index(fifo_index, queue->fifo_size) ) {
@@ -497,10 +502,12 @@ void ef_shrub_queue_dump_to_fd(struct ef_shrub_queue* queue, int fd,
                     "buffer_sbseq: %d\n", ef_shrub_buffer_sentinel(buffer_id),
                     ef_shrub_buffer_sbseq(buffer_id));
   }
+#endif
 
   shrub_log_to_fd(fd, buf, buflen,
                   "    buffer_count: %zu reserved_buffer_count: %zu\n",
                   queue->buffer_count, queue->reserved_buffer_count);
+#ifndef NDEBUG
   for( buffer_index = 0; buffer_index < queue->buffer_count; buffer_index++ ) {
     struct ef_shrub_queue_buffer* buffer = &queue->buffers[buffer_index];
     if( buffer->ref_count != 0 ) {
@@ -509,6 +516,7 @@ void ef_shrub_queue_dump_to_fd(struct ef_shrub_queue* queue, int fd,
                       buffer->fifo_index);
     }
   }
+#endif
 
   shrub_log_to_fd(fd, buf, buflen, "    connection_count: %llu\n",
                   queue->connection_count);

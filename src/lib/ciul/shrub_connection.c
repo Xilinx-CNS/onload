@@ -189,10 +189,12 @@ int ef_shrub_connection_attach_queue(struct ef_shrub_connection* connection,
   return 0;
 }
 
+#ifndef NDEBUG
 static int prev_fifo_index(int index, int fifo_size)
 {
   return index == 0 ? fifo_size - 1 : index - 1;
 }
+#endif
 
 void ef_shrub_connection_dump_to_fd(struct ef_shrub_connection* connection,
                                     int fd, char* buf, size_t buflen)
@@ -202,7 +204,9 @@ void ef_shrub_connection_dump_to_fd(struct ef_shrub_connection* connection,
   bool print_comma = false;
   int printed_chars = 0;
   int buffer_index;
+#ifndef NDEBUG
   int fifo_index;
+#endif
 
   shrub_log_to_fd(fd, buf, buflen, "    connection[fd %d]: "
                   "queue_fifo_index: %llu\n", connection->socket,
@@ -215,6 +219,7 @@ void ef_shrub_connection_dump_to_fd(struct ef_shrub_connection* connection,
                   connection->server_fifo_index,
                   client_state->server_fifo_index,
                   client_state->metrics.server_fifo_size);
+#ifndef NDEBUG
   for( fifo_index = prev_fifo_index(connection->server_fifo_index,
                                     client_state->metrics.server_fifo_size);
        connection->server_fifo[fifo_index] != EF_SHRUB_INVALID_BUFFER;
@@ -230,6 +235,7 @@ void ef_shrub_connection_dump_to_fd(struct ef_shrub_connection* connection,
                     "buffer_sbseq: %d\n", ef_shrub_buffer_sentinel(buffer_id),
                     ef_shrub_buffer_sbseq(buffer_id));
   }
+#endif
 
   shrub_log_to_fd(fd, buf, buflen,
                   "      client_fifo_index_write: %llu "
@@ -238,6 +244,7 @@ void ef_shrub_connection_dump_to_fd(struct ef_shrub_connection* connection,
                   client_state->client_fifo_index,
                   connection->client_fifo_index,
                   client_state->metrics.client_fifo_size);
+#ifndef NDEBUG
   for( fifo_index = prev_fifo_index(client_state->client_fifo_index,
                                     client_state->metrics.client_fifo_size);
        connection->client_fifo[fifo_index] != EF_SHRUB_INVALID_BUFFER;
@@ -253,6 +260,7 @@ void ef_shrub_connection_dump_to_fd(struct ef_shrub_connection* connection,
                     "buffer_sbseq: %d\n", ef_shrub_buffer_sentinel(buffer_id),
                     ef_shrub_buffer_sbseq(buffer_id));
   }
+#endif
 
   shrub_log_to_fd(fd, buf, buflen, "      referenced_buffer_count: %zu "
                   "max_referenced_buffers: %zu\n",
