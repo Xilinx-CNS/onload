@@ -349,6 +349,9 @@ typedef struct tcp_helper_resource_s {
    * stack, as a hint for which rxq to prefer (in the absence of any more
    * explicit constraints from the user) */
   struct cpumask        filter_irqmask;
+  /* User-specified IRQ affinity mask from EF_ONLOAD_IRQ_CORES, parsed from
+   * cpu list format. Empty if not set by user. */
+  struct cpumask        onload_irq_cores;
 
   uint16_t*             tproxy_ifindex;
   int                   tproxy_ifindex_count;

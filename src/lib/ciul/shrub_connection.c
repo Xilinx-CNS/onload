@@ -11,46 +11,69 @@
 struct ef_shrub_client_state*
 ef_shrub_connection_client_state(struct ef_shrub_connection* connection)
 {
-  return (void*)((char*)connection->fifo +
+  return (void*)((char*)connection->client_fifo +
                  connection->fifo_size * sizeof(ef_shrub_buffer_id));
+}
+
+static int map_shared_state(void** map, int fd, size_t offset, size_t bytes)
+{
+  int rc;
+
+  rc = ef_shrub_server_memfd_resize(fd, offset + bytes);
+  if( rc < 0 )
+    return rc;
+
+  rc = ef_shrub_server_mmap(map, bytes, PROT_READ | PROT_WRITE,
+                            MAP_SHARED | MAP_POPULATE, fd, offset);
+  if( rc < 0 )
+    return rc;
+
+  return 0;
 }
 
 int
 ef_shrub_connection_alloc(struct ef_shrub_connection** connection_out,
-                          int fifo_fd, size_t* fifo_offset, size_t fifo_size)
+                          int client_fifo_fd, size_t* client_fifo_offset,
+                          int server_fifo_fd, size_t* server_fifo_offset,
+                          size_t fifo_size)
 {
   int i, rc;
   struct ef_shrub_connection* connection;
-  void* map;
   size_t fifo_bytes = fifo_size * sizeof(ef_shrub_buffer_id);
-  size_t total_bytes = fifo_bytes +
+  size_t total_client_bytes = fifo_bytes +
     EF_VI_ROUND_UP(sizeof(struct ef_shrub_client_state), PAGE_SIZE);
 
   connection = calloc(1, sizeof(struct ef_shrub_connection));
   if( connection == NULL )
     return -ENOMEM;
 
-  rc = ef_shrub_server_memfd_resize(fifo_fd, *fifo_offset + total_bytes);
+  rc = map_shared_state((void**)&connection->client_fifo, client_fifo_fd,
+                        *client_fifo_offset, total_client_bytes);
   if( rc < 0 )
-    goto fail_fifo;
+    goto fail_client_map;
 
-  rc = ef_shrub_server_mmap(&map, total_bytes, PROT_READ | PROT_WRITE,
-                            MAP_SHARED | MAP_POPULATE, fifo_fd, *fifo_offset);
+  rc = map_shared_state((void**)&connection->server_fifo, server_fifo_fd,
+                        *server_fifo_offset, fifo_bytes);
   if( rc < 0 )
-    goto fail_fifo;
+    goto fail_server_map;
 
-  connection->fifo = map;
+  connection->client_fifo_mmap_offset = *client_fifo_offset;
+  *client_fifo_offset += total_client_bytes;
+  connection->server_fifo_mmap_offset = *server_fifo_offset;
+  *server_fifo_offset += fifo_bytes;
+
   connection->fifo_size = fifo_size;
-  connection->fifo_mmap_offset = *fifo_offset;
-  *fifo_offset += total_bytes;
-
   for( i = 0; i < fifo_size; ++i )
-    connection->fifo[i] = EF_SHRUB_INVALID_BUFFER;
+    connection->client_fifo[i] = EF_SHRUB_INVALID_BUFFER;
+  for( i = 0; i < fifo_size; ++i )
+    connection->server_fifo[i] = EF_SHRUB_INVALID_BUFFER;
 
   *connection_out = connection;
   return 0;
 
-fail_fifo:
+fail_server_map:
+  munmap(connection->client_fifo, total_client_bytes);
+fail_client_map:
   free(connection);
   return rc;
 }
@@ -95,8 +118,9 @@ int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection)
   metrics->server_version = EF_SHRUB_VERSION;
   metrics->buffer_bytes = queue->buffer_bytes;
   metrics->buffer_count = queue->buffer_count;
-  metrics->server_fifo_size = queue->fifo_size;
-  metrics->client_fifo_offset = connection->fifo_mmap_offset;
+  metrics->server_fifo_offset = connection->server_fifo_mmap_offset;
+  metrics->server_fifo_size = connection->fifo_size;
+  metrics->client_fifo_offset = connection->client_fifo_mmap_offset;
   metrics->client_fifo_size = connection->fifo_size;
 
   cmsg->cmsg_level = SOL_SOCKET;
@@ -114,6 +138,8 @@ int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection)
 int ef_shrub_connection_attach_queue(struct ef_shrub_connection* connection,
                                      struct ef_shrub_queue* queue)
 {
+  struct ef_shrub_client_state* client_state =
+    ef_shrub_connection_client_state(connection);
   size_t buffer_refs_bytes;
   void* buffer_refs;
   size_t ref_size;
@@ -123,6 +149,9 @@ int ef_shrub_connection_attach_queue(struct ef_shrub_connection* connection,
     return -EINVAL;
 
   connection->queue = queue;
+
+  connection->client_fifo_index = client_state->client_fifo_index = 0;
+  connection->server_fifo_index = client_state->server_fifo_index = 0;
 
   /* If our calculation has overflowed, then we can't do much about it except
    * complain that we can't satisfy the memory allocation request. */
@@ -142,6 +171,11 @@ int ef_shrub_connection_attach_queue(struct ef_shrub_connection* connection,
   return 0;
 }
 
+static int prev_fifo_index(int index, int fifo_size)
+{
+  return index == 0 ? fifo_size - 1 : index - 1;
+}
+
 void ef_shrub_connection_dump_to_fd(struct ef_shrub_connection* connection,
                                     int fd, char* buf, size_t buflen)
 {
@@ -150,14 +184,57 @@ void ef_shrub_connection_dump_to_fd(struct ef_shrub_connection* connection,
   bool print_comma = false;
   int printed_chars = 0;
   int buffer_index;
+  int fifo_index;
 
   shrub_log_to_fd(fd, buf, buflen, "    connection[fd %d]: "
-                  "server_fifo_index: %llu server_fifo_size: %llu\n",
-                  connection->socket, client_state->server_fifo_index,
+                  "queue_fifo_index: %llu\n", connection->socket,
+                  connection->queue_fifo_index);
+
+  shrub_log_to_fd(fd, buf, buflen,
+                  "      server_fifo_index_write: %llu "
+                  "server_fifo_index_read: %llu\n"
+                  "      server_fifo_size: %llu\n",
+                  connection->server_fifo_index,
+                  client_state->server_fifo_index,
                   client_state->metrics.server_fifo_size);
-  shrub_log_to_fd(fd, buf, buflen, "      client_fifo_index: %llu "
-                  "client_fifo_size: %llu\n", client_state->client_fifo_index,
+  for( fifo_index = prev_fifo_index(connection->server_fifo_index,
+                                    client_state->metrics.server_fifo_size);
+       connection->server_fifo[fifo_index] != EF_SHRUB_INVALID_BUFFER;
+       fifo_index = prev_fifo_index(fifo_index,
+                                    client_state->metrics.server_fifo_size) ) {
+    ef_shrub_buffer_id buffer_id = connection->server_fifo[fifo_index];
+    shrub_log_to_fd(fd, buf, buflen,
+                    "      server_fifo[%d]: buffer_id: %#llx "
+                    "buffer_index: %d\n", fifo_index, buffer_id,
+                    ef_shrub_buffer_index(buffer_id));
+    shrub_log_to_fd(fd, buf, buflen,
+                    "                      buffer_sentinel: %d "
+                    "buffer_sbseq: %d\n", ef_shrub_buffer_sentinel(buffer_id),
+                    ef_shrub_buffer_sbseq(buffer_id));
+  }
+
+  shrub_log_to_fd(fd, buf, buflen,
+                  "      client_fifo_index_write: %llu "
+                  "client_fifo_index_read: %llu \n"
+                  "      client_fifo_size: %llu\n",
+                  client_state->client_fifo_index,
+                  connection->client_fifo_index,
                   client_state->metrics.client_fifo_size);
+  for( fifo_index = prev_fifo_index(client_state->client_fifo_index,
+                                    client_state->metrics.client_fifo_size);
+       connection->client_fifo[fifo_index] != EF_SHRUB_INVALID_BUFFER;
+       fifo_index = prev_fifo_index(fifo_index,
+                                    client_state->metrics.client_fifo_size) ) {
+    ef_shrub_buffer_id buffer_id = connection->client_fifo[fifo_index];
+    shrub_log_to_fd(fd, buf, buflen,
+                    "      client_fifo[%d]: buffer_id: %#llx "
+                    "buffer_index: %d\n", fifo_index, buffer_id,
+                    ef_shrub_buffer_index(buffer_id));
+    shrub_log_to_fd(fd, buf, buflen,
+                    "                      buffer_sentinel: %d "
+                    "buffer_sbseq: %d\n", ef_shrub_buffer_sentinel(buffer_id),
+                    ef_shrub_buffer_sbseq(buffer_id));
+  }
 
 #define SHRUB_DUMP_CONN_BUF_REFS_LINE "      buffer_refs: {"
   shrub_log_to_fd(fd, buf, buflen, SHRUB_DUMP_CONN_BUF_REFS_LINE);

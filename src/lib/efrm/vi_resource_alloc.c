@@ -77,6 +77,7 @@ struct vi_attr {
 	int32_t             ps_buffer_size;
 	bool                want_rxq;
 	bool                want_txq;
+	const struct cpumask *irq_affinity;
 };
 
 CI_BUILD_ASSERT(sizeof(struct vi_attr) <= sizeof(struct efrm_vi_attr));
@@ -155,7 +156,8 @@ vi_interrupt(int irq, void *dev_id)
 
 
 static int
-efrm_vi_irq_setup(struct efrm_interrupt_vector *vec)
+efrm_vi_irq_setup(struct efrm_interrupt_vector *vec,
+		  const struct cpumask *affinity)
 {
 	char name_local[80];
 	int rc;
@@ -191,6 +193,16 @@ efrm_vi_irq_setup(struct efrm_interrupt_vector *vec)
 		if (name != default_irq_name)
 			kfree(name);
 	}
+	else if (affinity != NULL) {
+		/* Set IRQ affinity to the specified cpumask. This is best effort
+		 * so just log gently if it fails. */
+		rc = irq_set_affinity_hint(vec->irq, affinity);
+		if (rc != 0) {
+			EFRM_NOTICE("failed to set IRQ affinity for IRQ %d on NIC "
+				    "%d: %d", vec->irq, vec->nic->index, rc);
+			rc = 0;
+		}
+	}
 #ifndef EFRM_IRQ_FREE_RETURNS_NAME
 	vec->irq_name = name;
 #endif
@@ -210,6 +222,8 @@ efrm_vi_irq_free(struct efrm_interrupt_vector *vec)
 	if( vec->irq == IRQ_NOTCONNECTED )
 		return;
 
+	irq_set_affinity_hint(vec->irq, NULL);
+
 	/* linux>=4.13: free_irq() returns name */
 #ifdef EFRM_IRQ_FREE_RETURNS_NAME
 	name = free_irq(vec->irq, &vec->tasklet);
@@ -228,13 +242,14 @@ efrm_vi_irq_free(struct efrm_interrupt_vector *vec)
 }
 
 
-static int efrm_interrupt_vector_acquire(struct efrm_interrupt_vector *vec)
+static int efrm_interrupt_vector_acquire(struct efrm_interrupt_vector *vec,
+					 const struct cpumask *affinity)
 {
 	int rc = 0;
 
 	mutex_lock(&vec->vec_acquire_lock);
 	if (vec->num_vis == 0)
-		rc = efrm_vi_irq_setup(vec);
+		rc = efrm_vi_irq_setup(vec, affinity);
 	if (rc == 0)
 		++vec->num_vis;
 	mutex_unlock(&vec->vec_acquire_lock);
@@ -253,10 +268,51 @@ static void efrm_interrupt_vector_release(struct efrm_interrupt_vector *vec)
 }
 
 
-static int
-efrm_interrupt_vector_choose(struct efrm_nic *nic, struct efrm_vi *virs)
+static struct efrm_interrupt_vector*
+efrm_find_least_used_vector(struct efrm_nic *nic)
 {
-	struct efrm_interrupt_vector *current_vec = NULL, *selected_vec = NULL;
+	struct efrm_interrupt_vector *current_vec = NULL;
+	struct efrm_interrupt_vector *least_used_vec = NULL;
+
+	list_for_each_entry(current_vec, &nic->irq_list, link) {
+		/* The num_vis could be changing under our feet, but
+		 * it's not worth locking each vector to prevent this.
+		 */
+		if (least_used_vec == NULL ||
+		    current_vec->num_vis < least_used_vec->num_vis)
+			least_used_vec = current_vec;
+		if (current_vec->num_vis == 0)
+			break;
+	}
+
+	return least_used_vec;
+}
+
+
+static struct efrm_interrupt_vector*
+efrm_setup_free_vector(struct efrm_nic *nic, uint32_t irq, uint32_t channel)
+{
+	struct efrm_interrupt_vector *current_vec = NULL;
+	struct efrm_interrupt_vector *selected_vec = NULL;
+
+	list_for_each_entry(current_vec, &nic->irq_list, link) {
+		if (current_vec->irq == IRQ_NOTCONNECTED) {
+			selected_vec = current_vec;
+			selected_vec->irq = irq;
+			selected_vec->channel = channel;
+			break;
+		}
+	}
+
+	return selected_vec;
+}
+
+
+static int
+efrm_interrupt_vector_choose(struct efrm_nic *nic, struct efrm_vi *virs,
+			     const struct cpumask *affinity)
+{
+	struct efrm_interrupt_vector *selected_vec = NULL;
 	uint32_t irq, channel;
 	int rc;
 
@@ -265,35 +321,17 @@ efrm_interrupt_vector_choose(struct efrm_nic *nic, struct efrm_vi *virs)
 	if (rc < 0) {
 		/* IRQ allocation failed. Find the least used vector of those
 		 * that have already been allocated.*/
-		struct efrm_interrupt_vector *least_used_vec = NULL;
-		list_for_each_entry(current_vec, &nic->irq_list, link) {
-			/* The num_vis could be changing under our feet, but
-			 * it's not worth locking each vector to prevent this.
-			 */
-			if (least_used_vec == NULL ||
-				current_vec->num_vis < least_used_vec->num_vis)
-				least_used_vec = current_vec;
-			if (current_vec->num_vis == 0)
-				break;
-		}
-		selected_vec = least_used_vec;
+		selected_vec = efrm_find_least_used_vector(nic);
 	} else {
 		/* IRQ allocation succeeded. Find an unconnected vector and
 		 * update it with the new irq and channel values. */
-		list_for_each_entry(current_vec, &nic->irq_list, link) {
-			if (current_vec->irq == IRQ_NOTCONNECTED) {
-				selected_vec = current_vec;
-				selected_vec->irq = irq;
-				selected_vec->channel = channel;
-				break;
-			}
-		}
+		selected_vec = efrm_setup_free_vector(nic, irq, channel);
 	}
 	mutex_unlock(&nic->irq_list_lock);
 
 	EFRM_ASSERT(selected_vec);
 
-	rc = efrm_interrupt_vector_acquire(selected_vec);
+	rc = efrm_interrupt_vector_acquire(selected_vec, affinity);
 
 	if (rc >= 0) {
 		virs->vec = selected_vec;
@@ -383,11 +421,12 @@ void efrm_interrupt_vectors_release(struct efrm_nic *nic)
 }
 
 
-static int efrm_vi_request_irq(struct efhw_nic *nic, struct efrm_vi *virs)
+static int efrm_vi_request_irq(struct efhw_nic *nic, struct efrm_vi *virs,
+				const struct cpumask *affinity)
 {
 	int rc;
 
-	rc = efrm_interrupt_vector_choose(efrm_nic(nic), virs);
+	rc = efrm_interrupt_vector_choose(efrm_nic(nic), virs, affinity);
 	if (rc != 0) {
 		EFRM_ERR("%s: Failed to assign IRQ: %d\n", __FUNCTION__, rc);
 		return rc;
@@ -1354,20 +1393,12 @@ EXPORT_SYMBOL(efrm_vi_q_alloc);
  * what is returned from efrm_vi_set_get_pd().
  */
 int
-efrm_vi_resource_alloc(struct efrm_client *client,
-		       struct efrm_vi *evq_virs,
-		       struct efrm_vi_set *vi_set, int vi_set_instance,
-		       struct efrm_pd *pd, const char *name,
-		       unsigned vi_flags,
-		       int evq_capacity, int txq_capacity, int rxq_capacity,
-		       int tx_q_tag, int rx_q_tag, int wakeup_cpu_core,
-		       int wakeup_channel,
+efrm_vi_resource_alloc(const struct efrm_vi_alloc_params *params,
 		       struct efrm_vi **virs_out,
 		       uint32_t *out_io_mmap_bytes,
 		       uint32_t *out_ctpio_mmap_bytes,
 		       uint32_t *out_txq_capacity,
-		       uint32_t *out_rxq_capacity,
-		       int print_resource_warnings)
+		       uint32_t *out_rxq_capacity)
 {
 	struct efrm_vi_attr attr;
 	struct efrm_vi *virs;
@@ -1375,23 +1406,30 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 	int rc;
 	size_t io_size;
 	resource_size_t io_addr;
+	int evq_capacity = params->evq_capacity;
+	int txq_capacity = params->txq_capacity;
+	int rxq_capacity = params->rxq_capacity;
 
-	EFRM_ASSERT(pd != NULL);
+	EFRM_ASSERT(params->pd != NULL);
 	efrm_vi_attr_init(&attr);
-	if (vi_set != NULL)
-		efrm_vi_attr_set_instance(&attr, vi_set, vi_set_instance);
-	efrm_vi_attr_set_pd(&attr, pd);
-	if (wakeup_cpu_core >= 0)
-		efrm_vi_attr_set_interrupt_core(&attr, wakeup_cpu_core);
-	if (wakeup_channel >= 0)
-		efrm_vi_attr_set_wakeup_channel(&attr, wakeup_channel);
-	if (evq_virs == NULL)
+	if (params->vi_set != NULL)
+		efrm_vi_attr_set_instance(&attr, params->vi_set,
+					  params->vi_set_instance);
+	efrm_vi_attr_set_pd(&attr, params->pd);
+	if (params->wakeup_cpu_core >= 0)
+		efrm_vi_attr_set_interrupt_core(&attr, params->wakeup_cpu_core);
+	if (params->wakeup_channel >= 0)
+		efrm_vi_attr_set_wakeup_channel(&attr, params->wakeup_channel);
+	if (params->irq_affinity != NULL)
+		efrm_vi_attr_set_irq_affinity(&attr, params->irq_affinity);
+	if (params->evq_virs == NULL)
 		efrm_vi_attr_set_want_interrupt(&attr);
 	efrm_vi_attr_set_queue_types(&attr, rxq_capacity != 0,
 	                             txq_capacity != 0);
 
-	if ((rc = efrm_vi_alloc(client, &attr, print_resource_warnings,
-				name, &virs)) < 0)
+	if ((rc = efrm_vi_alloc(params->client, &attr,
+				params->print_resource_warnings,
+				params->name, &virs)) < 0)
 		goto fail_vi_alloc;
 
 	/* We have to jump through some hoops here:
@@ -1412,31 +1450,34 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 		goto fail_q_alloc;
 	rxq_capacity = rc;
 
-	if (evq_virs == NULL) {
+	if (params->evq_virs == NULL) {
 		if (evq_capacity < 0)
 			evq_capacity = rxq_capacity + txq_capacity;
 
 		/* TODO AF_XDP: allocation order must match the order that
-	 	* ef_vi expects the queues to be mapped into user memory. */
+		 * ef_vi expects the queues to be mapped into user memory. */
 		if ((rc = efrm_vi_q_alloc(virs, EFHW_EVQ, evq_capacity,
-				  	  0, vi_flags, NULL)) < 0)
+					  0, params->vi_flags, NULL)) < 0)
 			goto fail_q_alloc;
 	}
 	if ((rc = efrm_vi_q_alloc(virs, EFHW_RXQ, rxq_capacity,
-				  rx_q_tag, vi_flags, evq_virs)) < 0)
+				  params->rx_q_tag, params->vi_flags,
+				  params->evq_virs)) < 0)
 		goto fail_q_alloc;
 	if ((rc = efrm_vi_q_alloc(virs, EFHW_TXQ, txq_capacity,
-				  tx_q_tag, vi_flags, evq_virs)) < 0)
+				  params->tx_q_tag, params->vi_flags,
+				  params->evq_virs)) < 0)
 		goto fail_q_alloc;
 
-	if( vi_flags & EFHW_VI_TX_CTPIO )
+	if (params->vi_flags & EFHW_VI_TX_CTPIO)
 		ctpio_mmap_bytes = EF_VI_CTPIO_APERTURE_SIZE;
 
 	if (out_io_mmap_bytes != NULL) {
-		rc = efhw_nic_vi_io_region(client->nic,
-					evq_virs ? evq_virs->rs.rs_instance :
-						   virs->rs.rs_instance,
-					&io_size, &io_addr);
+		rc = efhw_nic_vi_io_region(params->client->nic,
+					   params->evq_virs ?
+						params->evq_virs->rs.rs_instance :
+						virs->rs.rs_instance,
+					   &io_size, &io_addr);
 		if (rc == 0)
 			*out_io_mmap_bytes = io_size;
 		else
@@ -1517,6 +1558,7 @@ int __efrm_vi_attr_init(struct efrm_client *client_obsolete,
 	a->packed_stream = 0;
 	a->want_rxq = true;
 	a->want_txq = true;
+	a->irq_affinity = NULL;
 	return 0;
 }
 EXPORT_SYMBOL(__efrm_vi_attr_init);
@@ -1582,6 +1624,15 @@ void efrm_vi_attr_set_wakeup_channel(struct efrm_vi_attr *attr, int channel_id)
 	a->channel = channel_id;
 }
 EXPORT_SYMBOL(efrm_vi_attr_set_wakeup_channel);
+
+
+void efrm_vi_attr_set_irq_affinity(struct efrm_vi_attr *attr,
+				   const struct cpumask *mask)
+{
+	struct vi_attr *a = VI_ATTR_FROM_O_ATTR(attr);
+	a->irq_affinity = mask;
+}
+EXPORT_SYMBOL(efrm_vi_attr_set_irq_affinity);
 
 
 void efrm_vi_attr_set_want_interrupt(struct efrm_vi_attr *attr)
@@ -1745,7 +1796,7 @@ int  efrm_vi_alloc(struct efrm_client *client,
 	 * See ON-10914.
 	 */
 	if ((client->nic->flags & NIC_FLAG_EVQ_IRQ) && attr->want_interrupt) {
-		rc = efrm_vi_request_irq(client->nic, virs);
+		rc = efrm_vi_request_irq(client->nic, virs, attr->irq_affinity);
 		if (rc != 0)
 			goto fail_irq;
 	}

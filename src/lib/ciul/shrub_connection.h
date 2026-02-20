@@ -18,20 +18,26 @@ struct ef_shrub_connection {
   struct ef_shrub_queue* queue;
 
   int socket;
-  size_t fifo_index;
   size_t fifo_size;
-  size_t fifo_mmap_offset;
+  size_t client_fifo_index;
+  size_t client_fifo_mmap_offset;
+  size_t server_fifo_index;
+  size_t server_fifo_mmap_offset;
+  size_t queue_fifo_index;
 
   /* If buffer_refs[buffer_idx] is true, then this client has taken a reference
    * to the buffer at queue->buffers[buffer_idx] and has not returned it. */
   bool *buffer_refs;
 
-  ef_shrub_buffer_id* fifo;
+  ef_shrub_buffer_id* client_fifo;
+  ef_shrub_buffer_id* server_fifo;
 };
 
 int
 ef_shrub_connection_alloc(struct ef_shrub_connection** connection_out,
-                          int fifo_fd, size_t* fifo_offset, size_t fifo_size);
+                          int client_fifo_fd, size_t* client_fifo_offset,
+                          int server_fifo_fd, size_t* server_fifo_offset,
+                          size_t fifo_size);
 
 int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection);
 

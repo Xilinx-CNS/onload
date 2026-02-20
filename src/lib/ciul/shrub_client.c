@@ -38,6 +38,19 @@ static size_t map_size(const struct ef_shrub_shared_metrics* metrics, int type)
   }
 }
 
+static size_t map_offset(const struct ef_shrub_shared_metrics* metrics,
+                         int fd_type)
+{
+  switch( fd_type ) {
+  case EF_SHRUB_FD_CLIENT_FIFO:
+    return metrics->client_fifo_offset;
+  case EF_SHRUB_FD_SERVER_FIFO:
+    return metrics->server_fifo_offset;
+  default:
+    return 0;
+  }
+}
+
 static int client_mmap(uint64_t* mappings, uintptr_t* files,
                        const struct ef_shrub_shared_metrics* metrics,
                        void* buffers)
@@ -46,10 +59,9 @@ static int client_mmap(uint64_t* mappings, uintptr_t* files,
   for( i = 0; i < EF_SHRUB_FD_COUNT; ++i ) {
     int rc;
     void* addr = i == EF_SHRUB_FD_BUFFERS ? buffers : NULL;
-    size_t offset = i == EF_SHRUB_FD_CLIENT_FIFO ? metrics->client_fifo_offset : 0;
 
     rc = ef_shrub_socket_mmap(&mappings[i], addr, map_size(metrics, i),
-                              files[i], offset, i);
+                              files[i], map_offset(metrics, i), i);
     if( rc < 0 )
       return rc;
   }
@@ -70,10 +82,10 @@ static int client_mmap_user(uint64_t* user_mappings, const uintptr_t* files,
   for( i = 0; i < EF_SHRUB_FD_COUNT; ++i ) {
     int rc;
     uint64_t user_addr = i == EF_SHRUB_FD_BUFFERS ? user_buffers : 0;
-    size_t offset = i == EF_SHRUB_FD_CLIENT_FIFO ? metrics->client_fifo_offset : 0;
 
     rc = ef_shrub_socket_mmap_user(&user_mappings[i], user_addr,
-                                   map_size(metrics, i), files[i], offset, i);
+                                   map_size(metrics, i), files[i],
+                                   map_offset(metrics, i), i);
     if( rc < 0 )
       return rc;
   }

@@ -45,7 +45,7 @@ static inline uint32_t ef_shrub_buffer_sbseq(ef_shrub_buffer_id id)
 }
 
 /* Protocol version, to check compatibility between client and server */
-#define EF_SHRUB_VERSION 5
+#define EF_SHRUB_VERSION 6
 #define SHRUB_ERR_INCOMPATIBLE_VERSION -1000
 
 /* An identifier that does not represent a buffer, used to indicate empty
@@ -173,7 +173,8 @@ struct ef_shrub_shared_metrics {
 
   /* Mapping information for the FIFO for the server to post buffers to clients.
    * Read only for clients.
-   * Offset is zero, length is sizeof(ef_shrub_buffer_id) * size */
+   * Offset is provided, length is sizeof(ef_shrub_buffer_id) * size */
+  uint64_t server_fifo_offset;
   uint64_t server_fifo_size;
 
   /* Mapping information for the FIFO for clients to release buffers to server,

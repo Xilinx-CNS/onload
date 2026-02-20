@@ -1721,17 +1721,27 @@ static int allocate_vi(ci_netif* ni, struct vi_allocate_info* info)
     /* This is a loop to try double allocation. If it fails initialy an attempt
      * is made to find and release orphaned stack and try allocation again.  */
     for( i = 0; i < 2; ++i ) {
-      rc = efrm_vi_resource_alloc(info->client, NULL, info->vi_set, -1,
-                                  info->pd, info->name,
-                                  info->efhw_flags,
-                                  info->evq_capacity, info->txq_capacity,
-                                  info->rxq_capacity, 0, 0,
-                                  info->wakeup_cpu_core,
-                                  info->wakeup_channel,
-                                  info->virs,
+      struct efrm_vi_alloc_params alloc_params = {
+        .client = info->client,
+        .evq_virs = NULL,
+        .vi_set = info->vi_set,
+        .vi_set_instance = -1,
+        .pd = info->pd,
+        .name = info->name,
+        .vi_flags = info->efhw_flags,
+        .evq_capacity = info->evq_capacity,
+        .txq_capacity = info->txq_capacity,
+        .rxq_capacity = info->rxq_capacity,
+        .tx_q_tag = 0,
+        .rx_q_tag = 0,
+        .wakeup_cpu_core = info->wakeup_cpu_core,
+        .wakeup_channel = info->wakeup_channel,
+        .irq_affinity = info->irq_affinity,
+        .print_resource_warnings = info->log_resource_warnings,
+      };
+      rc = efrm_vi_resource_alloc(&alloc_params, info->virs,
                                   &info->vi_io_mmap_bytes,
-                                  &info->vi_ctpio_mmap_bytes, NULL, NULL,
-                                  info->log_resource_warnings);
+                                  &info->vi_ctpio_mmap_bytes, NULL, NULL);
       /* If we succeeded, there is no need to find and release orphan stack. */
       if( rc != -EBUSY )
         break;
@@ -1939,7 +1949,9 @@ static int allocate_vis(tcp_helper_resource_t* trs,
   /* Outside the per-interface loop we initialise some values that are common
    * across all interfaces.
    */
-  alloc_info.wakeup_channel = NI_OPTS(ni).irq_channel,
+  alloc_info.wakeup_channel = NI_OPTS(ni).irq_channel;
+  alloc_info.irq_affinity = cpumask_empty(&trs->onload_irq_cores) ?
+                                              NULL : &trs->onload_irq_cores;
   alloc_info.name = vf_name;
   alloc_info.cluster = thc;
 
@@ -4436,6 +4448,27 @@ static void generate_efct_filter_irqmask(cpumask_t* result)
     cpumask_andnot(result, result, current_cpus);
 }
 
+
+/* Set up irq mask for use with onload managed interrupts. Default to an
+ * empty mask if not configured by the user or parsing fails.
+ */
+static void init_onload_irq_cores(ci_netif* ni, const char* str,
+                                  cpumask_t* result)
+{
+  int rc;
+
+  cpumask_clear(result);
+
+  if( str == NULL || str[0] == '\0' )
+    return;
+
+  rc = cpulist_parse(str, result);
+  if( rc < 0 ) {
+    NI_LOG(ni, CONFIG_WARNINGS,
+           "WARNING: failed to parse EF_ONLOAD_IRQ_CORES '%s': %d", str, rc);
+  }
+}
+
 int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
                         const ci_netif_config_opts* opts,
                         int ifindices_len, tcp_helper_cluster_t* thc,
@@ -4572,6 +4605,24 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
 #endif
   strcpy(rs->name, alloc->in_name);
   generate_efct_filter_irqmask(&rs->filter_irqmask);
+  init_onload_irq_cores(ni, NI_OPTS(ni).onload_irq_cores,
+                        &rs->onload_irq_cores);
+
+  /* Warn if user specified IRQ mask but no NICs support it */
+  if( NI_OPTS(ni).onload_irq_cores[0] != '\0' ) {
+    int intf_i;
+    bool have_evq_irq = false;
+    OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
+      struct efhw_nic* nic = efrm_client_get_nic(rs->nic[intf_i].thn_oo_nic->efrm_client);
+      if( nic->flags & NIC_FLAG_EVQ_IRQ ) {
+        have_evq_irq = true;
+        break;
+      }
+    }
+    if( !have_evq_irq )
+      NI_LOG(ni, CONFIG_WARNINGS,
+             "WARNING: EF_ONLOAD_IRQ_CORES set but not supported by any available NIC");
+  }
 
   spin_lock_init(&ni->swf_update_lock);
   ni->swf_update_last =  ni->swf_update_first = NULL;

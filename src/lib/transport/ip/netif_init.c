@@ -1269,6 +1269,9 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
   handle_str_opt(opts, "EF_INTERFACE_BLACKLIST", opts->iface_blacklist,
                  sizeof(opts->iface_blacklist));
 
+  handle_str_opt(opts, "EF_ONLOAD_IRQ_CORES", opts->onload_irq_cores,
+                 sizeof(opts->onload_irq_cores));
+
   static const char* const multiarch_tx_opts[] = { "enterprise", "express", 0 };
   opts->multiarch_tx_datapath =
     parse_enum(opts, "EF_TX_DATAPATH", multiarch_tx_opts, "express");

@@ -19,6 +19,8 @@ struct ef_shrub_server {
   size_t buffer_count;
   size_t client_fifo_offset;
   int client_fifo_fd;
+  size_t server_fifo_offset;
+  int server_fifo_fd;
   unsigned pd_excl_rxq_tok;
   bool use_interrupts;
   struct timespec last_disconnection;
@@ -134,7 +136,8 @@ static int server_request_queue(struct ef_shrub_server* server,
     rc = ef_shrub_queue_open(queue, server->vi,
                              server->buffer_bytes, server->buffer_count,
                              fifo_size(server), server->client_fifo_fd,
-                             qid, server->use_interrupts);
+                             server->server_fifo_fd, qid,
+                             server->use_interrupts);
     if( rc < 0 )
       return rc;
   }
@@ -169,6 +172,8 @@ static int server_connection_opened(struct ef_shrub_server* server)
     rc = ef_shrub_connection_alloc(&connection,
                                    server->client_fifo_fd,
                                    &server->client_fifo_offset,
+                                   server->server_fifo_fd,
+                                   &server->server_fifo_offset,
                                    fifo_size(server));
     if( rc < 0 )
       return rc;
@@ -301,9 +306,16 @@ int ef_shrub_server_open(struct ef_vi* vi,
 
   rc = ef_shrub_server_memfd_create("ef_shrub_client_fifo", 0, false);
   if( rc < 0 )
-    goto fail_memfd;
+    goto fail_memfd_client;
 
   server->client_fifo_fd = rc;
+
+  rc = ef_shrub_server_memfd_create("ef_shrub_server_fifo", 0, false);
+  if( rc < 0 )
+    goto fail_memfd_server;
+
+  server->server_fifo_fd = rc;
+
   server->vi = vi;
   strncpy(server->socket_path, server_addr, sizeof(server->socket_path));
 
@@ -319,8 +331,10 @@ int ef_shrub_server_open(struct ef_vi* vi,
   return 0;
 
 fail_init_pd_token:
+  ef_shrub_server_close_fd(server->server_fifo_fd);
+fail_memfd_server:
   ef_shrub_server_close_fd(server->client_fifo_fd);
-fail_memfd:
+fail_memfd_client:
   ef_shrub_server_sockets_close(&server->sockets);
 fail_sockets:
   free(server);
@@ -344,6 +358,7 @@ void ef_shrub_server_close(struct ef_shrub_server* server)
     if( server->queues[i].connection_count != 0 )
       ef_shrub_queue_close(&server->queues[i]);
 
+  ef_shrub_server_close_fd(server->server_fifo_fd);
   ef_shrub_server_close_fd(server->client_fifo_fd);
   ef_shrub_server_sockets_close(&server->sockets);
   if ( server->socket_path[0] != '\0' )
