@@ -192,6 +192,8 @@ EFRM_HAVE_IBT symbol X86_FEATURE_IBT arch/x86/include/asm/cpufeatures.h
 
 EFRM_HAVE_FLOWI4_DSCP	member	struct_flowi_common flowic_dscp	include/net/flow.h
 
+EFRM_HAVE_SOCKADDR_UNSIZED	symtype	kernel_bind	include/linux/net.h	int(struct socket*, struct sockaddr_unsized*, int)
+
 # TODO move onload-related stuff from net kernel_compat
 " | grep -E -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
