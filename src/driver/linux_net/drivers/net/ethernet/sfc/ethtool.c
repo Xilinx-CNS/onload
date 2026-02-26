@@ -392,7 +392,7 @@ int efx_ethtool_flash_device(struct net_device *net_dev,
 #endif
 
 const struct ethtool_ops efx_ethtool_ops = {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_RXFH_PARAM)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_CAP_RSS_CTX_SUPPORTED)
 	.cap_rss_ctx_supported	= true,
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_LINK_LANES)

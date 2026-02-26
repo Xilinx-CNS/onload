@@ -125,7 +125,7 @@ static void ef100_ethtool_get_drvinfo(struct net_device *net_dev,
 /*	Ethtool options available
  */
 const struct ethtool_ops ef100_ethtool_ops = {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_RXFH_PARAM)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_CAP_RSS_CTX_SUPPORTED)
 	.cap_rss_ctx_supported	= true,
 #endif
 	.get_drvinfo		= ef100_ethtool_get_drvinfo,

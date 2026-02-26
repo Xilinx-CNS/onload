@@ -6478,6 +6478,7 @@ const struct efx_nic_type efx_x4_vf_nic_type = {
 	.filter_count_rx_used = efx_mcdi_filter_count_rx_used,
 	.filter_get_rx_id_limit = efx_mcdi_filter_get_rx_id_limit,
 	.filter_get_rx_ids = efx_mcdi_filter_get_rx_ids,
+	.filter_get_hardware_handle = efx_mcdi_filter_get_hardware_handle,
 #ifdef CONFIG_RFS_ACCEL
 	.filter_rfs_expire_one = efx_mcdi_filter_rfs_expire_one,
 #endif
@@ -6861,6 +6862,7 @@ const struct efx_nic_type efx_x4_nic_type = {
 	.filter_count_rx_used = efx_mcdi_filter_count_rx_used,
 	.filter_get_rx_id_limit = efx_mcdi_filter_get_rx_id_limit,
 	.filter_get_rx_ids = efx_mcdi_filter_get_rx_ids,
+	.filter_get_hardware_handle = efx_mcdi_filter_get_hardware_handle,
 #ifdef CONFIG_RFS_ACCEL
 	.filter_rfs_expire_one = efx_mcdi_filter_rfs_expire_one,
 #endif

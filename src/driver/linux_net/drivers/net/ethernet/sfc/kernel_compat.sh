@@ -164,7 +164,9 @@ EFX_HAVE_NETDEV_EXT_MTU_LIMITS	member	struct_net_device_extended	max_mtu	include
 EFX_HAVE_NDO_EXT_CHANGE_MTU	memtype	struct_net_device_ops_extended	ndo_change_mtu	include/linux/netdevice.h	int (*)(struct net_device *, int)
 EFX_HAVE_NDO_TX_TIMEOUT_TXQUEUE	memtype	struct_net_device_ops	ndo_tx_timeout	include/linux/netdevice.h	void (*)(struct net_device *, unsigned int)
 EFX_HAVE_ETHTOOL_LINK_LANES	bitfield struct_ethtool_ops	cap_link_lanes_supported	include/linux/ethtool.h
+EFX_HAVE_CAP_RSS_CTX_SUPPORTED	bitfield struct_ethtool_ops	cap_rss_ctx_supported	include/linux/ethtool.h
 EFX_HAVE_ETHTOOL_FECSTATS	member	struct_ethtool_ops	get_fec_stats	include/linux/ethtool.h
+EFX_HAVE_ETHTOOL_FECSTATS_HIST	memtype	struct_ethtool_ops	get_fec_stats	include/linux/ethtool.h		void (*)(struct net_device *, struct ethtool_fec_stats *, struct ethtool_fec_hist *)
 EFX_HAVE_ETHTOOL_FECPARAM	member	struct_ethtool_ops	get_fecparam	include/linux/ethtool.h
 EFX_HAVE_ETHTOOL_RXFH_CONTEXT	member	struct_ethtool_ops	get_rxfh_context	include/linux/ethtool.h
 EFX_HAVE_ETHTOOL_RXNFC_CONTEXT	member	struct_ethtool_rxnfc	rss_context	include/linux/ethtool.h

@@ -1563,6 +1563,32 @@ int efx_mcdi_filter_remove_all(struct efx_nic *efx,
 	return rc;
 }
 
+int efx_mcdi_filter_get_hardware_handle(struct efx_nic *efx, u32 filter_id,
+					u64 *hardware_handle)
+{
+	unsigned int filter_idx = efx_mcdi_filter_get_unsafe_id(efx, filter_id);
+	struct efx_mcdi_filter_table *table;
+	int rc;
+
+	down_read(&efx->filter_sem);
+	table = efx->filter_state;
+	if (!table || !table->entry) {
+		up_read(&efx->filter_sem);
+		return -ENETDOWN;
+	}
+
+	down_read(&table->lock);
+	if (efx_mcdi_filter_entry_spec(table, filter_idx)) {
+		rc = 0;
+		*hardware_handle = table->entry[filter_idx].handle;
+	} else {
+		rc = -ENOENT;
+	}
+	up_read(&table->lock);
+	up_read(&efx->filter_sem);
+	return rc;
+}
+
 #ifdef EFX_NOT_UPSTREAM
 int efx_mcdi_filter_redirect(struct efx_nic *efx, u32 filter_id,
 			     u32 *rss_context, int rxq_i, int stack_id)
