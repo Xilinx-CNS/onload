@@ -214,7 +214,7 @@ int ef_vi_tx_ring_bytes(struct ef_vi* vi)
 
 
 int ef_vi_init(struct ef_vi* vi, int arch, int variant, int revision,
-	       unsigned ef_vi_flags, unsigned char nic_flags,
+	       enum ef_vi_flags ef_vi_flags, unsigned char nic_flags,
 	       ef_vi_state* state)
 {
   int rc;

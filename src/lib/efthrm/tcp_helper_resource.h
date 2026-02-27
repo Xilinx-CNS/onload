@@ -14,7 +14,7 @@ struct vi_allocate_info {
   struct efrm_vi_set *vi_set;
   struct efrm_pd *pd;
   const char *name;
-  unsigned ef_vi_flags;
+  enum ef_vi_flags ef_vi_flags;
   unsigned efhw_flags;
   unsigned oo_vi_flags;
   int evq_capacity;

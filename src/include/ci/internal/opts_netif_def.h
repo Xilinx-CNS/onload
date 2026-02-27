@@ -1808,6 +1808,17 @@ CI_CFG_OPT("EF_SHRUB_AUTO_CLOSE_DELAY", shrub_auto_close_delay, ci_int32,
 "-1 disables this feature, keeping a spawned controller alive indefinitely.",
            , , EF_SHRUB_DEFAULT_AUTO_CLOSE_DELAY, -1, SMAX, time:msec)
 
+#define EF_SHRUB_DEFAULT_MAX_CLIENT_BUFFERS 2
+/* Keep in sync with shrub_shared.h */
+#define EF_SHRUB_CLIENT_BUFFER_COUNT_MIN 2
+CI_CFG_OPT("EF_SHRUB_MAX_CLIENT_BUFFERS", shrub_max_client_buffers, ci_uint32,
+"The maximum number of buffers each shrub client is allowed to reference. "
+"Limits the total available buffers by the amount each client is allowed to "
+"ensure each client always has buffers available.",
+           , , EF_SHRUB_CLIENT_BUFFER_COUNT_MIN,
+           EF_SHRUB_DEFAULT_MAX_CLIENT_BUFFERS,
+           EF_SHRUB_MAX_BUFFER_COUNT, count)
+
 CI_CFG_OPT("EF_ENABLE_TX_ERROR_RECOVERY", tx_error_recovery, ci_uint32,
 "Recover a broken TXQ after observing a TX error event.\n"
 "If we see a TX error event for any reason, then the interface that saw it "

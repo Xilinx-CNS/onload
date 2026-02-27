@@ -292,6 +292,12 @@ static void efct_kbufs_dump_stats(struct ef_vi* vi, ef_vi_dump_log_fn_t logger,
   }
 }
 
+static int efct_kbufs_set_shrub_bufs_per_client(ef_vi* vi,
+                                                size_t bufs_per_client)
+{
+  return -EOPNOTSUPP;
+}
+
 int efct_kbufs_init_internal(ef_vi* vi,
                              struct efab_efct_rxq_uk_shm_base *shm,
                              void* space)
@@ -348,6 +354,7 @@ int efct_kbufs_init_internal(ef_vi* vi,
   rxqs->ops.prime = efct_kbufs_prime;
   rxqs->ops.cleanup = efct_kbufs_cleanup_internal;
   rxqs->ops.dump_stats = efct_kbufs_dump_stats;
+  rxqs->ops.set_client_buf_count = efct_kbufs_set_shrub_bufs_per_client;
 
   vi->efct_rxqs.active_qs = &shm->active_qs;
   vi->efct_rxqs.ops = &rxqs->ops;

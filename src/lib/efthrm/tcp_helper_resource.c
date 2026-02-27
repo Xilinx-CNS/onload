@@ -1875,6 +1875,8 @@ static int initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
       rc = efct_ubufs_init_internal(vi);
       vi->efct_rxqs.ops->post = tcp_helper_post_superbuf;
       vi->efct_rxqs.ops->refresh = tcp_helper_superbuf_config_refresh;
+      ef_vi_set_shrub_client_buffer_count(vi,
+                                          NI_OPTS(ni).shrub_max_client_buffers);
     }
     if( rc < 0 )
       return rc;

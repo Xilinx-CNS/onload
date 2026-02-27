@@ -96,6 +96,9 @@ s32 efx_mcdi_filter_get_rx_ids(struct efx_nic *efx,
 			       enum efx_filter_priority priority,
 			       u32 *buf, u32 size);
 
+int efx_mcdi_filter_get_hardware_handle(struct efx_nic *efx, u32 filter_id,
+					u64 *hardware_handle);
+
 int efx_mcdi_filter_add_vlan(struct efx_nic *efx, u16 vid);
 int efx_mcdi_filter_del_vlan(struct efx_nic *efx, u16 vid);
 

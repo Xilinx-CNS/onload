@@ -275,6 +275,17 @@ static inline s32 efx_filter_get_rx_ids(struct efx_nic *efx,
 {
 	return efx->type->filter_get_rx_ids(efx, priority, buf, size);
 }
+
+static inline int
+efx_filter_get_hardware_handle(struct efx_nic *efx, u32 filter_id,
+			       u64 *hardware_handle)
+{
+	if (efx->type->filter_get_hardware_handle)
+		return efx->type->filter_get_hardware_handle(efx, filter_id,
+							     hardware_handle);
+	return -EOPNOTSUPP;
+}
+
 #ifdef CONFIG_RFS_ACCEL
 int efx_filter_rfs(struct net_device *net_dev, const struct sk_buff *skb,
 		   u16 rxq_index, u32 flow_id);

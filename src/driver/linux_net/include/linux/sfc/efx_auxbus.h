@@ -26,7 +26,7 @@
  * this is so when fields in &struct efx_auxdev are added to the end of the
  * struct.
  */
-#define EFX_AUX_ABI_VERSION_MINOR 2
+#define EFX_AUX_ABI_VERSION_MINOR 3
 #define EFX_AUX_ABI_VERSION ((EFX_AUX_ABI_VERSION_MAJOR << 16) | \
 			     EFX_AUX_ABI_VERSION_MINOR)
 #define EFX_AUX_ABI_VERSION_MAJOR_GET(ver) (ver >> 16)
@@ -435,6 +435,12 @@ struct efx_auxdev_onload_ops {
 	int (*filter_set_block)(struct efx_auxdev_client *handle,
 				enum efx_filter_block_kernel_type type,
 				bool should_block);
+	/**
+	 * @filter_get_hardware_handle: Get the hardware filter handle
+	 *	associated with a filter allocated via @filter_insert.
+	 */
+	int (*filter_get_hardware_handle)(struct efx_auxdev_client *handle,
+					  u32 filter_id, u64 *hardware_handle);
 #endif
 };
 

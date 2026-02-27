@@ -923,7 +923,10 @@ typedef struct {
   int  (*prime)(struct ef_vi*, ef_driver_handle dh);
   /** De-allocate internal local resources (affects this user of this vi) */
   void (*cleanup)(struct ef_vi*);
+  /** Output stats recorded for EFCT RXQs. */
   void (*dump_stats)(struct ef_vi*, ef_vi_dump_log_fn_t logger, void* log_arg);
+  /** Set the number of buffers a shrub client can reference */
+  int  (*set_client_buf_count)(struct ef_vi*, size_t);
   /** Arbitrary user data available when overriding these operations */
   uintptr_t user_data;
 } ef_vi_efct_rxq_ops;
@@ -3108,6 +3111,20 @@ __ef_vi_reinit_txq_post_error(ef_vi* vi);
     if( EF_REQUEST_ID_MASK != \
         ((dma_id) = (vi)->vi_txq.ids[(vi)->ep_state->txq.removed & \
                                      (vi)->vi_txq.mask]) )
+
+/*! \brief Set the number of buffers subsequent shrub connections will request
+**
+** \param vi             The virtual interface that will connect to shrub.
+** \param buffer_count   The number of buffers to request.
+**
+** When connecting to a shrub server, a client must specify the maximum number
+** of buffers it wants to have references to at any given time. This allows the
+** server to guarantee the client will always have that many buffers in its
+** rotation, regardless of the behaviour of other clients. Requesting too many
+** buffers may result in failure to connect to a shrub server.
+*/
+#define ef_vi_set_shrub_client_buffer_count(vi, buffer_count) \
+  (vi)->efct_rxqs.ops->set_client_buf_count((vi), (buffer_count))
 
 #ifdef __cplusplus
 }

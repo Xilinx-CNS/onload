@@ -34,7 +34,7 @@
  * the Rx & Tx doorbell & DMA queue.
  */
 /* TODO move this to driver code as EFHW_* APIs are not userspace interface */
-static unsigned vi_flags_to_efab_flags(unsigned vi_flags)
+static unsigned vi_flags_to_efab_flags(enum ef_vi_flags vi_flags)
 {
   unsigned efab_flags = 0u;
   if( vi_flags & EF_VI_TX_PHYS_ADDR      ) efab_flags |= EFHW_VI_TX_PHYS_ADDR_EN;
@@ -69,7 +69,7 @@ static unsigned vi_flags_to_efab_flags(unsigned vi_flags)
 
 /* While Onload always sets a buffer for VI statistics, ef_vi only does so if
  * we need to maintain statistics to track non-errors. */
-static int /*bool*/ need_vi_stats_buf(unsigned vi_flags)
+static int /*bool*/ need_vi_stats_buf(enum ef_vi_flags vi_flags)
 {
   /* At present, we don't record any non-errors in the statistics buffer. */
   return 0;
@@ -79,7 +79,8 @@ static int /*bool*/ need_vi_stats_buf(unsigned vi_flags)
 /* Certain VI functionalities are only supported on certain NIC types.
  * This function validates that the requested functionality is present
  * on the selected NIC. */
-static int check_nic_compatibility(unsigned vi_flags, enum ef_vi_arch ef_vi_arch)
+static int check_nic_compatibility(enum ef_vi_flags vi_flags,
+                                   enum ef_vi_arch ef_vi_arch)
 {
   switch (ef_vi_arch) {
   case EF_VI_ARCH_EF10:

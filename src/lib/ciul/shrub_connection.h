@@ -25,12 +25,19 @@ struct ef_shrub_connection {
   size_t server_fifo_mmap_offset;
   size_t queue_fifo_index;
 
+  size_t referenced_buffer_count;
+  size_t max_referenced_buffers;
+
   /* If buffer_refs[buffer_idx] is true, then this client has taken a reference
    * to the buffer at queue->buffers[buffer_idx] and has not returned it. */
   bool *buffer_refs;
 
   ef_shrub_buffer_id* client_fifo;
   ef_shrub_buffer_id* server_fifo;
+
+  struct {
+    uint64_t dropped_buffers;
+  } stats;
 };
 
 int

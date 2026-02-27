@@ -112,7 +112,8 @@ find_queue(struct ef_shrub_server* server, uint64_t qid)
 
 static int server_request_queue(struct ef_shrub_server* server,
                                 struct ef_shrub_connection* connection,
-                                int qid, bool use_interrupts)
+                                int qid, bool use_interrupts,
+                                size_t max_connection_buffers)
 {
   struct ef_shrub_queue* queue;
   int rc;
@@ -141,6 +142,8 @@ static int server_request_queue(struct ef_shrub_server* server,
     if( rc < 0 )
       return rc;
   }
+
+  connection->max_referenced_buffers = max_connection_buffers;
 
   rc = ef_shrub_connection_attach_queue(connection, queue);
   if( rc < 0 )
@@ -240,7 +243,8 @@ static int server_request_received(struct ef_shrub_server* server,
     goto out_close;
   case EF_SHRUB_REQUEST_QUEUE:
     rc = server_request_queue(server, connection, request.queue.qid,
-                              request.queue.use_interrupts);
+                              request.queue.use_interrupts,
+                              request.queue.max_connection_buffers);
     if( rc < 0 )
       goto out_close;
 

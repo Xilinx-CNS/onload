@@ -2382,7 +2382,23 @@ static int
 ef10_filter_query(struct efhw_nic *nic, int filter_id,
                   struct efhw_filter_info *info)
 {
-  return -EOPNOTSUPP;
+  int rc;
+  struct device *dev;
+  struct efx_auxdev *auxdev;
+  struct efx_auxdev_client *cli;
+  u64 hardware_handle;
+
+  AUX_PRE(dev, auxdev, cli, nic, rc);
+  rc = auxdev->onload_ops->filter_get_hardware_handle(cli, filter_id,
+                                                      &hardware_handle);
+  AUX_POST(dev, auxdev, cli, nic, rc);
+
+  /* If we successfully get the filter handle, then lets transform it into what
+   * the NIC will give us in the RX prefix, i.e., the bottom 16-bits. */
+  if( rc == 0 )
+    info->hw_id = hardware_handle & 0xffff;
+
+  return rc;
 }
 
 static int ef10_multicast_block(struct efhw_nic *nic, bool block)

@@ -999,6 +999,23 @@ static s64 efx_auxbus_vport_id_get(struct efx_auxdev_client *handle,
 	return vpx->vport_id;
 }
 
+static int
+efx_auxbus_filter_get_hardware_handle(struct efx_auxdev_client *handle,
+				      u32 filter_id, u64 *hardware_handle)
+{
+	struct efx_probe_data *pd;
+
+	if (!handle)
+		return -EINVAL;
+
+	pd = cdev_to_probe_data(handle);
+	if (!pd)
+		return -ENODEV;
+
+	return efx_filter_get_hardware_handle(&pd->efx, filter_id,
+					      hardware_handle);
+}
+
 static const struct efx_auxdev_ops aux_devops = {
 	.open = efx_auxbus_open,
 	.close = efx_auxbus_close,
@@ -1036,6 +1053,7 @@ static const struct efx_auxdev_onload_ops aux_onload_devops = {
 	.vport_free = efx_auxbus_vport_free,
 	.vport_id_get = efx_auxbus_vport_id_get,
 	.filter_set_block = efx_auxbus_filter_set_block,
+	.filter_get_hardware_handle = efx_auxbus_filter_get_hardware_handle,
 };
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XARRAY)

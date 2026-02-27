@@ -92,7 +92,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.2.1.1001"
+#define EFX_DRIVER_VERSION	"6.2.1.1003"
 #endif
 
 #ifdef DEBUG
@@ -2199,6 +2199,7 @@ struct mae_mport_desc;
  * @filter_count_rx_used: Get the number of filters in use at a given priority
  * @filter_get_rx_id_limit: Get maximum value of a filter id, plus 1
  * @filter_get_rx_ids: Get list of RX filters at a given priority
+ * @filter_get_hw_id: Get the hardware ID of a given filter
  * @filter_rfs_expire_one: Consider expiring a filter inserted for RFS.
  *	This must check whether the specified table entry is used by RFS
  *	and that rps_may_expire_flow() returns true for it.
@@ -2423,6 +2424,8 @@ struct efx_nic_type {
 	s32 (*filter_get_rx_ids)(struct efx_nic *efx,
 				 enum efx_filter_priority priority,
 				 u32 *buf, u32 size);
+	int (*filter_get_hardware_handle)(struct efx_nic *efx, u32 filter_id,
+					  u64 *hardware_handle);
 #ifdef CONFIG_RFS_ACCEL
 	bool (*filter_rfs_expire_one)(struct efx_nic *efx, u32 flow_id,
 				      unsigned int index);

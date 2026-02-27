@@ -169,14 +169,6 @@ static const struct efx_mcdi_hwmon_info efx_mcdi_sensor_type[] = {
 #undef SENSOR
 };
 
-static const char *const sensor_status_names[] = {
-	[MC_CMD_SENSOR_STATE_OK] = "OK",
-	[MC_CMD_SENSOR_STATE_WARNING] = "Warning",
-	[MC_CMD_SENSOR_STATE_FATAL] = "Fatal",
-	[MC_CMD_SENSOR_STATE_BROKEN] = "Device failure",
-	[MC_CMD_SENSOR_STATE_NO_READING] = "No reading",
-};
-
 struct efx_mcdi_mon_attribute {
 	struct device_attribute dev_attr;
 	unsigned int index;
@@ -193,12 +185,22 @@ struct efx_mcdi_mon_attribute {
 
 #ifdef CONFIG_SFC_MCDI_MON
 
+/* State names for legacy sensors */
 static const char *efx_sensor_status_name(unsigned int state)
 {
-	if (state < ARRAY_SIZE(sensor_status_names))
-		return sensor_status_names[state];
-	else
-		return "Unknown state";
+	switch (state) {
+	case MC_CMD_SENSOR_STATE_OK:
+		return "OK";
+	case MC_CMD_SENSOR_STATE_WARNING:
+		return "Warning";
+	case MC_CMD_SENSOR_STATE_FATAL:
+		return "Fatal";
+	case MC_CMD_SENSOR_STATE_BROKEN:
+		return "Device failure";
+	case MC_CMD_SENSOR_STATE_NO_READING:
+		return "No reading";
+	}
+	return "Unknown state";
 }
 
 void efx_mcdi_sensor_event(struct efx_nic *efx, efx_qword_t *ev)
@@ -291,6 +293,25 @@ static const struct rhashtable_params sensor_entry_params = {
 };
 #endif
 
+static const char *efx_dynamic_sensor_status_name(unsigned int state)
+{
+	switch (state) {
+          case MC_CMD_DYNAMIC_SENSORS_READING_OK:
+		return "OK";
+          case MC_CMD_DYNAMIC_SENSORS_READING_WARNING:
+		return "Warning";
+          case MC_CMD_DYNAMIC_SENSORS_READING_CRITICAL:
+		return "Critical";
+          case MC_CMD_DYNAMIC_SENSORS_READING_FATAL:
+		return "Fatal";
+          case MC_CMD_DYNAMIC_SENSORS_READING_BROKEN:
+		return "Device failure";
+          case MC_CMD_DYNAMIC_SENSORS_READING_NO_READING:
+		return "No reading";
+	}
+	return "Unknown state";
+}
+
 static struct efx_dynamic_sensor *
 efx_mcdi_get_dynamic_sensor(struct efx_nic *efx, unsigned int handle)
 {
@@ -340,15 +361,15 @@ static void efx_mcdi_handle_dynamic_sensor_state_change(struct efx_nic *efx,
 		if (!sensor)
 			return;
 
-		state_txt = efx_sensor_status_name(state);
+		state_txt = efx_dynamic_sensor_status_name(state);
 		switch (state) {
-		case MC_CMD_SENSOR_STATE_OK:
+		case MC_CMD_DYNAMIC_SENSORS_READING_OK:
 			if (__ratelimit(&rs))
 				netif_info(efx, hw, efx->net_dev,
 					   "Sensor %d (%s) reports condition '%s'\n",
 					   handle, name, state_txt);
-		break;
-		case MC_CMD_SENSOR_STATE_WARNING:
+			break;
+		case MC_CMD_DYNAMIC_SENSORS_READING_WARNING:
 			if (__ratelimit(&rs))
 				netif_warn(efx, hw, efx->net_dev,
 					   "Sensor %d (%s) reports condition '%s'\n",
@@ -382,13 +403,13 @@ static void efx_mcdi_handle_dynamic_sensor_state_change(struct efx_nic *efx,
 			return;
 
 		switch (state) {
-		case MC_CMD_SENSOR_STATE_OK:
+		case MC_CMD_DYNAMIC_SENSORS_READING_OK:
 			if (__ratelimit(&rs))
 				netif_info(efx, hw, efx->net_dev,
 					   "Sensor %d (%s) reports value %d\n",
 					   handle, name, value);
-		break;
-		case MC_CMD_SENSOR_STATE_WARNING:
+			break;
+		case MC_CMD_DYNAMIC_SENSORS_READING_WARNING:
 			if (__ratelimit(&rs))
 				netif_warn(efx, hw, efx->net_dev,
 					   "Sensor %d (%s) reports value %d\n",

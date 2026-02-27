@@ -237,7 +237,7 @@ int main(int argc, char* argv[])
   const char* interface;
   pthread_t thread_id;
   struct thread* t;
-  unsigned vi_flags;
+  enum ef_vi_flags vi_flags;
   int c, i;
 
   while( (c = getopt (argc, argv, "dtvF:")) != -1 )
