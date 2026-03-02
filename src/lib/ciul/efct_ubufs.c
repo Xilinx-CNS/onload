@@ -471,6 +471,13 @@ static void efct_ubufs_detach(ef_vi* vi, int ix)
   rxq->rxq_id = rxq->memreg_id = efch_resource_id_none();
 }
 
+static int efct_ubufs_get_wakeup_params(ef_vi* vi, int qix, unsigned* sbseq,
+                                        unsigned* pktix)
+{
+  /* TODO */
+  return -EOPNOTSUPP;
+}
+
 static int efct_ubufs_prime(ef_vi* vi, ef_driver_handle dh)
 {
   // TODO
@@ -620,6 +627,7 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
   ubufs->ops.refresh = efct_ubufs_refresh;
   ubufs->ops.refresh_mappings = efct_ubufs_refresh_mappings;
   ubufs->ops.prime = efct_ubufs_prime;
+  ubufs->ops.get_wakeup_params = efct_ubufs_get_wakeup_params;
   ubufs->ops.cleanup = efct_ubufs_cleanup;
   ubufs->ops.dump_stats = efct_ubufs_dump_stats;
   ubufs->ops.post = efct_ubufs_post_direct;

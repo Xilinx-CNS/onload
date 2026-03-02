@@ -240,8 +240,9 @@ static int efct_kbufs_prime(ef_vi* vi, ef_driver_handle dh)
       efch_make_resource_id(get_kbufs(vi)->q[i].resource_id);
     if( efch_resource_id_is_none(op.rxq_current[i].rxq_id) )
       break;
-    if( efct_vi_get_pkt_wakeup_params(vi, i, &op.rxq_current[i].sbseq,
-                                      &op.rxq_current[i].pktix) < 0 )
+    if( vi->efct_rxqs.ops->get_wakeup_params(vi, i,
+                                             &op.rxq_current[i].sbseq,
+                                             &op.rxq_current[i].pktix) < 0 )
       break;
   }
   op.n_rxqs = i;
@@ -352,6 +353,7 @@ int efct_kbufs_init_internal(ef_vi* vi,
   rxqs->ops.detach = efct_kbufs_detach;
   rxqs->ops.refresh_mappings = efct_kbufs_refresh_mappings;
   rxqs->ops.prime = efct_kbufs_prime;
+  rxqs->ops.get_wakeup_params = efct_vi_get_pkt_wakeup_params;
   rxqs->ops.cleanup = efct_kbufs_cleanup_internal;
   rxqs->ops.dump_stats = efct_kbufs_dump_stats;
   rxqs->ops.set_client_buf_count = efct_kbufs_set_shrub_bufs_per_client;
