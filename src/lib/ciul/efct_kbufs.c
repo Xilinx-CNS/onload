@@ -240,8 +240,8 @@ static int efct_kbufs_prime(ef_vi* vi, ef_driver_handle dh)
       efch_make_resource_id(get_kbufs(vi)->q[i].resource_id);
     if( efch_resource_id_is_none(op.rxq_current[i].rxq_id) )
       break;
-    if( efct_vi_get_wakeup_params(vi, i, &op.rxq_current[i].sbseq,
-                                  &op.rxq_current[i].pktix) < 0 )
+    if( efct_vi_get_pkt_wakeup_params(vi, i, &op.rxq_current[i].sbseq,
+                                      &op.rxq_current[i].pktix) < 0 )
       break;
   }
   op.n_rxqs = i;

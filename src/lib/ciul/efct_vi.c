@@ -1763,8 +1763,8 @@ int32_t efct_ef_vi_receive_get_filter_id(ef_vi* vi, const ef_event *rx_event,
   }
 }
 
-int efct_vi_get_wakeup_params(ef_vi* vi, int qix, unsigned* sbseq,
-                              unsigned* pktix)
+int efct_vi_get_pkt_wakeup_params(ef_vi* vi, int qix, unsigned* sbseq,
+                                  unsigned* pktix)
 {
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
   ef_vi_efct_rxq_ptr* rxq_ptr = &qs->rxq_ptr[qix];
