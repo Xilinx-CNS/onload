@@ -25,7 +25,7 @@
 #ifndef __KERNEL__
 struct efct_kbufs_rxq
 {
-  unsigned resource_id;
+  efch_resource_id_t resource_id;
 };
 #endif
 
@@ -56,7 +56,7 @@ static int efct_kbufs_refresh(ef_vi* vi, int qid)
 
   ci_resource_op_t op;
   op.op = CI_RSOP_RXQ_REFRESH;
-  op.id = efch_make_resource_id(kbq->resource_id);
+  op.id = kbq->resource_id;
   op.u.rxq_refresh.superbufs = (uintptr_t)rxq->superbuf;
   op.u.rxq_refresh.current_mappings = (uintptr_t)rxq->mappings;
   op.u.rxq_refresh.max_superbufs = CI_EFCT_MAX_SUPERBUFS;
@@ -200,7 +200,7 @@ static int efct_kbufs_attach(ef_vi* vi,
     return rc;
   }
 
-  get_kbufs(vi)->q[ix].resource_id = ra.out_id.index;
+  get_kbufs(vi)->q[ix].resource_id = ra.out_id;
   efct_vi_start_rxq(vi, ix, qid);
   return 0;
 #endif
@@ -237,7 +237,7 @@ static int efct_kbufs_prime(ef_vi* vi, ef_driver_handle dh)
   op.crp_id = efch_make_resource_id(vi->vi_resource_id);
   for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
     op.rxq_current[i].rxq_id =
-      efch_make_resource_id(get_kbufs(vi)->q[i].resource_id);
+      get_kbufs(vi)->q[i].resource_id;
     if( efch_resource_id_is_none(op.rxq_current[i].rxq_id) )
       break;
     if( vi->efct_rxqs.ops->get_wakeup_params(vi, i,
@@ -337,7 +337,7 @@ int efct_kbufs_init_internal(ef_vi* vi,
 
     efct_get_rxq_state(vi, i)->qid = shm->q[i].qid;
 #ifndef __KERNEL__
-    rxqs->q[i].resource_id = EFCH_RESOURCE_ID_PRI_ARG(efch_resource_id_none());
+    rxqs->q[i].resource_id = efch_resource_id_none();
     rxq->mappings = mappings + i * CI_EFCT_MAX_HUGEPAGES;
 #endif
     rxq->live.superbuf_pkts = &shm->q[i].superbuf_pkts;
