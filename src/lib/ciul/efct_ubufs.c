@@ -471,6 +471,17 @@ static void efct_ubufs_detach(ef_vi* vi, int ix)
   rxq->rxq_id = rxq->memreg_id = efch_resource_id_none();
 }
 
+static efch_resource_id_t efct_ubufs_get_rxq_resource_id(ef_vi* vi, int ix)
+{
+#ifdef __KERNEL__
+  /* Shouldn't ever be called in kernel */
+  EF_VI_ASSERT(0);
+  return efch_resource_id_none();
+#else
+  return get_ubufs(vi)->q[ix].rxq_id;
+#endif
+}
+
 static int efct_ubufs_get_wakeup_params(ef_vi* vi, int qix, unsigned* sbseq,
                                         unsigned* pktix)
 {
@@ -628,6 +639,7 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
   ubufs->ops.refresh_mappings = efct_ubufs_refresh_mappings;
   ubufs->ops.prime = efct_ubufs_prime;
   ubufs->ops.get_wakeup_params = efct_ubufs_get_wakeup_params;
+  ubufs->ops.get_rxq_resource_id = efct_ubufs_get_rxq_resource_id;
   ubufs->ops.cleanup = efct_ubufs_cleanup;
   ubufs->ops.dump_stats = efct_ubufs_dump_stats;
   ubufs->ops.post = efct_ubufs_post_direct;

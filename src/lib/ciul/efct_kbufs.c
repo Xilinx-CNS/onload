@@ -118,6 +118,17 @@ static void efct_kbufs_free(ef_vi* vi, int qid, int sbid)
   }
 }
 
+static efch_resource_id_t efct_kbufs_get_rxq_resource_id(ef_vi* vi, int ix)
+{
+#ifdef __KERNEL__
+  /* Shouldn't ever be called in kernel */
+  EF_VI_ASSERT(0);
+  return efch_resource_id_none();
+#else
+  return get_kbufs(vi)->q[ix].resource_id;
+#endif
+}
+
 static bool efct_kbufs_available(const ef_vi* vi, int qid)
 {
   const struct efab_efct_rxq_uk_shm_q* shm = &const_kbufs(vi)->shm->q[qid];
@@ -354,6 +365,7 @@ int efct_kbufs_init_internal(ef_vi* vi,
   rxqs->ops.refresh_mappings = efct_kbufs_refresh_mappings;
   rxqs->ops.prime = efct_kbufs_prime;
   rxqs->ops.get_wakeup_params = efct_vi_get_pkt_wakeup_params;
+  rxqs->ops.get_rxq_resource_id = efct_kbufs_get_rxq_resource_id;
   rxqs->ops.cleanup = efct_kbufs_cleanup_internal;
   rxqs->ops.dump_stats = efct_kbufs_dump_stats;
   rxqs->ops.set_client_buf_count = efct_kbufs_set_shrub_bufs_per_client;
