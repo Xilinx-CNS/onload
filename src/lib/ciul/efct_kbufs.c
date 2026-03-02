@@ -236,31 +236,7 @@ static int efct_kbufs_prime(ef_vi* vi, ef_driver_handle dh)
   BUG();
   return -EOPNOTSUPP;
 #else
-  ci_resource_prime_qs_op_t  op;
-  int i;
-
-  /* The loop below assumes that all rxqs will fit in the fixed array in
-   * the operations's arguments. If that assumption no longer holds, then
-   * this assertion will fail and we'll need a more complicated loop to split
-   * the queues across multiple operations. */
-  EF_VI_BUILD_ASSERT(CI_ARRAY_SIZE(op.rxq_current) >= EF_VI_MAX_EFCT_RXQS);
-
-  op.crp_id = efch_make_resource_id(vi->vi_resource_id);
-  for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
-    op.rxq_current[i].rxq_id =
-      get_kbufs(vi)->q[i].resource_id;
-    if( efch_resource_id_is_none(op.rxq_current[i].rxq_id) )
-      break;
-    if( vi->efct_rxqs.ops->get_wakeup_params(vi, i,
-                                             &op.rxq_current[i].sbseq,
-                                             &op.rxq_current[i].pktix) < 0 )
-      break;
-  }
-  op.n_rxqs = i;
-  op.n_txqs = vi->vi_txq.mask != 0 ? 1 : 0;
-  if( op.n_txqs )
-    op.txq_current = vi->ep_state->evq.evq_ptr;
-  return ci_resource_prime_qs(dh, &op);
+  return efct_vi_prime(vi, dh);
 #endif
 }
 

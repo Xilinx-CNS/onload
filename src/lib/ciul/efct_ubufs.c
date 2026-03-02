@@ -491,8 +491,12 @@ static int efct_ubufs_get_wakeup_params(ef_vi* vi, int qix, unsigned* sbseq,
 
 static int efct_ubufs_prime(ef_vi* vi, ef_driver_handle dh)
 {
-  // TODO
+#ifdef __KERNEL__
+  EF_VI_ASSERT(0);
   return -EOPNOTSUPP;
+#else
+  return efct_vi_prime(vi, dh);
+#endif
 }
 
 static int efct_ubufs_refresh(ef_vi* vi, int ix)
