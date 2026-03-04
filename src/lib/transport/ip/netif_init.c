@@ -2763,6 +2763,12 @@ netif_tcp_helper_alloc_u(ef_driver_handle fd, ci_netif* ni,
     goto fail;
   }
 
+  rc = oo_resource_op(fd, OO_IOC_USER_RESOURCES_READY, &rc);
+  if( rc < 0 ) {
+    LOG_E(ci_log("%s: user_resources_ready failed rc=%d", __FUNCTION__, rc));
+    goto fail;
+  }
+
   return 0;
 
 fail:

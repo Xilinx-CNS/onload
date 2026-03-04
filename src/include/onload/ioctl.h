@@ -243,6 +243,9 @@ enum {
   OO_OP_REINIT_TXQ,
 #define OO_IOC_REINIT_TXQ OO_IOC_W(REINIT_TXQ, oo_reinit_txq_t)
 
+  OO_OP_USER_RESOURCES_READY,
+#define OO_IOC_USER_RESOURCES_READY OO_IOC_W(USER_RESOURCES_READY, int)
+
   OO_OP_CONTIG_END,  /* This is the last in range of contigous opcodes */
 
   /* Here come only placeholder for operations with arbitrary codes */
