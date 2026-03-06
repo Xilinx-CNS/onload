@@ -550,6 +550,40 @@ static int ef10_nic_get_ptp_attributes(struct efhw_nic* nic,
   return 0;
 }
 
+static bool ef10_supports_filter_id_in_packet_prefix(struct efhw_nic *nic)
+{
+  /* TODO: this is an unpleasant hack. X4 enterprise supports this feature but,
+   * as of writing, has no way for us to ask about support for this feature in
+   * a way that older EF10 cards (e.g., X2) will report inability to support
+   * this feature. For now, we're stuck with this fragile check that assumes
+   * older known EF10 cards don't support this, but assumed newer NICs do.
+   * Fix this on resolution of X4-7423. */
+
+  /* This list is everything we know about (as of writing), stolen from
+   * efhw_sfc_device_type_init, minus the X4 IDs. */
+  switch( nic->pci_dev_device ) {
+  case 0x0703:
+  case 0x6703:
+  case 0x0710:
+  case 0x0770:
+  case 0x7777:
+  case 0x7778:
+  case 0x0803:
+  case 0x0813:
+  case 0x1923:
+  case 0x1903:
+  case 0x0923:
+  case 0x0903:
+  case 0x0901:
+  case 0x1a03:
+  case 0x0a03:
+  case 0x1b03:
+  case 0x0b03:
+    return false;
+  default:
+    return true;
+  }
+}
 
 static void
 ef10_nic_tweak_hardware(struct efhw_nic *nic)
@@ -572,6 +606,9 @@ ef10_nic_tweak_hardware(struct efhw_nic *nic)
   _ef10_nic_check_capabilities(nic, &nic->flags, __FUNCTION__);
 
   nic->rx_prefix_len = (nic->flags & NIC_FLAG_14BYTE_PREFIX) ? 14 : 0;
+
+  if( ef10_supports_filter_id_in_packet_prefix(nic) )
+    nic->flags |= NIC_FLAG_RX_FILTER_ID;
 }
 
 static int

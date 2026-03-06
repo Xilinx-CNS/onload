@@ -3786,6 +3786,12 @@
 #define ES_DZ_RX_PREFIX_TSTAMP_OFST 10
 #define ES_DZ_RX_PREFIX_SIZE 14
 
+/* RX packet prefix where filter ID is supported (replaces VLAN1), 16-bits.
+ * An "invalid" field is present in bit 63. */
+#define ES_DZ_RX_PREFIX_FILTER_ID_OFST 4
+#define ES_DZ_RX_PREFIX_FILTER_INVALID_OFST 7
+#define ES_DZ_RX_PREFIX_FILTER_INVALID_LBN 7
+
 /* Packed stream RX packet prefix */
 #define ES_DZ_PS_RX_PREFIX_TSTAMP_OFST 0
 #define ES_DZ_PS_RX_PREFIX_CAP_LEN_OFST 4

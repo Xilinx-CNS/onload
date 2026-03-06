@@ -220,6 +220,8 @@ extern int ef10_ef_eventq_has_many_events(const ef_vi*, int);
 
 extern int ef10_receive_get_precise_timestamp(ef_vi*, const void*,
                                               ef_precisetime*);
+extern int32_t ef10_receive_get_filter_id(ef_vi* vi, const ef_event *rx_event,
+                                          const void* rx_packet);
 
 extern void ef100_vi_init(ef_vi*) EF_VI_HF;
 

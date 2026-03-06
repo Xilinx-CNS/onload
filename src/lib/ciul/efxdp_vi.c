@@ -411,6 +411,13 @@ static void efxdp_ef_eventq_timer_zero(ef_vi* vi)
   // TODO
 }
 
+static int32_t efxdp_ef_vi_receive_get_filter_id(ef_vi* vi,
+                                                 const ef_event *rx_event,
+                                                 const void* rx_packet)
+{
+  return -EOPNOTSUPP;
+}
+
 int efxdp_vi_init(ef_vi* vi)
 {
   EF_VI_BUILD_ASSERT(EFAB_AF_XDP_DESC_BYTES == sizeof(struct xdp_desc));
@@ -436,6 +443,7 @@ int efxdp_vi_init(ef_vi* vi)
   vi->ops.receive_init           = efxdp_ef_vi_receive_init;
   vi->ops.receive_push           = efxdp_ef_vi_receive_push;
   vi->ops.receive_get_timestamp  = efxdp_ef_vi_receive_get_timestamp;
+  vi->ops.receive_get_filter_id  = efxdp_ef_vi_receive_get_filter_id;
   vi->ops.eventq_poll            = efxdp_ef_eventq_poll;
   vi->ops.eventq_prime           = efxdp_ef_eventq_prime;
   vi->ops.eventq_timer_prime     = efxdp_ef_eventq_timer_prime;

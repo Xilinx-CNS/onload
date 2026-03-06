@@ -147,13 +147,13 @@ struct efrm_vi {
 
 	unsigned rx_prefix_len;
 
-	/*! EFHW_VI_* flags or EFRM_VI_RELEASED */
-	unsigned flags;
-        /* Note that the EFHW_VI_* flags are stored in the same word;
-         * they use all the values up to and including 0x10000000. */
-#define EFRM_VI_RELEASED 0x20000000
-#define EFRM_VI_OWNS_STACK_ID 0x40000000
-#define EFRM_VI_STOPPING 0x80000000
+	/*! EFHW_VI_* flags */
+	unsigned efhw_vi_flags;
+
+	unsigned efrm_vi_flags;
+#define EFRM_VI_RELEASED 0x00000001
+#define EFRM_VI_OWNS_STACK_ID 0x00000002
+#define EFRM_VI_STOPPING 0x00000004
 
 	/* Sometimes a queue is shut down forcibly or never initialised,
 	 * pending recovery on reset. */

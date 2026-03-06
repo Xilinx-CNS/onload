@@ -791,12 +791,12 @@ void efrm_vi_rm_delayed_free(struct work_struct *data)
 		EFRM_TRACE("%s: flushed VI instance=%d", __FUNCTION__,
 			   virs->rs.rs_instance);
 
-		if ( (~virs->flags & EFRM_VI_RELEASED) &&
-		     (~virs->flags & EFRM_VI_STOPPING) )
+		if ( (~virs->efrm_vi_flags & EFRM_VI_RELEASED) &&
+		     (~virs->efrm_vi_flags & EFRM_VI_STOPPING) )
 			efrm_vi_rm_reinit_dmaqs(virs);
 
 		/* Save flags before callback */
-		flags = virs->flags;
+		flags = virs->efrm_vi_flags;
 		if (virs->flush_callback_fn != NULL)
 			virs->flush_callback_fn(virs->flush_callback_arg);
 		if (flags & EFRM_VI_RELEASED)
@@ -819,7 +819,7 @@ void efrm_vi_resource_free(struct efrm_vi *virs)
 		spin_unlock(&vi_set->allocation_lock);
 	}
 	efrm_vi_register_flush_callback(virs, NULL, NULL);
-	virs->flags |= EFRM_VI_RELEASED;
+	virs->efrm_vi_flags |= EFRM_VI_RELEASED;
 	efrm_pt_flush(virs);
 }
 
@@ -835,7 +835,7 @@ EXPORT_SYMBOL(efrm_vi_resource_release);
 void efrm_vi_resource_stop_callback(struct efrm_vi *virs)
 {
 	EFRM_ASSERT(virs->flush_callback_fn);
-	virs->flags |= EFRM_VI_STOPPING;
+	virs->efrm_vi_flags |= EFRM_VI_STOPPING;
 	efrm_pt_flush(virs);
 }
 EXPORT_SYMBOL(efrm_vi_resource_stop_callback);
@@ -844,7 +844,7 @@ EXPORT_SYMBOL(efrm_vi_resource_stop_callback);
 void efrm_vi_resource_release_flushed(struct efrm_vi *virs)
 {
 	if (__efrm_resource_release(&virs->rs)) {
-		virs->flags |= EFRM_VI_RELEASED;
+		virs->efrm_vi_flags |= EFRM_VI_RELEASED;
 		efrm_vi_rm_free_flushed_resource(virs);
 	}
 }

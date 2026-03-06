@@ -243,7 +243,7 @@ typedef struct oo_p_dllink oo_p_dllink_t;
   FTL_TFIELD_INT(ctx, ci_int16, rx_ts_correction, ORM_OUTPUT_STACK) \
   FTL_TFIELD_INT(ctx, ci_int16, tx_ts_correction, ORM_OUTPUT_STACK) \
   FTL_TFIELD_INT(ctx, ci_uint32, ts_format, ORM_OUTPUT_STACK)       \
-  FTL_TFIELD_INT(ctx, ci_uint32, vi_flags, ORM_OUTPUT_STACK)        \
+  FTL_TFIELD_INT(ctx, ci_uint64, vi_flags, ORM_OUTPUT_STACK)        \
   FTL_TFIELD_INT(ctx, ci_uint32, vi_out_flags, ORM_OUTPUT_STACK)    \
   FTL_TFIELD_INT(ctx, ci_uint32, oo_vi_flags, ORM_OUTPUT_STACK)     \
   ON_CI_HAVE_PIO(                                                   \

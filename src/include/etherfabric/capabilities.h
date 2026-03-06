@@ -186,6 +186,9 @@ enum ef_vi_capability {
   /** Supported extra datapaths (see enum ef_vi_extra_datapaths) */
   EF_VI_CAP_EXTRA_DATAPATHS,
 
+  /** RX events support lookup of matched filter ID */
+  EF_VI_CAP_RX_FILTER_ID,
+
   /** Maximum value of capabilities enumeration */
   EF_VI_CAP_MAX, /* Keep this last */
 };

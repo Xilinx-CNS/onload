@@ -8649,7 +8649,7 @@ int tcp_helper_reinit_txq_locked(tcp_helper_resource_t* thr,
   int rc;
 
   if( virs->q[EFHW_TXQ].capacity == 0 ||
-      virs->flags & (EFRM_VI_RELEASED | EFRM_VI_STOPPING) ||
+      virs->efrm_vi_flags & (EFRM_VI_RELEASED | EFRM_VI_STOPPING) ||
       virs->reinit_txq_attempts <= 0 ) {
     virs->reinit_txq_attempts = 0;
     return 0;

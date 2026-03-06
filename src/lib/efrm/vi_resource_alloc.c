@@ -792,6 +792,8 @@ static unsigned q_flags_to_vi_flags(unsigned q_flags, enum efhw_q_type q_type)
 			vi_flags |= EFHW_VI_ENABLE_TPH;
 		if (q_flags & EFRM_VI_TPH_TAG_MODE)
 			vi_flags |= EFHW_VI_TPH_TAG_MODE;
+		if (q_flags & EFRM_VI_RX_FILTER_ID)
+			vi_flags |= EFHW_VI_RX_PREFIX | EFHW_VI_RX_FILTER_ID;
 		break;
 	case EFHW_EVQ:
 		if (q_flags & EFRM_VI_RX_TIMESTAMPS)
@@ -857,6 +859,8 @@ static unsigned vi_flags_to_q_flags(unsigned vi_flags, enum efhw_q_type q_type)
 			q_flags |= EFRM_VI_ENABLE_TPH;
 		if (vi_flags & EFHW_VI_TPH_TAG_MODE)
 			q_flags |= EFRM_VI_TPH_TAG_MODE;
+		if (vi_flags & EFHW_VI_RX_FILTER_ID)
+			q_flags |= EFRM_VI_RX_FILTER_ID;
 		break;
 	case EFHW_EVQ:
 		if (vi_flags & EFHW_VI_RX_TIMESTAMPS)
@@ -891,7 +895,7 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 	struct efrm_nic* efrm_nic;
 	int instance, evq_instance = -1;
 	uint qid = -1;
-	unsigned flags = virs->flags;
+	unsigned flags = virs->efhw_vi_flags;
 	unsigned vport_id;
 	struct efhw_evq_params evq_params = {};
 	struct efhw_dmaq_params q_params = {};
@@ -1127,9 +1131,9 @@ __efrm_vi_q_flush(struct efhw_nic* nic, struct efrm_vi* virs,
 		break;
 	case EFHW_EVQ:
 		{
+			unsigned flags = virs->efhw_vi_flags;
 			int time_sync_events_enabled =
-				efhw_nic_evq_requires_time_sync(nic,
-								virs->flags);
+				efhw_nic_evq_requires_time_sync(nic, flags);
 			/* flushing EVQ is as good as disabling it */
 			efhw_nic_event_queue_disable(nic, q->qid,
 						     time_sync_events_enabled);
@@ -1813,7 +1817,8 @@ int  efrm_vi_alloc(struct efrm_client *client,
 	 * instance is freed.
 	 */
 	atomic_set(&virs->evq_refs, 1);
-	virs->flags = 0;
+	virs->efhw_vi_flags = 0;
+	virs->efrm_vi_flags = 0;
 	virs->pd = pd;
 
 #ifdef __PPC__
@@ -1858,7 +1863,7 @@ EXPORT_SYMBOL(efrm_vi_alloc);
 
 int efrm_vi_is_hw_rx_loopback_supported(struct efrm_vi *virs)
 {
-	return (virs->flags & EFHW_VI_RX_LOOPBACK);
+	return (virs->efhw_vi_flags & EFHW_VI_RX_LOOPBACK);
 }
 EXPORT_SYMBOL(efrm_vi_is_hw_rx_loopback_supported);
 
@@ -1949,7 +1954,7 @@ efrm_vi_q_init_common(struct efrm_vi *virs, enum efhw_q_type q_type,
 	q->flags = q_flags;
 	q->capacity = qsize.q_len_entries;
 	q->bytes = qsize.q_len_bytes;
-	virs->flags |= q_flags_to_vi_flags(q_flags, q_type);
+	virs->efhw_vi_flags |= q_flags_to_vi_flags(q_flags, q_type);
 
 	return 0;
 }
@@ -2046,7 +2051,7 @@ int efrm_vi_reinit_txq(struct efrm_vi *virs)
 	if( q->capacity == 0 )
 		return -EINVAL;
 
-	if( (virs->flags & (EFRM_VI_RELEASED | EFRM_VI_STOPPING)) != 0 )
+	if( (virs->efrm_vi_flags & (EFRM_VI_RELEASED | EFRM_VI_STOPPING)) != 0 )
 		return -EINVAL;
 
 	if( ! list_empty(&q->init_link) ) {

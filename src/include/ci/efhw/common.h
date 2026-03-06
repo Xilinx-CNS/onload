@@ -101,10 +101,7 @@ typedef union {
 #define EFHW_VI_TX_ALT             0x4000000  /*! Provision for alternatives */
 #define EFHW_VI_TX_CTPIO           0x8000000  /*! Cut-through PIO */
 #define EFHW_VI_TX_CTPIO_NO_POISON 0x10000000 /*! Prevent CTPIO poisoning */
-
-/* Note that the EFRM_VI_* flags (0x20000000 and above) are stored in
- * the same word and so no more bits are available for use as new
- * EFHW_VI_* flags. */
+#define EFHW_VI_RX_FILTER_ID  0x20000000 /*! Request filter ID for RX evs */
 
 #define HIGH_THROUGHPUT_EFHW_VI_FLAGS (EFHW_VI_RX_PREFIX | \
 				       EFHW_VI_NO_EV_CUT_THROUGH | \
@@ -257,6 +254,8 @@ typedef union {
 #define NIC_FLAG_RX_POLL 0x200000000000000LL
 /* NIC attaches to an exclusive RXQ by default */
 #define NIC_FLAG_EXCL_RXQ_ATTACH_IS_DEFAULT 0x400000000000000LL
+/* NIC supports attached matched filter ID to RX events */
+#define NIC_FLAG_RX_FILTER_ID 0x800000000000000LL
 
 /* Filter type flags */
 #define NIC_FILTER_FLAG_RX_TYPE_IP_LOCAL 0x1

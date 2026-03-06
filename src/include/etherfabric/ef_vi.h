@@ -608,6 +608,9 @@ enum ef_vi_flags {
   /** Tag mode to use for SDCI TPH tags: 0 = no ST mode; 1 = use steering tags
    ** Depends on EF_VI_ENABLE_TPH being set */
   EF_VI_TPH_TAG_MODE = 0x80000000,
+  /** Request the filter ID to be stored alongside RX events in the packet
+   ** prefix. */
+  EF_VI_RX_FILTER_ID = 0x100000000ull,
 };
 
 /*! \brief Flags that can be returned when an ef_vi has been allocated */
@@ -1316,6 +1319,10 @@ typedef struct ef_vi {
                                     int dma_iov_len, ef_request_id dma_id);
     /** Poll for received data event */
     int (*receive_poll)(struct ef_vi*, ef_event* evs, int evs_len);
+    /** Retrieve the matched filter ID for an RX event */
+    int32_t (*receive_get_filter_id)(struct ef_vi* vi,
+                                     const ef_event* rx_event,
+                                     const void* rx_packet);
   } ops;  /**< Driver-dependent operations. */
   /* Doxygen comment above is documentation for the ops member of ef_vi */
 
@@ -1904,6 +1911,26 @@ ef_vi_get_rx_discard_subtype_from_flags(unsigned flags)
     return EF_EVENT_RX_DISCARD_OTHER;
   return 0;
 }
+
+/*! \brief Returns the matched filter ID for a given RX event and packet
+**
+** \param vi The virtual interface the RXQ belongs to.
+** \param rx_event The ef_event for the given RX packet.
+** \param rx_packet The RX packet associated with the RX event.
+**
+** \return The matched filter ID on success, or a negative errno on failure.
+**         -ENODATA is returned in the special case where no filter lookup was
+**         performed to keep this packet (such as port sniffing).
+**
+** Extracts the matched filter ID from a packet where present. This function is
+** not necessary for EF_EVENT_TYPE_RX_REF, as the filter ID can be accessed in
+** the event itself. For EF_EVENT_TYPE_RX events, this function requires the VI
+** to be created with the EF_VI_RX_FILTER_ID VI flag and for the capability
+** EF_VI_CAP_RX_FILTER_ID to be supported.
+*/
+#define ef_vi_receive_get_filter_id(vi, rx_event, rx_packet) \
+  (vi)->ops.receive_get_filter_id((vi), (rx_event), (rx_packet))
+
 
 /**********************************************************************
  * Transmit interface *************************************************
@@ -2959,6 +2986,8 @@ enum ef_vi_layout_type {
   EF_VI_LAYOUT_PACKET_LENGTH,
   /** Compat timestamp (80 bits) */
   EF_VI_LAYOUT_COMPAT_TS,
+  /** Filter ID - 16 bits */
+  EF_VI_LAYOUT_FILTER_ID,
 };
 
 

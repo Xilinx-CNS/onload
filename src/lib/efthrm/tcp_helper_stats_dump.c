@@ -84,7 +84,7 @@ static void ci_netif_dump_vi_info_stats(ci_netif* ni, int intf_i,
          NI_ID(ni), intf_i, nic->dev_name, (int) nic->vi_arch,
          nic->vi_variant, (int) nic->vi_revision);
   logger(log_arg, "  vi=%d  gvi=0x%x  pd_owner=%d %s=%d tcpdump=%s"
-         " vi_flags=%x oo_vi_flags=%x", ef_vi_instance(vi),
+         " vi_flags=%lx oo_vi_flags=%x", ef_vi_instance(vi),
          (ef_vi_instance(vi) << efhw_nic->vi_shift) + efhw_nic->vi_base,
          nic->pd_owner,
          nic->vi_nic_flags & EFHW_VI_NIC_IRQ ? "irq" : "channel",

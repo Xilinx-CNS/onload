@@ -400,6 +400,10 @@ int efch_capabilities_op(struct efch_capabilities_in* in,
     break;
   }
 
+  case EF_VI_CAP_RX_FILTER_ID:
+    get_from_nic_flags(nic, NIC_FLAG_RX_FILTER_ID, out);
+    break;
+
   default:
     out->support_rc = -ENOSYS;
     out->val = 0;

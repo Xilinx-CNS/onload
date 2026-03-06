@@ -63,6 +63,7 @@ static unsigned vi_flags_to_efab_flags(enum ef_vi_flags vi_flags)
   if( vi_flags & EF_VI_RX_ZEROCOPY ) efab_flags |= EFHW_VI_RX_ZEROCOPY;
   if( vi_flags & EF_VI_ENABLE_TPH ) efab_flags |= EFHW_VI_ENABLE_TPH;
   if( vi_flags & EF_VI_TPH_TAG_MODE ) efab_flags |= EFHW_VI_TPH_TAG_MODE;
+  if( vi_flags & EF_VI_RX_FILTER_ID ) efab_flags |= EFHW_VI_RX_FILTER_ID;
   return efab_flags;
 }
 
@@ -97,6 +98,11 @@ static int check_nic_compatibility(enum ef_vi_flags vi_flags,
                    " on EF100 architecture", __FUNCTION__));
       return -EOPNOTSUPP;
     }
+    if (vi_flags & EF_VI_RX_FILTER_ID) {
+      LOGVV(ef_log("%s: ERROR: RX FILTER ID flag not supported"
+                   " on EF100 architecture", __FUNCTION__));
+      return -EOPNOTSUPP;
+    }
     return 0;
 
   case EF_VI_ARCH_AF_XDP:
@@ -112,6 +118,11 @@ static int check_nic_compatibility(enum ef_vi_flags vi_flags,
     }
     if (vi_flags & EF_VI_TX_TIMESTAMPS) {
       LOGVV(ef_log("%s: ERROR: TX TIMESTAMPS flag not supported"
+                   " on AF_XDP architecture", __FUNCTION__));
+      return -EOPNOTSUPP;
+    }
+    if (vi_flags & EF_VI_RX_FILTER_ID) {
+      LOGVV(ef_log("%s: ERROR: RX FILTER ID flag not supported"
                    " on AF_XDP architecture", __FUNCTION__));
       return -EOPNOTSUPP;
     }

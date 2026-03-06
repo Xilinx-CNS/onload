@@ -791,6 +791,31 @@ ef_vi_receive_get_timestamp(ef_vi* vi, const void* pkt,
   return rc < 0 ? -1 : 0;
 }
 
+int32_t
+ef10_receive_get_filter_id(ef_vi* vi, const ef_event *rx_event,
+                           const void* rx_packet)
+{
+  uint16_t* data;
+  bool invalid;
+
+  /* The VI must have a packet prefix, and have the RX filter ID in that prefix
+   * otherwise we can't extract any data from it. */
+  if( vi->rx_prefix_len == 0 || ! (vi->vi_flags & EF_VI_RX_FILTER_ID) ||
+      (EF_EVENT_TYPE(*rx_event) != EF_EVENT_TYPE_RX &&
+       EF_EVENT_TYPE(*rx_event) != EF_EVENT_TYPE_RX_DISCARD &&
+       EF_EVENT_TYPE(*rx_event) != EF_EVENT_TYPE_RX_MULTI &&
+       EF_EVENT_TYPE(*rx_event) != EF_EVENT_TYPE_RX_MULTI_DISCARD) )
+    return -EINVAL;
+
+  data = (uint16_t*)((uint8_t*)rx_packet + ES_DZ_RX_PREFIX_FILTER_INVALID_OFST);
+  invalid = !!(*data & (1 << ES_DZ_RX_PREFIX_FILTER_INVALID_LBN));
+  if( invalid )
+    return -ENODATA;
+
+  data = (uint16_t*)((char*)rx_packet + ES_DZ_RX_PREFIX_FILTER_ID_OFST);
+  return le16_to_cpu(*data);
+}
+
 
 static void ef10_major_tick(ef_vi* vi, unsigned major, unsigned minor,
 			    unsigned sync_flags)

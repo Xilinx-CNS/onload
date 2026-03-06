@@ -117,7 +117,7 @@ efab_vi_rm_mmap_ctpio(struct efrm_vi *virs, unsigned long *bytes, void *opaque,
 
   instance = virs->rs.rs_instance;
 
-  if( ! (virs->flags & EFHW_VI_TX_CTPIO ||
+  if( ! (virs->efhw_vi_flags & EFHW_VI_TX_CTPIO ||
         nic->flags & NIC_FLAG_CTPIO_ONLY) ) {
     EFRM_ERR("%s: CTPIO is not enabled on VI instance %d\n", __FUNCTION__,
 	     instance);
