@@ -15,6 +15,7 @@
 #include <sys/un.h>
 #include <sys/epoll.h>
 #include <sys/mman.h>
+#include <linux/mman.h>
 
 static int ret(int rc) {return rc < 0 ? -errno : rc;}
 
@@ -165,7 +166,7 @@ int ef_shrub_server_resource_op(int fd, struct ci_resource_op_s* op)
 
 int ef_shrub_server_memfd_create(const char* name, size_t size, bool huge)
 {
-  int fd = memfd_create(name, huge ? MFD_HUGETLB : 0);
+  int fd = memfd_create(name, huge ? MFD_HUGETLB | MAP_HUGE_2MB : 0);
   if( fd < 0 )
     return -errno;
 
