@@ -45,7 +45,7 @@ static inline uint32_t ef_shrub_buffer_sbseq(ef_shrub_buffer_id id)
 }
 
 /* Protocol version, to check compatibility between client and server */
-#define EF_SHRUB_VERSION 7
+#define EF_SHRUB_VERSION 8
 #define SHRUB_ERR_INCOMPATIBLE_VERSION -1000
 
 /* An identifier that does not represent a buffer, used to indicate empty
@@ -122,18 +122,20 @@ enum ef_shrub_controller_command {
 
 /* This enum specifies the type of request being made to the shrub server. */
 enum ef_shrub_request_type {
-  EF_SHRUB_REQUEST_TOKEN,
+  EF_SHRUB_REQUEST_FILTER_INFO,
   EF_SHRUB_REQUEST_QUEUE,
 };
 
-/* This struct is sent with EF_SHRUB_REQUEST_TOKEN requests. */
-struct ef_shrub_token_request {
+/* This struct is sent with EF_SHRUB_REQUEST_FILTER_INFO requests. */
+struct ef_shrub_filter_info_request {
 };
 
-/* This struct contains the server response to EF_SHRUB_REQUEST_TOKEN. */
-struct ef_shrub_token_response {
+/* This struct contains the server response to EF_SHRUB_REQUEST_FILTER_INFO. */
+struct ef_shrub_filter_info_response {
   /* Exclusive rxq token of the shrub server pd. */
   uint64_t shared_rxq_token;
+  /* Whether this shrub server uses interrupt-driven wakeups */
+  uint64_t use_interrupts;
 };
 
 /* This structure is sent to the shrub server to request a queue. After which,
@@ -157,8 +159,8 @@ struct ef_shrub_request {
   uint64_t type;
   /* Data required to be sent corresponding to a request type. */
   union {
-    /* Shared rxq token request tagged by EF_SHRUB_REQUEST_TOKEN */
-    struct ef_shrub_token_request rxq_token;
+    /* Filter info request tagged by EF_SHRUB_REQUEST_FILTER_INFO */
+    struct ef_shrub_filter_info_request filter_info;
     /* Queue request tagged by EF_SHRUB_REQUEST_QUEUE. */
     struct ef_shrub_queue_request queue;
   };

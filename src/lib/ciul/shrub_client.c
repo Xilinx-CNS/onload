@@ -91,8 +91,9 @@ void client_munmap(uint64_t* mappings,
   }
 }
 
-int ef_shrub_client_request_token(const char *server_addr,
-                                  struct ef_shrub_token_response *response)
+int ef_shrub_client_request_filter_info(
+                              const char *server_addr,
+                              struct ef_shrub_filter_info_response *response)
 {
   struct ef_shrub_request request = {};
   uintptr_t sock;
@@ -107,7 +108,7 @@ int ef_shrub_client_request_token(const char *server_addr,
     goto out;
 
   request.server_version = EF_SHRUB_VERSION;
-  request.type = EF_SHRUB_REQUEST_TOKEN;
+  request.type = EF_SHRUB_REQUEST_FILTER_INFO;
   rc = ef_shrub_socket_send(sock, &request, sizeof(request));
   if( rc < 0 )
     goto out;

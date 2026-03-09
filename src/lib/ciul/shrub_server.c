@@ -208,10 +208,12 @@ static int server_init_pd_excl_rxq_tok(struct ef_shrub_server *server)
   return rc;
 }
 
-static int server_request_token(struct ef_shrub_server* server,
-                                struct ef_shrub_connection* connection)
+static int server_request_filter_info(struct ef_shrub_server* server,
+                                      struct ef_shrub_connection* connection)
 {
-  return ef_shrub_connection_send_token(connection, server->pd_excl_rxq_tok);
+  return ef_shrub_connection_send_filter_info(connection,
+                                              server->pd_excl_rxq_tok,
+                                              server->use_interrupts);
 }
 
 static int server_request_received(struct ef_shrub_server* server,
@@ -237,8 +239,8 @@ static int server_request_received(struct ef_shrub_server* server,
   }
 
   switch( request.type ) {
-  case EF_SHRUB_REQUEST_TOKEN:
-    rc = server_request_token(server, connection);
+  case EF_SHRUB_REQUEST_FILTER_INFO:
+    rc = server_request_filter_info(server, connection);
     /* Client will connect again once it has an rxq to attach to. Remove it from
      * the epoll set */
     goto out_close;

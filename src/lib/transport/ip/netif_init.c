@@ -2198,9 +2198,11 @@ static int alloc_efct_shared_rxq(ci_netif* ni, uint32_t nic_i)
 {
   int rc, qix;
   unsigned shared_rxq_token;
+  bool use_interrupts;
   ef_vi* vi = ci_netif_vi(ni, nic_i);
 
-  rc = efct_ubufs_get_shared_rxq_token(vi, &shared_rxq_token);
+  rc = efct_ubufs_get_shared_filter_info(vi, &shared_rxq_token,
+                                         &use_interrupts);
   if( rc < 0 )
     return rc;
 

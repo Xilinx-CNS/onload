@@ -34,7 +34,8 @@ struct efct_ubufs
   unsigned nic_fifo_limit;
   ef_pd* pd;
   ef_driver_handle pd_dh;
-  bool is_shrub_token_set;
+  bool is_shrub_filter_info_set;
+  bool shrub_use_interrupts;
   size_t shrub_max_client_bufs;
   struct efct_ubufs_rxq q[EF_VI_MAX_EFCT_RXQS];
   char server_address[EF_SHRUB_SERVER_SOCKET_LEN];
@@ -345,17 +346,19 @@ int efct_ubufs_shared_attach_internal(ef_vi* vi, int ix, int qid,
   return ix;
 }
 
-int efct_ubufs_get_shared_rxq_token(ef_vi* vi, unsigned* token)
+int efct_ubufs_get_shared_filter_info(ef_vi* vi, unsigned* token,
+                                      bool* use_interrupts)
 {
   struct efct_ubufs *ubufs = get_ubufs(vi);
-  struct ef_shrub_token_response response;
+  struct ef_shrub_filter_info_response response;
   int rc;
 
-  rc = ef_shrub_client_request_token(ubufs->server_address, &response);
+  rc = ef_shrub_client_request_filter_info(ubufs->server_address, &response);
   if( rc < 0 )
     return rc;
 
   *token = response.shared_rxq_token;
+  *use_interrupts = response.use_interrupts;
   return 0;
 }
 
@@ -363,18 +366,21 @@ static int efct_ubufs_pre_attach(ef_vi* vi, bool shared_mode)
 {
   struct efct_ubufs *ubufs = get_ubufs(vi);
   unsigned token;
+  bool use_interrupts;
   int rc;
 
-  if( ! shared_mode || ubufs->is_shrub_token_set )
+  if( ! shared_mode || ubufs->is_shrub_filter_info_set )
     return 0;
 
-  rc = efct_ubufs_get_shared_rxq_token(vi, &token);
+  rc = efct_ubufs_get_shared_filter_info(vi, &token, &use_interrupts);
   if( rc < 0 )
     return rc;
 
   rc = efct_ubufs_set_shared_rxq_token(vi, token);
-  if( rc == 0 )
-    ubufs->is_shrub_token_set = true;
+  if( rc == 0 ) {
+    ubufs->is_shrub_filter_info_set = true;
+    ubufs->shrub_use_interrupts = use_interrupts;
+  }
 
   return rc;
 }
@@ -632,7 +638,7 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
   ubufs->nic_fifo_limit = 64;
   ubufs->pd = pd;
   ubufs->pd_dh = pd_dh;
-  ubufs->is_shrub_token_set = false;
+  ubufs->is_shrub_filter_info_set = false;
   ubufs->shrub_max_client_bufs = EF_SHRUB_DEFAULT_MAX_CLIENT_BUFFERS;
 
   ubufs->ops.free = efct_ubufs_free;

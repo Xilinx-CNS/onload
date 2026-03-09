@@ -40,10 +40,14 @@ struct ef_shrub_client
   uint64_t mappings[EF_SHRUB_MAP_COUNT];
 };
 
-/* Request shared rxq token from shrub server
+/* Request filter info from shrub server
+ *
+ * This is the information needed by a client before attach/filter
+ * installation to configure shared RXQ attachment and interrupt mode.
  *
  * server_addr: The address for the server, typically a filesystem path
- * response:    Response from the server containing shared rxq token
+ * response:    Response from the server containing shared rxq token and
+ *              filter flags
  *
  * Returns zero on success, or negative error codes including
  *  -ECONNREFUSED server is not listening
@@ -51,8 +55,9 @@ struct ef_shrub_client
  *
  * This function will block while communicating with the server.
  */
-int ef_shrub_client_request_token(const char *server_addr,
-                                  struct ef_shrub_token_response *response);
+int ef_shrub_client_request_filter_info(
+                         const char *server_addr,
+                         struct ef_shrub_filter_info_response *response);
 
 /* Open a connection to a server.
  *
