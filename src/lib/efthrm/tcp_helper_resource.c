@@ -1102,8 +1102,16 @@ static int tcp_helper_rxq_alloc(tcp_helper_resource_t* trs,
      * triggered the filter update. However, we are always called from oof
      * with fm_outer_lock held, or during stack creation,  which protects our
      * qix between looking it up and using it in the alloc. */
-    qix = efct_vi_find_free_rxq(vi, rxq);
-    if( qix == -EALREADY )
+    rc = efct_vi_find_rxq(vi, rxq);
+    if( rc < 0 ) {
+      rc = efct_vi_find_free_rxq(vi);
+      if( rc < 0 )
+        return rc;
+    }
+    qix = rc;
+
+    /* We may already have allocated resources for this queue */
+    if( trs->nic[intf_i].thn_efct_rxq[qix] )
       return 0;
 
     rc = efrm_rxq_alloc(vi_rs, rxq,
