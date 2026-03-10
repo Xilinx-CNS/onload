@@ -394,7 +394,10 @@ static int efct_ubufs_attach(ef_vi* vi,
   if( n_superbufs > CI_EFCT_MAX_SUPERBUFS )
     return -EINVAL;
 
-  ix = efct_vi_find_free_rxq(vi, qid);
+  if( efct_vi_find_rxq(vi, qid) >= 0 )
+    return -EALREADY;
+
+  ix = efct_vi_find_free_rxq(vi);
   if( ix < 0 )
     return ix;
   rxq = &ubufs->q[ix];

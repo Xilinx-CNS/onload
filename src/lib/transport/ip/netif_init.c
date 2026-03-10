@@ -2204,7 +2204,7 @@ static int alloc_efct_shared_rxq(ci_netif* ni, uint32_t nic_i)
   if( rc < 0 )
     return rc;
 
-  rc = efct_vi_find_free_rxq(vi, -1);
+  rc = efct_vi_find_free_rxq(vi);
   if( rc < 0 )
     return rc;
   qix = rc;

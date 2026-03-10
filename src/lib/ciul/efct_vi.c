@@ -1344,16 +1344,26 @@ static bool efct_vi_sb_has_been_filled(ef_vi *vi, uint32_t sbid,
   return CI_OWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL) == sb_sentinel;
 }
 
-int efct_vi_find_free_rxq(ef_vi* vi, int qid)
+int efct_vi_find_rxq(ef_vi* vi, int qid)
 {
   int ix;
 
-  for( ix = 0; ix < vi->efct_rxqs.max_qs; ++ix ) {
-    if( qid >= 0 && efct_get_rxq_state(vi, ix)->qid == qid )
-      return -EALREADY;
+  if( qid >= 0 )
+    for( ix = 0; ix < vi->efct_rxqs.max_qs; ++ix )
+      if( efct_get_rxq_state(vi, ix)->qid == qid )
+        return ix;
+
+  return -ENOENT;
+}
+
+int efct_vi_find_free_rxq(ef_vi* vi)
+{
+  int ix;
+
+  for( ix = 0; ix < vi->efct_rxqs.max_qs; ++ix )
     if( ! efct_rxq_is_active(&vi->efct_rxqs.q[ix]) )
       return ix;
-  }
+
   return -ENOSPC;
 }
 

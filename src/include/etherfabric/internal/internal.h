@@ -120,7 +120,8 @@ extern int efct_ubufs_set_shared(ef_vi* vi, int shrub_controller_id, int shrub_s
 extern int efct_ubufs_get_shared_rxq_token(ef_vi* vi, unsigned* token);
 volatile uint64_t* efct_ubufs_get_rxq_io_window(ef_vi* vi, int ix);
 void efct_ubufs_set_rxq_io_window(ef_vi* vi, int ix, volatile uint64_t* p);
-int efct_vi_find_free_rxq(ef_vi* vi, int qid);
+int efct_vi_find_rxq(ef_vi* vi, int qid);
+int efct_vi_find_free_rxq(ef_vi* vi);
 void efct_vi_start_rxq(ef_vi* vi, int ix, int qid);
 int efct_vi_sync_rxq(ef_vi* vi, int ix, int qid);
 bool efct_vi_rxq_is_active(const ef_vi* vi, int ix);

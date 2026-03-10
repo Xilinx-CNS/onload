@@ -155,7 +155,10 @@ static int efct_kbufs_attach(ef_vi* vi,
   unsigned n_hugepages = (n_superbufs + CI_EFCT_SUPERBUFS_PER_PAGE - 1) /
                          CI_EFCT_SUPERBUFS_PER_PAGE;
 
-  ix = efct_vi_find_free_rxq(vi, qid);
+  if( efct_vi_find_rxq(vi, qid) >= 0 )
+    return -EALREADY;
+
+  ix = efct_vi_find_free_rxq(vi);
   if( ix < 0 )
     return ix;
 

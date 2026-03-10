@@ -25,12 +25,17 @@ struct dependency_checks {
   int called_init_buffers;
 } *checks;
 
-int efct_vi_find_free_rxq(ef_vi* vi, int qid)
+int efct_vi_find_rxq(ef_vi* vi, int qid)
+{
+  return -ENOENT;
+}
+
+int efct_vi_find_free_rxq(ef_vi* vi)
 {
   if( checks && checks->fail_find_free )
     return -EPROTO;
 
-  return qid;
+  return 0; // TODO test more than one queue
 }
 
 void efct_vi_start_rxq(ef_vi* vi, int ix, int qid) {}
