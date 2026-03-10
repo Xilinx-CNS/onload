@@ -1068,17 +1068,10 @@ static int tcp_helper_rxq_map(tcp_helper_resource_t* trs, int intf_i, int qix,
   return rc;
 }
 
-
-int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
-                               const struct efx_filter_spec* spec, int rxq,
-                               unsigned token)
+static int tcp_helper_rxq_alloc(tcp_helper_resource_t* trs,
+                                int intf_i, int rxq, unsigned token)
 {
-  int intf_i;
   struct efhw_nic* nic;
-
-  ci_assert_lt((unsigned) hwport, CI_CFG_MAX_HWPORTS);
-  if( (intf_i = trs->netif.hwport_to_intf_i[hwport]) < 0 )
-    return 0;
 
   nic = efrm_client_get_nic(trs->nic[intf_i].thn_oo_nic->efrm_client);
   if( efhw_nic_max_shared_rxqs(nic) ) {
@@ -1105,11 +1098,10 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
     if( vi_rs->q[EFHW_RXQ].capacity == 0 )   /* e.g. EF_RXQ_SIZE=0 */
       return 0;
 
-    ci_assert_ge(rxq, 0);
     /* We can be here either with or without the stack lock, depending on what
      * triggered the filter update. However, we are always called from oof
-     * with fm_outer_lock held, which protects our qix between looking it up
-     * and using it in the alloc. */
+     * with fm_outer_lock held, or during stack creation,  which protects our
+     * qix between looking it up and using it in the alloc. */
     qix = efct_vi_find_free_rxq(vi, rxq);
     if( qix == -EALREADY )
       return 0;
@@ -1137,7 +1129,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
     rc = efrm_rxq_alloc(vi_rs, rxq,
                         nic->flags & NIC_FLAG_RX_KERNEL_SHARED ? qix : -1,
                         true, interrupt_req, hugepages, trs->trs_efct_alloc,
-                        &trs->nic[intf_i].thn_efct_rxq[qix]);
+                        &trs->nic[intf_i].thn_efct_rxq[qix], &rxq);
     if( rc < 0 ) {
       if( rc != -EINTR )
         LOG_E(ci_log("%s: ERROR: efrm_rxq_alloc failed (%d)", __func__, rc));
@@ -1210,6 +1202,18 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
   return 0;
 }
 
+int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
+                               const struct efx_filter_spec* spec, int rxq,
+                               unsigned token)
+{
+  int intf_i;
+
+  ci_assert_lt((unsigned) hwport, CI_CFG_MAX_HWPORTS);
+  if( (intf_i = trs->netif.hwport_to_intf_i[hwport]) < 0 )
+    return 0;
+
+  return tcp_helper_rxq_alloc(trs, intf_i, rxq, token);
+}
 
 #if CI_CFG_PIO
 
@@ -8561,6 +8565,15 @@ int efab_tcp_helper_efct_superbuf_post(tcp_helper_resource_t* trs,
                            op->qid, op->sbid, op->sentinel);
   CITP_STATS_NETIF_INC(ni, superbuf_ioctl_posts);
   return 0;
+}
+
+int efab_tcp_helper_efct_rxq_alloc(tcp_helper_resource_t* trs,
+                                   oo_efct_rxq_alloc_t* op)
+{
+  struct efrm_pd* pd = efrm_vi_get_pd(tcp_helper_vi(trs, op->intf_i));
+  unsigned token = efrm_pd_exclusive_rxq_token_get(pd);
+
+  return tcp_helper_rxq_alloc(trs, op->intf_i, -1, token);
 }
 
 int efab_tcp_helper_pkt_buf_map(tcp_helper_resource_t* trs,

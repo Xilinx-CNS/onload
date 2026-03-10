@@ -13,6 +13,11 @@
 #include <ci/tools/cpu_features.h>
 #include <ci/internal/transport_config_opt.h>
 
+#ifndef __KERNEL__
+#include "driver_access.h"
+#include <ci/efch/op_types.h>
+#endif
+
 #if CI_CFG_CXL
 #ifndef __KERNEL__
 #ifndef CI_HAVE_X86INTRIN
@@ -153,6 +158,11 @@ efct_rx_desc_for_sb(ef_vi* vi, uint32_t ix, uint32_t sbid)
 static bool efct_rxq_is_active(const ef_vi_efct_rxq* rxq)
 {
   return *rxq->live.superbuf_pkts != 0;
+}
+
+bool efct_vi_rxq_is_active(const ef_vi* vi, int ix)
+{
+  return efct_rxq_is_active(&vi->efct_rxqs.q[ix]);
 }
 
 /* The superbuf descriptor for this packet */
@@ -1339,7 +1349,7 @@ int efct_vi_find_free_rxq(ef_vi* vi, int qid)
   int ix;
 
   for( ix = 0; ix < vi->efct_rxqs.max_qs; ++ix ) {
-    if( efct_get_rxq_state(vi, ix)->qid == qid )
+    if( qid >= 0 && efct_get_rxq_state(vi, ix)->qid == qid )
       return -EALREADY;
     if( ! efct_rxq_is_active(&vi->efct_rxqs.q[ix]) )
       return ix;
@@ -1758,8 +1768,8 @@ int32_t efct_ef_vi_receive_get_filter_id(ef_vi* vi, const ef_event *rx_event,
   }
 }
 
-int efct_vi_get_wakeup_params(ef_vi* vi, int qix, unsigned* sbseq,
-                              unsigned* pktix)
+int efct_vi_get_pkt_wakeup_params(ef_vi* vi, int qix, unsigned* sbseq,
+                                  unsigned* pktix)
 {
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
   ef_vi_efct_rxq_ptr* rxq_ptr = &qs->rxq_ptr[qix];
@@ -1783,6 +1793,37 @@ int efct_vi_get_wakeup_params(ef_vi* vi, int qix, unsigned* sbseq,
   }
   return 0;
 }
+
+#ifndef __KERNEL__
+int efct_vi_prime(ef_vi* vi, ef_driver_handle dh)
+{
+  ci_resource_prime_qs_op_t  op;
+  int i;
+
+  /* The loop below assumes that all rxqs will fit in the fixed array in
+   * the operations's arguments. If that assumption no longer holds, then
+   * this assertion will fail and we'll need a more complicated loop to split
+   * the queues across multiple operations. */
+  EF_VI_BUILD_ASSERT(CI_ARRAY_SIZE(op.rxq_current) >= EF_VI_MAX_EFCT_RXQS);
+
+  op.crp_id = efch_make_resource_id(vi->vi_resource_id);
+  for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
+    op.rxq_current[i].rxq_id =
+      vi->efct_rxqs.ops->get_rxq_resource_id(vi, i);
+    if( efch_resource_id_is_none(op.rxq_current[i].rxq_id) )
+      break;
+    if( vi->efct_rxqs.ops->get_wakeup_params(vi, i,
+                                             &op.rxq_current[i].sbseq,
+                                             &op.rxq_current[i].pktix) < 0 )
+      break;
+  }
+  op.n_rxqs = i;
+  op.n_txqs = vi->vi_txq.mask != 0 ? 1 : 0;
+  if( op.n_txqs )
+    op.txq_current = vi->ep_state->evq.evq_ptr;
+  return ci_resource_prime_qs(dh, &op);
+}
+#endif
 
 void efct_vi_start_transmit_warm(ef_vi* vi)
 {

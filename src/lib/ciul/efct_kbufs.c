@@ -25,7 +25,7 @@
 #ifndef __KERNEL__
 struct efct_kbufs_rxq
 {
-  unsigned resource_id;
+  efch_resource_id_t resource_id;
 };
 #endif
 
@@ -56,7 +56,7 @@ static int efct_kbufs_refresh(ef_vi* vi, int qid)
 
   ci_resource_op_t op;
   op.op = CI_RSOP_RXQ_REFRESH;
-  op.id = efch_make_resource_id(kbq->resource_id);
+  op.id = kbq->resource_id;
   op.u.rxq_refresh.superbufs = (uintptr_t)rxq->superbuf;
   op.u.rxq_refresh.current_mappings = (uintptr_t)rxq->mappings;
   op.u.rxq_refresh.max_superbufs = CI_EFCT_MAX_SUPERBUFS;
@@ -116,6 +116,17 @@ static void efct_kbufs_free(ef_vi* vi, int qid, int sbid)
     /* No space in the freeq add to descriptor free list */
     efct_rx_sb_free_push(vi, qid, sbid);
   }
+}
+
+static efch_resource_id_t efct_kbufs_get_rxq_resource_id(ef_vi* vi, int ix)
+{
+#ifdef __KERNEL__
+  /* Shouldn't ever be called in kernel */
+  EF_VI_ASSERT(0);
+  return efch_resource_id_none();
+#else
+  return get_kbufs(vi)->q[ix].resource_id;
+#endif
 }
 
 static bool efct_kbufs_available(const ef_vi* vi, int qid)
@@ -200,7 +211,7 @@ static int efct_kbufs_attach(ef_vi* vi,
     return rc;
   }
 
-  get_kbufs(vi)->q[ix].resource_id = ra.out_id.index;
+  get_kbufs(vi)->q[ix].resource_id = ra.out_id;
   efct_vi_start_rxq(vi, ix, qid);
   return 0;
 #endif
@@ -225,30 +236,7 @@ static int efct_kbufs_prime(ef_vi* vi, ef_driver_handle dh)
   BUG();
   return -EOPNOTSUPP;
 #else
-  ci_resource_prime_qs_op_t  op;
-  int i;
-
-  /* The loop below assumes that all rxqs will fit in the fixed array in
-   * the operations's arguments. If that assumption no longer holds, then
-   * this assertion will fail and we'll need a more complicated loop to split
-   * the queues across multiple operations. */
-  EF_VI_BUILD_ASSERT(CI_ARRAY_SIZE(op.rxq_current) >= EF_VI_MAX_EFCT_RXQS);
-
-  op.crp_id = efch_make_resource_id(vi->vi_resource_id);
-  for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
-    op.rxq_current[i].rxq_id =
-      efch_make_resource_id(get_kbufs(vi)->q[i].resource_id);
-    if( efch_resource_id_is_none(op.rxq_current[i].rxq_id) )
-      break;
-    if( efct_vi_get_wakeup_params(vi, i, &op.rxq_current[i].sbseq,
-                                  &op.rxq_current[i].pktix) < 0 )
-      break;
-  }
-  op.n_rxqs = i;
-  op.n_txqs = vi->vi_txq.mask != 0 ? 1 : 0;
-  if( op.n_txqs )
-    op.txq_current = vi->ep_state->evq.evq_ptr;
-  return ci_resource_prime_qs(dh, &op);
+  return efct_vi_prime(vi, dh);
 #endif
 }
 
@@ -336,7 +324,7 @@ int efct_kbufs_init_internal(ef_vi* vi,
 
     efct_get_rxq_state(vi, i)->qid = shm->q[i].qid;
 #ifndef __KERNEL__
-    rxqs->q[i].resource_id = EFCH_RESOURCE_ID_PRI_ARG(efch_resource_id_none());
+    rxqs->q[i].resource_id = efch_resource_id_none();
     rxq->mappings = mappings + i * CI_EFCT_MAX_HUGEPAGES;
 #endif
     rxq->live.superbuf_pkts = &shm->q[i].superbuf_pkts;
@@ -352,6 +340,8 @@ int efct_kbufs_init_internal(ef_vi* vi,
   rxqs->ops.detach = efct_kbufs_detach;
   rxqs->ops.refresh_mappings = efct_kbufs_refresh_mappings;
   rxqs->ops.prime = efct_kbufs_prime;
+  rxqs->ops.get_wakeup_params = efct_vi_get_pkt_wakeup_params;
+  rxqs->ops.get_rxq_resource_id = efct_kbufs_get_rxq_resource_id;
   rxqs->ops.cleanup = efct_kbufs_cleanup_internal;
   rxqs->ops.dump_stats = efct_kbufs_dump_stats;
   rxqs->ops.set_client_buf_count = efct_kbufs_set_shrub_bufs_per_client;

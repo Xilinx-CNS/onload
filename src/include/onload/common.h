@@ -295,6 +295,10 @@ typedef struct {
 } oo_efct_superbuf_post_t;
 
 typedef struct {
+  uint32_t intf_i;
+} oo_efct_rxq_alloc_t;
+
+typedef struct {
   ci_uint64     offset;
   ci_user_ptr_t addr;
 } oo_pkt_buf_map_t;
@@ -328,6 +332,8 @@ typedef ci_uint16 oo_fd_flags;
 /* This is Onload service like stackdump. */
 #define OO_FDFLAG_SERVICE       0x100
 
+/* Indicates that we hold the user resource lock and must unlock on close */
+#define OO_FDFLAG_URES_LOCKED   0x200
 
 #define OO_FDFLAG_TYPE_STR(flags) \
   (flags) & OO_FDFLAG_STACK ? "stack" :             \

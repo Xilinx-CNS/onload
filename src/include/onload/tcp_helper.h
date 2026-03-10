@@ -371,6 +371,11 @@ typedef struct tcp_helper_resource_s {
 
   struct oo_icmp_msg* icmp_msg;
   int icmp_msg_n;
+
+  /* Lock against sharing the stack until user resources have been signalled
+   * ready or failed, according to the value of ures_result */
+  struct mutex ures_lock;
+  int ures_result;
 } tcp_helper_resource_t;
 
 

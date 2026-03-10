@@ -311,7 +311,6 @@ void efct_ubufs_local_attach_internal(ef_vi* vi, int ix, int qid, unsigned n_sup
     efct_rx_sb_free_push(vi, ix, id);
   }
 
-  qs->efct_state[ix].config_generation = 1; /* force an initial refresh */
   qs->efct_state[ix].superbuf_pkts = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
   qs->efct_active_qs |= 1 << ix;
   efct_vi_start_rxq(vi, ix, qid);
@@ -472,10 +471,32 @@ static void efct_ubufs_detach(ef_vi* vi, int ix)
   rxq->rxq_id = rxq->memreg_id = efch_resource_id_none();
 }
 
+static efch_resource_id_t efct_ubufs_get_rxq_resource_id(ef_vi* vi, int ix)
+{
+#ifdef __KERNEL__
+  /* Shouldn't ever be called in kernel */
+  EF_VI_ASSERT(0);
+  return efch_resource_id_none();
+#else
+  return get_ubufs(vi)->q[ix].rxq_id;
+#endif
+}
+
+static int efct_ubufs_get_wakeup_params(ef_vi* vi, int qix, unsigned* sbseq,
+                                        unsigned* pktix)
+{
+  /* TODO */
+  return -EOPNOTSUPP;
+}
+
 static int efct_ubufs_prime(ef_vi* vi, ef_driver_handle dh)
 {
-  // TODO
+#ifdef __KERNEL__
+  EF_VI_ASSERT(0);
   return -EOPNOTSUPP;
+#else
+  return efct_vi_prime(vi, dh);
+#endif
 }
 
 static int efct_ubufs_refresh(ef_vi* vi, int ix)
@@ -621,6 +642,8 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
   ubufs->ops.refresh = efct_ubufs_refresh;
   ubufs->ops.refresh_mappings = efct_ubufs_refresh_mappings;
   ubufs->ops.prime = efct_ubufs_prime;
+  ubufs->ops.get_wakeup_params = efct_ubufs_get_wakeup_params;
+  ubufs->ops.get_rxq_resource_id = efct_ubufs_get_rxq_resource_id;
   ubufs->ops.cleanup = efct_ubufs_cleanup;
   ubufs->ops.dump_stats = efct_ubufs_dump_stats;
   ubufs->ops.post = efct_ubufs_post_direct;

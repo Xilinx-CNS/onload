@@ -924,6 +924,11 @@ typedef struct {
                            uint64_t user_buffers, uint64_t* user_mappings);
   /** Prime the virtual interface's queues (both rx and tx) */
   int  (*prime)(struct ef_vi*, ef_driver_handle dh);
+  /** Get wakeup parameters for a queue */
+  int  (*get_wakeup_params)(struct ef_vi*, int qix, unsigned* sbseq,
+                            unsigned* pktix);
+  /** Get the resource ID for a queue (none => queue not attached) */
+  struct efch_resource_id_s (*get_rxq_resource_id)(struct ef_vi*, int ix);
   /** De-allocate internal local resources (affects this user of this vi) */
   void (*cleanup)(struct ef_vi*);
   /** Output stats recorded for EFCT RXQs. */

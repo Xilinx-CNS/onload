@@ -122,9 +122,11 @@ void efct_ubufs_set_rxq_io_window(ef_vi* vi, int ix, volatile uint64_t* p);
 int efct_vi_find_free_rxq(ef_vi* vi, int qid);
 void efct_vi_start_rxq(ef_vi* vi, int ix, int qid);
 int efct_vi_sync_rxq(ef_vi* vi, int ix, int qid);
+bool efct_vi_rxq_is_active(const ef_vi* vi, int ix);
 int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len);
-int efct_vi_get_wakeup_params(ef_vi* vi, int qid, unsigned* sbseq,
-                              unsigned* pktix);
+int efct_vi_get_pkt_wakeup_params(ef_vi* vi, int qid, unsigned* sbseq,
+                                  unsigned* pktix);
+int efct_vi_prime(ef_vi* vi, ef_driver_handle dh);
 
 /* This returns the ID of the next RX buffer in the RXQ.  In the absence of
  * event merging and errors, this will be the same packet that will be returned

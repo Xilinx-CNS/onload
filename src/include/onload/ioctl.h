@@ -230,6 +230,8 @@ enum {
 #define OO_IOC_EFCT_SUPERBUF_POST \
                                OO_IOC_W(EFCT_SUPERBUF_POST, \
                                         oo_efct_superbuf_post_t)
+  OO_OP_EFCT_RXQ_ALLOC,
+#define OO_IOC_EFCT_RXQ_ALLOC OO_IOC_W(EFCT_RXQ_ALLOC, oo_efct_rxq_alloc_t)
 
   OO_OP_PKT_BUF_MAP,
 #define OO_IOC_PKT_BUF_MMAP OO_IOC_RW(PKT_BUF_MAP, oo_pkt_buf_map_t)
@@ -240,6 +242,9 @@ enum {
 
   OO_OP_REINIT_TXQ,
 #define OO_IOC_REINIT_TXQ OO_IOC_W(REINIT_TXQ, oo_reinit_txq_t)
+
+  OO_OP_USER_RESOURCES_READY,
+#define OO_IOC_USER_RESOURCES_READY OO_IOC_W(USER_RESOURCES_READY, int)
 
   OO_OP_CONTIG_END,  /* This is the last in range of contigous opcodes */
 
