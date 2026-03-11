@@ -374,8 +374,10 @@ void ef_shrub_server_dump_to_fd(struct ef_shrub_server* server, int fd,
 {
   int i;
 
-  shrub_log_to_fd(fd, buf, buflen, "  pd token: %u buffer count: %llu\n",
-                  server->pd_excl_rxq_tok, server->buffer_count);
+  shrub_log_to_fd(fd, buf, buflen, "  pd token: %u buffer count: %llu "
+                                   "interrupt mode: %s\n",
+                  server->pd_excl_rxq_tok, server->buffer_count,
+                  server->use_interrupts ? "enabled" : "disabled");
 
   for( i = 0; i < sizeof(server->queues) / sizeof(server->queues[0]); i++ )
     if( server->queues[i].fifo_size )

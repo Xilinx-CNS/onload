@@ -372,6 +372,8 @@ static void shrub_dump_summary_to_fd(int fd, shrub_controller_config *config,
   shrub_log_to_fd(fd, buf, buflen, "  name: "EF_SHRUB_CONTROLLER_PREFIX"%d%s\n",
                   config->controller_id, config->debug_mode ? " (debug)" : "");
   shrub_log_to_fd(fd, buf, buflen, "  dir: %s\n", config->controller_dir);
+  shrub_log_to_fd(fd, buf, buflen, "  interrupt mode: %s\n",
+                  config->use_interrupts ? "enabled" : "disabled");
   shrub_log_to_fd(fd, buf, buflen, "  config socket: %s\n",
                   config->config_socket);
 }
