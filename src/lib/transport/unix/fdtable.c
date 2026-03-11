@@ -500,6 +500,15 @@ int citp_fdtable_ctor()
   citp_fdtable.size = 4096;
 
   if( getrlimit(RLIMIT_NOFILE, &rlim) == 0 ) {
+    /* Handle the case when rlim_max is too huge for malloc(). */
+    if( rlim.rlim_max > CITP_OPTS.fds_max ) {
+      Log_S(ci_log("Limit max number of opened files to EF_FDS_MAX=%u value.",
+                   CITP_OPTS.fds_max));
+      rlim.rlim_max = CITP_OPTS.fds_max;
+      if( rlim.rlim_cur > rlim.rlim_max )
+        rlim.rlim_cur = rlim.rlim_max;
+      CI_TRY(ci_sys_setrlimit(RLIMIT_NOFILE, &rlim));
+    }
     citp_fdtable.size = rlim.rlim_max;
     if( CITP_OPTS.fdtable_size != 0 &&
         CITP_OPTS.fdtable_size != rlim.rlim_max ) {
