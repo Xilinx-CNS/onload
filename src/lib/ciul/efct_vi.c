@@ -1549,7 +1549,11 @@ static int efct_post_filter_add(struct ef_vi* vi,
   EF_VI_ASSERT(rxq >= 0);
   n_superbufs = CI_ROUND_UP((vi->vi_rxq.mask + 1) * EFCT_PKT_STRIDE,
                             EFCT_RX_SUPERBUF_BYTES) / EFCT_RX_SUPERBUF_BYTES;
-  rc = vi->efct_rxqs.ops->attach(vi, rxq, -1, n_superbufs, shared_mode, false, &rxq);
+  /* TODO currently we don't have support for requesting interrupts from ef_vi
+   * clients. When we wire that in, it will be fed through here. Note that in the
+   * efct_kbufs case interrupts are always enabled anyway. */
+  rc = vi->efct_rxqs.ops->attach(vi, rxq, -1, n_superbufs, shared_mode,
+                                 false, &rxq);
   if( rc == -EALREADY )
     rc = 0;
   return rc;

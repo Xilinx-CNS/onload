@@ -2206,14 +2206,22 @@ static int alloc_efct_shared_rxq(ci_netif* ni, uint32_t nic_i)
   if( rc < 0 )
     return rc;
 
+  if( NI_OPTS(ni).shrub_use_interrupts && !use_interrupts ) {
+    NI_LOG(ni, CONFIG_WARNINGS,
+           "ERROR: Expected shrub controller to use interrupts, but it's not "
+           "configured to do so. Is there a conflicting manually launched "
+           "controller with id %d? To allow use without interrupts set "
+           "EF_SHRUB_USE_INTERRUPTS=0.", NI_OPTS(ni).shrub_controller_id);
+    return -EINVAL;
+  }
+
   rc = efct_vi_find_free_rxq(vi);
   if( rc < 0 )
     return rc;
   qix = rc;
 
   rc = efct_ubufs_shared_attach_internal(vi, qix, -1,
-                                         (void*)vi->efct_rxqs.q[qix].superbuf,
-                                         NI_OPTS(ni).shrub_use_interrupts);
+                                         (void*)vi->efct_rxqs.q[qix].superbuf);
   if( rc < 0 )
     return rc;
 

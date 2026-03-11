@@ -145,8 +145,6 @@ struct ef_shrub_queue_request {
   /* Queue ID that the client intends to connect to */
   uint64_t qid;
 #define EF_SHRUB_QUEUE_ANY ((uint64_t)-1)
-  /* Whether we expect to use interrupts */
-  uint64_t use_interrupts;
   /* The number of buffers we can accept from the server at any time */
   uint64_t max_connection_buffers;
 };

@@ -112,8 +112,7 @@ find_queue(struct ef_shrub_server* server, int qid)
 
 static int server_request_queue(struct ef_shrub_server* server,
                                 struct ef_shrub_connection* connection,
-                                int qid, bool use_interrupts,
-                                size_t max_connection_buffers)
+                                int qid, size_t max_connection_buffers)
 {
   struct ef_shrub_queue* queue;
   int rc;
@@ -123,9 +122,6 @@ static int server_request_queue(struct ef_shrub_server* server,
 
   if( connection->queue != NULL )
     return -EALREADY;
-
-  if( use_interrupts != server->use_interrupts )
-    return -EINVAL;
 
   remove_connection(&server->pending_connections, connection);
 
@@ -247,7 +243,6 @@ static int server_request_received(struct ef_shrub_server* server,
   case EF_SHRUB_REQUEST_QUEUE:
     qid = request.queue.qid == EF_SHRUB_QUEUE_ANY ? -1 : request.queue.qid;
     rc = server_request_queue(server, connection, qid,
-                              request.queue.use_interrupts,
                               request.queue.max_connection_buffers);
     if( rc < 0 )
       goto out_close;

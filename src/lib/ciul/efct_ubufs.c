@@ -317,8 +317,7 @@ void efct_ubufs_local_attach_internal(ef_vi* vi, int ix, int qid, unsigned n_sup
   post_buffers(vi, ix);
 }
 
-int efct_ubufs_shared_attach_internal(ef_vi* vi, int ix, int qid,
-                                      void* superbuf, bool use_interrupts)
+int efct_ubufs_shared_attach_internal(ef_vi* vi, int ix, int qid, void* superbuf)
 {
   int rc;
   struct efct_ubufs* ubufs = get_ubufs(vi);
@@ -327,7 +326,7 @@ int efct_ubufs_shared_attach_internal(ef_vi* vi, int ix, int qid,
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
 
   rc = ef_shrub_client_open(client, superbuf, ubufs->server_address, qid,
-                            use_interrupts, ubufs->shrub_max_client_bufs);
+                            ubufs->shrub_max_client_bufs);
   if ( rc < 0 ) {
     LOG(ef_log("%s: ERROR initializing shrub client! rc=%d", __FUNCTION__, rc));
     return rc;
@@ -396,6 +395,7 @@ static int efct_ubufs_attach(ef_vi* vi,
   int ix, rc;
   struct efct_ubufs* ubufs = get_ubufs(vi);
   struct efct_ubufs_rxq* rxq;
+  bool use_interrupts = interrupt_mode;
 
   if( n_superbufs > CI_EFCT_MAX_SUPERBUFS )
     return -EINVAL;
@@ -408,7 +408,12 @@ static int efct_ubufs_attach(ef_vi* vi,
     return ix;
   rxq = &ubufs->q[ix];
 
-  rc = efct_ubufs_init_rxq_resource(vi, qid, n_superbufs, interrupt_mode,
+  /* For ef_vi shrub clients the interrupt mode is currently decided solely by the
+   * controller configuration. */
+  if( shared_mode )
+    use_interrupts = ubufs->shrub_use_interrupts;
+
+  rc = efct_ubufs_init_rxq_resource(vi, qid, n_superbufs, use_interrupts,
                                     &rxq->rxq_id);
   if( rc < 0 ) {
     LOGVV(ef_log("%s: efct_ubufs_init_rxq_resource %d", __FUNCTION__, rc));
@@ -422,7 +427,7 @@ static int efct_ubufs_attach(ef_vi* vi,
 
   if( shared_mode ) {
     void* superbufs = (void*)efct_superbuf_access(vi, ix, 0);
-    rc = efct_ubufs_shared_attach_internal(vi, ix, qid, superbufs, false);
+    rc = efct_ubufs_shared_attach_internal(vi, ix, qid, superbufs);
     if( rc < 0 ) {
       LOGVV(ef_log("%s: efct_ubufs_shared_attach_internal %d", __FUNCTION__, rc));
       goto fail;

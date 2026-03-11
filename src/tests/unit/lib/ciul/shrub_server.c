@@ -117,7 +117,6 @@ int ef_shrub_server_recv(int fd, void* data, size_t bytes)
   switch(shrub_request_type) {
     case EF_SHRUB_REQUEST_QUEUE:
       req->queue.qid = ++last_qid;
-      req->queue.use_interrupts = shrub_use_interrupts;
       break;
     default:
       break;
