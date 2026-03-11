@@ -2716,9 +2716,12 @@ static int alloc_efct_resources(ci_netif* ni)
     if( vi->efct_rxqs.active_qs &&
         NI_OPTS(ni).multiarch_rx_datapath != EF_MULTIARCH_DATAPATH_FF &&
         nsn->vi_arch == EFHW_ARCH_EF10CT ) {
-      rc = alloc_efct_exclusive_rxq(ni, nic_i);
-      if( rc < 0 )
-        return rc;
+
+      if( ! NI_OPTS(ni).shrub_unicast ) {
+        rc = alloc_efct_exclusive_rxq(ni, nic_i);
+        if( rc < 0 )
+          return rc;
+      }
 
       rc = efct_superbuf_config_refresh_all(vi);
       if( rc < 0 )
