@@ -113,7 +113,7 @@ enum ef_shrub_controller_command {
   EF_SHRUB_CONTROLLER_SHRUB_DUMP,
 };
 
-#define EF_SHRUB_DEFAULT_BUFFER_COUNT 4
+#define EF_SHRUB_DEFAULT_BUFFER_COUNT 32
 #define EF_SHRUB_MAX_BUFFER_COUNT 100000
 /* The attachment dance may fail due to the way we try to find the first unfull
  * buffer/packet with only one buffer. */
