@@ -33,12 +33,12 @@ struct efct_ubufs
   ef_vi_efct_rxq_ops ops;
   unsigned nic_fifo_limit;
   ef_pd* pd;
-  int shrub_controller_id;
-  int shrub_server_socket_id;
   ef_driver_handle pd_dh;
-  bool is_shrub_token_set;
+  bool is_shrub_filter_info_set;
+  bool shrub_use_interrupts;
   size_t shrub_max_client_bufs;
   struct efct_ubufs_rxq q[EF_VI_MAX_EFCT_RXQS];
+  char server_address[EF_SHRUB_SERVER_SOCKET_LEN];
 };
 
 static struct efct_ubufs* get_ubufs(ef_vi* vi)
@@ -317,43 +317,26 @@ void efct_ubufs_local_attach_internal(ef_vi* vi, int ix, int qid, unsigned n_sup
   post_buffers(vi, ix);
 }
 
-int efct_ubufs_shared_attach_internal(ef_vi* vi, int ix, int qid,
-                                      void* superbuf, bool use_interrupts)
+int efct_ubufs_shared_attach_internal(ef_vi* vi, int ix, int qid, void* superbuf)
 {
   int rc;
-  struct ef_shrub_client* client = &get_ubufs(vi)->q[ix].shrub_client;
+  struct efct_ubufs* ubufs = get_ubufs(vi);
+  struct ef_shrub_client* client = &ubufs->q[ix].shrub_client;
+  const struct ef_shrub_shared_metrics* metrics;
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
-  struct efct_ubufs*     ubufs;
 
-  char attach_path[EF_SHRUB_SERVER_SOCKET_LEN];
-  ubufs = get_ubufs(vi);
-
-  EF_VI_ASSERT(ubufs->shrub_controller_id >= 0);
-  EF_VI_ASSERT(ubufs->shrub_server_socket_id >= 0);
-
-  memset(attach_path, 0, sizeof(attach_path));
-  rc = snprintf(attach_path, sizeof(attach_path),
-                EF_SHRUB_CONTROLLER_PATH_FORMAT EF_SHRUB_SHRUB_FORMAT,
-                EF_SHRUB_SOCK_DIR_PATH, ubufs->shrub_controller_id,
-                ubufs->shrub_server_socket_id);
-  if ( rc < 0 || rc >= sizeof(attach_path) )
-    return -EINVAL;
-
-  attach_path[sizeof(attach_path) - 1] = '\0';
-
-  rc = ef_shrub_client_open(client, superbuf, attach_path, qid,
-                            use_interrupts, ubufs->shrub_max_client_bufs);
+  rc = ef_shrub_client_open(client, superbuf, ubufs->server_address, qid,
+                            ubufs->shrub_max_client_bufs);
   if ( rc < 0 ) {
     LOG(ef_log("%s: ERROR initializing shrub client! rc=%d", __FUNCTION__, rc));
     return rc;
   }
 
-  qs->efct_state[ix].config_generation = 1; /* force an initial refresh */
-  qs->efct_state[ix].superbuf_pkts =
-    ef_shrub_client_get_state(client)->metrics.buffer_bytes / EFCT_PKT_STRIDE;
+  metrics = &ef_shrub_client_get_state(client)->metrics;
+  qs->efct_state[ix].superbuf_pkts = metrics->buffer_bytes / EFCT_PKT_STRIDE;
   qs->efct_active_qs |= 1 << ix;
 
-  rc = efct_vi_sync_rxq(vi, ix, qid);
+  rc = efct_vi_sync_rxq(vi, ix, metrics->qid);
   if ( rc < 0 ) {
     LOG(ef_log("%s: ERROR syncing shrub_client to rxq! rc=%d", __FUNCTION__,
                rc));
@@ -362,34 +345,40 @@ int efct_ubufs_shared_attach_internal(ef_vi* vi, int ix, int qid,
   return ix;
 }
 
+int efct_ubufs_get_shared_filter_info(ef_vi* vi, unsigned* token,
+                                      bool* use_interrupts)
+{
+  struct efct_ubufs *ubufs = get_ubufs(vi);
+  struct ef_shrub_filter_info_response response;
+  int rc;
+
+  rc = ef_shrub_client_request_filter_info(ubufs->server_address, &response);
+  if( rc < 0 )
+    return rc;
+
+  *token = response.shared_rxq_token;
+  *use_interrupts = response.use_interrupts;
+  return 0;
+}
+
 static int efct_ubufs_pre_attach(ef_vi* vi, bool shared_mode)
 {
-  struct ef_shrub_token_response response;
-  struct efct_ubufs *ubufs;
-  char attach_path[EF_SHRUB_SERVER_SOCKET_LEN];
-  int rc = 0;
+  struct efct_ubufs *ubufs = get_ubufs(vi);
+  unsigned token;
+  bool use_interrupts;
+  int rc;
 
-  if( !shared_mode )
+  if( ! shared_mode || ubufs->is_shrub_filter_info_set )
     return 0;
 
-  ubufs = get_ubufs(vi);
-  if( !ubufs->is_shrub_token_set ) {
-    memset(attach_path, 0, sizeof(attach_path));
-    rc = snprintf(attach_path, sizeof(attach_path),
-                  EF_SHRUB_CONTROLLER_PATH_FORMAT EF_SHRUB_SHRUB_FORMAT,
-                  EF_SHRUB_SOCK_DIR_PATH, ubufs->shrub_controller_id,
-                  ubufs->shrub_server_socket_id);
-    if ( rc < 0 || rc >= sizeof(attach_path) )
-      return -EINVAL;
-    attach_path[sizeof(attach_path) - 1] = '\0';
+  rc = efct_ubufs_get_shared_filter_info(vi, &token, &use_interrupts);
+  if( rc < 0 )
+    return rc;
 
-    rc = ef_shrub_client_request_token(attach_path, &response);
-    if( rc )
-      return rc;
-
-    rc = efct_ubufs_set_shared_rxq_token(vi, response.shared_rxq_token);
-    if( rc == 0 )
-      ubufs->is_shrub_token_set = true;
+  rc = efct_ubufs_set_shared_rxq_token(vi, token);
+  if( rc == 0 ) {
+    ubufs->is_shrub_filter_info_set = true;
+    ubufs->shrub_use_interrupts = use_interrupts;
   }
 
   return rc;
@@ -400,30 +389,45 @@ static int efct_ubufs_attach(ef_vi* vi,
                              int fd,
                              unsigned n_superbufs,
                              bool shared_mode,
-                             bool interrupt_mode)
+                             bool interrupt_mode,
+                             int* qid_out)
 {
   int ix, rc;
   struct efct_ubufs* ubufs = get_ubufs(vi);
   struct efct_ubufs_rxq* rxq;
+  bool use_interrupts = interrupt_mode;
 
   if( n_superbufs > CI_EFCT_MAX_SUPERBUFS )
     return -EINVAL;
 
-  ix = efct_vi_find_free_rxq(vi, qid);
+  if( efct_vi_find_rxq(vi, qid) >= 0 )
+    return -EALREADY;
+
+  ix = efct_vi_find_free_rxq(vi);
   if( ix < 0 )
     return ix;
   rxq = &ubufs->q[ix];
 
-  rc = efct_ubufs_init_rxq_resource(vi, qid, n_superbufs, interrupt_mode,
+  /* For ef_vi shrub clients the interrupt mode is currently decided solely by the
+   * controller configuration. */
+  if( shared_mode )
+    use_interrupts = ubufs->shrub_use_interrupts;
+
+  rc = efct_ubufs_init_rxq_resource(vi, qid, n_superbufs, use_interrupts,
                                     &rxq->rxq_id);
   if( rc < 0 ) {
     LOGVV(ef_log("%s: efct_ubufs_init_rxq_resource %d", __FUNCTION__, rc));
     return rc;
   }
 
+  if( qid < 0 )
+    qid = rc;
+  else
+    EF_VI_ASSERT(rc == qid);
+
   if( shared_mode ) {
     void* superbufs = (void*)efct_superbuf_access(vi, ix, 0);
-    rc = efct_ubufs_shared_attach_internal(vi, ix, qid, superbufs, false);
+    rc = efct_ubufs_shared_attach_internal(vi, ix, qid, superbufs);
     if( rc < 0 ) {
       LOGVV(ef_log("%s: efct_ubufs_shared_attach_internal %d", __FUNCTION__, rc));
       goto fail;
@@ -441,6 +445,7 @@ static int efct_ubufs_attach(ef_vi* vi,
     efct_ubufs_local_attach_internal(vi, ix, qid, n_superbufs);
   }
 
+  *qid_out = qid;
   return ix;
 
 fail:
@@ -464,7 +469,11 @@ static void efct_ubufs_detach(ef_vi* vi, int ix)
   if( rxq_is_local(vi, ix) )
     efct_ubufs_free_rxq_buffers(vi, ix, rxq->rx_post_buffer_reg);
   else
+#ifdef __KERNEL__
+    efct_ubufs_unmap_kernel(rxq->shrub_client.mappings);
+#else
     ef_shrub_client_close(&rxq->shrub_client);
+#endif
 
   efct_ubufs_free_resource(vi, rxq->rxq_id);
   efct_ubufs_free_resource(vi, rxq->memreg_id);
@@ -509,8 +518,14 @@ static int efct_ubufs_refresh_mappings(ef_vi* vi, int ix,
                                        uint64_t user_superbuf,
                                        uint64_t* user_mappings)
 {
-  return ef_shrub_client_refresh_mappings(&get_ubufs(vi)->q[ix].shrub_client,
-                                          user_superbuf, user_mappings);
+#ifdef __KERNEL__
+  return efct_ubufs_map_kernel(get_ubufs(vi)->q[ix].shrub_client.mappings,
+                               user_mappings,
+                               vi->efct_rxqs.q[ix].superbufs,
+                               user_superbuf);
+#else
+  return -EOPNOTSUPP;
+#endif
 }
 
 static void efct_ubufs_cleanup(ef_vi* vi)
@@ -628,9 +643,7 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
   ubufs->nic_fifo_limit = 64;
   ubufs->pd = pd;
   ubufs->pd_dh = pd_dh;
-  ubufs->is_shrub_token_set = false;
-  ubufs->shrub_controller_id = EF_SHRUB_NO_SHRUB;
-  ubufs->shrub_server_socket_id = -1;
+  ubufs->is_shrub_filter_info_set = false;
   ubufs->shrub_max_client_bufs = EF_SHRUB_DEFAULT_MAX_CLIENT_BUFFERS;
 
   ubufs->ops.free = efct_ubufs_free;
@@ -665,11 +678,18 @@ int efct_ubufs_init_internal(ef_vi* vi)
   return efct_ubufs_init(vi, NULL, 0);
 }
 
-int efct_ubufs_set_shared(ef_vi* vi, int shrub_controller_id, int shrub_server_socket_id)
+int efct_ubufs_set_shared(ef_vi* vi, int shrub_controller_id,
+                          int shrub_server_socket_id)
 {
-  struct efct_ubufs* ubufs;
-  ubufs = get_ubufs(vi);
-  ubufs->shrub_controller_id = shrub_controller_id;
-  ubufs->shrub_server_socket_id = shrub_server_socket_id;
+  int rc;
+  struct efct_ubufs* ubufs = get_ubufs(vi);
+
+  rc = snprintf(ubufs->server_address, sizeof(ubufs->server_address),
+                EF_SHRUB_CONTROLLER_PATH_FORMAT EF_SHRUB_SHRUB_FORMAT,
+                EF_SHRUB_SOCK_DIR_PATH, shrub_controller_id,
+                shrub_server_socket_id);
+  if ( rc < 0 || rc >= sizeof(ubufs->server_address) )
+    return -EINVAL;
+
   return 0;
 }

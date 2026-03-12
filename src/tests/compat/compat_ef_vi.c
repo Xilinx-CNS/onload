@@ -76,7 +76,7 @@ CI_BUILD_ASSERT(sizeof(struct efch_efct_rxq_alloc) == 24);
 CI_BUILD_ASSERT(__builtin_offsetof(struct efch_efct_rxq_alloc, in_vi_rs_id) == 0);
 CI_BUILD_ASSERT(__builtin_offsetof(struct efch_efct_rxq_alloc, in_flags) == 4);
 CI_BUILD_ASSERT(__builtin_offsetof(struct efch_efct_rxq_alloc, in_abi_version) == 8);
-CI_BUILD_ASSERT(__builtin_offsetof(struct efch_efct_rxq_alloc, in_qid) == 12);
+CI_BUILD_ASSERT(__builtin_offsetof(struct efch_efct_rxq_alloc, in_out_qid) == 12);
 CI_BUILD_ASSERT(__builtin_offsetof(struct efch_efct_rxq_alloc, in_shm_ix) == 13);
 CI_BUILD_ASSERT(__builtin_offsetof(struct efch_efct_rxq_alloc, in_timestamp_req) == 14);
 CI_BUILD_ASSERT(__builtin_offsetof(struct efch_efct_rxq_alloc, in_n_hugepages) == 16);

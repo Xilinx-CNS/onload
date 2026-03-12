@@ -4,7 +4,10 @@
 /* Access to kernel resources for kernel efct_ubufs */
 
 #include "ef_vi_internal.h"
+#include <etherfabric/internal/shrub_client.h>
+#include <etherfabric/internal/efct_uk_api.h>
 #include <linux/slab.h>
+#include <linux/mman.h>
 
 void* efct_ubufs_alloc_mem(size_t size)
 {
@@ -47,3 +50,208 @@ int efct_ubufs_set_shared_rxq_token(ef_vi* vi, uint64_t token)
 {
   return -EOPNOTSUPP;
 }
+
+static int map_area_to_kernel(uint64_t* mapping_out, uint64_t user_mapping,
+                              size_t bytes, int flags, pgprot_t prot)
+{
+  /* TBD: do we still need to build for such ancient kernels? */
+#ifndef VM_MAP_PUT_PAGES
+  return -EOPNOTSUPP;
+#else
+  unsigned page_count, pages_got, i;
+  struct page **pages;
+  void* map;
+
+  page_count = (bytes + PAGE_SIZE - 1) / PAGE_SIZE;
+  pages = kmalloc(page_count * sizeof(*pages), GFP_KERNEL);
+  if( pages == NULL )
+    return -ENOMEM;
+
+  pages_got = get_user_pages_fast(user_mapping, page_count, flags, pages);
+  if( pages_got != page_count )
+    goto fail;
+
+  map = vmap(pages, page_count, VM_MAP_PUT_PAGES | VM_USERMAP, prot);
+  if( map == NULL )
+    goto fail;
+
+  *mapping_out = (uint64_t)map;
+  return 0;
+
+fail:
+  for( i = 0; i < pages_got; ++i )
+    put_page(pages[i]);
+  kfree(pages);
+  return -EFAULT;
+#endif
+}
+
+static void
+populate_buffers(const char** buffers, uint64_t mapping, size_t bytes)
+{
+  int i, count = (bytes + EFCT_RX_SUPERBUF_BYTES - 1) / EFCT_RX_SUPERBUF_BYTES;
+
+  for( i = 0; i < count; ++i )
+    buffers[i] = (void*)(mapping + i * EFCT_RX_SUPERBUF_BYTES);
+}
+ 
+static int map_user_to_kernel(uint64_t* kernel_mappings,
+                              uint64_t* user_mappings,
+                              const char** buffers)
+{
+  int i, rc;
+  size_t buffer_bytes, server_bytes, client_bytes;
+  struct ef_shrub_client_state state;
+  uint64_t user_state = user_mappings[EF_SHRUB_MAP_STATE];
+ 
+  rc = copy_from_user(&state, (void* __user)user_state, sizeof(state));
+  if( rc != 0 )
+    return -EFAULT;
+
+  buffer_bytes = state.metrics.buffer_count * state.metrics.buffer_bytes;
+  server_bytes = state.metrics.server_fifo_size * sizeof(ef_shrub_buffer_id);
+  client_bytes = state.metrics.client_fifo_size * sizeof(ef_shrub_buffer_id);
+
+  rc = map_area_to_kernel(&kernel_mappings[EF_SHRUB_MAP_BUFFERS],
+                          user_mappings[EF_SHRUB_MAP_BUFFERS],
+                          buffer_bytes, 0, PAGE_KERNEL_RO);
+  if( rc < 0 )
+    return rc;
+
+  rc = map_area_to_kernel(&kernel_mappings[EF_SHRUB_MAP_SERVER_FIFO],
+                          user_mappings[EF_SHRUB_MAP_SERVER_FIFO],
+                          server_bytes, 0, PAGE_KERNEL_RO);
+  if( rc < 0 )
+    goto fail_server;
+
+  rc = map_area_to_kernel(&kernel_mappings[EF_SHRUB_MAP_CLIENT_FIFO],
+                          user_mappings[EF_SHRUB_MAP_CLIENT_FIFO],
+                          client_bytes + sizeof(state), FOLL_WRITE, PAGE_KERNEL);
+  if( rc < 0 )
+    goto fail_client;
+
+  populate_buffers(buffers, kernel_mappings[EF_SHRUB_MAP_BUFFERS], buffer_bytes);
+  kernel_mappings[EF_SHRUB_MAP_STATE] =
+    kernel_mappings[EF_SHRUB_MAP_CLIENT_FIFO] + client_bytes;
+
+  for( i = 0; i < EF_SHRUB_FD_COUNT; ++i )
+    kernel_mappings[i] = (uint64_t)fget(user_mappings[i]);
+
+  return 0;
+
+fail_client:
+  vfree((void*)kernel_mappings[EF_SHRUB_MAP_SERVER_FIFO]);
+fail_server:
+  vfree((void*)kernel_mappings[EF_SHRUB_MAP_BUFFERS]);
+  return rc;
+}
+
+static int map_file_to_user(uint64_t* mapping_out, uint64_t file,
+                            unsigned long addr, unsigned long bytes,
+                            unsigned long prot, unsigned long flags,
+                            unsigned long offset)
+{
+  addr = vm_mmap((struct file*)file, addr, bytes, prot, flags, offset);
+  if( IS_ERR((void*)addr) )
+    return PTR_ERR((void*)addr);
+
+  *mapping_out = addr;
+  return 0;
+}
+
+int map_kernel_to_user(uint64_t* kernel_mappings,
+                       uint64_t* user_mappings,
+                       uint64_t user_buffers)
+{
+  int rc;
+  size_t buffer_bytes, server_bytes, client_bytes;
+  const struct ef_shrub_client_state* state =
+    (void*)kernel_mappings[EF_SHRUB_MAP_STATE];
+
+  buffer_bytes = state->metrics.buffer_count * state->metrics.buffer_bytes;
+  server_bytes = state->metrics.server_fifo_size * sizeof(ef_shrub_buffer_id);
+  client_bytes = state->metrics.client_fifo_size * sizeof(ef_shrub_buffer_id);
+
+  rc = map_file_to_user(&user_mappings[EF_SHRUB_MAP_BUFFERS],
+                        kernel_mappings[EF_SHRUB_FD_BUFFERS],
+                        user_buffers, buffer_bytes, PROT_READ,
+                        MAP_SHARED | MAP_ANONYMOUS | MAP_FIXED | MAP_POPULATE |
+                          MAP_HUGETLB | MAP_HUGE_2MB, 0);
+  if( rc < 0 )
+    return rc;
+
+  rc = map_file_to_user(&user_mappings[EF_SHRUB_MAP_SERVER_FIFO],
+                        kernel_mappings[EF_SHRUB_FD_SERVER_FIFO],
+                        0, server_bytes, PROT_READ, MAP_SHARED | MAP_ANONYMOUS,
+                        state->metrics.server_fifo_offset);
+  if( rc < 0 )
+    goto fail_server;
+
+  rc = map_file_to_user(&user_mappings[EF_SHRUB_MAP_CLIENT_FIFO],
+                        kernel_mappings[EF_SHRUB_FD_CLIENT_FIFO],
+                        0, client_bytes + sizeof(*state),
+                        PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS,
+                        state->metrics.client_fifo_offset);
+  if( rc < 0 )
+    goto fail_client;
+
+  user_mappings[EF_SHRUB_MAP_STATE] =
+    user_mappings[EF_SHRUB_MAP_CLIENT_FIFO] + client_bytes;
+
+  return 0;
+
+fail_client:
+  vm_munmap(user_mappings[EF_SHRUB_MAP_SERVER_FIFO], server_bytes);
+fail_server:
+  vm_munmap(user_mappings[EF_SHRUB_MAP_BUFFERS], buffer_bytes);
+  return rc;
+}
+
+int efct_ubufs_map_kernel(uint64_t* kernel_mappings,
+                          uint64_t* uu_mappings, /* user array of user pointers */
+                          const char** kernel_buffers, uint64_t user_buffers)
+{
+  uint64_t user_mappings[EF_SHRUB_MAP_COUNT];
+
+  if( copy_from_user(user_mappings, uu_mappings, sizeof(user_mappings)) )
+      return -EFAULT;
+
+  /* Shrub connection established in userland, map to kernel */
+  if( user_mappings[EF_SHRUB_MAP_STATE] != 0 )
+    return map_user_to_kernel(kernel_mappings, user_mappings, kernel_buffers);
+
+  /* Shrub connection established in another process, map to userland */
+  if( kernel_mappings[EF_SHRUB_MAP_STATE] != 0 ) {
+    int rc = map_kernel_to_user(kernel_mappings, user_mappings, user_buffers);
+    if( rc < 0 )
+      return rc;
+
+    if( copy_to_user(uu_mappings, user_mappings, sizeof(user_mappings)) )
+      /* TODO should unmap, although failure is theoretically impossible */
+      return -EFAULT;
+
+    return 0;
+  }
+
+  /* No shrub connection */
+  return -EOPNOTSUPP;
+}
+
+void efct_ubufs_unmap_kernel(uint64_t* mappings)
+{
+  struct ef_shrub_client_state* state = (void*)mappings[EF_SHRUB_FD_COUNT];
+  int i;
+  size_t buffer_bytes;
+
+  if( state == NULL )
+    return;
+
+  buffer_bytes = state->metrics.buffer_count * state->metrics.buffer_bytes;
+
+  vfree((void*)mappings[EF_SHRUB_MAP_CLIENT_FIFO]);
+  vfree((void*)mappings[EF_SHRUB_MAP_SERVER_FIFO]);
+  vfree((void*)mappings[EF_SHRUB_MAP_BUFFERS]);
+  for( i = 0; i < EF_SHRUB_FD_COUNT; ++i )
+    fput((struct file*)mappings[i]);
+}
+

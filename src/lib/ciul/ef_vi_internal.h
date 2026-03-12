@@ -253,6 +253,10 @@ extern int efct_ubufs_init_rxq_buffers(ef_vi* vi, int ix, int fd,
                                        volatile uint64_t** post_buffer_reg_out) EF_VI_HF;
 extern void efct_ubufs_free_rxq_buffers(ef_vi*, int, volatile uint64_t*) EF_VI_HF;
 extern int efct_ubufs_set_shared_rxq_token(ef_vi*, uint64_t) EF_VI_HF;
+#ifdef __KERNEL__
+extern int efct_ubufs_map_kernel(uint64_t*, uint64_t*, const char**, uint64_t);
+extern void efct_ubufs_unmap_kernel(uint64_t*);
+#endif
 
 extern int efct_superbufs_reserve(ef_vi* vi, void* space);
 extern void efct_superbufs_cleanup(ef_vi* vi);
@@ -314,12 +318,6 @@ extern int ef_vi_compat_capability_get(enum ef_vi_capability cap,
 extern enum ef_pd_flags ef_pd_flags_from_env(enum ef_pd_flags flags,
                                              ef_driver_handle pd_dh,
                                              int ifindex);
-
-struct ef_shrub_client;
-extern int
-ef_shrub_client_refresh_mappings(const struct ef_shrub_client* client,
-                                 uint64_t user_superbuf,
-                                 uint64_t* user_mappings);
 
 typedef uint64_t efct_tx_aperture_t;
 ci_inline uint64_t efct_tx_scale_offset_bytes(uint64_t offset_bytes)

@@ -13,18 +13,41 @@
 
 #include <etherfabric/internal/shrub_shared.h>
 
+/* Indexes into the clients "mappings" array, used to share resource handles
+ * between instances in different contexts (e.g. onload's userland and kernel
+ * instances)
+ */
+enum ef_shrub_client_mappings
+{
+  /* The first few entries contain the shared file descriptors, or
+   * "struct file*" pointers in a kernel context. These are indexed by
+   * the EF_SHRUB_FD_ values defined elsewhere.
+   *
+   * The remaining entries are pointers to resources in shared memory maps.
+   */
+  EF_SHRUB_MAP_BUFFERS = EF_SHRUB_FD_COUNT,
+  EF_SHRUB_MAP_SERVER_FIFO,
+  EF_SHRUB_MAP_CLIENT_FIFO,
+  EF_SHRUB_MAP_STATE,
+
+  EF_SHRUB_MAP_COUNT
+};
+
 /* Structure for managing a client instance */
 struct ef_shrub_client
 {
   uintptr_t socket;
-  uintptr_t files[EF_SHRUB_FD_COUNT];
-  uint64_t  mappings[EF_SHRUB_FD_COUNT + 1];
+  uint64_t mappings[EF_SHRUB_MAP_COUNT];
 };
 
-/* Request shared rxq token from shrub server
+/* Request filter info from shrub server
+ *
+ * This is the information needed by a client before attach/filter
+ * installation to configure shared RXQ attachment and interrupt mode.
  *
  * server_addr: The address for the server, typically a filesystem path
- * response:    Response from the server containing shared rxq token
+ * response:    Response from the server containing shared rxq token and
+ *              filter flags
  *
  * Returns zero on success, or negative error codes including
  *  -ECONNREFUSED server is not listening
@@ -32,8 +55,9 @@ struct ef_shrub_client
  *
  * This function will block while communicating with the server.
  */
-int ef_shrub_client_request_token(const char *server_addr,
-                                  struct ef_shrub_token_response *response);
+int ef_shrub_client_request_filter_info(
+                         const char *server_addr,
+                         struct ef_shrub_filter_info_response *response);
 
 /* Open a connection to a server.
  *
@@ -41,7 +65,6 @@ int ef_shrub_client_request_token(const char *server_addr,
  * buffers:     location to map the buffer memory, NULL for arbitrary location
  * server_addr: the address for the server, typically a filesystem path
  * qid:         hardware QID to attach to
- * use_irqs:    whether we expect to use interrupts
  * max_bufs:    the maximum number of buffers this client can have at once
  *
  * Returns zero on success, or negative error codes including
@@ -55,7 +78,6 @@ int ef_shrub_client_open(struct ef_shrub_client* client,
                          void* buffers,
                          const char* server_addr,
                          int qid,
-                         bool use_irqs,
                          size_t max_bufs);
 
 /* Close the client connection.
@@ -97,7 +119,7 @@ bool ef_shrub_client_buffer_available(const struct ef_shrub_client* client);
 static inline const struct ef_shrub_client_state*
 ef_shrub_client_get_state(const struct ef_shrub_client* client)
 {
-  return (void*)(client->mappings[EF_SHRUB_FD_COUNT]);
+  return (void*)(client->mappings[EF_SHRUB_MAP_STATE]);
 }
 
 #endif

@@ -304,7 +304,6 @@ int ef_shrub_queue_open(struct ef_shrub_queue* queue,
   queue->buffer_bytes = buffer_bytes;
   queue->buffer_count = buffer_count;
   queue->fifo_size = fifo_size;
-  queue->qid = qid;
   queue->vi = vi;
 
   rc = queue_alloc_buffers(queue);
@@ -323,7 +322,7 @@ int ef_shrub_queue_open(struct ef_shrub_queue* queue,
                                  qid,
                                  queue->shared_fds[EF_SHRUB_FD_BUFFERS],
                                  queue->buffer_count,
-                                 false, use_interrupts);
+                                 false, use_interrupts, &queue->qid);
   if (rc < 0)
     goto fail_queue_attach;
 

@@ -133,17 +133,19 @@ struct efch_pd_alloc {
 
 #define EFCH_EFCT_RXQ_FLAG_UBUF 0x1
 #define EFCH_EFCT_RXQ_FLAG_IRQ  0x2
+#define EFCH_EFCT_RXQ_FLAG_NEW  0x4
 
 /* Make sure to update this whenever a new flag is added, otherwise resource
  * allocation will fail. */
 #define EFCH_EFCT_RXQ_GOOD_FLAGS (EFCH_EFCT_RXQ_FLAG_UBUF | \
-                                  EFCH_EFCT_RXQ_FLAG_IRQ)
+                                  EFCH_EFCT_RXQ_FLAG_IRQ  | \
+                                  EFCH_EFCT_RXQ_FLAG_NEW)
 
 struct efch_efct_rxq_alloc {
   efch_resource_id_t  in_vi_rs_id;
   uint32_t            in_flags;
   uint32_t            in_abi_version;
-  uint8_t             in_qid;
+  uint8_t             in_out_qid; /* output if FLAG_NEW is set */
   uint8_t             in_shm_ix;
   /*bool*/uint8_t     in_timestamp_req;
   uint32_t            in_n_hugepages;

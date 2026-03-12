@@ -140,7 +140,8 @@ static int efct_kbufs_attach(ef_vi* vi,
                              int buf_fd,
                              unsigned n_superbufs,
                              bool shared_mode,
-                             bool interrupt_mode)
+                             bool interrupt_mode,
+                             int* qid_out)
 {
 #ifdef __KERNEL__
   /* Onload does its own thing before calling attach_internal */
@@ -154,7 +155,10 @@ static int efct_kbufs_attach(ef_vi* vi,
   unsigned n_hugepages = (n_superbufs + CI_EFCT_SUPERBUFS_PER_PAGE - 1) /
                          CI_EFCT_SUPERBUFS_PER_PAGE;
 
-  ix = efct_vi_find_free_rxq(vi, qid);
+  if( efct_vi_find_rxq(vi, qid) >= 0 )
+    return -EALREADY;
+
+  ix = efct_vi_find_free_rxq(vi);
   if( ix < 0 )
     return ix;
 
@@ -196,8 +200,8 @@ static int efct_kbufs_attach(ef_vi* vi,
 
   ef_vi_init_resource_alloc(&ra, EFRM_RESOURCE_EFCT_RXQ);
   ra.u.rxq.in_abi_version = CI_EFCT_SWRXQ_ABI_VERSION;
-  ra.u.rxq.in_flags = 0;
-  ra.u.rxq.in_qid = qid;
+  ra.u.rxq.in_flags = qid < 0 ? EFCH_EFCT_RXQ_FLAG_NEW : 0;
+  ra.u.rxq.in_out_qid = qid;
   ra.u.rxq.in_shm_ix = ix;
   ra.u.rxq.in_vi_rs_id = efch_make_resource_id(vi->vi_resource_id);
   ra.u.rxq.in_n_hugepages = n_hugepages;
@@ -211,8 +215,14 @@ static int efct_kbufs_attach(ef_vi* vi,
     return rc;
   }
 
+  if( qid < 0 )
+    qid = ra.u.rxq.in_out_qid;
+  else
+    EF_VI_ASSERT(qid == ra.u.rxq.in_out_qid);
+
   get_kbufs(vi)->q[ix].resource_id = ra.out_id;
   efct_vi_start_rxq(vi, ix, qid);
+  *qid_out = qid;
   return 0;
 #endif
 }

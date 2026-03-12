@@ -78,13 +78,15 @@ fail_client_map:
   return rc;
 }
 
-int ef_shrub_connection_send_token(struct ef_shrub_connection* connection,
-                                   unsigned token)
+int ef_shrub_connection_send_filter_info(struct ef_shrub_connection* connection,
+                                         unsigned token,
+                                         bool use_interrupts)
 {
-  struct ef_shrub_token_response response = {0};
+  struct ef_shrub_filter_info_response response = {0};
   int rc;
 
   response.shared_rxq_token = token;
+  response.use_interrupts = use_interrupts;
   rc = ef_shrub_server_send(connection->socket, &response, sizeof(response));
   if( rc < 0 )
     return rc;
@@ -122,6 +124,7 @@ int ef_shrub_connection_send_metrics(struct ef_shrub_connection* connection)
   metrics->server_fifo_size = connection->fifo_size;
   metrics->client_fifo_offset = connection->client_fifo_mmap_offset;
   metrics->client_fifo_size = connection->fifo_size;
+  metrics->qid = queue->qid;
 
   cmsg->cmsg_level = SOL_SOCKET;
   cmsg->cmsg_type = SCM_RIGHTS;

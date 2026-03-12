@@ -95,7 +95,7 @@ ef_shrub_server_get_last_disconnection_time(struct ef_shrub_server* server)
 }
 
 static struct ef_shrub_queue*
-find_queue(struct ef_shrub_server* server, uint64_t qid)
+find_queue(struct ef_shrub_server* server, int qid)
 {
   int i;
   struct ef_shrub_queue* unused = NULL;
@@ -103,7 +103,7 @@ find_queue(struct ef_shrub_server* server, uint64_t qid)
     struct ef_shrub_queue* queue = &server->queues[i];
     if( queue->connections == NULL )
       unused = queue;
-    else if( queue->qid == qid )
+    else if( qid < 0 || queue->qid == qid )
       return queue;
   }
 
@@ -112,8 +112,7 @@ find_queue(struct ef_shrub_server* server, uint64_t qid)
 
 static int server_request_queue(struct ef_shrub_server* server,
                                 struct ef_shrub_connection* connection,
-                                int qid, bool use_interrupts,
-                                size_t max_connection_buffers)
+                                int qid, size_t max_connection_buffers)
 {
   struct ef_shrub_queue* queue;
   int rc;
@@ -123,9 +122,6 @@ static int server_request_queue(struct ef_shrub_server* server,
 
   if( connection->queue != NULL )
     return -EALREADY;
-
-  if( use_interrupts != server->use_interrupts )
-    return -EINVAL;
 
   remove_connection(&server->pending_connections, connection);
 
@@ -208,10 +204,12 @@ static int server_init_pd_excl_rxq_tok(struct ef_shrub_server *server)
   return rc;
 }
 
-static int server_request_token(struct ef_shrub_server* server,
-                                struct ef_shrub_connection* connection)
+static int server_request_filter_info(struct ef_shrub_server* server,
+                                      struct ef_shrub_connection* connection)
 {
-  return ef_shrub_connection_send_token(connection, server->pd_excl_rxq_tok);
+  return ef_shrub_connection_send_filter_info(connection,
+                                              server->pd_excl_rxq_tok,
+                                              server->use_interrupts);
 }
 
 static int server_request_received(struct ef_shrub_server* server,
@@ -219,6 +217,7 @@ static int server_request_received(struct ef_shrub_server* server,
 {
   struct ef_shrub_request request;
   int rc;
+  int qid;
 
   rc = ef_shrub_server_recv(connection->socket, &request, sizeof(request));
   if( rc < sizeof(request)) {
@@ -236,14 +235,14 @@ static int server_request_received(struct ef_shrub_server* server,
   }
 
   switch( request.type ) {
-  case EF_SHRUB_REQUEST_TOKEN:
-    rc = server_request_token(server, connection);
+  case EF_SHRUB_REQUEST_FILTER_INFO:
+    rc = server_request_filter_info(server, connection);
     /* Client will connect again once it has an rxq to attach to. Remove it from
      * the epoll set */
     goto out_close;
   case EF_SHRUB_REQUEST_QUEUE:
-    rc = server_request_queue(server, connection, request.queue.qid,
-                              request.queue.use_interrupts,
+    qid = request.queue.qid == EF_SHRUB_QUEUE_ANY ? -1 : request.queue.qid;
+    rc = server_request_queue(server, connection, qid,
                               request.queue.max_connection_buffers);
     if( rc < 0 )
       goto out_close;
@@ -375,8 +374,10 @@ void ef_shrub_server_dump_to_fd(struct ef_shrub_server* server, int fd,
 {
   int i;
 
-  shrub_log_to_fd(fd, buf, buflen, "  pd token: %u buffer count: %llu\n",
-                  server->pd_excl_rxq_tok, server->buffer_count);
+  shrub_log_to_fd(fd, buf, buflen, "  pd token: %u buffer count: %llu "
+                                   "interrupt mode: %s\n",
+                  server->pd_excl_rxq_tok, server->buffer_count,
+                  server->use_interrupts ? "enabled" : "disabled");
 
   for( i = 0; i < sizeof(server->queues) / sizeof(server->queues[0]); i++ )
     if( server->queues[i].fifo_size )

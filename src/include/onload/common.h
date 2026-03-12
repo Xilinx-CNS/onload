@@ -458,9 +458,9 @@ typedef struct {
 } shrub_ioctl_data_t;
 
 typedef struct {
-  uint32_t intf_i;
-  ci_uint32 controller_id;
-  ci_uint32 shrub_socket_id;
+  ci_uint32 intf_i;
+  ci_uint32 qix;
+  ci_uint32 shared_rxq_token;
 } shrub_socket_ioctl_data_t;
 
 

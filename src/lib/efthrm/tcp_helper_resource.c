@@ -1102,29 +1102,17 @@ static int tcp_helper_rxq_alloc(tcp_helper_resource_t* trs,
      * triggered the filter update. However, we are always called from oof
      * with fm_outer_lock held, or during stack creation,  which protects our
      * qix between looking it up and using it in the alloc. */
-    qix = efct_vi_find_free_rxq(vi, rxq);
-    if( qix == -EALREADY )
-      return 0;
-
-    /* If we are using shrub for shared rxqs, then connect to the server before
-     * creating the efct_rxq resource (and thus binding to the hw rxq). This is
-     * done so that the shrub controller will be the first one to bind to the
-     * queue and so decide which evq it will use. */
-    if (shrub) {
-      LOG_NC(ci_log("%s: using shrub for queue %d", __func__, rxq));
-      rc = efct_ubufs_shared_attach_internal(vi, qix, rxq,
-                                             vi->efct_rxqs.q[qix].superbufs,
-                                             interrupt_req);
-      if( rc < 0 ) {
-        if( rc != -EINTR )
-          LOG_E(ci_log("%s: ERROR: efct_ubufs_shared_attach_internal failed (%d)",
-                        __func__, rc));
+    rc = efct_vi_find_rxq(vi, rxq);
+    if( rc < 0 ) {
+      rc = efct_vi_find_free_rxq(vi);
+      if( rc < 0 )
         return rc;
-      }
-      /* It doesn't matter if we set this now and then fail later, this value
-       * is only valid to read for queues we know are already attached. */
-      ni_nic->shrub_queues[qix] = true;
     }
+    qix = rc;
+
+    /* We may already have allocated resources for this queue */
+    if( trs->nic[intf_i].thn_efct_rxq[qix] )
+      return 0;
 
     rc = efrm_rxq_alloc(vi_rs, rxq,
                         nic->flags & NIC_FLAG_RX_KERNEL_SHARED ? qix : -1,
@@ -1133,8 +1121,6 @@ static int tcp_helper_rxq_alloc(tcp_helper_resource_t* trs,
     if( rc < 0 ) {
       if( rc != -EINTR )
         LOG_E(ci_log("%s: ERROR: efrm_rxq_alloc failed (%d)", __func__, rc));
-      if (shrub)
-        vi->efct_rxqs.ops->detach(vi, qix);
       return rc;
     }
 

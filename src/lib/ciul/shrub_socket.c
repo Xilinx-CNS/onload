@@ -2,6 +2,7 @@
 /* X-SPDX-Copyright-Text: (c) Copyright 2025 Advanced Micro Devices, Inc. */
 
 #include "ef_vi_internal.h"
+#include "syscall_stubs.h"
 
 #include <ci/tools/sysdep.h>
 #include <ci/tools/utils.h>
@@ -10,14 +11,13 @@
 #include <etherfabric/internal/shrub_client.h>
 #include <etherfabric/internal/shrub_socket.h>
 #include <unistd.h>
-#include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/mman.h>
 #include <linux/mman.h>
 
 int ef_shrub_socket_open(uintptr_t* socket_out)
 {
-  int rc = socket(AF_UNIX, SOCK_SEQPACKET, 0);
+  int rc = ci_sys_socket(AF_UNIX, SOCK_SEQPACKET, 0);
   if( rc < 0 )
     return -errno;
   
@@ -27,7 +27,7 @@ int ef_shrub_socket_open(uintptr_t* socket_out)
 
 int ef_shrub_socket_close_socket(uintptr_t socket)
 {
-  int rc = close(socket);
+  int rc = ci_sys_close(socket);
   if( rc < 0 )
     return -errno;
   return 0;
@@ -35,7 +35,7 @@ int ef_shrub_socket_close_socket(uintptr_t socket)
 
 int ef_shrub_socket_close_file(uintptr_t file)
 {
-  int rc = close(file);
+  int rc = ci_sys_close(file);
   if( rc < 0 )
     return -errno;
   return 0;
@@ -50,7 +50,7 @@ int ef_shrub_socket_bind(uintptr_t socket, const char* server_addr)
   if( rc < 0 )
     return rc;
 
-  rc = bind(socket, (struct sockaddr*)&addr, addr_len);
+  rc = ci_sys_bind(socket, (struct sockaddr*)&addr, addr_len);
   if( rc < 0 )
     return -errno;
 
@@ -59,7 +59,7 @@ int ef_shrub_socket_bind(uintptr_t socket, const char* server_addr)
 
 int ef_shrub_socket_listen(uintptr_t socket, int backlog)
 {
-  int rc = listen(socket, backlog);
+  int rc = ci_sys_listen(socket, backlog);
   if( rc < 0 )
     return -errno;
   return rc;
@@ -67,7 +67,7 @@ int ef_shrub_socket_listen(uintptr_t socket, int backlog)
 
 int ef_shrub_socket_accept(uintptr_t listen_socket, uintptr_t* socket_out)
 {
-  int rc = accept((int) listen_socket, NULL, NULL);
+  int rc = ci_sys_accept((int) listen_socket, NULL, NULL);
   if( rc < 0 )
     return -errno;
   *socket_out = (uintptr_t) rc;
@@ -89,7 +89,7 @@ int ef_shrub_socket_connect(uintptr_t socket, const char* server_addr)
    * it's started listening yet. If we get ECONNREFUSED we try again to give
    * shrub a chance to start listening. */
   for( i = 0; i < 200; i++ ) {
-    rc = connect(socket, (struct sockaddr*)&addr, addr_len);
+    rc = ci_sys_connect(socket, (struct sockaddr*)&addr, addr_len);
     if( rc == 0 )
       break;
     if( (errno != ECONNREFUSED) && (errno != ENOENT) )
@@ -103,15 +103,13 @@ int ef_shrub_socket_connect(uintptr_t socket, const char* server_addr)
 
 int ef_shrub_socket_send(uintptr_t socket, void* data, size_t bytes)
 {
-  int rc = send(socket, data, bytes, 0);
+  int rc = ci_sys_send(socket, data, bytes, 0);
   if( rc < 0 )
     return rc;
   if( rc != bytes )
     return -EIO;
   return 0;
 }
-
-extern ssize_t (*ci_sys_recv)(int s, void*, size_t, int);
 
 int ef_shrub_socket_recv(uintptr_t socket, void* data, size_t bytes)
 {
@@ -124,7 +122,7 @@ int ef_shrub_socket_recv(uintptr_t socket, void* data, size_t bytes)
 }
 
 int ef_shrub_socket_recv_metrics(struct ef_shrub_shared_metrics* metrics,
-                                 uintptr_t* shared_files,
+                                 uint64_t* shared_files,
                                  uintptr_t socket)
 {
   int rc, i;
@@ -142,7 +140,7 @@ int ef_shrub_socket_recv_metrics(struct ef_shrub_shared_metrics* metrics,
   };
   struct cmsghdr* cmsg;
 
-  rc = recvmsg(socket, &msg, 0);
+  rc = ci_sys_recvmsg(socket, &msg, 0);
   if( rc < 0 )
     return -errno;
   if( rc != sizeof(*metrics) || metrics->server_version != EF_SHRUB_VERSION )
@@ -195,12 +193,5 @@ int ef_shrub_socket_mmap(uint64_t* mapping, void* addr, size_t size,
 void ef_shrub_socket_munmap(uint64_t mapping, size_t size, int type)
 {
   munmap((void*)mapping, size);
-}
-
-int ef_shrub_socket_mmap_user(uint64_t* user_mapping, uint64_t user_addr,
-                              size_t size, uintptr_t file, size_t offset,
-                              int type)
-{
-  return -EOPNOTSUPP;
 }
 

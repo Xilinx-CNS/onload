@@ -180,7 +180,6 @@ EFRM_HAVE_FOLLOW_PTE_VMA symtype follow_pte include/linux/mm.h int(struct vm_are
 EFRM_HAVE_LINUX_TPH_H 			file	include/linux/pci-tph.h
 EFRM_HAVE_GET_FILE_RCU_FUNC symtype get_file_rcu include/linux/fs.h struct file*(struct file __rcu **)
 
-EFRM_HAVE_SKB_RECV_NOBLOCK_PARAM	symtype	skb_recv_datagram	include/linux/skbuff.h	struct sk_buff *(struct sock *, unsigned, int, int *)
 EFRM_HAVE_TIMER_DELETE_SYNC	export	timer_delete_sync	include/linux/timer.h	kernel/time/timer.c
 
 EFRM_HAVE_FOLLOW_PFNMAP_START symbol follow_pfnmap_start include/linux/mm.h

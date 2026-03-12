@@ -2079,30 +2079,15 @@ static int spawn_shrub_controller(ci_netif* ni)
   return oo_resource_op(fp, OO_IOC_SHRUB_SPAWN_SERVER, &shrub_args);
 }
 
-static int set_shrub_sockets(ci_netif* ni, int shrub_socket_id, uint32_t intf_i) {
-  ci_fd_t fp = ci_netif_get_driver_handle(ni);
-  shrub_socket_ioctl_data_t shrub_args = {0};
-
-  ci_assert(NI_OPTS(ni).shrub_controller_id >= 0);
-  ci_assert(shrub_socket_id >= 0);
-
-  shrub_args.controller_id = NI_OPTS(ni).shrub_controller_id;
-  shrub_args.intf_i = intf_i;
-  shrub_args.shrub_socket_id = shrub_socket_id;
-  return oo_resource_op(fp, OO_IOC_SHRUB_SET_SOCKETS, &shrub_args);
-}
-
-static int set_shrub_token(ci_netif *ni, int shrub_socket_id, uint32_t intf)
+static int set_shrub_token(ci_netif *ni, uint32_t intf_i,
+                           uint32_t qix, uint32_t token)
 {
   ci_fd_t fp = ci_netif_get_driver_handle(ni);
   shrub_socket_ioctl_data_t shrub_args = {0};
 
-  ci_assert(NI_OPTS(ni).shrub_controller_id >= 0);
-  ci_assert(shrub_socket_id >= 0);
-
-  shrub_args.controller_id = NI_OPTS(ni).shrub_controller_id;
-  shrub_args.intf_i = intf;
-  shrub_args.shrub_socket_id = shrub_socket_id;
+  shrub_args.intf_i = intf_i;
+  shrub_args.qix = qix;
+  shrub_args.shared_rxq_token = token;
   return oo_resource_op(fp, OO_IOC_SHRUB_SET_TOKEN, &shrub_args);
 }
 
@@ -2158,69 +2143,94 @@ clean_exit:
 }
 
 static int oo_init_shrub(ci_netif* ni, ef_vi* vi, ci_hwport_id_t hw_port, int nic_i) {
-  int rc = 0;
-  int shrub_socket_id = -1;
-  int i;
 #ifndef __KERNEL__
-  if ( NI_OPTS(ni).shrub_controller_id >= 0 ) {
-      /* Try requesting first, as there might be an existing shrub controller.
-       * There's no reliable way to detect whether there's a listening
-       * controller already, so we try and connect, and if we fail, try
-       * spawning one at that point. */
-      shrub_socket_id = ef_shrub_adapter_send_hwport(
-        oo_send_shrub_request,
-        NI_OPTS(ni).shrub_controller_id,
-        hw_port,
-        NI_OPTS(ni).shrub_buffer_count
-      );
+  int rc;
+  int i;
 
-      /* No listening socket, try spawning */
-      if( (shrub_socket_id == -ECONNREFUSED) ||
-          (shrub_socket_id == -ENOENT) ) {
-        LOG_NC(ci_log("%s: send to shrub failed, trying spawn", __func__));
-        rc = spawn_shrub_controller(ni);
-        if( rc < 0 )
-          return rc;
+  if ( NI_OPTS(ni).shrub_controller_id < 0 )
+    return 0;
 
-        /* Now retry */
-        for( i = 0; i < 200; i++ ) {
-          shrub_socket_id = ef_shrub_adapter_send_hwport(oo_send_shrub_request,
-                                              NI_OPTS(ni).shrub_controller_id,
-                                              hw_port,
-                                              NI_OPTS(ni).shrub_buffer_count);
-          if( (shrub_socket_id >= 0) ||
-              ((shrub_socket_id != -ECONNREFUSED) &&
-               (shrub_socket_id != -ENOENT)) )
-            break;
-          usleep(1000 * 10); /* 10ms */
-        }
-      }
+  /* Try requesting first, as there might be an existing shrub controller.
+   * There's no reliable way to detect whether there's a listening
+   * controller already, so we try and connect, and if we fail, try
+   * spawning one at that point. */
+  rc = ef_shrub_adapter_send_hwport(
+    oo_send_shrub_request,
+    NI_OPTS(ni).shrub_controller_id,
+    hw_port,
+    NI_OPTS(ni).shrub_buffer_count
+  );
 
-      /* Failure at this point is now fatal */
-      if ( shrub_socket_id < 0 ) {
-        rc = shrub_socket_id;
-        LOG_U(ci_log("%s: retry of send after spawn failed (rc %d), giving up",
-                     __func__, rc));
-        return rc;
-      }
+  /* No listening socket, try spawning */
+  if( rc == -ECONNREFUSED || rc == -ENOENT ) {
+    LOG_NC(ci_log("%s: send to shrub failed, trying spawn", __func__));
+    rc = spawn_shrub_controller(ni);
+    if( rc < 0 )
+      return rc;
 
-      rc = set_shrub_sockets(ni, shrub_socket_id, nic_i);
-      if ( rc < 0 )
-        return rc;
-
-      efct_ubufs_set_shared(vi, NI_OPTS(ni).shrub_controller_id, rc);
-      ef_vi_set_shrub_client_buffer_count(vi,
-                                          NI_OPTS(ni).shrub_max_client_buffers);
-
-      rc = set_shrub_token(ni, shrub_socket_id, nic_i);
-      if (rc < 0)
-        return rc;
-
-      /* Nothing needs to be done with the userland vi, as filter insertion
-       * only takes place in the kernel. */
+    /* Now retry */
+    for( i = 0; i < 200; i++ ) {
+      rc = ef_shrub_adapter_send_hwport(oo_send_shrub_request,
+                                        NI_OPTS(ni).shrub_controller_id,
+                                        hw_port,
+                                        NI_OPTS(ni).shrub_buffer_count);
+      if( rc >= 0 || (rc != -ECONNREFUSED && rc != -ENOENT) )
+        break;
+      usleep(1000 * 10); /* 10ms */
     }
+  }
+
+  /* Failure at this point is now fatal */
+  if ( rc < 0 ) {
+    LOG_U(ci_log("%s: retry of send after spawn failed (rc %d), giving up",
+                 __func__, rc));
+    return rc;
+  }
+
+  efct_ubufs_set_shared(vi, NI_OPTS(ni).shrub_controller_id, rc);
+  ef_vi_set_shrub_client_buffer_count(vi, NI_OPTS(ni).shrub_max_client_buffers);
+
 #endif
   return rc;
+}
+
+static int alloc_efct_shared_rxq(ci_netif* ni, uint32_t nic_i)
+{
+  int rc, qix;
+  unsigned shared_rxq_token;
+  bool use_interrupts;
+  ef_vi* vi = ci_netif_vi(ni, nic_i);
+
+  rc = efct_ubufs_get_shared_filter_info(vi, &shared_rxq_token,
+                                         &use_interrupts);
+  if( rc < 0 )
+    return rc;
+
+  if( NI_OPTS(ni).shrub_use_interrupts && !use_interrupts ) {
+    NI_LOG(ni, CONFIG_WARNINGS,
+           "ERROR: Expected shrub controller to use interrupts, but it's not "
+           "configured to do so. Is there a conflicting manually launched "
+           "controller with id %d? To allow use without interrupts set "
+           "EF_SHRUB_USE_INTERRUPTS=0.", NI_OPTS(ni).shrub_controller_id);
+    return -EINVAL;
+  }
+
+  rc = efct_vi_find_free_rxq(vi);
+  if( rc < 0 )
+    return rc;
+  qix = rc;
+
+  rc = efct_ubufs_shared_attach_internal(vi, qix, -1,
+                                         (void*)vi->efct_rxqs.q[qix].superbuf);
+  if( rc < 0 )
+    return rc;
+
+  rc = set_shrub_token(ni, nic_i, qix, shared_rxq_token);
+  if( rc < 0 )
+    /* TODO: detach on failure */
+    return rc;
+
+  return 0;
 }
 
 static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
@@ -2719,6 +2729,12 @@ static int alloc_efct_resources(ci_netif* ni)
 
       if( ! NI_OPTS(ni).shrub_unicast ) {
         rc = alloc_efct_exclusive_rxq(ni, nic_i);
+        if( rc < 0 )
+          return rc;
+      }
+
+      if ( NI_OPTS(ni).shrub_controller_id >= 0 ) {
+        rc = alloc_efct_shared_rxq(ni, nic_i);
         if( rc < 0 )
           return rc;
       }

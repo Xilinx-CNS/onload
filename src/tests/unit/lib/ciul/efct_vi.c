@@ -238,7 +238,7 @@ static void alloc_buffers(ef_vi* vi, int qid, size_t n_superbufs)
 
 static int efct_mock_attach(ef_vi* vi, int qid, int buf_fd,
                             unsigned n_superbufs, bool shared_mode,
-                            bool interrupt_mode)
+                            bool interrupt_mode, int* rxq_out)
 {
   struct efct_mock_ops* ops = mock_ops(vi);
   struct efct_mock_rxq* rxq = &ops->rxqs->q[qid];
@@ -255,6 +255,7 @@ static int efct_mock_attach(ef_vi* vi, int qid, int buf_fd,
 
   ops->rxqs->active_qs |= (1 << qid);
   rxq->superbuf_pkts = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
+  *rxq_out = qid;
 
   if ( shared_mode ) {
     return efct_vi_sync_rxq(vi, qid, qid);

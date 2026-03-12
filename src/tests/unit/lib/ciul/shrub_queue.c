@@ -94,13 +94,14 @@ shrub_connection_to_mock_connection(struct ef_shrub_connection* shrub_conn)
 }
 
 static int mock_attach(struct ef_vi* vi_, int qid_, int buf_fd,
-                       unsigned n_superbufs, bool shared, bool interrupt)
+                       unsigned n_superbufs, bool shared, bool interrupt, int* qid_out)
 {
   CHECK(vi_, ==, vi);
   CHECK(qid_, ==, qid);
   CHECK(buf_fd, ==, buffer_fd);
   CHECK(n_superbufs, ==, buffer_count);
   CHECK_FALSE(shared);
+  *qid_out = qid;
   return qix;
 }
 

@@ -46,7 +46,7 @@ static struct call_state
   int detach;
   int send_metrics;
   int cleanup;
-  int send_token;
+  int send_filter_info;
   int resource_op;
 
   /* Function arguments */
@@ -117,7 +117,6 @@ int ef_shrub_server_recv(int fd, void* data, size_t bytes)
   switch(shrub_request_type) {
     case EF_SHRUB_REQUEST_QUEUE:
       req->queue.qid = ++last_qid;
-      req->queue.use_interrupts = shrub_use_interrupts;
       break;
     default:
       break;
@@ -125,11 +124,13 @@ int ef_shrub_server_recv(int fd, void* data, size_t bytes)
   return bytes;
 }
 
-int ef_shrub_connection_send_token(struct ef_shrub_connection* connection,
-                                   unsigned token)
+int ef_shrub_connection_send_filter_info(struct ef_shrub_connection* connection,
+                                         unsigned token,
+                                         bool use_interrupts)
 {
   CHECK(token, ==, shared_rxq_token);
-  calls->send_token++;
+  CHECK(use_interrupts, ==, shrub_use_interrupts);
+  calls->send_filter_info++;
   return 0;
 }
 
@@ -297,10 +298,10 @@ static void open_server(void)
   STATE_ACCEPT(calls, queue); \
   STATE_CHECK_UNCHANGED(calls); \
 
-/* Expect server to send token then close the connection. */
-#define POLL_CHECK_GOT_TOKEN \
+/* Expect server to send filter info then close the connection. */
+#define POLL_CHECK_GOT_FILTER_INFO \
   ef_shrub_server_poll(server); \
-  STATE_CHECK(calls, send_token, 1); \
+  STATE_CHECK(calls, send_filter_info, 1); \
   STATE_CHECK(calls, close, 1); \
   STATE_CHECK(calls, fd, last_accept_fd); \
   STATE_CHECK_UNCHANGED(calls); \
@@ -402,14 +403,14 @@ static void test_shrub_server_connect(void)
   STATE_FREE(vi);
 }
 
-/* Connect and check that shrub rxq shared token is sent */
-static void test_shrub_server_get_token(void)
+/* Connect and check that shrub filter info is sent */
+static void test_shrub_server_get_filter_info(void)
 {
   struct epoll_event event;
 
   init_test();
   open_server();
-  shrub_request_type = EF_SHRUB_REQUEST_TOKEN;
+  shrub_request_type = EF_SHRUB_REQUEST_FILTER_INFO;
 
   POLL_CHECK_NOTHING
 
@@ -419,7 +420,7 @@ static void test_shrub_server_get_token(void)
   POLL_CHECK_ACCEPTED
 
   event.data = last_epoll_data;
-  POLL_CHECK_GOT_TOKEN
+  POLL_CHECK_GOT_FILTER_INFO
 
   STATE_FREE(calls);
   STATE_FREE(vi);
@@ -583,6 +584,6 @@ int main(void) {
   TEST_RUN(test_shrub_server_multi);
   TEST_RUN(test_shrub_server_share);
   TEST_RUN(test_shrub_server_bad_proto);
-  TEST_RUN(test_shrub_server_get_token);
+  TEST_RUN(test_shrub_server_get_filter_info);
   TEST_END();
 }

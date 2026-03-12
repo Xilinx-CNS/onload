@@ -49,8 +49,9 @@ int efct_ubufs_init_rxq_resource(ef_vi *vi, int qid, unsigned n_superbufs,
   ef_vi_init_resource_alloc(&ra, EFRM_RESOURCE_EFCT_RXQ);
   ra.u.rxq.in_abi_version = CI_EFCT_SWRXQ_ABI_VERSION;
   ra.u.rxq.in_flags = EFCH_EFCT_RXQ_FLAG_UBUF |
-                      (interrupt_mode ? EFCH_EFCT_RXQ_FLAG_IRQ : 0);
-  ra.u.rxq.in_qid = qid;
+                      (interrupt_mode ? EFCH_EFCT_RXQ_FLAG_IRQ : 0) |
+                      (qid < 0 ? EFCH_EFCT_RXQ_FLAG_NEW : 0);
+  ra.u.rxq.in_out_qid = qid;
   ra.u.rxq.in_shm_ix = -1;
   ra.u.rxq.in_vi_rs_id = efch_make_resource_id(vi->vi_resource_id);
   ra.u.rxq.in_n_hugepages = n_hugepages;
@@ -63,7 +64,7 @@ int efct_ubufs_init_rxq_resource(ef_vi *vi, int qid, unsigned n_superbufs,
   }
 
   *resource_id_out = ra.out_id;
-  return 0;
+  return ra.u.rxq.in_out_qid;
 }
 
 void efct_ubufs_free_resource(ef_vi* vi, efch_resource_id_t resource_id)
