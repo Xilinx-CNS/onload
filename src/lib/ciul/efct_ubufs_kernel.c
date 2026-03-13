@@ -86,13 +86,47 @@ fail:
 #endif
 }
 
-static void
-populate_buffers(const char** buffers, uint64_t mapping, size_t bytes)
+static void put_buffer_pages(const char** buffers, size_t buffer_count)
 {
-  int i, count = (bytes + EFCT_RX_SUPERBUF_BYTES - 1) / EFCT_RX_SUPERBUF_BYTES;
+  size_t i;
+  if( buffers )
+    for( i = 0; i < buffer_count; i += CI_EFCT_SUPERBUFS_PER_PAGE )
+      put_page(virt_to_page(buffers[i]));
+}
 
-  for( i = 0; i < count; ++i )
-    buffers[i] = (void*)(mapping + i * EFCT_RX_SUPERBUF_BYTES);
+static int
+map_buffers_to_kernel(uint64_t* mapping_out, uint64_t user_mapping,
+                      const char** buffers, size_t buffer_count)
+{
+  int rc;
+  struct page* page;
+  const char* buffer;
+  const char* page_end;
+  size_t buffers_got = 0;
+
+  while( buffers_got < buffer_count ) {
+    rc = get_user_pages_fast(user_mapping, 1, 0, &page);
+    if( rc != 1 )
+      goto fail;
+
+    buffer = page_address(page);
+    page_end = buffer + CI_HUGEPAGE_SIZE;
+
+    while( buffer != page_end && buffers_got != buffer_count ) {
+      buffers[buffers_got] = buffer;
+      buffer += EFCT_RX_SUPERBUF_BYTES;
+      buffers_got += 1;
+    }
+
+    user_mapping += CI_HUGEPAGE_SIZE;
+  }
+
+  *mapping_out = (uint64_t)buffers;
+  return 0;
+
+fail:
+  put_buffer_pages(buffers, buffers_got);
+  return rc;
 }
  
 static int map_user_to_kernel(uint64_t* kernel_mappings,
@@ -100,7 +134,7 @@ static int map_user_to_kernel(uint64_t* kernel_mappings,
                               const char** buffers)
 {
   int i, rc;
-  size_t buffer_bytes, server_bytes, client_bytes;
+  size_t server_bytes, client_bytes;
   struct ef_shrub_client_state state;
   uint64_t user_state = user_mappings[EF_SHRUB_MAP_STATE];
  
@@ -108,21 +142,14 @@ static int map_user_to_kernel(uint64_t* kernel_mappings,
   if( rc != 0 )
     return -EFAULT;
 
-  buffer_bytes = state.metrics.buffer_count * state.metrics.buffer_bytes;
   server_bytes = state.metrics.server_fifo_size * sizeof(ef_shrub_buffer_id);
   client_bytes = state.metrics.client_fifo_size * sizeof(ef_shrub_buffer_id);
-
-  rc = map_area_to_kernel(&kernel_mappings[EF_SHRUB_MAP_BUFFERS],
-                          user_mappings[EF_SHRUB_MAP_BUFFERS],
-                          buffer_bytes, 0, PAGE_KERNEL_RO);
-  if( rc < 0 )
-    return rc;
 
   rc = map_area_to_kernel(&kernel_mappings[EF_SHRUB_MAP_SERVER_FIFO],
                           user_mappings[EF_SHRUB_MAP_SERVER_FIFO],
                           server_bytes, 0, PAGE_KERNEL_RO);
   if( rc < 0 )
-    goto fail_server;
+    return rc;
 
   rc = map_area_to_kernel(&kernel_mappings[EF_SHRUB_MAP_CLIENT_FIFO],
                           user_mappings[EF_SHRUB_MAP_CLIENT_FIFO],
@@ -130,7 +157,12 @@ static int map_user_to_kernel(uint64_t* kernel_mappings,
   if( rc < 0 )
     goto fail_client;
 
-  populate_buffers(buffers, kernel_mappings[EF_SHRUB_MAP_BUFFERS], buffer_bytes);
+  rc = map_buffers_to_kernel(&kernel_mappings[EF_SHRUB_MAP_BUFFERS],
+                             user_mappings[EF_SHRUB_MAP_BUFFERS],
+                             buffers, state.metrics.buffer_count);
+  if( rc < 0 )
+    goto fail_buffers;
+
   kernel_mappings[EF_SHRUB_MAP_STATE] =
     kernel_mappings[EF_SHRUB_MAP_CLIENT_FIFO] + client_bytes;
 
@@ -139,10 +171,10 @@ static int map_user_to_kernel(uint64_t* kernel_mappings,
 
   return 0;
 
+fail_buffers:
+  vfree((void*)kernel_mappings[EF_SHRUB_MAP_CLIENT_FIFO]);
 fail_client:
   vfree((void*)kernel_mappings[EF_SHRUB_MAP_SERVER_FIFO]);
-fail_server:
-  vfree((void*)kernel_mappings[EF_SHRUB_MAP_BUFFERS]);
   return rc;
 }
 
@@ -239,18 +271,19 @@ int efct_ubufs_map_kernel(uint64_t* kernel_mappings,
 
 void efct_ubufs_unmap_kernel(uint64_t* mappings)
 {
-  struct ef_shrub_client_state* state = (void*)mappings[EF_SHRUB_FD_COUNT];
+  struct ef_shrub_client_state* state = (void*)mappings[EF_SHRUB_MAP_STATE];
+  size_t buffer_count;
   int i;
-  size_t buffer_bytes;
 
   if( state == NULL )
     return;
 
-  buffer_bytes = state->metrics.buffer_count * state->metrics.buffer_bytes;
+  /* Read the state before freeing it along with the client fifo mapping */
+  buffer_count = state->metrics.buffer_count;
 
+  put_buffer_pages((void*)mappings[EF_SHRUB_MAP_BUFFERS], buffer_count);
   vfree((void*)mappings[EF_SHRUB_MAP_CLIENT_FIFO]);
   vfree((void*)mappings[EF_SHRUB_MAP_SERVER_FIFO]);
-  vfree((void*)mappings[EF_SHRUB_MAP_BUFFERS]);
   for( i = 0; i < EF_SHRUB_FD_COUNT; ++i )
     fput((struct file*)mappings[i]);
 }
