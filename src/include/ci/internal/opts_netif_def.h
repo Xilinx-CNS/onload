@@ -1772,7 +1772,7 @@ CI_CFG_OPT("EF_SHRUB_CONTROLLER", shrub_controller_id ,ci_int32,
            , ,-1, -1, EF_SHRUB_MAX_CONTROLLER, count)
 
 /* These should remain in-sync with the values in shrub_shared.h */
-#define EF_SHRUB_DEFAULT_BUFFER_COUNT 4
+#define EF_SHRUB_DEFAULT_BUFFER_COUNT 32
 #define EF_SHRUB_MAX_BUFFER_COUNT 100000
 CI_CFG_OPT("EF_SHRUB_BUFFER_COUNT", shrub_buffer_count, ci_uint32,
 "Default value of superbufs that an onload client requests from "
