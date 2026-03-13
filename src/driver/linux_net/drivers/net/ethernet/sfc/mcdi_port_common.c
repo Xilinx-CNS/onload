@@ -1334,7 +1334,7 @@ static int efx_ef10_mcdi_stats(struct efx_nic *efx,
 static int efx_x4_mcdi_stats(struct efx_nic *efx,
 			     enum efx_stats_action action, int clear)
 {
-	MCDI_DECLARE_BUF(inbuf, MC_CMD_GET_NETPORT_STATISTICS_IN_LEN);
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_GET_NETPORT_STATISTICS_V2_IN_LEN);
 	dma_addr_t dma_addr = efx->stats_buffer.dma_addr;
 	int dma, change;
 	u32 dma_len;
@@ -1352,22 +1352,23 @@ static int efx_x4_mcdi_stats(struct efx_nic *efx,
 
 	BUILD_BUG_ON(MC_CMD_GET_NETPORT_STATISTICS_OUT_LENMIN != 0);
 
-	MCDI_SET_DWORD(inbuf, GET_NETPORT_STATISTICS_IN_PORT_HANDLE,
+	MCDI_SET_DWORD(inbuf, GET_NETPORT_STATISTICS_V2_IN_PORT_HANDLE,
 		       efx->port_handle);
 
 	MCDI_SET_QWORD(inbuf, GET_NETPORT_STATISTICS_IN_DMA_ADDR, dma_addr);
-	MCDI_POPULATE_DWORD_6(inbuf, GET_NETPORT_STATISTICS_IN_CMD,
-			      GET_NETPORT_STATISTICS_IN_DMA, dma,
-			      GET_NETPORT_STATISTICS_IN_CLEAR, clear,
-			      GET_NETPORT_STATISTICS_IN_PERIODIC_CHANGE, change,
-			      GET_NETPORT_STATISTICS_IN_PERIODIC_ENABLE,
+	MCDI_POPULATE_DWORD_6(inbuf, GET_NETPORT_STATISTICS_V2_IN_CMD,
+			      GET_NETPORT_STATISTICS_V2_IN_DMA, dma,
+			      GET_NETPORT_STATISTICS_V2_IN_CLEAR, clear,
+			      GET_NETPORT_STATISTICS_V2_IN_PERIODIC_CHANGE, change,
+			      GET_NETPORT_STATISTICS_V2_IN_PERIODIC_ENABLE,
 			      efx->stats_enabled,
-			      GET_NETPORT_STATISTICS_IN_PERIODIC_NOEVENT, 1,
-			      GET_NETPORT_STATISTICS_IN_PERIOD_MS,
+			      GET_NETPORT_STATISTICS_V2_IN_PERIODIC_NOEVENT, 1,
+			      GET_NETPORT_STATISTICS_V2_IN_PERIOD_MS,
 			      efx->stats_period_ms);
-	MCDI_SET_DWORD(inbuf, GET_NETPORT_STATISTICS_IN_DMA_LEN, dma_len);
+	MCDI_SET_DWORD(inbuf, GET_NETPORT_STATISTICS_V2_IN_DMA_LEN, dma_len);
 
-	/* TODO: need PORT_ID for VADAPTER statistics */
+	MCDI_SET_DWORD(inbuf, GET_NETPORT_STATISTICS_V2_IN_PORT_ID,
+		       efx->vport.vport_id);
 
 	rc = efx_mcdi_rpc_quiet(efx, MC_CMD_GET_NETPORT_STATISTICS, inbuf,
 				sizeof(inbuf), NULL, 0, NULL);

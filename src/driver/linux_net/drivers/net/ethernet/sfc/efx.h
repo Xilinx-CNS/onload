@@ -329,12 +329,6 @@ int efx_ethtool_set_rxnfc(struct net_device *net_dev,
 int efx_ethtool_set_rxnfc(struct net_device *net_dev,
 			  struct ethtool_rxnfc *info);
 #endif
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_RXFH_INDIR)
-int efx_ethtool_old_get_rxfh_indir(struct net_device *net_dev,
-				   struct ethtool_rxfh_indir *indir);
-int efx_ethtool_old_set_rxfh_indir(struct net_device *net_dev,
-				   const struct ethtool_rxfh_indir *indir);
-#endif
 #ifdef CONFIG_SFC_DUMP
 struct ethtool_dump;
 int efx_ethtool_get_dump_flag(struct net_device *net_dev,

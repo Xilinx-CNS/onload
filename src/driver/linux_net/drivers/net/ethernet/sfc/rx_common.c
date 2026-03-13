@@ -1054,9 +1054,7 @@ efx_rx_packet_gro(struct efx_rx_queue *rx_queue, struct efx_rx_buffer *rx_buf,
 		skb->ip_summed = ((rx_buf->flags & EFX_RX_PKT_CSUMMED) ?
 				  CHECKSUM_UNNECESSARY : CHECKSUM_NONE);
 	}
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_CSUM_LEVEL)
 	skb->csum_level = !!(rx_buf->flags & EFX_RX_PKT_CSUM_LEVEL);
-#endif
 
 	for (;;) {
 		skb_fill_page_desc(skb, skb_shinfo(skb)->nr_frags,

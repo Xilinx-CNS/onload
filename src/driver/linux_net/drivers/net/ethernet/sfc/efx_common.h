@@ -39,12 +39,7 @@ void efx_remove_common(struct efx_nic *efx);
 int efx_start_all(struct efx_nic *efx);
 void efx_stop_all(struct efx_nic *efx);
 int efx_try_recovery(struct efx_nic *efx);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NETDEV_STATS64_VOID)
 void efx_net_stats(struct net_device *net_dev, struct rtnl_link_stats64 *stats);
-#else
-struct rtnl_link_stats64 *efx_net_stats(struct net_device *net_dev,
-					struct rtnl_link_stats64 *stats);
-#endif
 void efx_reset_sw_stats(struct efx_nic *efx);
 void efx_print_stopped_queues(struct efx_nic *efx);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_TX_TIMEOUT_TXQUEUE)
@@ -121,37 +116,22 @@ bool efx_dl_supported(struct efx_nic *efx);
 
 extern const struct pci_error_handlers efx_err_handlers;
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_FEATURES_CHECK)
 netdev_features_t efx_features_check(struct sk_buff *skb,
 				     struct net_device *dev,
 				     netdev_features_t features);
-#endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_ID)
 int efx_get_phys_port_id(struct net_device *net_dev,
 			 struct netdev_phys_item_id *ppid);
-#endif
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_NAME)
 int efx_get_phys_port_name(struct net_device *net_dev,
 			   char *name, size_t len);
-#endif
 
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
 netdev_features_t efx_fix_features(struct net_device *net_dev, netdev_features_t data);
 #endif
 int efx_set_features(struct net_device *net_dev, netdev_features_t data);
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID_PROTO)
 int efx_vlan_rx_add_vid(struct net_device *net_dev, __be16 proto, u16 vid);
 int efx_vlan_rx_kill_vid(struct net_device *net_dev, __be16 proto, u16 vid);
-#elif defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID_RC)
-int efx_vlan_rx_add_vid(struct net_device *net_dev, u16 vid);
-int efx_vlan_rx_kill_vid(struct net_device *net_dev, u16 vid);
-#else
-void efx_vlan_rx_add_vid(struct net_device *net_dev, unsigned short vid);
-void efx_vlan_rx_kill_vid(struct net_device *net_dev, unsigned short vid);
-#endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_HWTSTAMP_GET)
 int efx_hwtstamp_set(struct net_device *net_dev,

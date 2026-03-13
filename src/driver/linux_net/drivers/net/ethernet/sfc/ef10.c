@@ -1470,10 +1470,8 @@ static int efx_ef10_init_nic(struct efx_nic *efx)
 {
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 	u32 old_datapath_caps = nic_data->datapath_caps;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_FEATURES_CHECK)
 #ifdef EFX_USE_OVERLAY_TX_CSUM
 	netdev_features_t hw_enc_features;
-#endif
 #endif
 	int rc;
 
@@ -1544,7 +1542,6 @@ static int efx_ef10_init_nic(struct efx_nic *efx)
 		nic_data->must_restore_piobufs = false;
 	}
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_FEATURES_CHECK)
 #ifdef EFX_USE_OVERLAY_TX_CSUM
 	hw_enc_features = 0;
 
@@ -1565,7 +1562,6 @@ static int efx_ef10_init_nic(struct efx_nic *efx)
 	}
 
 	efx->net_dev->hw_enc_features = hw_enc_features;
-#endif
 #endif
 
 	return 0;
@@ -1741,16 +1737,9 @@ static void efx_ef10_monitor(struct efx_nic *efx)
 #endif
 #if defined(CONFIG_EEH)
 	{
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_EEH_DEV_CHECK_FAILURE)
-	struct eeh_dev *eehdev = pci_dev_to_eeh_dev(efx->pci_dev);
+		struct eeh_dev *eehdev = pci_dev_to_eeh_dev(efx->pci_dev);
 
-	eeh_dev_check_failure(eehdev);
-#else
-	struct pci_dev *pcidev = efx->pci_dev;
-	struct device_node *dn = pci_device_to_OF_node(pcidev);
-
-	eeh_dn_check_failure(dn, pcidev);
-#endif
+		eeh_dev_check_failure(eehdev);
 	}
 #endif
 
@@ -2356,10 +2345,61 @@ static void efx_ef10_stop_stats_vf(struct efx_nic *efx)
 	cancel_delayed_work_sync(&nic_data->vf_stats_work);
 }
 
+static int efx_mcdi_ef10_vf_stats(struct efx_nic *efx,
+				  struct efx_buffer *stats_buf)
+{
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAC_STATS_IN_LEN);
+	int rc;
+
+	MCDI_SET_QWORD(inbuf, MAC_STATS_IN_DMA_ADDR, stats_buf->dma_addr);
+	MCDI_POPULATE_DWORD_1(inbuf, MAC_STATS_IN_CMD,
+			      MAC_STATS_IN_DMA, 1);
+	MCDI_SET_DWORD(inbuf, MAC_STATS_IN_DMA_LEN, stats_buf->len);
+	MCDI_SET_DWORD(inbuf, MAC_STATS_IN_PORT_ID, EVB_PORT_ID_ASSIGNED);
+
+	rc = efx_mcdi_rpc_quiet(efx, MC_CMD_MAC_STATS, inbuf, sizeof(inbuf),
+				NULL, 0, NULL);
+	if (rc) {
+		/* Expect ENOENT if DMA queues have not been set up */
+		if (rc != -ENOENT || atomic_read(&efx->active_queues))
+			efx_mcdi_display_error(efx, MC_CMD_MAC_STATS,
+					       sizeof(inbuf), NULL, 0, rc);
+	}
+	return rc;
+}
+
+static int efx_mcdi_x4_vf_stats(struct efx_nic *efx,
+				struct efx_buffer *stats_buf)
+{
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_GET_NETPORT_STATISTICS_V2_IN_LEN);
+	int rc;
+
+	MCDI_SET_DWORD(inbuf, GET_NETPORT_STATISTICS_V2_IN_PORT_HANDLE,
+		       efx->port_handle);
+	MCDI_SET_QWORD(inbuf, GET_NETPORT_STATISTICS_IN_DMA_ADDR,
+		       stats_buf->dma_addr);
+	MCDI_POPULATE_DWORD_1(inbuf, GET_NETPORT_STATISTICS_V2_IN_CMD,
+			      GET_NETPORT_STATISTICS_V2_IN_DMA, 1);
+	MCDI_SET_DWORD(inbuf, GET_NETPORT_STATISTICS_V2_IN_DMA_LEN,
+		       stats_buf->len);
+	MCDI_SET_DWORD(inbuf, GET_NETPORT_STATISTICS_V2_IN_PORT_ID,
+		       EVB_PORT_ID_ASSIGNED);
+
+	rc = efx_mcdi_rpc_quiet(efx, MC_CMD_GET_NETPORT_STATISTICS, inbuf,
+				sizeof(inbuf), NULL, 0, NULL);
+	if (rc) {
+		/* Expect ENOENT if DMA queues have not been set up */
+		if (rc != -ENOENT || atomic_read(&efx->active_queues))
+			efx_mcdi_display_error(efx,
+					       MC_CMD_GET_NETPORT_STATISTICS,
+					       sizeof(inbuf), NULL, 0, rc);
+	}
+	return rc;
+}
+
 static void efx_ef10_pull_stats_vf(struct efx_nic *efx)
 {
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
-	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAC_STATS_IN_LEN);
 	DECLARE_BITMAP(mask, EF10_STAT_COUNT) = {};
 	__le64 generation_start, generation_end;
 	u32 dma_len = efx->stats_dma_size;
@@ -2368,33 +2408,24 @@ static void efx_ef10_pull_stats_vf(struct efx_nic *efx)
 	u64 *stats = nic_data->stats;
 	int rc;
 
-	// TODO: need MC_CMD_MAC_STATISTICS support for vadapter stats
-	if (efx_nic_port_handle_supported(efx))
-		return;
-
-	efx_ef10_get_stat_mask(efx, mask);
-
 	if (efx_nic_alloc_buffer(efx, &stats_buf, dma_len, GFP_KERNEL))
 		return;
 
 	dma_stats = stats_buf.addr;
 	dma_stats[efx->num_mac_stats - 1] = EFX_MC_STATS_GENERATION_INVALID;
 
-	MCDI_SET_QWORD(inbuf, MAC_STATS_IN_DMA_ADDR, stats_buf.dma_addr);
-	MCDI_POPULATE_DWORD_1(inbuf, MAC_STATS_IN_CMD,
-			      MAC_STATS_IN_DMA, 1);
-	MCDI_SET_DWORD(inbuf, MAC_STATS_IN_DMA_LEN, dma_len);
-	MCDI_SET_DWORD(inbuf, MAC_STATS_IN_PORT_ID, EVB_PORT_ID_ASSIGNED);
+	if (efx_nic_port_handle_supported(efx)) {
+		rc = efx_mcdi_x4_vf_stats(efx, &stats_buf);
+		if (rc)
+			goto out;
 
-	rc = efx_mcdi_rpc_quiet(efx, MC_CMD_MAC_STATS, inbuf, sizeof(inbuf),
-				NULL, 0, NULL);
+		efx_x4_get_stat_mask(efx, mask);
+	} else {
+		rc = efx_mcdi_ef10_vf_stats(efx, &stats_buf);
+		if (rc)
+			goto out;
 
-	if (rc) {
-		/* Expect ENOENT if DMA queues have not been set up */
-		if (rc != -ENOENT || atomic_read(&efx->active_queues))
-			efx_mcdi_display_error(efx, MC_CMD_MAC_STATS,
-					       sizeof(inbuf), NULL, 0, rc);
-		goto out;
+		efx_ef10_get_stat_mask(efx, mask);
 	}
 
 	generation_end = dma_stats[efx->num_mac_stats - 1];
@@ -3360,19 +3391,6 @@ static int efx_ef10_rx_init(struct efx_rx_queue *rx_queue)
 {
 	bool want_outer_classes = false;
 
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_FAKE_VLAN_RX_ACCEL)
-	struct efx_nic *efx = rx_queue->efx;
-	struct efx_ef10_nic_data *nic_data = efx->nic_data;
-
-	/* Outer classes (ETH_TAG_CLASS to be more precise) are required
-	 * for Rx VLAN stripping offload.
-	 */
-	want_outer_classes = efx_ef10_has_cap(nic_data->datapath_caps,
-				VXLAN_NVGRE) ||
-			     efx_ef10_has_cap(nic_data->datapath_caps2,
-				L3XUDP_SUPPORT);
-#endif
-
 	return efx_mcdi_rx_init(rx_queue, want_outer_classes);
 }
 
@@ -3612,9 +3630,6 @@ static int efx_ef10_handle_rx_event(struct efx_channel *channel,
 {
 	unsigned int rx_bytes, next_ptr_lbits, rx_queue_label, rx_l4_class;
 	unsigned int rx_l3_class, rx_encap_hdr;
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_FAKE_VLAN_RX_ACCEL)
-	unsigned int rx_eth_tag_class;
-#endif
 	unsigned int n_descs, n_packets, i;
 	struct efx_nic *efx = channel->efx;
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
@@ -3630,9 +3645,6 @@ static int efx_ef10_handle_rx_event(struct efx_channel *channel,
 	rx_bytes = EFX_QWORD_FIELD(*event, ESF_DZ_RX_BYTES);
 	next_ptr_lbits = EFX_QWORD_FIELD(*event, ESF_DZ_RX_DSC_PTR_LBITS);
 	rx_queue_label = EFX_QWORD_FIELD(*event, ESF_DZ_RX_QLABEL);
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_FAKE_VLAN_RX_ACCEL)
-	rx_eth_tag_class = EFX_QWORD_FIELD(*event, ESF_DZ_RX_ETH_TAG_CLASS);
-#endif
 	rx_l3_class = EFX_QWORD_FIELD(*event, ESF_DZ_RX_L3_CLASS);
 	rx_l4_class = EFX_QWORD_FIELD(*event, ESF_FZ_RX_L4_CLASS);
 	rx_cont = EFX_QWORD_FIELD(*event, ESF_DZ_RX_CONT);
@@ -3742,12 +3754,6 @@ static int efx_ef10_handle_rx_event(struct efx_channel *channel,
 				   EFX_QWORD_VAL(*event));
 		}
 	}
-
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_FAKE_VLAN_RX_ACCEL)
-	if (rx_eth_tag_class == ESE_DZ_ETH_TAG_CLASS_VLAN1 ||
-	    rx_eth_tag_class == ESE_DZ_ETH_TAG_CLASS_VLAN2)
-		flags |= EFX_RX_PKT_VLAN;
-#endif
 
 	channel->irq_mod_score += 2 * n_packets;
 
@@ -3971,6 +3977,9 @@ static int efx_ef10_ev_process(struct efx_channel *channel, int quota)
 	int ev_code;
 	int spent = 0;
 	int rc;
+
+	if (quota <= 0)
+		return spent;
 
 	read_ptr = channel->eventq_read_ptr;
 	wrap_ptr = read_ptr & channel->eventq_mask;
@@ -4934,7 +4943,6 @@ static int efx_ef10_ptp_set_ts_config(struct efx_nic *efx,
 }
 #endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_ID)
 static int efx_ef10_get_phys_port_id(struct efx_nic *efx,
 				     struct netdev_phys_item_id *ppid)
 {
@@ -4948,7 +4956,6 @@ static int efx_ef10_get_phys_port_id(struct efx_nic *efx,
 
 	return 0;
 }
-#endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_UDP_TUNNEL_NIC_INFO)
 /* We rely on the MCDI wiping out our TX rings if it made any changes to the
@@ -5811,7 +5818,6 @@ static int efx_ef10_probe_post_io(struct efx_nic *efx)
 	efx_sriov_init_max_vfs(efx, nic_data->pf_index);
 #endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_ID)
 #ifdef CONFIG_SFC_SRIOV
 	if (efx->pci_dev->physfn && !efx->pci_dev->is_physfn) {
 		struct pci_dev *pci_dev_pf = efx->pci_dev->physfn;
@@ -5821,7 +5827,7 @@ static int efx_ef10_probe_post_io(struct efx_nic *efx)
 	} else
 #endif
 		ether_addr_copy(nic_data->port_id, efx->net_dev->perm_addr);
-#endif
+
 	/* If tx_coalesce_doorbell=Y disable tx_push, we do this here to avoid
 	 * additional checks on the fast path.
 	 */
@@ -6344,10 +6350,9 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 	.vswitching_remove = efx_ef10_vswitching_remove_vf,
 	.get_mac_address = efx_ef10_get_mac_address_vf,
 	.set_mac_address = efx_ef10_set_mac_address,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_ID)
 	.get_phys_port_id = efx_ef10_get_phys_port_id,
-#endif
 	.revision = EFX_REV_HUNT_A0,
+	.default_max_rxq = 16,
 	.max_dma_mask = DMA_BIT_MASK(ESF_DZ_TX_KER_BUF_ADDR_WIDTH),
 	.ev_label_mask = BIT(ESF_DZ_RX_QLABEL_WIDTH) - 1,
 	.rx_prefix_size = ES_DZ_RX_PREFIX_SIZE,
@@ -6512,6 +6517,7 @@ const struct efx_nic_type efx_x4_vf_nic_type = {
 	.get_phys_port_id = efx_ef10_get_phys_port_id,
 #endif
 	.revision = EFX_REV_X4,
+	.default_max_rxq = 64,
 	.max_dma_mask = DMA_BIT_MASK(ESF_DZ_TX_KER_BUF_ADDR_WIDTH),
 	.ev_label_mask = BIT(ESF_DZ_RX_QLABEL_WIDTH) - 1,
 	.rx_prefix_size = ES_DZ_RX_PREFIX_SIZE,
@@ -6708,19 +6714,16 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.sriov_set_vf_vlan = efx_ef10_sriov_set_vf_vlan,
 	.sriov_set_vf_spoofchk = efx_ef10_sriov_set_vf_spoofchk,
 	.sriov_get_vf_config = efx_ef10_sriov_get_vf_config,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VF_LINK_STATE)
 	.sriov_set_vf_link_state = efx_ef10_sriov_set_vf_link_state,
-#endif
 #endif
 	.vswitching_probe = efx_ef10_vswitching_probe_pf,
 	.vswitching_restore = efx_ef10_vswitching_restore_pf,
 	.vswitching_remove = efx_ef10_vswitching_remove_pf,
 	.get_mac_address = efx_ef10_get_mac_address_pf,
 	.set_mac_address = efx_ef10_set_mac_address,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_ID)
 	.get_phys_port_id = efx_ef10_get_phys_port_id,
-#endif
 	.revision = EFX_REV_HUNT_A0,
+	.default_max_rxq = 16,
 	.max_dma_mask = DMA_BIT_MASK(ESF_DZ_TX_KER_BUF_ADDR_WIDTH),
 	.ev_label_mask = BIT(ESF_DZ_RX_QLABEL_WIDTH) - 1,
 	.rx_prefix_size = ES_DZ_RX_PREFIX_SIZE,
@@ -6915,9 +6918,7 @@ const struct efx_nic_type efx_x4_nic_type = {
 	.sriov_set_vf_vlan = efx_ef10_sriov_set_vf_vlan,
 	.sriov_set_vf_spoofchk = efx_ef10_sriov_set_vf_spoofchk,
 	.sriov_get_vf_config = efx_ef10_sriov_get_vf_config,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VF_LINK_STATE)
 	.sriov_set_vf_link_state = efx_ef10_sriov_set_vf_link_state,
-#endif
 #endif
 	.vswitching_probe = efx_ef10_vswitching_probe_pf,
 	.vswitching_restore = efx_ef10_vswitching_restore_pf,
@@ -6928,6 +6929,7 @@ const struct efx_nic_type efx_x4_nic_type = {
 	.get_phys_port_id = efx_ef10_get_phys_port_id,
 #endif
 	.revision = EFX_REV_X4,
+	.default_max_rxq = 64,
 	.max_dma_mask = DMA_BIT_MASK(ESF_DZ_TX_KER_BUF_ADDR_WIDTH),
 	.ev_label_mask = BIT(ESF_DZ_RX_QLABEL_WIDTH) - 1,
 	.rx_prefix_size = ES_DZ_RX_PREFIX_SIZE,

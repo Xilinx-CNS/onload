@@ -14,17 +14,12 @@
 #include <linux/pci.h>
 #include <linux/module.h>
 #include <linux/seq_file.h>
-#ifndef EFX_USE_KCOMPAT
 #include <linux/cpu_rmap.h>
-#endif
 #include "net_driver.h"
 #ifdef CONFIG_SFC_TPH
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCIE_ENABLE_TPH)
 #include <linux/pci-tph.h>
 #endif
-#endif
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_CPU_RMAP)
-#include <linux/cpu_rmap.h>
 #endif
 #include "bitfield.h"
 #include "efx.h"

@@ -364,9 +364,7 @@ static void efx_rx_deliver(struct efx_rx_queue *rx_queue, u8 *eh,
 	skb_checksum_none_assert(skb);
 	if (likely(rx_buf_flags & EFX_RX_PKT_CSUMMED)) {
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
-#if !defined(EFX_USE_KCOMPAT) || defined (EFX_HAVE_CSUM_LEVEL)
 		skb->csum_level = !!(rx_buf_flags & EFX_RX_PKT_CSUM_LEVEL);
-#endif
 	}
 
 	efx_rx_skb_attach_timestamp(channel, skb,
@@ -407,15 +405,12 @@ static void efx_rx_deliver(struct efx_rx_queue *rx_queue, u8 *eh,
 /* Handle a received packet.  Second half: Touches packet payload. */
 void __efx_rx_packet(struct efx_rx_queue *rx_queue)
 {
-#if (defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL) || !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK))
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 	struct efx_channel *channel = efx_get_rx_queue_channel(rx_queue);
 #endif
 	struct efx_rx_buffer *rx_buf = efx_rx_buf_pipe(rx_queue);
 	struct efx_nic *efx = rx_queue->efx;
 	u8 *eh = efx_rx_buf_va(rx_buf);
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_FAKE_VLAN_RX_ACCEL)
-	struct vlan_ethhdr *veh;
-#endif
 	bool rx_deliver = false;
 	int rc;
 
@@ -472,26 +467,6 @@ void __efx_rx_packet(struct efx_rx_queue *rx_queue)
 #endif
 #endif
 
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_FAKE_VLAN_RX_ACCEL)
-	/* Fake VLAN tagging */
-	veh = (struct vlan_ethhdr *) eh;
-	if ((rx_buf->flags & EFX_RX_PKT_VLAN) &&
-	    ((veh->h_vlan_proto == htons(ETH_P_8021Q)) ||
-	     (veh->h_vlan_proto == htons(ETH_P_QINQ1)) ||
-	     (veh->h_vlan_proto == htons(ETH_P_QINQ2)) ||
-	     (veh->h_vlan_proto == htons(ETH_P_QINQ3)) ||
-	     (veh->h_vlan_proto == htons(ETH_P_8021AD)))) {
-		rx_buf->vlan_tci = ntohs(veh->h_vlan_TCI);
-		memmove(eh - efx->rx_prefix_size + VLAN_HLEN,
-			eh - efx->rx_prefix_size,
-			2 * ETH_ALEN + efx->rx_prefix_size);
-		eh += VLAN_HLEN;
-		rx_buf->page_offset += VLAN_HLEN;
-		rx_buf->len -= VLAN_HLEN;
-		rx_buf->flags |= EFX_RX_BUF_VLAN_XTAG;
-	}
-#endif
-
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 	if (rx_buf->flags & EFX_RX_BUF_ZC) {
 		rx_deliver = true;
@@ -511,12 +486,7 @@ void __efx_rx_packet(struct efx_rx_queue *rx_queue)
 		/* fall through */
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_GRO)
-	if ((rx_buf->flags & EFX_RX_PKT_TCP) &&
-	    !rx_queue->receive_skb
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
-	    && !efx_channel_busy_polling(channel)
-#endif
-	   ) {
+	if ((rx_buf->flags & EFX_RX_PKT_TCP) && !rx_queue->receive_skb) {
 		efx_rx_packet_gro(rx_queue, rx_buf,
 				  rx_queue->rx_pkt_n_frags,
 				  eh, 0);

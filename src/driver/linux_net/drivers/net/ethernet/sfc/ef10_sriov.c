@@ -489,13 +489,11 @@ int efx_ef10_sriov_get_vf_config(struct efx_nic *efx, int vf_i,
 				 struct ifla_vf_info *ivf)
 {
 	struct ef10_vf *vf;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VF_LINK_STATE)
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_LINK_STATE_MODE_IN_LEN);
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_LINK_STATE_MODE_OUT_LEN);
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 	size_t outlen;
 	int rc;
-#endif
 
 	vf = efx_ef10_vf_info(efx, vf_i);
 	if (!vf)
@@ -512,7 +510,6 @@ int efx_ef10_sriov_get_vf_config(struct efx_nic *efx, int vf_i,
 	ivf->vlan = (vf->vlan == EFX_FILTER_VID_UNSPEC) ? 0 : vf->vlan;
 	ivf->qos = 0;
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VF_LINK_STATE)
 	MCDI_POPULATE_DWORD_2(inbuf, LINK_STATE_MODE_IN_FUNCTION,
 			      LINK_STATE_MODE_IN_FUNCTION_PF, nic_data->pf_index,
 			      LINK_STATE_MODE_IN_FUNCTION_VF, vf_i);
@@ -525,7 +522,6 @@ int efx_ef10_sriov_get_vf_config(struct efx_nic *efx, int vf_i,
 	if (outlen < MC_CMD_LINK_STATE_MODE_OUT_LEN)
 		return -EIO;
 	ivf->linkstate = MCDI_DWORD(outbuf, LINK_STATE_MODE_OUT_OLD_MODE);
-#endif
 
 	return 0;
 }
@@ -937,7 +933,6 @@ int efx_ef10_sriov_set_vf_spoofchk(struct efx_nic *efx, int vf_i,
 		spoofchk ? 0 : MC_CMD_PRIVILEGE_MASK_IN_GRP_MAC_SPOOFING_TX);
 }
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VF_LINK_STATE)
 int efx_ef10_sriov_set_vf_link_state(struct efx_nic *efx, int vf_i,
 				     int link_state)
 {
@@ -954,7 +949,6 @@ int efx_ef10_sriov_set_vf_link_state(struct efx_nic *efx, int vf_i,
 	return efx_mcdi_rpc(efx, MC_CMD_LINK_STATE_MODE, inbuf, sizeof(inbuf),
 			    NULL, 0, NULL); /* don't care what old mode was */
 }
-#endif /* EFX_HAVE_VF_LINK_STATE */
 
 
 #else /* CONFIG_SFC_SRIOV */

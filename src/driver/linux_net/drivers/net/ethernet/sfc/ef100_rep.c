@@ -114,7 +114,6 @@ static int efx_ef100_rep_get_port_parent_id(struct net_device *dev,
 }
 #endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_NAME)
 static int efx_ef100_rep_get_phys_port_name(struct net_device *dev,
 					    char *buf, size_t len)
 {
@@ -161,7 +160,6 @@ static int efx_ef100_rep_get_phys_port_name(struct net_device *dev,
 
 	return 0;
 }
-#endif
 
 static int efx_ef100_rep_set_mac_address(struct net_device *net_dev, void *data)
 {
@@ -224,9 +222,7 @@ const struct net_device_ops efx_ef100_rep_netdev_ops = {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PORT_PARENT_ID)
 	.ndo_get_port_parent_id	= efx_ef100_rep_get_port_parent_id,
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_NAME)
 	.ndo_get_phys_port_name	= efx_ef100_rep_get_phys_port_name,
-#endif
 	.ndo_set_mac_address    = efx_ef100_rep_set_mac_address,
 	.ndo_get_stats64	= efx_ef100_rep_get_stats64,
 	.ndo_setup_tc		= efx_ef100_rep_setup_tc,

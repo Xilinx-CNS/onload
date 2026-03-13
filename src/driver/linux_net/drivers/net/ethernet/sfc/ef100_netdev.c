@@ -630,34 +630,19 @@ static const struct net_device_ops ef100_netdev_ops = {
 #if 0
 #ifdef CONFIG_SFC_SRIOV
 	.ndo_set_vf_mac         = efx_sriov_set_vf_mac,
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_EXT_SET_VF_VLAN_PROTO)
-	.extended.ndo_set_vf_vlan = efx_sriov_set_vf_vlan,
-#else
 	.ndo_set_vf_vlan        = efx_sriov_set_vf_vlan,
-#endif
 	.ndo_get_vf_config      = efx_sriov_get_vf_config,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VF_LINK_STATE)
 	.ndo_set_vf_link_state  = efx_sriov_set_vf_link_state,
-#endif
 	.ndo_set_vf_spoofchk    = efx_sriov_set_vf_spoofchk,
 #endif
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_ID)
 	.ndo_get_phys_port_id   = efx_get_phys_port_id,
-#endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_NAME)
 #ifndef CONFIG_NET_DEVLINK
 	.ndo_get_phys_port_name = efx_get_phys_port_name,
-#endif
 #endif
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_NDO_POLL_CONTROLLER)
 #ifdef CONFIG_NET_POLL_CONTROLLER
 	.ndo_poll_controller    = efx_netpoll,
-#endif
-#endif
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
-#ifdef CONFIG_NET_RX_BUSY_POLL
-	.ndo_busy_poll          = efx_busy_poll,
 #endif
 #endif
 #ifdef CONFIG_RFS_ACCEL
@@ -695,13 +680,6 @@ static const struct net_device_ops ef100_netdev_ops = {
 #ifdef CONFIG_NET_DEVLINK
 	.ndo_get_devlink_port	= efx_get_devlink_port,
 #endif
-#endif
-
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_SIZE)
-	.ndo_size               = sizeof(struct net_device_ops),
-#endif
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_SIZE_RH)
-	.ndo_size_rh            = sizeof(struct net_device_ops),
 #endif
 };
 

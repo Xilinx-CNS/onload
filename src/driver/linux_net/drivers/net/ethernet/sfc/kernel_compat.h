@@ -261,59 +261,6 @@
 	#define RX_CLS_LOC_LAST		0xfffffffd
 #endif
 
-#ifdef ETHTOOL_GRXFHINDIR
-	#define EFX_HAVE_ETHTOOL_RXFH_INDIR yes
-#else
-	struct ethtool_rxfh_indir {
-		__u32	cmd;
-		/* On entry, this is the array size of the user buffer.  On
-		 * return from ETHTOOL_GRXFHINDIR, this is the array size of
-		 * the hardware indirection table. */
-		__u32	size;
-		__u32	ring_index[0];	/* ring/queue index for each hash value */
-	};
-	#define ETHTOOL_GRXFHINDIR	0x00000038
-	#define ETHTOOL_SRXFHINDIR	0x00000039
-#endif
-
-#ifndef EFX_HAVE_ETHTOOL_SET_PHYS_ID
-	enum ethtool_phys_id_state {
-		ETHTOOL_ID_INACTIVE,
-		ETHTOOL_ID_ACTIVE,
-		ETHTOOL_ID_ON,
-		ETHTOOL_ID_OFF
-	};
-#endif
-
-#ifdef ETHTOOL_GMODULEEEPROM
-	#define EFX_HAVE_ETHTOOL_GMODULEEEPROM yes
-	#ifndef ETH_MODULE_SFF_8436
-	#define ETH_MODULE_SFF_8436     0x3
-	#define ETH_MODULE_SFF_8436_LEN 256
-	#endif
-	#ifndef ETH_MODULE_SFF_8436_MAX_LEN
-	#define ETH_MODULE_SFF_8436_MAX_LEN 640
-	#endif
-#else
-	struct ethtool_modinfo {
-		__u32   cmd;
-		__u32   type;
-		__u32   eeprom_len;
-		__u32   reserved[8];
-	};
-
-	#define ETH_MODULE_SFF_8079     0x1
-	#define ETH_MODULE_SFF_8079_LEN 256
-	#define ETH_MODULE_SFF_8472     0x2
-	#define ETH_MODULE_SFF_8472_LEN 512
-	#define ETH_MODULE_SFF_8436     0x3
-	#define ETH_MODULE_SFF_8436_LEN 256
-	#define ETH_MODULE_SFF_8436_MAX_LEN 640
-
-	#define ETHTOOL_GMODULEINFO     0x00000042
-	#define ETHTOOL_GMODULEEEPROM   0x00000043
-#endif
-
 #ifndef ETHTOOL_GET_TS_INFO
 	struct ethtool_ts_info {
 		__u32	cmd;
@@ -339,6 +286,10 @@ struct ethtool_module_eeprom {
 	u8	i2c_address;
 	u8	*data;
 };
+#endif
+
+#ifndef ETH_MODULE_SFF_8436_MAX_LEN
+#define ETH_MODULE_SFF_8436_MAX_LEN 640
 #endif
 
 #ifndef RXH_XFRM_SYM_XOR
@@ -372,24 +323,6 @@ struct ethtool_rxfh_param {
 	#define GSO_LEGACY_MAX_SIZE	65536u
 #endif
 
-#ifdef EFX_NEED_DMA_SET_MASK_AND_COHERENT
-	static inline int dma_set_mask_and_coherent(struct device *dev, u64 mask)
-	{
-		int rc;
-
-		/*
-		 * Truncate the mask to the actually supported dma_addr_t
-		 * width to avoid generating unsupportable addresses.
-		 */
-		mask = (dma_addr_t)mask;
-
-		rc = dma_set_mask(dev, mask);
-		if (rc == 0)
-			dma_set_coherent_mask(dev, mask);
-		return rc;
-	}
-#endif
-
 /* netdev_WARN may be defined wrongly (with a trailing semi-colon) */
 #undef netdev_WARN
 #define netdev_WARN(dev, format, args...)			\
@@ -414,31 +347,11 @@ struct ethtool_rxfh_param {
 	#define __always_unused __attribute__((unused))
 #endif
 
-#ifdef EFX_NEED_ETHER_ADDR_COPY
-	static inline void ether_addr_copy(u8 *dst, const u8 *src)
-	{
-		u16 *a = (u16 *)dst;
-		const u16 *b = (const u16 *)src;
-
-		a[0] = b[0];
-		a[1] = b[1];
-		a[2] = b[2];
-	}
-#endif
-
 #ifdef EFX_NEED_ETH_HW_ADDR_SET
 	static inline void eth_hw_addr_set(struct net_device *dev, const u8 *addr)
 	{
 		ether_addr_copy(dev->dev_addr, addr);
 	}
-#endif
-
-#ifdef EFX_NEED_NETDEV_NOTIFIER_INFO_TO_DEV
-static inline struct net_device *
-netdev_notifier_info_to_dev(const void *info)
-{
-	return (struct net_device *) info;
-}
 #endif
 
 #ifdef EFX_NEED_SKB_FRAG_OFF
@@ -537,24 +450,6 @@ static inline bool __netdev_tx_sent_queue(struct netdev_queue *dev_queue,
 	#define efx_ioremap(phys,size)	ioremap_nocache(phys,size)
 #else
 	#define efx_ioremap(phys,size)	ioremap(phys,size)
-#endif
-
-#ifdef EFX_NEED_SKB_SET_HASH
-enum pkt_hash_types {
-	PKT_HASH_TYPE_NONE,
-	PKT_HASH_TYPE_L2,
-	PKT_HASH_TYPE_L3,
-	PKT_HASH_TYPE_L4,
-};
-
-static inline void skb_set_hash(struct sk_buff *skb, __u32 hash,
-				enum pkt_hash_types type)
-{
-#ifdef EFX_HAVE_SKB_L4HASH
-	skb->l4_rxhash = (type == PKT_HASH_TYPE_L4);
-#endif
-	skb->rxhash = hash;
-}
 #endif
 
 #ifndef EFX_HAVE_BUSY_POLL
@@ -877,23 +772,6 @@ unsigned int cpumask_local_spread(unsigned int i, int node);
 	#define NET_IP_ALIGN 0
 #endif
 
-#if defined(EFX_HAVE_OLD___VLAN_PUT_TAG)
-	static inline struct sk_buff *
-	efx___vlan_put_tag(struct sk_buff *skb, __be16 vlan_proto, u16 vlan_tci)
-	{
-		WARN_ON(vlan_proto != htons(ETH_P_8021Q));
-		return __vlan_put_tag(skb, vlan_tci);
-	}
-	#define vlan_insert_tag_set_proto efx___vlan_put_tag
-#elif !defined(EFX_HAVE_VLAN_INSERT_TAG_SET_PROTO)
-	static inline struct sk_buff *
-	vlan_insert_tag_set_proto(struct sk_buff *skb, __be16 vlan_proto,
-			u16 vlan_tci)
-	{
-		return __vlan_put_tag(skb, vlan_proto, vlan_tci);
-	}
-#endif
-
 #ifdef EFX_HAVE_ASM_SYSTEM_H
 #include <asm/system.h>
 #endif
@@ -1070,24 +948,6 @@ static inline int skb_inner_transport_offset(const struct sk_buff *skb)
 }
 #endif
 
-#ifdef EFX_HAVE_NETDEV_REGISTER_RH
-/* The _rh versions of these appear in RHEL7.3.
- * Wrap them to make the calling code simpler.
- */
-static inline int efx_register_netdevice_notifier(struct notifier_block *b)
-{
-	return register_netdevice_notifier_rh(b);
-}
-
-static inline int efx_unregister_netdevice_notifier(struct notifier_block *b)
-{
-	return unregister_netdevice_notifier_rh(b);
-}
-
-#define register_netdevice_notifier efx_register_netdevice_notifier
-#define unregister_netdevice_notifier efx_unregister_netdevice_notifier
-#endif
-
 #ifdef EFX_NEED_NETIF_NAPI_ADD_WEIGHT
 static inline void netif_napi_add_weight(struct net_device *dev,
 					 struct napi_struct *napi,
@@ -1096,50 +956,6 @@ static inline void netif_napi_add_weight(struct net_device *dev,
 {
 	netif_napi_add(dev, napi, poll, weight);
 }
-#endif
-
-#ifdef EFX_HAVE_NAPI_HASH_ADD
-/* napi_hash_add appeared in 3.11 and is no longer exported as of 4.10.
- *
- * Although newer versions of netif_napi_add call napi_hash_add we can still
- * call napi_hash_add here regardless, since there is a state bit to avoid
- * double adds.
- */
-static inline void efx_netif_napi_add(struct net_device *dev,
-				      struct napi_struct *napi,
-				      int (*poll)(struct napi_struct *, int),
-				      int weight)
-{
-	netif_napi_add(dev, napi, poll, weight);
-	napi_hash_add(napi);
-}
-#ifdef netif_napi_add
-/* RHEL7.3 defines netif_napi_add as _netif_napi_add for KABI compat. */
-#define _netif_napi_add efx_netif_napi_add
-#else
-#define netif_napi_add efx_netif_napi_add
-#endif
-
-/* napi_hash_del still exists as of 4.10, even though napi_hash_add has gone.
- * This is because it returns whether an RCU grace period is needed, allowing
- * drivers to coalesce them. We don't do this.
- *
- * Although newer versions of netif_napi_del() call napi_hash_del() already
- * this is safe - it uses a state bit to determine if it needs deleting.
- */
-static inline void efx_netif_napi_del(struct napi_struct *napi)
-{
-	might_sleep();
-#ifndef EFX_HAVE_NAPI_HASH_DEL_RETURN
-	napi_hash_del(napi);
-	if (1) /* Always call synchronize_net */
-#else
-	if (napi_hash_del(napi))
-#endif
-		synchronize_net();
-	netif_napi_del(napi);
-}
-#define netif_napi_del efx_netif_napi_del
 #endif
 
 #if defined(EFX_NEED_BOOL_NAPI_COMPLETE_DONE)
@@ -1174,18 +990,8 @@ struct device *hwmon_device_register_with_info(
 	void *drvdata __always_unused,
 	const struct hwmon_chip_info *info __always_unused,
 	const struct attribute_group **extra_groups __always_unused);
-#else
-#if defined(EFX_NEED_HWMON_T_ALARM)
-#define HWMON_T_ALARM	BIT(hwmon_temp_alarm)
 #endif
-#endif
-/* For RHEL 6 and 7 the above takes care of hwmon_device_register_with_info(),
- * but they are missing the read_string() API in struct hwmon_ops.
- */
-#if defined(HWMON_T_MIN) && (defined(EFX_HAVE_HWMON_READ_STRING) ||	\
-			     defined(EFX_HAVE_HWMON_READ_STRING_CONST))
 #define EFX_HAVE_HWMON_DEVICE_REGISTER_WITH_INFO
-#endif
 
 #if defined(EFX_HAVE_XDP_EXT)
 /* RHEL 7 adds the XDP related NDOs in the net_device_ops_extended area.

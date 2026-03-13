@@ -191,31 +191,6 @@ int efx_ethtool_phys_id(struct net_device *net_dev,
 	return efx_mcdi_set_id_led(efx, mode);
 }
 
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_SET_PHYS_ID)
-int efx_ethtool_phys_id_loop(struct net_device *net_dev, u32 count)
-{
-	/* Driver expects to be called at twice the frequency in rc */
-	int rc = efx_ethtool_phys_id(net_dev, ETHTOOL_ID_ACTIVE);
-	int n = rc * 2, i, interval = HZ / n;
-
-	/* Count down seconds */
-	do {
-		/* Count down iterations per second */
-		i = n;
-		do {
-			efx_ethtool_phys_id(net_dev,
-					    (i & 1) ? ETHTOOL_ID_OFF
-					    : ETHTOOL_ID_ON);
-			schedule_timeout_interruptible(interval);
-		} while (!signal_pending(current) && --i != 0);
-	} while (!signal_pending(current) &&
-		 (count == 0 || --count != 0));
-
-	(void)efx_ethtool_phys_id(net_dev, ETHTOOL_ID_INACTIVE);
-	return 0;
-}
-#endif
-
 u32 efx_ethtool_get_msglevel(struct net_device *net_dev)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
@@ -1745,11 +1720,7 @@ int efx_ethtool_set_rxnfc(struct net_device *net_dev,
 #ifdef EFX_USE_KCOMPAT
 int efx_ethtool_get_rxnfc_wrapper(struct net_device *net_dev,
 					 struct ethtool_rxnfc *info,
-#ifdef EFX_HAVE_OLD_ETHTOOL_GET_RXNFC
-					 void *rules)
-#else
 					 u32 *rules)
-#endif
 {
 	return efx_ethtool_get_rxnfc(net_dev, (struct efx_ethtool_rxnfc *)info,
 				     rules);
@@ -1990,16 +1961,10 @@ int efx_sfctool_get_rxfh_context(struct efx_nic *efx, u32 *indir,
 	return 0;
 }
 
-#if defined(EFX_HAVE_ETHTOOL_GET_RXFH) || defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR) || !defined(EFX_HAVE_ETHTOOL_RXFH_INDIR)
 int efx_ethtool_get_rxfh(struct net_device *net_dev, u32 *indir, u8 *key,
 			 u8 *hfunc)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
-#else
-int efx_sfctool_get_rxfh(struct efx_nic *efx, u32 *indir, u8 *key,
-			 u8 *hfunc)
-{
-#endif
 	struct ethtool_rxfh_param rxfh = {.indir = indir, .key = key};
 	int rc;
 
@@ -2012,7 +1977,7 @@ int efx_sfctool_get_rxfh(struct efx_nic *efx, u32 *indir, u8 *key,
 	return 0;
 }
 
-#if defined(EFX_HAVE_ETHTOOL_GET_RXFH) && !defined(EFX_HAVE_CONFIGURABLE_RSS_HASH)
+#if !defined(EFX_HAVE_CONFIGURABLE_RSS_HASH)
 /* Wrappers without hash function getting and setting. */
 int efx_ethtool_get_rxfh_no_hfunc(struct net_device *net_dev,
 				  u32 *indir, u8 *key)
@@ -2020,49 +1985,18 @@ int efx_ethtool_get_rxfh_no_hfunc(struct net_device *net_dev,
 	return efx_ethtool_get_rxfh(net_dev, indir, key, NULL);
 }
 
-# if defined(EFX_HAVE_ETHTOOL_SET_RXFH_NOCONST)
-/* RH backported version doesn't have const for arguments. */
-int efx_ethtool_set_rxfh_no_hfunc(struct net_device *net_dev,
-				  u32 *indir, u8 *key)
-{
-	return efx_ethtool_set_rxfh(net_dev, indir, key,
-				    ETH_RSS_HASH_NO_CHANGE);
-}
-# else
 int efx_ethtool_set_rxfh_no_hfunc(struct net_device *net_dev,
 				  const u32 *indir, const u8 *key)
 {
 	return efx_ethtool_set_rxfh(net_dev, indir, key,
 				    ETH_RSS_HASH_NO_CHANGE);
 }
-# endif
 #endif
 
-#if defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR) && !defined(EFX_HAVE_ETHTOOL_GET_RXFH)
-/* Wrappers that only set the indirection table, not the key. */
-int efx_ethtool_get_rxfh_indir(struct net_device *net_dev, u32 *indir)
-{
-	return efx_ethtool_get_rxfh(net_dev, indir, NULL, NULL);
-}
-
-int efx_ethtool_set_rxfh_indir(struct net_device *net_dev, const u32 *indir)
-{
-	return efx_ethtool_set_rxfh(net_dev, indir, NULL,
-				    ETH_RSS_HASH_NO_CHANGE);
-}
-#endif
-
-#if defined(EFX_HAVE_ETHTOOL_GET_RXFH) || defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR) || !defined(EFX_HAVE_ETHTOOL_RXFH_INDIR)
 int efx_ethtool_set_rxfh(struct net_device *net_dev,
 			 const u32 *indir, const u8 *key, const u8 hfunc)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
-
-#else
-int efx_sfctool_set_rxfh(struct efx_nic *efx,
-			 const u32 *indir, const u8 *key, const u8 hfunc)
-{
-#endif
 	struct ethtool_rxfh_param rxfh = {};
 
 	rxfh.hfunc = hfunc;

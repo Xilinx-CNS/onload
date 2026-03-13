@@ -92,7 +92,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.2.1.1003"
+#define EFX_DRIVER_VERSION	"6.2.1.1005"
 #endif
 
 #ifdef DEBUG
@@ -108,9 +108,6 @@
 #if defined(EFX_NOT_UPSTREAM)
 #define EFX_RX_PAGE_SHARE	1
 #if IS_ENABLED(CONFIG_VLAN_8021Q)
-#ifndef EFX_HAVE_CSUM_LEVEL
-#define EFX_USE_FAKE_VLAN_RX_ACCEL 1
-#endif
 #define EFX_USE_FAKE_VLAN_TX_ACCEL 1
 #endif
 #endif
@@ -121,15 +118,14 @@
  *
  **************************************************************************/
 
-/* Limit to 128 channels for now, so it is possible for all TX queues to
- * have TSO
+/* This limit is arbitrary, it only exists to impose a testing limit and
+ * to avoid large memory allocations in case of a bug.
  */
-#define EFX_MAX_DATAPATH_CHANNELS 128U
-#define EFX_MAX_RX_QUEUES EFX_MAX_DATAPATH_CHANNELS
+#define EFX_MAX_CHANNELS 255U
+#define EFX_MAX_RX_QUEUES EFX_MAX_CHANNELS
 #define EFX_EXTRA_CHANNEL_PTP	0
 #define EFX_EXTRA_CHANNEL_TC	1
 #define EFX_MAX_EXTRA_CHANNELS	2U
-#define EFX_MAX_CHANNELS (EFX_MAX_DATAPATH_CHANNELS + EFX_MAX_EXTRA_CHANNELS)
 
 /* Checksum generation is a per-queue option in hardware, so each
  * queue visible to the networking core is backed by two hardware TX
@@ -469,9 +465,6 @@ struct efx_rx_buffer {
 #define EFX_RX_BUF_LAST_IN_PAGE		0x0001
 #define EFX_RX_PKT_CSUMMED		0x0002
 #define EFX_RX_PKT_DISCARD		0x0004
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_FAKE_VLAN_RX_ACCEL)
-#define EFX_RX_PKT_VLAN                 0x0008
-#endif
 #define EFX_RX_PKT_IPV4			0x0010
 #define EFX_RX_PKT_IPV6			0x0020
 #define EFX_RX_PKT_TCP			0x0040
@@ -858,14 +851,6 @@ struct efx_channel {
 	unsigned int irq_moderation_us;
 	struct net_device *napi_dev;
 	struct napi_struct napi_str;
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
-#ifdef CONFIG_NET_RX_BUSY_POLL
-	/** @busy_poll_state: busy poll state */
-	unsigned long busy_poll_state;
-	/** @poll_lock: Protect against concurrent busy poll and NAPI */
-	spinlock_t poll_lock;
-#endif
-#endif
 	struct efx_buffer eventq;
 	unsigned int eventq_mask;
 	unsigned int eventq_read_ptr;
@@ -930,94 +915,6 @@ struct efx_channel {
 
 	int irq_mem_node;
 };
-
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
-#ifdef CONFIG_NET_RX_BUSY_POLL
-enum efx_channel_busy_poll_state {
-	EFX_CHANNEL_STATE_IDLE = 0,
-	EFX_CHANNEL_STATE_POLL_BIT = 1,
-	EFX_CHANNEL_STATE_POLL = BIT(1),
-	EFX_CHANNEL_STATE_DISABLE_BIT = 2,
-};
-
-static inline void efx_channel_busy_poll_init(struct efx_channel *channel)
-{
-	WRITE_ONCE(channel->busy_poll_state, EFX_CHANNEL_STATE_IDLE);
-	spin_lock_init(&channel->poll_lock);
-}
-
-/* Called from efx_busy_poll(). */
-static inline bool efx_channel_try_lock_poll(struct efx_channel *channel)
-{
-	return cmpxchg(&channel->busy_poll_state, EFX_CHANNEL_STATE_IDLE,
-			EFX_CHANNEL_STATE_POLL) == EFX_CHANNEL_STATE_IDLE;
-}
-
-static inline void efx_channel_unlock_poll(struct efx_channel *channel)
-{
-	clear_bit_unlock(EFX_CHANNEL_STATE_POLL_BIT, &channel->busy_poll_state);
-}
-
-static inline bool efx_channel_busy_polling(struct efx_channel *channel)
-{
-	return test_bit(EFX_CHANNEL_STATE_POLL_BIT, &channel->busy_poll_state);
-}
-
-static inline void efx_channel_enable(struct efx_channel *channel)
-{
-	clear_bit_unlock(EFX_CHANNEL_STATE_DISABLE_BIT,
-			&channel->busy_poll_state);
-}
-
-/* Stop further polling or napi access.
- * Returns false if the channel is currently busy polling.
- */
-static inline bool efx_channel_disable(struct efx_channel *channel)
-{
-	set_bit(EFX_CHANNEL_STATE_DISABLE_BIT, &channel->busy_poll_state);
-	/* Implicit barrier in efx_channel_busy_polling() */
-	return !efx_channel_busy_polling(channel);
-}
-
-#else /* CONFIG_NET_RX_BUSY_POLL */
-
-static inline void efx_channel_busy_poll_init(struct efx_channel *channel)
-{
-}
-
-static inline bool efx_channel_lock_napi(struct efx_channel *channel)
-{
-	return true;
-}
-
-static inline void efx_channel_unlock_napi(struct efx_channel *channel)
-{
-}
-
-static inline bool efx_channel_try_lock_poll(struct efx_channel *channel)
-{
-	return false;
-}
-
-static inline void efx_channel_unlock_poll(struct efx_channel *channel)
-{
-}
-
-static inline bool efx_channel_busy_polling(struct efx_channel *channel)
-{
-	return false;
-}
-
-static inline void efx_channel_enable(struct efx_channel *channel)
-{
-}
-
-static inline bool efx_channel_disable(struct efx_channel *channel)
-{
-	return true;
-}
-#endif /* CONFIG_NET_RX_BUSY_POLL */
-#endif /* EFX_HAVE_NDO_BUSY_POLL */
 
 /**
  * struct efx_msi_context - Context for each MSI
@@ -1632,6 +1529,10 @@ struct efx_nic {
 	unsigned int irq_tx_moderation_us;
 #if !defined(EFX_NOT_UPSTREAM)
 	enum efx_rss_mode rss_mode;
+#endif
+#ifdef EFX_NOT_UPSTREAM
+	/** @wanted_parallelism: Desired number of channels */
+	unsigned int wanted_parallelism;
 #endif
 	u32 msg_enable;
 #ifdef EFX_NOT_UPSTREAM
@@ -2261,6 +2162,7 @@ struct mae_mport_desc;
  * @has_dynamic_sensors: check if dynamic sensor capability is set
  * @rx_recycle_ring_size: Size of the RX recycle ring
  * @revision: Hardware architecture revision
+ * @default_max_rxq: Parallelism limit for rss_cpus default setting
  * @txd_ptr_tbl_base: TX descriptor ring base address
  * @rxd_ptr_tbl_base: RX descriptor ring base address
  * @buf_tbl_base: Buffer table base address
@@ -2484,10 +2386,8 @@ struct efx_nic_type {
 #endif
 	int (*vlan_rx_add_vid)(struct efx_nic *efx, __be16 proto, u16 vid);
 	int (*vlan_rx_kill_vid)(struct efx_nic *efx, __be16 proto, u16 vid);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_ID)
 	int (*get_phys_port_id)(struct efx_nic *efx,
 				struct netdev_phys_item_id *ppid);
-#endif
 	int (*vport_add)(struct efx_nic *efx, u16 vlan, bool vlan_restrict,
 			 unsigned int *port_id_out);
 	int (*vport_del)(struct efx_nic *efx, unsigned int port_id);
@@ -2538,6 +2438,7 @@ struct efx_nic_type {
 	unsigned int (*rx_recycle_ring_size)(const struct efx_nic *efx);
 
 	int revision;
+	unsigned int default_max_rxq;
 	unsigned int txd_ptr_tbl_base;
 	unsigned int rxd_ptr_tbl_base;
 	unsigned int buf_tbl_base;
