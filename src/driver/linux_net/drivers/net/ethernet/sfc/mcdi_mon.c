@@ -1360,10 +1360,6 @@ static int efx_hwmon_read(struct device *dev,
 			return rc;
 		value = (value != MC_CMD_SENSOR_STATE_OK);
 		break;
-#ifndef EFX_HAVE_HWMON_READ_STRING
-	case EFX_HWMON_LABEL:
-		return -EOPNOTSUPP;
-#endif
 	default:
 		WARN_ONCE(1, "Unhandled HW sensor read\n");
 		return -EOPNOTSUPP;
@@ -1372,16 +1368,10 @@ static int efx_hwmon_read(struct device *dev,
 	return 0;
 }
 
-#ifdef EFX_HAVE_HWMON_READ_STRING
 static int efx_hwmon_read_string(struct device *dev,
 				 enum hwmon_sensor_types type,
 				 u32 attr, int channel,
-#ifdef EFX_HAVE_HWMON_READ_STRING_CONST
-				 const char **str
-#else
-				 char **str
-#endif
-				)
+				 const char **str)
 {
 	const struct efx_nic *efx = dev_get_drvdata(dev);
 	struct efx_nic *efx_temp = dev_get_drvdata(dev);
@@ -1405,7 +1395,6 @@ static int efx_hwmon_read_string(struct device *dev,
 	}
 	return 0;
 }
-#endif
 
 static umode_t efx_hwmon_is_visible(const void *data,
 				    enum hwmon_sensor_types type,
@@ -1563,9 +1552,7 @@ static const struct hwmon_channel_info *efx_hwmon_info[] = {
 static const struct hwmon_ops efx_hwmon_ops = {
 	.is_visible = efx_hwmon_is_visible,
 	.read = efx_hwmon_read,
-#if defined(EFX_HAVE_HWMON_READ_STRING)
 	.read_string = efx_hwmon_read_string,
-#endif
 };
 
 static const struct hwmon_chip_info efx_hwmon_chip_info = {

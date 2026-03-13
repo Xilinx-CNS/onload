@@ -139,6 +139,8 @@ static const struct {
 	[EF10_STAT_ ## ef10_name] = { STAT_ID(RXDP, mcdi_index) }
 #define LL_STAT(ef10_name, mcdi_index)		\
 	[EF10_STAT_ ## ef10_name] = { STAT_ID(LL, mcdi_index) }
+#define VADAPTER_STAT(ef10_name, mcdi_index)		\
+	[EF10_STAT_ ## ef10_name] = { STAT_ID(VADAPTER, mcdi_index) }
 
 	MAC_STAT(port_tx_bytes, TX_BYTES),
 	MAC_STAT(port_tx_packets, TX_PKTS),
@@ -187,8 +189,24 @@ static const struct {
 	RXDP_STAT(port_rx_dp_streaming_packets, RXDP_STREAMING_PKTS),
 	RXDP_STAT(port_rx_dp_hlb_fetch, RXDP_HLB_FETCH_CONDITIONS),
 	RXDP_STAT(port_rx_dp_hlb_wait, RXDP_HLB_WAIT_CONDITIONS),
-	// TODO: rx_*	      (no STAT_IDs, was MC_CMD_MAC_VADAPTER_RX_*)
-	// TODO: tx_*	      (no STAT_IDs, was MC_CMD_MAC_VADAPTER_RX_*)
+	VADAPTER_STAT(rx_unicast, VADAPTER_RX_UNICAST_PACKETS),
+	VADAPTER_STAT(rx_unicast_bytes, VADAPTER_RX_UNICAST_BYTES),
+	VADAPTER_STAT(rx_multicast, VADAPTER_RX_MULTICAST_PACKETS),
+	VADAPTER_STAT(rx_multicast_bytes, VADAPTER_RX_MULTICAST_BYTES),
+	VADAPTER_STAT(rx_broadcast, VADAPTER_RX_BROADCAST_PACKETS),
+	VADAPTER_STAT(rx_broadcast_bytes, VADAPTER_RX_BROADCAST_BYTES),
+	VADAPTER_STAT(rx_bad, VADAPTER_RX_BAD_PACKETS),
+	VADAPTER_STAT(rx_bad_bytes, VADAPTER_RX_BAD_BYTES),
+	VADAPTER_STAT(rx_overflow, VADAPTER_RX_OVERFLOW),
+	VADAPTER_STAT(tx_unicast, VADAPTER_TX_UNICAST_PACKETS),
+	VADAPTER_STAT(tx_unicast_bytes, VADAPTER_TX_UNICAST_BYTES),
+	VADAPTER_STAT(tx_multicast, VADAPTER_TX_MULTICAST_PACKETS),
+	VADAPTER_STAT(tx_multicast_bytes, VADAPTER_TX_MULTICAST_BYTES),
+	VADAPTER_STAT(tx_broadcast, VADAPTER_TX_BROADCAST_PACKETS),
+	VADAPTER_STAT(tx_broadcast_bytes, VADAPTER_TX_BROADCAST_BYTES),
+	VADAPTER_STAT(tx_bad, VADAPTER_TX_BAD_PACKETS),
+	VADAPTER_STAT(tx_bad_bytes, VADAPTER_TX_BAD_BYTES),
+	VADAPTER_STAT(tx_overflow, VADAPTER_TX_OVERFLOW),
 	PHY_STAT(fec_uncorrected_errors, FEC_UNCORRECTED_ERRORS),
 	PHY_STAT(fec_corrected_errors, FEC_CORRECTED_ERRORS),
 	PHY_STAT(fec_corrected_symbols_lane0, FEC_CORRECTED_SYMBOLS_LANE0),
@@ -231,6 +249,7 @@ static const struct {
 #undef PM_STAT
 #undef RXDP_STAT
 #undef LL_STAT
+#undef VADAPTER_STAT
 };
 
 static bool efx_x4_lookup_ef10_stat(u32 mcdi_stat_id, u32 *ef10_stat)

@@ -12,9 +12,6 @@
 
 int efx_ethtool_phys_id(struct net_device *net_dev,
 			enum ethtool_phys_id_state state);
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_SET_PHYS_ID)
-int efx_ethtool_phys_id_loop(struct net_device *net_dev, u32 count);
-#endif
 
 void efx_ethtool_get_common_drvinfo(struct efx_nic *efx,
 				    struct ethtool_drvinfo *info);
@@ -81,11 +78,7 @@ int efx_ethtool_get_rxnfc(struct net_device *net_dev,
 #ifdef EFX_USE_KCOMPAT
 int efx_ethtool_get_rxnfc_wrapper(struct net_device *net_dev,
 					 struct ethtool_rxnfc *info,
-#ifdef EFX_HAVE_OLD_ETHTOOL_GET_RXNFC
-					 void *rules);
-#else
 					 u32 *rules);
-#endif
 int efx_ethtool_set_rxnfc_wrapper(struct net_device *net_dev,
 					 struct ethtool_rxnfc *info);
 #endif
@@ -109,39 +102,19 @@ int efx_ethtool_get_rxfh(struct net_device *net_dev,
 int efx_ethtool_set_rxfh(struct net_device *net_dev,
 			 struct ethtool_rxfh_param *rxfh,
 			 struct netlink_ext_ack *extack);
-#elif defined(EFX_USE_KCOMPAT) && (defined(EFX_HAVE_ETHTOOL_GET_RXFH) || defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR) || !defined(EFX_HAVE_ETHTOOL_RXFH_INDIR))
+#elif defined(EFX_USE_KCOMPAT)
 int efx_ethtool_get_rxfh(struct net_device *net_dev, u32 *indir, u8 *key,
 			 u8 *hfunc);
 int efx_ethtool_set_rxfh(struct net_device *net_dev,
 			 const u32 *indir, const u8 *key, const u8 hfunc);
-#else
-int efx_sfctool_get_rxfh(struct efx_nic *efx, u32 *indir, u8 *key,
-			 u8 *hfunc);
-int efx_sfctool_set_rxfh(struct efx_nic *efx,
-			 const u32 *indir, const u8 *key, const u8 hfunc);
 #endif
 
-
-#if defined(EFX_USE_KCOMPAT)
-#if defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR) && !defined(EFX_HAVE_ETHTOOL_GET_RXFH)
-/* Wrappers that only set the indirection table, not the key. */
-int efx_ethtool_get_rxfh_indir(struct net_device *net_dev, u32 *indir);
-int efx_ethtool_set_rxfh_indir(struct net_device *net_dev,const u32 *indir);
-#endif
-
-#if defined(EFX_HAVE_ETHTOOL_GET_RXFH) && !defined(EFX_HAVE_CONFIGURABLE_RSS_HASH)
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_CONFIGURABLE_RSS_HASH)
 /* Wrappers without hash function getting and setting. */
 int efx_ethtool_get_rxfh_no_hfunc(struct net_device *net_dev,
 				  u32 *indir, u8 *key);
-# if defined(EFX_HAVE_ETHTOOL_SET_RXFH_NOCONST)
-/* RH backported version doesn't have const for arguments. */
-int efx_ethtool_set_rxfh_no_hfunc(struct net_device *net_dev,
-				  u32 *indir, u8 *key);
-# else
 int efx_ethtool_set_rxfh_no_hfunc(struct net_device *net_dev,
 				  const u32 *indir, const u8 *key);
-# endif
-#endif
 #endif
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_RXFH_PARAM)
 #if defined(EFX_HAVE_ETHTOOL_RXFH_CONTEXT)

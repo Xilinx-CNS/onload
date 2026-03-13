@@ -781,10 +781,6 @@ static void efx_init_features(struct efx_nic *efx)
 #endif
 	}
 #endif
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_FAKE_VLAN_RX_ACCEL)
-	/* soft VLAN acceleration cannot be disabled at runtime */
-	efx->fixed_features |= NETIF_F_HW_VLAN_CTAG_RX;
-#endif
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_FAKE_VLAN_TX_ACCEL)
 	efx->fixed_features |= NETIF_F_HW_VLAN_CTAG_TX;
 #endif
@@ -1617,9 +1613,7 @@ const struct net_device_ops efx_netdev_ops = {
 	.ndo_fix_features	= efx_fix_features,
 #endif
 	.ndo_set_features	= efx_set_features,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_FEATURES_CHECK)
 	.ndo_features_check	= efx_features_check,
-#endif
 	.ndo_vlan_rx_add_vid	= efx_vlan_rx_add_vid,
 	.ndo_vlan_rx_kill_vid	= efx_vlan_rx_kill_vid,
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_HWTSTAMP_GET)
@@ -1628,28 +1622,15 @@ const struct net_device_ops efx_netdev_ops = {
 #endif
 #ifdef CONFIG_SFC_SRIOV
 	.ndo_set_vf_mac         = efx_sriov_set_vf_mac,
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_EXT_SET_VF_VLAN_PROTO)
-	.extended.ndo_set_vf_vlan = efx_sriov_set_vf_vlan,
-#else
 	.ndo_set_vf_vlan        = efx_sriov_set_vf_vlan,
-#endif
 	.ndo_get_vf_config      = efx_sriov_get_vf_config,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VF_LINK_STATE)
 	.ndo_set_vf_link_state  = efx_sriov_set_vf_link_state,
-#endif
 	.ndo_set_vf_spoofchk	= efx_sriov_set_vf_spoofchk,
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_ID)
 	.ndo_get_phys_port_id	= efx_get_phys_port_id,
-#endif
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_NDO_POLL_CONTROLLER)
 #ifdef CONFIG_NET_POLL_CONTROLLER
 	.ndo_poll_controller	= efx_netpoll,
-#endif
-#endif
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
-#ifdef CONFIG_NET_RX_BUSY_POLL
-	.ndo_busy_poll		= efx_busy_poll,
 #endif
 #endif
 #ifdef CONFIG_RFS_ACCEL
@@ -1698,13 +1679,6 @@ const struct net_device_ops efx_netdev_ops = {
 #ifdef CONFIG_NET_DEVLINK
 	.ndo_get_devlink_port	= efx_get_devlink_port,
 #endif
-#endif
-
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_SIZE)
-	.ndo_size		= sizeof(struct net_device_ops),
-#endif
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_SIZE_RH)
-	.ndo_size_rh		= sizeof(struct net_device_ops),
 #endif
 };
 

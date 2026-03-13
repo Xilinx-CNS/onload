@@ -429,11 +429,7 @@ const struct ethtool_ops efx_ethtool_ops = {
 	.set_priv_flags		= efx_ethtool_set_priv_flags,
 	.self_test		= efx_ethtool_self_test,
 	.get_strings		= efx_ethtool_get_strings,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_SET_PHYS_ID)
 	.set_phys_id		= efx_ethtool_phys_id,
-#else
-	.phys_id		= efx_ethtool_phys_id_loop,
-#endif
 	.get_ethtool_stats	= efx_ethtool_get_stats,
 	.get_wol                = efx_ethtool_get_wol,
 	.set_wol                = efx_ethtool_set_wol,
@@ -445,21 +441,14 @@ const struct ethtool_ops efx_ethtool_ops = {
 	.get_rxnfc		= efx_ethtool_get_rxnfc_wrapper,
 	.set_rxnfc		= efx_ethtool_set_rxnfc_wrapper,
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR_SIZE)
 	.get_rxfh_indir_size	= efx_ethtool_get_rxfh_indir_size,
-#endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_GET_RXFH_KEY_SIZE)
 	.get_rxfh_key_size	= efx_ethtool_get_rxfh_key_size,
-#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_CONFIGURABLE_RSS_HASH)
 	.get_rxfh		= efx_ethtool_get_rxfh,
 	.set_rxfh		= efx_ethtool_set_rxfh,
-#elif defined(EFX_HAVE_ETHTOOL_GET_RXFH)
+#else
 	.get_rxfh		= efx_ethtool_get_rxfh_no_hfunc,
 	.set_rxfh		= efx_ethtool_set_rxfh_no_hfunc,
-#elif defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR)
-	.get_rxfh_indir		= efx_ethtool_get_rxfh_indir,
-	.set_rxfh_indir		= efx_ethtool_set_rxfh_indir,
 #endif
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_ETHTOOL_RXFH_CONTEXT)
 	.get_rxfh_context	= efx_ethtool_get_rxfh_context,
@@ -472,10 +461,8 @@ const struct ethtool_ops efx_ethtool_ops = {
 #endif
 
 	.get_ts_info		= efx_ethtool_get_ts_info,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_GMODULEEEPROM)
 	.get_module_info	= efx_ethtool_get_module_info,
 	.get_module_eeprom	= efx_ethtool_get_module_eeprom,
-#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_EEPROM_BY_PAGE)
 	.get_module_eeprom_by_page = efx_ethtool_get_module_eeprom_by_page,
 #endif

@@ -74,28 +74,6 @@ static int efx_ioctl_do_mcdi_old(struct efx_nic *efx, union efx_ioctl_data *data
 	return 0;
 }
 
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_RXFH_INDIR)
-
-static int
-efx_ioctl_rxfh_indir(struct efx_nic *efx, union efx_ioctl_data *data)
-{
-	BUILD_BUG_ON(ARRAY_SIZE(data->rxfh_indir.table) !=
-		     ARRAY_SIZE(efx->rss_context.rx_indir_table));
-
-	switch (data->rxfh_indir.head.cmd) {
-	case ETHTOOL_GRXFHINDIR:
-		return efx_ethtool_old_get_rxfh_indir(efx->net_dev,
-						      &data->rxfh_indir.head);
-	case ETHTOOL_SRXFHINDIR:
-		return efx_ethtool_old_set_rxfh_indir(efx->net_dev,
-						      &data->rxfh_indir.head);
-	default:
-		return -EOPNOTSUPP;
-	}
-}
-
-#endif
-
 static int
 efx_ioctl_get_mod_eeprom(struct efx_nic *efx,
 			 union efx_ioctl_data __user *useraddr)
@@ -278,12 +256,6 @@ int efx_private_ioctl(struct efx_nic *efx, u16 cmd,
 	case EFX_RXNFC:
 		/* This command has variable length */
 		return efx_ioctl_rxnfc(efx, &user_data->rxnfc);
-#endif
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_RXFH_INDIR)
-	case EFX_RXFHINDIR:
-		size = sizeof(data->rxfh_indir);
-		op = efx_ioctl_rxfh_indir;
-		break;
 #endif
 	case EFX_MODULEEEPROM:
 		return efx_ioctl_get_mod_eeprom(efx, user_data);

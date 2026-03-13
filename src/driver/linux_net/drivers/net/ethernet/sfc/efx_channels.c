@@ -200,16 +200,16 @@ static unsigned int efx_num_packages(const cpumask_t *in)
 unsigned int efx_wanted_parallelism(struct efx_nic *efx)
 {
 #if defined(EFX_NOT_UPSTREAM)
-	static unsigned int n_rxq;
 	bool selected = false;
 #else
-	unsigned int n_rxq;
 	enum efx_rss_mode rss_mode;
 #endif
+	unsigned int n_rxq;
 
 #if defined(EFX_NOT_UPSTREAM)
-	if (n_rxq)
-		return n_rxq;
+	if (efx->wanted_parallelism)
+		return efx->wanted_parallelism;
+
 	rss_mode = EFX_RSS_CORES;
 
 	if (!efx_rss_cpus_str) {
@@ -325,6 +325,20 @@ unsigned int efx_wanted_parallelism(struct efx_nic *efx)
 		n_rxq = EFX_MAX_RX_QUEUES;
 	}
 
+#if defined(EFX_NOT_UPSTREAM)
+	if (!selected) {
+#else
+	if (rss_mode != EFX_RSS_CUSTOM) {
+#endif
+		/* Limit default parallelism to avoid exhausting interrupts
+		 * available for PTP (or X4 Express datapath) on adapters
+		 * with a small default pf-msix-limit or on large core
+		 * count systems.
+		 */
+		if (efx->type->default_max_rxq)
+			n_rxq = clamp(n_rxq, 1u, efx->type->default_max_rxq);
+	}
+
 #ifdef CONFIG_SFC_SRIOV
 	/* If RSS is requested for the PF *and* VFs then we can't write RSS
 	 * table entries that are inaccessible to VFs
@@ -339,6 +353,9 @@ unsigned int efx_wanted_parallelism(struct efx_nic *efx)
 
 #if !defined(EFX_NOT_UPSTREAM)
 	efx->rss_mode = rss_mode;
+#endif
+#if defined(EFX_NOT_UPSTREAM)
+	efx->wanted_parallelism	= n_rxq;
 #endif
 
 	return n_rxq;
@@ -1069,9 +1086,6 @@ void efx_start_eventq(struct efx_channel *channel)
 	channel->enabled = true;
 	smp_wmb();
 
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
-	efx_channel_enable(channel);
-#endif
 	napi_enable(&channel->napi_str);
 
 #if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_BUSYPOLL)
@@ -1092,11 +1106,6 @@ void efx_stop_eventq(struct efx_channel *channel)
 		  "chan %d stop event queue\n", channel->channel);
 
 	napi_disable(&channel->napi_str);
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
-	while (!efx_channel_disable(channel))
-		usleep_range(1000, 20000);
-
-#endif
 	channel->enabled = false;
 }
 
@@ -2072,18 +2081,6 @@ static int efx_poll(struct napi_struct *napi, int budget)
 	channel->last_napi_poll_jiffies = jiffies;
 #endif
 #endif
-
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
-	/* Worst case scenario is this poll waiting for as many packets to be
-	 * processed as if it would process itself without busy poll. If no
-	 * further packets to process, this poll will be quick. If further
-	 * packets reaching after busy poll is done, this will handle them.
-	 * This active wait is simpler than synchronizing busy poll and napi
-	 * which implies to schedule napi from the busy poll driver's code.
-	 */
-	spin_lock(&channel->poll_lock);
-#endif
-
 	netif_vdbg(efx, intr, efx->net_dev,
 		   "channel %d NAPI poll executing on CPU %d\n",
 		   channel->channel, raw_smp_processor_id());
@@ -2129,11 +2126,6 @@ static int efx_poll(struct napi_struct *napi, int budget)
 			efx_nic_eventq_read_ack(channel);
 		}
 	}
-
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
-	spin_unlock(&channel->poll_lock);
-#endif
-
 #ifdef EFX_NOT_UPSTREAM
 #ifdef SFC_NAPI_DEBUG
 	channel->last_napi_poll_end_jiffies = jiffies;
@@ -2152,10 +2144,6 @@ static int efx_init_napi_channel(struct efx_channel *channel)
 	channel->napi_dev = efx->net_dev;
 	netif_napi_add_weight(channel->napi_dev, &channel->napi_str,
 			      efx_poll, napi_weight);
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
-	efx_channel_busy_poll_init(channel);
-#endif
-
 	return 0;
 }
 
@@ -2214,11 +2202,6 @@ void efx_pause_napi(struct efx_nic *efx)
 
 	efx_for_each_channel(channel, efx) {
 		napi_disable(&channel->napi_str);
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
-		while (!efx_channel_disable(channel))
-			usleep_range(1000, 20000);
-
-#endif
 	}
 }
 
@@ -2233,9 +2216,6 @@ int efx_resume_napi(struct efx_nic *efx)
 	netif_dbg(efx, drv, efx->net_dev, "Resuming NAPI\n");
 
 	efx_for_each_channel(channel, efx) {
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
-		efx_channel_enable(channel);
-#endif
 		napi_enable(&channel->napi_str);
 	}
 
@@ -2264,47 +2244,6 @@ void efx_netpoll(struct net_device *net_dev)
 		efx_schedule_channel(channel);
 }
 
-#endif
-#endif
-
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
-#ifdef CONFIG_NET_RX_BUSY_POLL
-int efx_busy_poll(struct napi_struct *napi)
-{
-	struct efx_channel *channel =
-		container_of(napi, struct efx_channel, napi_str);
-	u64 old_rx_packets = 0, rx_packets = 0;
-	struct efx_nic *efx = channel->efx;
-	struct efx_rx_queue *rx_queue;
-	int budget = 4;
-
-	if (!netif_running(efx->net_dev))
-		return LL_FLUSH_FAILED;
-
-	/* Tell about busy poll in progress if napi channel enabled */
-	if (!efx_channel_try_lock_poll(channel))
-		return LL_FLUSH_BUSY;
-
-	/* Protect against napi poll scheduled in any core */
-	spin_lock_bh(&channel->poll_lock);
-
-	efx_for_each_channel_rx_queue(rx_queue, channel)
-		old_rx_packets += rx_queue->rx_packets;
-	efx_process_channel(channel, budget);
-
-	efx_for_each_channel_rx_queue(rx_queue, channel)
-		rx_packets += rx_queue->rx_packets;
-	rx_packets -= old_rx_packets;
-
-	/* Tell code disabling napi that busy poll is done */
-	efx_channel_unlock_poll(channel);
-
-	/* Allow napi poll to go on if waiting and net_rx_action softirq to
-	 * execute in this core */
-	spin_unlock_bh(&channel->poll_lock);
-
-	return rx_packets;
-}
 #endif
 #endif
 

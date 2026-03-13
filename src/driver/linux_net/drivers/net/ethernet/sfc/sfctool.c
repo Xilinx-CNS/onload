@@ -46,12 +46,6 @@ static int sfctool_set_fecparam(struct efx_nic *efx, void __user *useraddr)
 #endif
 
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_RXFH_CONTEXT)
-#if !defined(EFX_HAVE_ETHTOOL_GET_RXFH) && !defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR) && defined(EFX_HAVE_ETHTOOL_RXFH_INDIR)
-int efx_sfctool_get_rxfh(struct efx_nic *efx, u32 *indir, u8 *key, u8 *hfunc);
-int efx_sfctool_set_rxfh(struct efx_nic *efx,
-			 const u32 *indir, const u8 *key, const u8 hfunc);
-#endif
-
 static noinline_for_stack int sfctool_get_rxfh(struct efx_nic *efx,
 					       void __user *useraddr)
 {
@@ -108,11 +102,7 @@ static noinline_for_stack int sfctool_get_rxfh(struct efx_nic *efx,
 						   rxfh.rss_context);
 	else
 #endif
-#if defined(EFX_HAVE_ETHTOOL_GET_RXFH) || defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR) || !defined(EFX_HAVE_ETHTOOL_RXFH_INDIR)
-		return -EOPNOTSUPP; /* use ethtool instead */
-#else
-		ret = efx_sfctool_get_rxfh(efx, indir, hkey, &dev_hfunc);
-#endif
+		ret = -EOPNOTSUPP; /* use ethtool instead */
 	if (ret)
 		goto out;
 
@@ -229,18 +219,14 @@ static noinline_for_stack int sfctool_set_rxfh(struct efx_nic *efx,
 	}
 
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_ETHTOOL_RXFH_CONTEXT)
-	if (rxfh.rss_context)
+	if (rxfh.rss_context) {
 		ret = efx_sfctool_set_rxfh_context(efx, indir, hkey, rxfh.hfunc,
 						   &rxfh.rss_context, delete);
-	else
+		if (ret)
+			goto out;
+	} else
 #endif
-#if defined(EFX_HAVE_ETHTOOL_GET_RXFH) || defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR) || !defined(EFX_HAVE_ETHTOOL_RXFH_INDIR)
 		return -EOPNOTSUPP; /* use ethtool instead */
-#else
-		ret = efx_sfctool_set_rxfh(efx, indir, hkey, rxfh.hfunc);
-#endif
-	if (ret)
-		goto out;
 
 	if (copy_to_user(useraddr + offsetof(struct sfctool_rxfh, rss_context),
 			 &rxfh.rss_context, sizeof(rxfh.rss_context)))
@@ -259,93 +245,6 @@ static noinline_for_stack int sfctool_set_rxfh(struct efx_nic *efx,
 out:
 	kfree(rss_config);
 	return ret;
-}
-#endif
-
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_GMODULEEEPROM)
-static int sfctool_get_any_eeprom(struct net_device *dev, void __user *useraddr,
-				  int (*getter)(struct net_device *,
-						struct ethtool_eeprom *, u8 *),
-				  u32 total_len)
-{
-	struct ethtool_eeprom eeprom;
-	void __user *userbuf = useraddr + sizeof(eeprom);
-	u32 bytes_remaining;
-	u8 *data;
-	int ret = 0;
-
-	if (copy_from_user(&eeprom, useraddr, sizeof(eeprom)))
-		return -EFAULT;
-
-	/* Check for wrap and zero */
-	if (eeprom.offset + eeprom.len <= eeprom.offset)
-		return -EINVAL;
-
-	/* Check for exceeding total eeprom len */
-	if (eeprom.offset + eeprom.len > total_len)
-		return -EINVAL;
-
-	data = kmalloc(PAGE_SIZE, GFP_USER);
-	if (!data)
-		return -ENOMEM;
-
-	bytes_remaining = eeprom.len;
-	while (bytes_remaining > 0) {
-		eeprom.len = min(bytes_remaining, (u32)PAGE_SIZE);
-
-		ret = getter(dev, &eeprom, data);
-		if (ret)
-			break;
-		if (copy_to_user(userbuf, data, eeprom.len)) {
-			ret = -EFAULT;
-			break;
-		}
-		userbuf += eeprom.len;
-		eeprom.offset += eeprom.len;
-		bytes_remaining -= eeprom.len;
-	}
-
-	eeprom.len = userbuf - (useraddr + sizeof(eeprom));
-	eeprom.offset -= eeprom.len;
-	if (copy_to_user(useraddr, &eeprom, sizeof(eeprom)))
-		ret = -EFAULT;
-
-	kfree(data);
-	return ret;
-}
-
-static int sfctool_get_module_info(struct efx_nic *efx,
-				   void __user *useraddr)
-{
-	int ret;
-	struct ethtool_modinfo modinfo;
-
-	if (copy_from_user(&modinfo, useraddr, sizeof(modinfo)))
-		return -EFAULT;
-
-	ret = efx_ethtool_get_module_info(efx->net_dev, &modinfo);
-	if (ret)
-		return ret;
-
-	if (copy_to_user(useraddr, &modinfo, sizeof(modinfo)))
-		return -EFAULT;
-
-	return 0;
-}
-
-static int sfctool_get_module_eeprom(struct efx_nic *efx,
-				     void __user *useraddr)
-{
-	int ret;
-	struct ethtool_modinfo modinfo;
-
-	ret = efx_ethtool_get_module_info(efx->net_dev, &modinfo);
-	if (ret)
-		return ret;
-
-	return sfctool_get_any_eeprom(efx->net_dev, useraddr,
-				      efx_ethtool_get_module_eeprom,
-				      modinfo.eeprom_len);
 }
 #endif
 
@@ -380,12 +279,6 @@ int efx_sfctool(struct efx_nic *efx, u32 cmd, void __user *data)
 		 * horrid 32-bit compat mess.
 		 */
 		return efx_ioctl_rxnfc(efx, data);
-#endif
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_GMODULEEEPROM)
-	case ETHTOOL_GMODULEEEPROM:
-		return sfctool_get_module_eeprom(efx, data);
-	case ETHTOOL_GMODULEINFO:
-		return sfctool_get_module_info(efx, data);
 #endif
 	default:
 		return -EOPNOTSUPP;

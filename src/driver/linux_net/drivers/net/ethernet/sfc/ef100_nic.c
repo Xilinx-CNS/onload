@@ -447,6 +447,9 @@ static int ef100_ev_process(struct efx_channel *channel, int quota)
 	bool ev_phase;
 	int ev_type;
 
+	if (quota <= 0)
+		return spent;
+
 	if (unlikely(!channel->enabled))
 		return 0;
 
@@ -945,7 +948,6 @@ static void ef100_pull_stats(struct efx_nic *efx)
 	}
 }
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_ID)
 static int efx_ef100_get_phys_port_id(struct efx_nic *efx,
 				      struct netdev_phys_item_id *ppid)
 {
@@ -959,7 +961,6 @@ static int efx_ef100_get_phys_port_id(struct efx_nic *efx,
 
 	return 0;
 }
-#endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
 static struct net_device *ef100_get_vf_rep(struct efx_nic *efx, unsigned int vf)
@@ -1869,9 +1870,7 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.vlan_rx_add_vid = efx_mcdi_filter_add_vid,
 	.vlan_rx_kill_vid = efx_mcdi_filter_del_vid,
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_ID)
 	.get_phys_port_id = efx_ef100_get_phys_port_id,
-#endif
 
 	.ev_label_mask = BIT(ESF_GZ_EV_RXPKTS_Q_LABEL_WIDTH) - 1,
 	.rx_prefix_size = ESE_GZ_RX_PKT_PREFIX_LEN,

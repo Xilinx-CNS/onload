@@ -756,22 +756,13 @@ void efx_stop_all(struct efx_nic *efx)
 }
 
 /* Context: process, dev_base_lock or RTNL held, non-blocking. */
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NETDEV_STATS64_VOID)
 void efx_net_stats(struct net_device *net_dev, struct rtnl_link_stats64 *stats)
-#else
-struct rtnl_link_stats64 *efx_net_stats(struct net_device *net_dev,
-					struct rtnl_link_stats64 *stats)
-#endif
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	efx->type->update_stats(efx, NULL, stats);
 	/* release stats_lock obtained in update_stats */
 	spin_unlock_bh(&efx->stats_lock);
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NETDEV_STATS64_VOID)
-
-	return stats;
-#endif
 }
 
 void efx_reset_sw_stats(struct efx_nic *efx)
@@ -825,11 +816,6 @@ void efx_print_stopped_queues(struct efx_nic *efx)
 		if (!trans_timeout)
 			continue;
 
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_BUSY_POLL)
-#ifdef CONFIG_NET_RX_BUSY_POLL
-		busy_poll_state = channel->busy_poll_state;
-#endif
-#endif
 		netif_info(efx, tx_err, efx->net_dev,
 			   "Channel %u: %senabled Busy poll %#lx NAPI state %#lx Doorbell %sheld %scoalescing Xmit state %#lx timeouts %lu\n",
 			   channel->channel, (channel->enabled ? "" : "NOT "),
@@ -926,16 +912,9 @@ int efx_try_recovery(struct efx_nic *efx)
 	 * schedule a 'recover or reset', leading to this recovery handler.
 	 * Manually call the eeh failure check function.
 	 */
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_EEH_DEV_CHECK_FAILURE)
 	struct eeh_dev *eehdev = pci_dev_to_eeh_dev(efx->pci_dev);
 
 	if (eeh_dev_check_failure(eehdev)) {
-#else
-	struct pci_dev *pcidev = efx->pci_dev;
-	struct device_node *dn = pci_device_to_OF_node(pcidev);
-
-	if (eeh_dn_check_failure(dn, pcidev)) {
-#endif
 		/* The EEH mechanisms will handle the error and reset
 		 * the device if necessary.
 		 */
@@ -1921,7 +1900,6 @@ void efx_fini_mcdi_logging(struct efx_nic *efx)
 #endif
 
 /* VLAN acceleration */
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID_PROTO)
 int efx_vlan_rx_add_vid(struct net_device *net_dev, __be16 proto, u16 vid)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
@@ -1941,44 +1919,6 @@ int efx_vlan_rx_kill_vid(struct net_device *net_dev, __be16 proto, u16 vid)
 	else
 		return -EOPNOTSUPP;
 }
-#elif defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID_RC)
-int efx_vlan_rx_add_vid(struct net_device *net_dev, u16 vid)
-{
-	struct efx_nic *efx = efx_netdev_priv(net_dev);
-
-	if (efx->type->vlan_rx_add_vid)
-		return efx->type->vlan_rx_add_vid(efx, htons(ETH_P_8021Q), vid);
-	else
-		return -EOPNOTSUPP;
-}
-
-int efx_vlan_rx_kill_vid(struct net_device *net_dev, u16 vid)
-{
-	struct efx_nic *efx = efx_netdev_priv(net_dev);
-
-	if (efx->type->vlan_rx_kill_vid)
-		return efx->type->vlan_rx_kill_vid(efx, htons(ETH_P_8021Q),
-						   vid);
-	else
-		return -EOPNOTSUPP;
-}
-#else
-void efx_vlan_rx_add_vid(struct net_device *net_dev, unsigned short vid)
-{
-	struct efx_nic *efx = efx_netdev_priv(net_dev);
-
-	if (efx->type->vlan_rx_add_vid)
-		efx->type->vlan_rx_add_vid(efx, htons(ETH_P_8021Q), vid);
-}
-
-void efx_vlan_rx_kill_vid(struct net_device *net_dev, unsigned short vid)
-{
-	struct efx_nic *efx = efx_netdev_priv(net_dev);
-
-	if (efx->type->vlan_rx_kill_vid)
-		efx->type->vlan_rx_kill_vid(efx, htons(ETH_P_8021Q), vid);
-}
-#endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_HWTSTAMP_GET)
 int efx_hwtstamp_set(struct net_device *net_dev,
@@ -2272,7 +2212,6 @@ const struct pci_error_handlers efx_err_handlers = {
 	.resume		= efx_io_resume,
 };
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_FEATURES_CHECK)
 /* Determine whether the NIC will be able to handle TX offloads for a given
  * encapsulated packet.
  */
@@ -2360,9 +2299,7 @@ netdev_features_t efx_features_check(struct sk_buff *skb,
 	}
 	return features;
 }
-#endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_ID)
 int efx_get_phys_port_id(struct net_device *net_dev,
 			 struct netdev_phys_item_id *ppid)
 {
@@ -2373,9 +2310,7 @@ int efx_get_phys_port_id(struct net_device *net_dev,
 	else
 		return -EOPNOTSUPP;
 }
-#endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_NAME)
 int efx_get_phys_port_name(struct net_device *net_dev,
 			   char *name, size_t len)
 {
@@ -2385,7 +2320,6 @@ int efx_get_phys_port_name(struct net_device *net_dev,
 		return -EINVAL;
 	return 0;
 }
-#endif
 
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
 /* This is called by netdev_update_features() to apply any

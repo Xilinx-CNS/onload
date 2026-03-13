@@ -24,7 +24,6 @@ EFX_HAVE_PCIE_ENABLE_TPH		symbol	pcie_enable_tph		include/linux/pci-tph.h
 EFX_HAVE_PCIE_TPH_GET_CPU_ST		symbol	pcie_tph_get_cpu_st	include/linux/pci-tph.h
 EFX_HAVE_NET_GRO_H			file				include/net/gro.h
 EFX_NEED_SKB_GRO_MAY_PULL              nsymbol  skb_gro_may_pull    include/net/gro.h
-EFX_HAVE_CSUM_LEVEL			symbol	csum_level		include/linux/skbuff.h
 EFX_HAVE_HWTSTAMP_FLAGS         symbol	hwtstamp_flags		include/uapi/linux/net_tstamp.h
 EFX_HAVE_KERNEL_HWTSTAMP_CONFIG         symbol kernel_hwtstamp_config include/linux/net_tstamp.h
 EFX_HAVE_KERNEL_HWTSTAMP_CONFIG_IFR     member struct_kernel_hwtstamp_config ifr include/linux/net_tstamp.h
@@ -32,30 +31,11 @@ EFX_HAVE_NDO_HWTSTAMP_GET               member  struct_net_device_ops ndo_hwtsta
 EFX_HAVE_HWTSTAMP_CONFIG_TO_KERNEL      symbol hwtstamp_config_to_kernel    include/linux/net_tstamp.h
 EFX_HAVE_HWTSTAMP_CONFIG_FROM_KERNEL    symbol hwtstamp_config_from_kernel  include/linux/net_tstamp.h
 EFX_HAVE_MTD_USECOUNT			member  struct_mtd_info	usecount		include/linux/mtd/mtd.h
-EFX_HAVE_NETDEV_STATS64_VOID		memtype	struct_net_device_ops	ndo_get_stats64	include/linux/netdevice.h	void(*)(struct net_device *, struct rtnl_link_stats64 *)
-EFX_NEED_HWMON_T_ALARM			nsymbol	HWMON_T_ALARM		include/linux/hwmon.h
-EFX_HAVE_HWMON_READ_STRING		member	struct_hwmon_ops	read_string	include/linux/hwmon.h
-EFX_HAVE_HWMON_READ_STRING_CONST	memtype	struct_hwmon_ops	read_string	include/linux/hwmon.h	int(*)(struct device *, enum hwmon_sensor_types, u32, int, const char **)
-EFX_HAVE_ETHTOOL_SET_PHYS_ID		symbol	set_phys_id		include/linux/ethtool.h
-EFX_HAVE_ETHTOOL_GMODULEEEPROM		symbol	get_module_eeprom	include/linux/ethtool.h
 EFX_HAVE_ETHTOOL_EEPROM_BY_PAGE		symbol	get_module_eeprom_by_page	include/linux/ethtool.h
-EFX_NEED_DMA_SET_MASK_AND_COHERENT		nsymbol	dma_set_mask_and_coherent	include/linux/dma-mapping.h
 EFX_NEED_BITMAP_ZALLOC			nsymbol	bitmap_zalloc		include/linux/bitmap.h
 EFX_HAVE_ASM_SYSTEM_H			file				asm/system.h
 EFX_HAVE_EXPORTED_CPU_SIBLING_MAP	export	(per_cpu__)?cpu_sibling_map	include/asm/smp.h	arch/$SRCARCH/include/asm/smp.h	arch/$SRCARCH/kernel/smpboot.c	drivers/xen/core/smpboot.c
-EFX_HAVE_NDO_SIZE			member	struct_net_device_ops	ndo_size		include/linux/netdevice.h
-EFX_HAVE_NDO_SIZE_RH			member	struct_net_device_ops	ndo_size_rh		include/linux/netdevice.h
-EFX_HAVE_NDO_SET_VF_VLAN_PROTO		memtype	struct_net_device_ops	ndo_set_vf_vlan		include/linux/netdevice.h	int (*)(struct net_device *, int, u16, u8, __be16)
-EFX_HAVE_NDO_EXT_SET_VF_VLAN_PROTO		memtype struct_net_device_ops_extended	ndo_set_vf_vlan	include/linux/netdevice.h	int (*)(struct net_device *, int, u16, u8, __be16)
-EFX_HAVE_NDO_FEATURES_CHECK		member	struct_net_device_ops	ndo_features_check	include/linux/netdevice.h
-EFX_HAVE_VF_LINK_STATE			member	struct_net_device_ops	ndo_set_vf_link_state	include/linux/netdevice.h
-EFX_HAVE_NDO_BUSY_POLL			member	struct_net_device_ops	ndo_busy_poll	        include/linux/netdevice.h
-EFX_HAVE_NDO_GET_PHYS_PORT_ID		member	struct_net_device_ops	ndo_get_phys_port_id	include/linux/netdevice.h
-EFX_HAVE_NDO_GET_PHYS_PORT_NAME		member	struct_net_device_ops	ndo_get_phys_port_name	include/linux/netdevice.h
 EFX_HAVE_NDO_GET_PORT_PARENT_ID		member	struct_net_device_ops	ndo_get_port_parent_id	include/linux/netdevice.h
-EFX_HAVE_NDO_VLAN_RX_ADD_VID_PROTO	memtype	struct_net_device_ops	ndo_vlan_rx_add_vid	include/linux/netdevice.h	int (*)(struct net_device *, __be16, u16)
-EFX_HAVE_NDO_VLAN_RX_ADD_VID_RC		memtype	struct_net_device_ops	ndo_vlan_rx_add_vid	include/linux/netdevice.h	int (*)(struct net_device *, u16)
-EFX_NEED_ETHER_ADDR_COPY		nsymbol ether_addr_copy		include/linux/etherdevice.h
 EFX_NEED_ETH_HW_ADDR_SET		nsymbol	eth_hw_addr_set		include/linux/etherdevice.h
 EFX_NEED_NS_TO_TIMESPEC			nexport ns_to_timespec		include/linux/time.h	kernel/time.c
 EFX_HAVE_TIMESPEC64			symbol	timespec64		include/linux/time64.h	include/linux/time.h
@@ -63,43 +43,25 @@ EFX_NEED_KTIME_GET_REAL_TS64		nsymbol	ktime_get_real_ts64	include/linux/timekeep
 EFX_NEED_KTIME_COMPARE			nsymbol	ktime_compare		include/linux/ktime.h
 EFX_NEED_RTC_TIME64_TO_TM		nsymbol	rtc_time64_to_tm	include/linux/rtc.h
 EFX_NEED_SET_NORMALIZED_TIMESPEC	custom
-EFX_HAVE_OLD_ETHTOOL_GET_RXNFC		memtype	struct_ethtool_ops	get_rxnfc	include/linux/ethtool.h int (*)(struct net_device *, struct ethtool_rxnfc *, void *)
-EFX_HAVE_CPU_RMAP			file				include/linux/cpu_rmap.h
 EFX_NEED_PTP_CLOCK_PPSUSR		custom
 EFX_NEED_KTIME_GET_SNAPSHOT		nsymbol	ktime_get_snapshot	include/linux/timekeeping.h
 EFX_HAVE_PTP_CLOCK_GETTIMEX64		member	struct_ptp_clock_info gettimex64	include/linux/ptp_clock_kernel.h
 EFX_NEED_SCALED_PPM_TO_PPB		nsymbol scaled_ppm_to_ppb		include/linux/ptp_clock_kernel.h
 EFX_NEED_SKB_FRAG_OFF			nsymbol	skb_frag_off		include/linux/skbuff.h
-EFX_HAVE_ETHTOOL_GET_RXFH_INDIR	symbol	get_rxfh_indir	include/linux/ethtool.h
-EFX_HAVE_ETHTOOL_GET_RXFH_INDIR_SIZE	symbol	get_rxfh_indir_size	include/linux/ethtool.h
-EFX_HAVE_ETHTOOL_GET_RXFH		symbol	get_rxfh	include/linux/ethtool.h
-EFX_HAVE_ETHTOOL_GET_RXFH_KEY_SIZE		symbol	get_rxfh_key_size	include/linux/ethtool.h
-EFX_HAVE_ETHTOOL_SET_RXFH_NOCONST	custom
 EFX_NEED_IS_COMPAT_TASK			custom
 EFX_NEED_COMPAT_U64			nsymbol	compat_u64		include/asm/compat.h arch/$SRCARCH/include/asm/compat.h include/asm-$SRCARCH/compat.h
-EFX_HAVE_IRQ_NOTIFIERS			symbol  irq_affinity_notify	include/linux/interrupt.h
 EFX_NEED_SET_TSO_MAX_SIZE		nsymbol netif_set_tso_max_size	include/linux/netdevice.h
 EFX_NEED_SET_TSO_MAX_SEGS		nsymbol netif_set_tso_max_segs	include/linux/netdevice.h
 EFX_NEED___BQL				nsymbol __netdev_tx_sent_queue	include/linux/netdevice.h
 EFX_NEED_KERNEL_ETHTOOL_TS_INFO		nsymbol	kernel_ethtool_ts_info	include/linux/ethtool.h
-EFX_HAVE_OLD___VLAN_PUT_TAG		symtype	__vlan_put_tag		include/linux/if_vlan.h	struct sk_buff *(struct sk_buff *, u16)
-EFX_HAVE_VLAN_INSERT_TAG_SET_PROTO	symbol vlan_insert_tag_set_proto	include/linux/if_vlan.h
-EFX_NEED_NETDEV_NOTIFIER_INFO_TO_DEV	nsymbol	netdev_notifier_info_to_dev	include/linux/netdevice.h
-EFX_HAVE_NETDEV_REGISTER_RH		symbol	register_netdevice_notifier_rh	include/linux/netdevice.h
 EFX_NEED_PCI_AER_CLEAR_NONFATAL_STATUS	nsymbol pci_aer_clear_nonfatal_status	include/linux/aer.h
 EFX_HAVE_PCI_ENABLE_PCIE_ERROR_REPORTING	symbol	pci_enable_pcie_error_reporting	include/linux/aer.h
-EFX_HAVE_EEH_DEV_CHECK_FAILURE		symbol	eeh_dev_check_failure	arch/powerpc/include/asm/eeh.h
 EFX_NEED_PCI_DEV_TO_EEH_DEV		nsymbol	pci_dev_to_eeh_dev	include/linux/pci.h
 EFX_HAVE_IOREMAP_WC			symbol	ioremap_wc		arch/$SRCARCH/include/asm/io.h include/asm-$SRCARCH/io.h include/asm-generic/io.h
 EFX_HAVE_IOREMAP_NOCACHE		symbol	ioremap_nocache		include/asm-generic/io.h
 EFX_HAVE_OLD_KMAP_ATOMIC		custom
-EFX_HAVE_NAPI_STRUCT_NAPI_ID		member	struct_napi_struct	napi_id	include/linux/netdevice.h
-EFX_HAVE_NAPI_HASH_ADD			symbol	napi_hash_add		include/linux/netdevice.h
-EFX_HAVE_NAPI_HASH_DEL_RETURN		symtype	napi_hash_del		include/linux/netdevice.h	int (struct napi_struct *)
 EFX_NEED_NETIF_NAPI_ADD_WEIGHT		nsymbol	netif_napi_add_weight	include/linux/netdevice.h
 EFX_HAVE_OLD_NETIF_NAPI_ADD		symtype	netif_napi_add		include/linux/netdevice.h	void (struct net_device *, struct napi_struct *, int (*)(struct napi_struct *, int), int)
-EFX_NEED_SKB_SET_HASH			nsymbol skb_set_hash		include/linux/skbuff.h
-EFX_HAVE_SKB_L4HASH			member	struct_sk_buff l4_rxhash	include/linux/skbuff.h
 EFX_HAVE_BUSY_POLL			file				include/net/busy_poll.h
 EFX_NEED_SKB_VLAN_TAG_GET		nsymbol	skb_vlan_tag_get	include/linux/if_vlan.h
 EFX_NEED_IPV6_NFC			nsymbol	ethtool_tcpip6_spec	include/uapi/linux/ethtool.h
@@ -305,20 +267,6 @@ function do_EFX_NEED_SET_NORMALIZED_TIMESPEC
 {
     ! test_inline_symbol set_normalized_timespec include/linux/time.h && \
 	! test_export set_normalized_timespec include/linux/time.h kernel/time.c
-}
-
-function do_EFX_HAVE_ETHTOOL_SET_RXFH_NOCONST
-{
-	defer_test_compile pos "
-#include <linux/ethtool.h>
-static int test_func(struct net_device *a, u32  *b, u8 *c)
-{
-	return 0;
-}
-struct ethtool_ops_ext test = {
-	.set_rxfh = test_func
-};
-"
 }
 
 function do_EFX_NEED_IS_COMPAT_TASK

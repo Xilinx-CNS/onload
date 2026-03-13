@@ -76,11 +76,8 @@ int efx_ef10_sriov_set_vf_vlan(struct efx_nic *efx, int vf_i, u16 vlan,
 int efx_ef10_sriov_set_vf_spoofchk(struct efx_nic *efx, int vf, bool spoofchk);
 int efx_ef10_sriov_get_vf_config(struct efx_nic *efx, int vf_i,
 				 struct ifla_vf_info *ivf);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VF_LINK_STATE)
 int efx_ef10_sriov_set_vf_link_state(struct efx_nic *efx, int vf_i,
 				     int link_state);
-#endif
-
 
 /* MCFW vswitch operations */
 int efx_ef10_vswitch_alloc(struct efx_nic *efx, unsigned int port_id,

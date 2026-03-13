@@ -67,11 +67,7 @@ TRACE_EVENT(sfc_receive,
 		 * to the kernel
 		 */
 		__entry->vlan_tagged = skb_vlan_tag_present(skb);
-#ifndef EFX_HAVE_OLD___VLAN_PUT_TAG
 		__entry->vlan_proto = ntohs(skb->vlan_proto);
-#else
-		__entry->vlan_proto = ETH_P_8021Q;
-#endif
 		__entry->vlan_tci = skb_vlan_tag_get(skb);
 #else
 		__entry->vlan_tagged = vlan_tagged;
@@ -159,11 +155,7 @@ TRACE_EVENT(sfc_transmit,
 		__entry->queue_mapping = skb->queue_mapping;
 		__entry->skbaddr = skb;
 		__entry->vlan_tagged = skb_vlan_tag_present(skb);
-#ifndef EFX_HAVE_OLD___VLAN_PUT_TAG
 		__entry->vlan_proto = ntohs(skb->vlan_proto);
-#else
-		__entry->vlan_proto = ETH_P_8021Q;
-#endif
 		__entry->vlan_tci = skb_vlan_tag_get(skb);
 		__entry->protocol = ntohs(skb->protocol);
 		__entry->ip_summed = skb->ip_summed;
