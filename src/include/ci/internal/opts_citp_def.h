@@ -61,6 +61,18 @@ CI_CFG_OPT("EF_SELECT_FAST", ul_select_fast, ci_uint32,
 "practice a vast majority of applications work fine with this option.",
            1, , 1, 0, 1, yesno)
 
+CI_CFG_OPT("EF_SELECT_DISCRETE_MODE", ul_select_discrete_mode, ci_uint32,
+"When the smallest file descriptor in the fd_set passed to select is relatively "
+"large, the file descriptors are non-contiguous, and the number of file "
+"descriptors in the fd_set is small, this pattern delivers significantly "
+"improved performance."
+"Under these conditions, the invocation latency of the select interface can be "
+"reduced by up to several tens of times compared to previous modes.\n"
+
+"However, this performance enhancement pattern is applicable only under "
+"specific scenarios and requires users to enable it based on actual conditions.",
+           1, , 0, 0, 1, yesno)
+	
 CI_CFG_OPT("EF_UL_POLL", ul_poll, ci_uint32,
 "Clear to disable acceleration of poll() calls at user-level.",
            1, , 1, 0, 1, yesno)
