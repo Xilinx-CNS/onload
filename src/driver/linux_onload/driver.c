@@ -321,10 +321,6 @@ int oo_fop_release(struct inode* inode, struct file* filp)
   /* cleanup private state */
   filp->private_data = 0;
   if (priv->thr != NULL) {
-    if( priv->fd_flags & OO_FDFLAG_URES_LOCKED ) {
-      priv->thr->ures_result = -ENOSYS;
-      mutex_unlock(&priv->thr->ures_lock);
-    }
     TCP_HELPER_RESOURCE_ASSERT_VALID(priv->thr, 0);
     oo_thr_ref_drop(priv->thr->ref,
                     (priv->fd_flags & OO_FDFLAG_SERVICE) ?

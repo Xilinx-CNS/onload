@@ -2602,11 +2602,12 @@ static int restore_efct_resources(ci_netif* ni)
   OO_STACK_FOR_EACH_INTF_I(ni, nic_i) {
     ef_vi* vi = ci_netif_vi(ni, nic_i);
 
+    ci_netif_lock(ni);
     rc = efct_superbuf_config_refresh_all(vi);
+    ci_netif_unlock(ni);
     if( rc < 0 )
       return rc;
   }
-
   return 0;
 }
 
@@ -2828,6 +2829,7 @@ netif_tcp_helper_alloc_u(ef_driver_handle fd, ci_netif* ni,
                         ra.out_netif_mmap_bytes, OO_MMAP_FLAG_DEFAULT, &p);
   if( rc < 0 ) {
     LOG_E(ci_log("%s: oo_resource_mmap %d", __FUNCTION__, rc));
+    ci_netif_unlock(ni);
     return rc;
   }
 
@@ -2859,15 +2861,11 @@ netif_tcp_helper_alloc_u(ef_driver_handle fd, ci_netif* ni,
     goto fail;
   }
 
-  rc = oo_resource_op(fd, OO_IOC_USER_RESOURCES_READY, &rc);
-  if( rc < 0 ) {
-    LOG_E(ci_log("%s: user_resources_ready failed rc=%d", __FUNCTION__, rc));
-    goto fail;
-  }
-
+  ci_netif_unlock(ni);
   return 0;
 
 fail:
+  ci_netif_unlock(ni);
   netif_tcp_helper_munmap(ni);
   return rc;
 }

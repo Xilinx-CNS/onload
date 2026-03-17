@@ -78,10 +78,6 @@ oo_priv_lookup_and_attach_stack(ci_private_t* priv, const char* name,
       priv->fd_flags = OO_FDFLAG_STACK |
                        (is_service ? OO_FDFLAG_SERVICE : 0);
       priv->sock_id = OO_SP_NULL;
-
-      mutex_lock(&trs->ures_lock);
-      rc = trs->ures_result;
-      mutex_unlock(&trs->ures_lock);
     }
     else {
       oo_thr_ref_drop(trs->ref, ref_type);
@@ -1043,17 +1039,6 @@ oo_reinit_txq_rsop(ci_private_t* priv, void* arg)
 }
 
 static int
-oo_user_resources_ready(ci_private_t* priv, void* arg)
-{
-  if( ! (priv->fd_flags & OO_FDFLAG_URES_LOCKED) )
-    return -EPERM;
-  priv->fd_flags &= ~OO_FDFLAG_URES_LOCKED;
-  priv->thr->ures_result = *(int*)arg;
-  mutex_unlock(&priv->thr->ures_lock);
-  return 0;
-}
-
-static int
 oo_eplock_lock_rsop(ci_private_t* priv, void* arg)
 {
   long timeout_jiffies = MAX_SCHEDULE_TIMEOUT;
@@ -1157,10 +1142,16 @@ static DEFINE_MUTEX(ctor_mutex);
   rc = tcp_helper_alloc_ul(alloc, -1, &trs);
   if( rc == 0 ) {
     rc = oo_priv_set_stack(priv, trs);
+
+    /* Initially lock the stack in case there are user-allocated resources
+     * which need to be in place before other processes can attach to the
+     * stack. We lock it here, while guarded by `ctor_mutex`, and the lock
+     * must be released once it's safe to attach. */
+    if( rc == 0 )
+      rc = ci_netif_lock(&trs->netif);
+
     if( rc == 0 ) {
-      mutex_init(&trs->ures_lock);
-      mutex_lock(&trs->ures_lock);
-      priv->fd_flags = OO_FDFLAG_STACK | OO_FDFLAG_URES_LOCKED;
+      priv->fd_flags = OO_FDFLAG_STACK;
       priv->sock_id = OO_SP_NULL;
     }
     else
@@ -1648,8 +1639,6 @@ oo_operations_table_t oo_operations[] = {
   op(OO_IOC_PKT_BUF_MMAP, oo_pkt_buf_map_rsop),
   op(OO_IOC_DESIGN_PARAMETERS, oo_design_parameters_rsop),
   op(OO_IOC_REINIT_TXQ, oo_reinit_txq_rsop),
-
-  op(OO_IOC_USER_RESOURCES_READY, oo_user_resources_ready),
 
 /* Here come non contigous operations only, their position need to match
  * index according to their placeholder */
