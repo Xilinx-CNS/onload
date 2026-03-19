@@ -94,7 +94,7 @@ main (int argc, char *argv[]) {
   LOGVV (ci_log ("Reading bytes from stream"));
 
   /* Read a string from the stream */
-  r = fscanf (stream, "%128s", check_str);
+  r = fscanf (stream, "%127s", check_str);
   if (r != 1) {
     int r2 = errno;
     if (r == -1) {
