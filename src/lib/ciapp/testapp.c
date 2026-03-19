@@ -162,8 +162,13 @@ void ci_app_startup(int argc, char* argv[])
     if( ci_cmdline ) {
       int o = 0;
       for( i = 0; i < argc; ++i ) {
-        o += snprintf(ci_cmdline+o, n-o, "%s%s", i == 0 ? "":" ", argv[i]);
-        CI_TEST(o < n);
+        int remaining = n - o;
+        int r = snprintf(ci_cmdline+o, remaining, "%s%s", i == 0 ? "":" ", argv[i]);
+        if( r < 0 || r >= remaining ) {
+          CI_TEST(0);
+          break;
+        }
+        o += r;
       }
     }
 
