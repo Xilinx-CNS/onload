@@ -6,6 +6,9 @@ name: "repo_compatibility_check"
 
 on: push
 
+permissions:
+  contents: read
+
 jobs:
   ssa:
     if: vars.INTERNAL_REPO
