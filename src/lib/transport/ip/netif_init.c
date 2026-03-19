@@ -2599,15 +2599,17 @@ static int restore_efct_resources(ci_netif* ni)
 {
   int rc, nic_i;
 
+  ci_netif_lock(ni);
   OO_STACK_FOR_EACH_INTF_I(ni, nic_i) {
     ef_vi* vi = ci_netif_vi(ni, nic_i);
 
-    ci_netif_lock(ni);
     rc = efct_superbuf_config_refresh_all(vi);
-    ci_netif_unlock(ni);
-    if( rc < 0 )
+    if( rc < 0 ) {
+      ci_netif_unlock(ni);
       return rc;
+    }
   }
+  ci_netif_unlock(ni);
   return 0;
 }
 
