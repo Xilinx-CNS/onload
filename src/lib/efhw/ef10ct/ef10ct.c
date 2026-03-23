@@ -81,10 +81,7 @@ ef10ct_nic_sw_ctor(struct efhw_nic *nic,
 {
   nic->q_sizes[EFHW_EVQ] = 128 | 256 | 512 | 1024 | 2048 | 4096 | 8192 |
                            16384 | 32768;
-  /* Effective TXQ size is potentially variable, as we can
-   * configure how the CTPIO windows are sized. For now assume
-   * we're sticking with fixed EFCT equivalent regions. */
-  nic->q_sizes[EFHW_TXQ] = 512;
+  nic->q_sizes[EFHW_TXQ] = 128 | 256 | 512 | 1024 | 2048 | 4096;
   /* Placeholder values consistent with ef_vi powers of 2 */
   nic->q_sizes[EFHW_RXQ] = 1024 | 2048 | 4096 | 8192 | 16384 | 32768 |
                            65536 | 131072;
@@ -1142,9 +1139,10 @@ ef10ct_dmaq_tx_q_init(struct efhw_nic *nic,
   EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_LABEL, txq_params->tag);
   EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_INSTANCE, txq_id);
   EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_PORT_ID, EVB_PORT_ID_ASSIGNED);
-  /* FIXME ON-15570 - This value should match vi->vi_txq.ct_fifo_bytes +
-   * EFCT_TX_ALIGNMENT + EFCT_TX_HEADER_BYTES */
-  EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_SIZE, 32768);
+  /* ef10ct firmware interprets this parameter as the size in bytes instead
+   * of the size in entries. */
+  EFHW_MCDI_SET_DWORD(in, INIT_TXQ_EXT_IN_SIZE,
+                      txq_params->dmaq_size * EFCT_TX_ALIGNMENT);
 
   EFHW_MCDI_POPULATE_DWORD_4(in, INIT_TXQ_EXT_IN_FLAGS,
                              INIT_TXQ_EXT_IN_FLAG_IP_CSUM_DIS, 1,
