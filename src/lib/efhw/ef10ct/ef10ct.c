@@ -87,7 +87,9 @@ ef10ct_nic_sw_ctor(struct efhw_nic *nic,
                            65536 | 131072;
 
   nic->default_q_size[EFHW_EVQ] = EFHW_DEFAULT_Q_SIZE_MIN;
-  nic->default_q_size[EFHW_TXQ] = EFHW_DEFAULT_Q_SIZE_MIN;
+  /* This default is the largest of the valid sizes that allows for the maximum
+   * number of TXQs to be allocated. */
+  nic->default_q_size[EFHW_TXQ] = 256;
   nic->default_q_size[EFHW_RXQ] = EFHW_DEFAULT_Q_SIZE_MIN;
 
   nic->efhw_func = &ef10ct_char_functional_units;
