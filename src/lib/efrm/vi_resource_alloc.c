@@ -714,7 +714,7 @@ int efrm_vi_n_q_entries(int size_rq, unsigned sizes)
 
 	/* size_rq < 0 means default, but we interpret this as 'minimum'. */
 
-	for (size = 256;; size <<= 1)
+	for (size = 128;; size <<= 1)
 		if ((size & sizes) && size >= size_rq)
 			return size;
 		else if ((sizes & ~((size - 1) | size)) == 0)
