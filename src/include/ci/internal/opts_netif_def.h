@@ -782,7 +782,7 @@ CI_CFG_OPT("EF_SHARE_WITH", share_with, ci_int32,
            , , 0, -1, SMAX, count)
 
 /* TODO ON-16706 allow 0 ring size for now for development purposes */
-CI_CFG_OPT("EF_RXQ_SIZE", rxq_size, ci_uint16,
+CI_CFG_OPT("EF_RXQ_SIZE", rxq_size, ci_int32,
 "Set the size of the receive descriptor ring.  Must be a power of two.  "
 "Valid values are architecture dependent.  For EF10: 512, 1024, 2048 "
 "or 4096.\n"
@@ -790,14 +790,22 @@ CI_CFG_OPT("EF_RXQ_SIZE", rxq_size, ci_uint16,
 "A larger ring size can absorb larger packet bursts without drops, but may "
 "reduce efficiency because the working set size is increased.\n"
 
+"The default value is -1 which will select the recommended value on a per "
+"architecture basis. The actual size used is reported by onload_stackdump "
+"netif in the 'rxq:' section for each interface.\n"
+
 "If the value is lower than is supported by the hardware this will be rounded "
 "up. Set EF_LOG to include more_config_warnings to log if this occurs.",
-           , , 512, 0, 32768, bincount)
+           , , -1, -1, 32768, bincount)
 
-CI_CFG_OPT("EF_TXQ_SIZE", txq_size, ci_uint16,
-"Set the size of the transmit descriptor ring.  Valid values: 512, 1024, 2048 "
-"or 4096.",
-           , , 512, 512, 4096, bincount)
+CI_CFG_OPT("EF_TXQ_SIZE", txq_size, ci_int32,
+"Set the size of the transmit descriptor ring.  Valid values are architecture "
+"dependent, but typical values include powers of two from 512 to 4096.\n"
+
+"The default value is -1 which will select the recommended value on a per "
+"architecture basis. The actual size used is reported by onload_stackdump "
+"netif in the 'txq:' section for each interface.\n",
+           , , -1, -1, 4096, bincount)
 
 CI_CFG_OPT("EF_SEND_POLL_THRESH", send_poll_thresh, ci_uint16,
 "Poll for network events after sending this many packets."

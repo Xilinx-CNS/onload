@@ -1176,7 +1176,7 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
   if ( (s = getenv("EF_FREE_PACKETS_LOW_WATERMARK")) )
     opts->free_packets_low = atoi(s);
   if( opts->free_packets_low == 0 )
-    opts->free_packets_low = opts->rxq_size / 2;
+    opts->free_packets_low = (opts->rxq_size < 0) ? 256 : opts->rxq_size / 2;
 
 #if CI_CFG_PIO
   if ( (s = getenv("EF_PIO")) )

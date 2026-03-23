@@ -673,6 +673,13 @@ struct efhw_nic {
 	 */
 	unsigned q_sizes[EFHW_N_Q_TYPES];
 
+	/*! Optional default queue size to use if a queue is requested, but no
+         * size is specified. Set to EFHW_DEFAULT_Q_SIZE_MIN to request the
+         * smallest possible queue size.
+	 */
+	unsigned default_q_size[EFHW_N_Q_TYPES];
+#define EFHW_DEFAULT_Q_SIZE_MIN 0
+
 	/* Number of event queues, DMA queues and timers. */
 	unsigned num_evqs;
 	unsigned num_dmaqs;

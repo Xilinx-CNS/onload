@@ -399,6 +399,10 @@ static int _ef10_nic_check_capabilities(struct efhw_nic *nic,
   nic->q_sizes[EFHW_TXQ] = 512 | 1024 | 2048;
   nic->q_sizes[EFHW_RXQ] = 512 | 1024 | 2048 | 4096;
 
+  nic->default_q_size[EFHW_EVQ] = EFHW_DEFAULT_Q_SIZE_MIN;
+  nic->default_q_size[EFHW_TXQ] = EFHW_DEFAULT_Q_SIZE_MIN;
+  nic->default_q_size[EFHW_RXQ] = EFHW_DEFAULT_Q_SIZE_MIN;
+
   /* Older FW ignores the extra in parameter, but such FW only supports a
    * single datapath anyway, so we still get what we want. */
   EFHW_MCDI_SET_DWORD(in, GET_CAPABILITIES_V13_IN_DATAPATH_TYPE,

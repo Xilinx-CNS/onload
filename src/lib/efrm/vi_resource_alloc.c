@@ -708,11 +708,14 @@ static int efrm_vi_q_bytes(struct efrm_vi *virs, enum efhw_q_type q_type,
 }
 
 
-int efrm_vi_n_q_entries(int size_rq, unsigned sizes)
+int efrm_vi_n_q_entries(int size_rq, unsigned sizes, unsigned default_size)
 {
 	int size;
 
-	/* size_rq < 0 means default, but we interpret this as 'minimum'. */
+	/* size_rq < 0 means default, a default value of 0 will result in the
+         * minimum queue size being chosen. */
+	if (size_rq < 0)
+		size_rq = default_size;
 
 	for (size = 128;; size <<= 1)
 		if ((size & sizes) && size >= size_rq)
@@ -1306,8 +1309,6 @@ efrm_vi_q_alloc_sanitize_size(struct efrm_vi *virs, enum efhw_q_type q_type,
 	struct efrm_vi_q_size qsize;
 	if (n_q_entries == 0)
 		return 0;
-	if (n_q_entries < 0)
-		n_q_entries = 1;
 	if (efrm_vi_q_get_size(virs, q_type, n_q_entries, &qsize) < 0) {
 		EFRM_ERR("%s: ERROR: bad %s size %d (supported=%x)",
 			 __FUNCTION__, q_names[q_type], n_q_entries,
@@ -1332,8 +1333,6 @@ efrm_vi_q_alloc(struct efrm_vi *virs, enum efhw_q_type q_type,
 
 	if (n_q_entries == 0)
 		return 0;
-	if (n_q_entries < 0)
-		n_q_entries = 1;
 	if (efrm_vi_q_get_size(virs, q_type, n_q_entries, &qsize) < 0) {
 		EFRM_ERR("%s: ERROR: bad %s size %d (supported=%x)",
 			 __FUNCTION__, q_names[q_type], n_q_entries,
@@ -1881,7 +1880,8 @@ int  efrm_vi_q_get_size(struct efrm_vi *virs, enum efhw_q_type q_type,
 {
 	struct efhw_nic *nic = virs->rs.rs_client->nic;
 
-	n_q_entries = efrm_vi_n_q_entries(n_q_entries, nic->q_sizes[q_type]);
+	n_q_entries = efrm_vi_n_q_entries(n_q_entries, nic->q_sizes[q_type],
+					  nic->default_q_size[q_type]);
 	if (n_q_entries <= 0)
 		return -EINVAL;
 
@@ -1932,7 +1932,9 @@ efrm_vi_q_init_common(struct efrm_vi *virs, enum efhw_q_type q_type,
 		return -EINVAL;
 	}
 
-	if (n_q_entries != efrm_vi_n_q_entries(n_q_entries, nic->q_sizes[q_type]))
+	if (n_q_entries != efrm_vi_n_q_entries(n_q_entries,
+					       nic->q_sizes[q_type],
+					       nic->default_q_size[q_type]))
 		return -EINVAL;
 	efrm_vi_q_get_size(virs, q_type, n_q_entries, &qsize);
 

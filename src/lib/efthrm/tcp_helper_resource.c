@@ -1089,13 +1089,14 @@ static int tcp_helper_rxq_alloc(tcp_helper_resource_t* trs,
     /* We always request interrupts if we aren't using shrub, but if we are
      * using shrub then we only request them if the netif option is set. */
     bool interrupt_req = !shrub || NI_OPTS_TRS(trs).shrub_use_interrupts;
+    int rxq_size = vi_rs->q[EFHW_RXQ].capacity;
 
     if( ! shrub )
       hugepages = max(1,
-                      DIV_ROUND_UP(NI_OPTS_TRS(trs).rxq_size * EFCT_PKT_STRIDE,
+                      DIV_ROUND_UP(rxq_size * EFCT_PKT_STRIDE,
                                    CI_HUGEPAGE_SIZE));
 
-    if( vi_rs->q[EFHW_RXQ].capacity == 0 )   /* e.g. EF_RXQ_SIZE=0 */
+    if( rxq_size == 0 )   /* e.g. EF_RXQ_SIZE=0 */
       return 0;
 
     /* We can be here either with or without the stack lock, depending on what
@@ -1987,6 +1988,12 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     cicp_hwport_mask_t hwport_mask = cp_hwport_make_mask(hwport);
     bool want_rxq = ni->rx_hwport_mask & hwport_mask;
     bool want_txq = ni->tx_hwport_mask & hwport_mask;
+    int default_vi_rxq_size =
+      (nic->default_q_size[EFHW_RXQ] == EFHW_DEFAULT_Q_SIZE_MIN)
+        ? 512 : nic->default_q_size[EFHW_RXQ];
+    int default_vi_txq_size =
+      (nic->default_q_size[EFHW_TXQ] == EFHW_DEFAULT_Q_SIZE_MIN)
+        ? 512 : nic->default_q_size[EFHW_TXQ];
 
     BUILD_BUG_ON(sizeof(ni->vi_data) < sizeof(struct efrm_vi_mappings));
 
@@ -2011,9 +2018,11 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     alloc_info.efhw_flags = base_efhw_flags;
     alloc_info.ef_vi_flags = base_ef_vi_flags;
     alloc_info.rxq_capacity = want_rxq ?
-      efrm_vi_n_q_entries(NI_OPTS(ni).rxq_size, nic->q_sizes[EFHW_RXQ]) : 0;
+      efrm_vi_n_q_entries(NI_OPTS(ni).rxq_size, nic->q_sizes[EFHW_RXQ],
+                          default_vi_rxq_size) : 0;
     alloc_info.txq_capacity = want_txq ?
-      efrm_vi_n_q_entries(NI_OPTS(ni).txq_size, nic->q_sizes[EFHW_TXQ]) : 0;
+      efrm_vi_n_q_entries(NI_OPTS(ni).txq_size, nic->q_sizes[EFHW_TXQ],
+                          default_vi_txq_size) : 0;
 
     if( alloc_info.rxq_capacity < 0 || alloc_info.txq_capacity < 0 ) {
       rc = -EINVAL;
@@ -2481,6 +2490,7 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
     struct efhw_nic* nic;
     int vi_rxq_size, vi_txq_size;
+    int default_vi_rxq_size, default_vi_txq_size;
 
     ci_hwport_id_t hwport = ni->intf_i_to_hwport[intf_i];
     cicp_hwport_mask_t hwport_mask = cp_hwport_make_mask(hwport);
@@ -2489,16 +2499,25 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
 
     nic = efrm_client_get_nic(trs->nic[intf_i].thn_oo_nic->efrm_client);
 
+    default_vi_rxq_size =
+      (nic->default_q_size[EFHW_RXQ] == EFHW_DEFAULT_Q_SIZE_MIN)
+        ? 512 : nic->default_q_size[EFHW_RXQ];
     vi_rxq_size = want_rxq ?
-      efrm_vi_n_q_entries(NI_OPTS(ni).rxq_size, nic->q_sizes[EFHW_RXQ]) : 0;
-    vi_txq_size = want_txq ?
-      efrm_vi_n_q_entries(NI_OPTS(ni).txq_size, nic->q_sizes[EFHW_TXQ]) : 0;
+      efrm_vi_n_q_entries(NI_OPTS(ni).rxq_size, nic->q_sizes[EFHW_RXQ],
+                          default_vi_rxq_size) : 0;
 
-    if( NI_OPTS(ni).rxq_size < vi_rxq_size )
+    default_vi_txq_size =
+      (nic->default_q_size[EFHW_TXQ] == EFHW_DEFAULT_Q_SIZE_MIN)
+        ? 512 : nic->default_q_size[EFHW_TXQ];
+    vi_txq_size = want_txq ?
+      efrm_vi_n_q_entries(NI_OPTS(ni).txq_size, nic->q_sizes[EFHW_TXQ],
+                          default_vi_txq_size) : 0;
+
+    if( NI_OPTS(ni).rxq_size >= 0 && NI_OPTS(ni).rxq_size < vi_rxq_size )
       NI_LOG(ni, MORE_CONFIG_WARNINGS,
              "WARNING: EF_RXQ_SIZE=%d rounded up to %d for dev %s",
              NI_OPTS(ni).rxq_size, vi_rxq_size, nic->net_dev->name);
-    if( NI_OPTS(ni).txq_size < vi_txq_size )
+    if( NI_OPTS(ni).txq_size >= 0 && NI_OPTS(ni).txq_size < vi_txq_size )
       NI_LOG(ni, CONFIG_WARNINGS,
              "WARNING: EF_TXQ_SIZE=%d rounded up to %d for dev %s",
              NI_OPTS(ni).txq_size, vi_txq_size, nic->net_dev->name);

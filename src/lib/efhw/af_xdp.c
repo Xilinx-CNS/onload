@@ -1033,6 +1033,9 @@ af_xdp_nic_sw_ctor(struct efhw_nic *nic,
 	nic->q_sizes[EFHW_EVQ] = ~0;
 	nic->q_sizes[EFHW_TXQ] = ~0;
 	nic->q_sizes[EFHW_RXQ] = ~0;
+	nic->default_q_size[EFHW_EVQ] = EFHW_DEFAULT_Q_SIZE_MIN;
+	nic->default_q_size[EFHW_TXQ] = EFHW_DEFAULT_Q_SIZE_MIN;
+	nic->default_q_size[EFHW_RXQ] = EFHW_DEFAULT_Q_SIZE_MIN;
 	nic->num_evqs = 1;
 	nic->num_dmaqs = 1;
 	nic->num_timers = 0;

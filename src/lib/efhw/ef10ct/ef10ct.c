@@ -85,6 +85,11 @@ ef10ct_nic_sw_ctor(struct efhw_nic *nic,
   /* Placeholder values consistent with ef_vi powers of 2 */
   nic->q_sizes[EFHW_RXQ] = 1024 | 2048 | 4096 | 8192 | 16384 | 32768 |
                            65536 | 131072;
+
+  nic->default_q_size[EFHW_EVQ] = EFHW_DEFAULT_Q_SIZE_MIN;
+  nic->default_q_size[EFHW_TXQ] = EFHW_DEFAULT_Q_SIZE_MIN;
+  nic->default_q_size[EFHW_RXQ] = EFHW_DEFAULT_Q_SIZE_MIN;
+
   nic->efhw_func = &ef10ct_char_functional_units;
   return 0;
 }
