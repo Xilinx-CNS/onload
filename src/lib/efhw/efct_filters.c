@@ -133,22 +133,28 @@ void efct_filter_state_reserve_rxq(struct efct_filter_state *state, int rxq)
 static bool
 hw_filters_are_equal(const struct efct_filter_node *node,
                      const struct efct_hw_filter *hw_filter,
-                     int clas, uint64_t filter_flags)
+                     int clas, uint64_t efhw_flags)
 {
   switch (clas) {
   case FILTER_CLASS_full_match:
-    if ( filter_flags & NIC_FILTER_FLAG_RX_TYPE_IP_FULL &&
-         (hw_filter->remote_ip != node->u.ip4.rip ||
-          hw_filter->remote_port != node->rport) )
-      return false;
-    /* fallthrough so the three-tuple code can check the local ip/port */
-    ci_fallthrough;
-  case FILTER_CLASS_semi_wild:
+  case FILTER_CLASS_semi_wild: {
+    /* On 3-tuple-only NICs, remote fields in the hw_filter are always zero,
+     * so full_match and semi_wild filters are equivalent if their local
+     * fields match. On 5-tuple NICs, remote fields in the hw_filter
+     * distinguish full_match (non-zero) from semi_wild (zero), so filters
+     * of different types will naturally not match. */
+    uint32_t rip = (efhw_flags & EFHW_FILTER_F_3TUPLE_ONLY) ?
+                                                         0 : node->u.ip4.rip;
+    uint16_t rport = (efhw_flags & EFHW_FILTER_F_3TUPLE_ONLY) ?
+                                                         0 : node->rport;
     if (hw_filter->ip_proto == node->proto &&
         hw_filter->local_ip == node->u.ip4.lip &&
-        hw_filter->local_port == node->lport)
+        hw_filter->local_port == node->lport &&
+        hw_filter->remote_ip == rip &&
+        hw_filter->remote_port == rport)
       return true;
     break;
+  }
   case FILTER_CLASS_ipproto:
     if (hw_filter->ethertype == node->ethertype &&
         hw_filter->ip_proto == node->proto)
@@ -531,8 +537,7 @@ efct_filter_insert(struct efct_filter_state *state,
       if( ! state->hw_filters[i].refcount )
         avail = i;
       else {
-        if( hw_filters_are_equal(&node, &state->hw_filters[i], clas,
-                                 params->filter_flags) ) {
+        if( hw_filters_are_equal(&node, &state->hw_filters[i], clas, flags) ) {
 
           if( ! (flags & (EFHW_FILTER_F_ANY_RXQ | EFHW_FILTER_F_PREF_RXQ) ) &&
               *rxq >= 0 && *rxq != state->hw_filters[i].rxq ) {
@@ -563,8 +568,14 @@ efct_filter_insert(struct efct_filter_state *state,
         memcpy(&state->hw_filters[avail].loc_mac, &node.loc_mac,
                 sizeof(node.loc_mac));
         state->hw_filters[avail].outer_vlan = node.vlan;
-        state->hw_filters[avail].remote_ip = node.u.ip4.rip;
-        state->hw_filters[avail].remote_port = node.rport;
+        if( flags & EFHW_FILTER_F_3TUPLE_ONLY ) {
+          state->hw_filters[avail].remote_ip = 0;
+          state->hw_filters[avail].remote_port = 0;
+        }
+        else {
+          state->hw_filters[avail].remote_ip = node.u.ip4.rip;
+          state->hw_filters[avail].remote_port = node.rport;
+        }
         insert_hw_filter = true;
       }
     }

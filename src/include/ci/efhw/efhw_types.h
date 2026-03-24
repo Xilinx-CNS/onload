@@ -264,6 +264,8 @@ struct efx_filter_spec;
 #define EFHW_FILTER_F_USE_SW   0x0020
 /* Filter is multi-recipient */
 #define EFHW_FILTER_F_MULTI    0x0040
+/* Treat 5 tuple and 3 tuple filters as equivalent. */
+#define EFHW_FILTER_F_3TUPLE_ONLY 0x0080
 
 #define EFHW_PD_NON_EXC_TOKEN 0xFFFFFFFF
 
