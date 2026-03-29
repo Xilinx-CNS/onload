@@ -6,10 +6,13 @@
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
+#include <dirent.h>
 #include <unistd.h>
 #include <sys/resource.h>
+#include <sys/types.h>
 
 #include <ci/tools/log.h>
 #include <ci/tools/debug.h>
@@ -37,6 +40,42 @@ void ci_server_set_log_prefix(char** log_prefix, const char* srv_bin)
   ci_set_log_prefix(*log_prefix);
 }
 
+/*
+ * close_extra_fds - Close all open file descriptors excluding 0, 1 and 2
+ */
+static void close_extra_fds(void)
+{
+  int i, dfd;
+  long long fd;
+  char *endp = NULL;
+  DIR *dir;
+  struct dirent *de;
+  struct rlimit rlim;
+
+  dir = opendir("/proc/self/fd");
+  if (dir) {
+    dfd = dirfd(dir);
+
+    while ( (de = readdir(dir)) != NULL ) {
+      /* Entries are numeric fd names; skip . and .. */
+      endp = NULL;
+      fd = strtoll(de->d_name, &endp, 10);
+      if ( endp == de->d_name || *endp != '\0' )
+          /* Not a number */
+          continue;
+
+      if ( fd <= STDERR_FILENO || fd == dfd )
+          continue;
+
+      (void)close((int)fd);
+    }
+    closedir(dir);
+    return;
+  }
+  if( getrlimit(RLIMIT_NOFILE, &rlim) == 0 )
+    for( i = STDERR_FILENO + 1; i < rlim.rlim_max; ++i )
+      close(i);
+}
 
 /* Fork off a daemon process according to the recipe in "man 7 daemon".  This
  * function returns only in the context of the daemon, and only on success;
@@ -49,15 +88,12 @@ void ci_server_daemonise(bool log_to_kern, char** log_prefix,
   int devnull;
   int i;
   sigset_t sigset;
-  struct rlimit rlim;
 
   /* Start with some tidy-up.  We don't check errors here as failure is non-
    * fatal. */
 
   /* Close all files above stderr. */
-  if( getrlimit(RLIMIT_NOFILE, &rlim) == 0 )
-    for( i = STDERR_FILENO + 1; i < rlim.rlim_max; ++i )
-      close(i);
+  close_extra_fds();
 
   /* Reset all signal handlers. */
   for( i = 0; i < _NSIG; ++i )
