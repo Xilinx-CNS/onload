@@ -5,7 +5,30 @@ Update sfc net driver to v6.2.2
 
 Add support for:
 
-Changes:
+ - Canonical Ubuntu Server LTS 26.04
+ - kernel.org Linux kernels 6.15 now without excluding shrub support
+ - kernel.org Linux kernels 6.16 - 7.0
+
+Remove support for:
+ - Canonical Ubuntu Server LTS 22.04
+
+Features:
+
+ON-15570: allow X4 CTPIO queue size to be configured and add per-NIC defaults
+ON-16192: X4: support filter_id for ef_vi on Enterprise Path
+ON-16321: X4: report RxQ state in stackdump
+ON-17178: X4: make shrub controller interrupt-driven
+ON-17197: add Onload stats for CTPIO transmit failures
+ON-17198: add env var to configure irq affinity for onload interrupts
+
+Fixes:
+
+ON-13695: minor maintenance to JNI headers
+ON-16253: X4: have shrub controller explicitly request 2MB huge pages
+ON-16312: X4: harden shrub controller against slow clients
+ON-16828: fix kernel crash binding to X3/X4 queue without user context
+ON-17018: fix hw filter equivalency check to work for both X3 and X4
+ON-17153: fix dynamic linking error with libciul shrub_log_to_fd
 
 
 onload-9.1.1.66

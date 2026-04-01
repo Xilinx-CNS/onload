@@ -1,8 +1,6 @@
 Onload-9.2.0
 ============
 
- Placeholder.
-
  This is a feature release of Onload including a new version of the
  sfc net driver and various features and fixes.
 
@@ -16,16 +14,55 @@ Linux distribution support
  - Red Hat Enterprise Linux 8.10
  - Red Hat Enterprise Linux 9.4 - 9.7
  - Red Hat Enterprise Linux 10.0 - 10.1
- - Canonical Ubuntu Server LTS 22.04 and 24.04
+ - Canonical Ubuntu Server LTS 24.04 and 26.04
  - Debian 12 "Bookworm"
  - Debian 13 "Trixie"
- - Linux kernels 5.11 - 6.14
+ - kernel.org Linux kernels 5.11 - 7.0
 
 
-First notable change in release
--------------------------------
+X4 Express datapath sharing support restored for recent kernels
+---------------------------------------------------------------
 
-Description of first notable change in release.
+This release adds support for kernel.org Linux kernels between version
+6.16 and 7.0. Previously, support for Linux kernel version 6.15 required
+the support for sharing X4 Express datapath queues ("SHRUB support")
+to be disabled at build time for Onload. The SHRUB implementation has
+been reworked so that this constraint no longer applies for any kernel
+version. The 'no-shrub' build profile has been removed.
+
+
+X4 Shared buffer resource management
+------------------------------------
+
+Applications sharing access to X4 Express datapath queues are now protected
+from being starved of buffers by other slow or stalled applications. This
+feature may be controlled by the new EF_SHRUB_MAX_CLIENT_BUFFERS
+configuration option in Onload or by ef_vi_set_shrub_client_buffer_count()
+with ef_vi.
+
+
+Configurable transmit descriptor ring size for X4 Express datapath
+------------------------------------------------------------------
+
+The size of the descriptor ring for transmissions on the X4 Express
+datapath ('CTPIO') is now configurable. The EF_TXQ_SIZE and EF_RXQ_SIZE
+per-interface configuration options have been updated to accept -1
+to indicate that an architecture-appropriate default should be used.
+
+
+X4 SHRUB Controller now interrupt-driven
+----------------------------------------
+
+The SHRUB Controller for managing shared access to X4 Express datapath
+queues is now interrupt-driven.
+
+
+Controlling IRQ affinity for Onload interrupts
+----------------------------------------------
+
+The new configuration option EF_ONLOAD_IRQ_CORES allows a CPU mask to be
+specified as an IRQ affinity hint on interfaces where interrupts are
+managed by Onload.
 
 
 (c) Copyright 2026 Advanced Micro Devices, Inc.
