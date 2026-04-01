@@ -661,6 +661,27 @@ efct_filter_insert(struct efct_filter_state *state,
 }
 
 
+static void
+remove_exclusive_rxq_ownership(struct efct_filter_state *state, int rxq)
+{
+  int i;
+
+  if( state->exclusive_rxq_mapping[rxq] ) {
+    /* Only bother worrying about exclusive mapping iff the filter has an
+     * exclusive entry */
+    for( i = 0; i < state->hw_filters_n; ++i ) {
+      if ( state->hw_filters[i].refcount ) {
+        /* Iff any of the currently active filters (ie refcount > 0) share
+         * the same rxq as the one we are attempting to delete, we cannot
+         * clear the rxq ownership.*/
+        if( state->hw_filters[i].rxq == rxq )
+          return;
+      }
+    }
+    state->exclusive_rxq_mapping[rxq] = 0;
+  }
+}
+
 int
 efct_filter_redirect(struct efct_filter_state *state, int filter_id,
                      struct efct_filter_params *params)
@@ -707,12 +728,18 @@ efct_filter_redirect(struct efct_filter_state *state, int filter_id,
 
   /* Redirect succeeded, update filter state */
   if( rc == 0 ) {
+    int old_rxq = state->hw_filters[hw_filter_idx].rxq;
     state->hw_filters[hw_filter_idx].rxq = op_out.rxq;
     state->hw_filters[hw_filter_idx].drv_id = op_out.drv_id;
     state->hw_filters[hw_filter_idx].hw_id = op_out.filter_handle;
     state->hw_filters[hw_filter_idx].flags = params->flags;
     *rxq = state->hw_filters[hw_filter_idx].rxq;
     state->exclusive_rxq_mapping[*rxq] = params->pd_excl_token;
+    /* If the rxq changed we may have been the last user of old_rxq, so
+     * release our exclusive mapping here (the removal function checks for
+     * any other users). */
+    if( old_rxq != *rxq )
+      remove_exclusive_rxq_ownership(state, old_rxq);
   }
 
 unlock_out:
@@ -721,32 +748,6 @@ unlock_out:
   return rc < 0 ? rc : node->filter_id;
 }
 
-
-static void
-remove_exclusive_rxq_ownership(struct efct_filter_state *state, int hw_filter)
-{
-  int i;
-  bool delete_owner = true;
-  int rxq = state->hw_filters[hw_filter].rxq;
-
-  if( state->exclusive_rxq_mapping[rxq] ) {
-
-    /* Only bother worrying about exclusive mapping iff the filter has an exclusive entry */
-    for( i = 0; i < state->hw_filters_n; ++i ) {
-      if ( state->hw_filters[i].refcount ) {
-        /* Iff any of the currently active filters (ie refcount > 0) share the same rxq
-          * as the one we are attempting to delete, we cannot clear the rxq ownership.*/
-        if( state->hw_filters[i].rxq == rxq ) {
-          delete_owner = false;
-          break;
-        }
-      }
-    }
-  }
-  
-  if ( delete_owner )
-    state->exclusive_rxq_mapping[rxq] = 0;
-}
 
 bool
 efct_filter_remove(struct efct_filter_state *state, int filter_id,
@@ -764,7 +765,8 @@ efct_filter_remove(struct efct_filter_state *state, int filter_id,
         /* The above check implies the current filter is unused. */
         *drv_id_out = state->hw_filters[hw_filter].drv_id;
         *flags_out = state->hw_filters[hw_filter].flags;
-        remove_exclusive_rxq_ownership(state, hw_filter);
+        remove_exclusive_rxq_ownership(state,
+                                       state->hw_filters[hw_filter].rxq);
         remove_drv = true;
     }
   }
