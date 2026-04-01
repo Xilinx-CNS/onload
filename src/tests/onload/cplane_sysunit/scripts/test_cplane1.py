@@ -287,6 +287,54 @@ def wait_for_hwports(cp, v, k, attempts=10, expected_hwports=None, netns=None):
     return d
 
 
+def wait_for_intfs(efcp, expected, flags=None):
+    ''' Polls get_all_intfs() until the expected list of ifindices appears.
+        Times out after 5 seconds.
+    '''
+    t0 = time.time()
+    t_end = t0 + 5
+
+    delayed = False
+    while time.time() < t_end:
+        if flags is not None:
+            got = efcp.get_all_intfs(flags)
+        else:
+            got = efcp.get_all_intfs()
+        if got == expected:
+            break
+        delayed = True
+        time.sleep(0.01)
+
+    if delayed:
+        elapsed = time.time() - t0
+        print("Spun for %fs while waiting for intfs update" % elapsed)
+
+    assert got == expected, "got %s, expected %s" % (got, expected)
+
+
+def wait_for_addrs(efcp, ifindex, expected_count):
+    ''' Polls get_intf_addrs() until the expected number of addresses appears.
+        Times out after 5 seconds.  Returns the address list.
+    '''
+    t0 = time.time()
+    t_end = t0 + 5
+
+    delayed = False
+    while time.time() < t_end:
+        a = efcp.get_intf_addrs(ifindex)
+        if len(a) == expected_count:
+            break
+        delayed = True
+        time.sleep(0.01)
+
+    if delayed:
+        elapsed = time.time() - t0
+        print("Spun for %fs while waiting for addrs update" % elapsed)
+
+    assert len(a) == expected_count, "got %d addrs, expected %d" % (len(a), expected_count)
+    return a
+
+
 def check_route(d, rtype, mac, hwports):
     assert rtype != CICP_ROUTE_TYPE.LOCAL
     if rtype == CICP_ROUTE_TYPE.NORMAL:
@@ -1412,10 +1460,10 @@ def do_test_efcp_get_all_intfs(cpserver,cp,netns,efcp):
     o0ix = build_intf(netns, 'O0', fake_ip_subnet(False, 1), cp=cp, hwport=1)
     o1ix = build_intf(netns, 'O1', fake_ip_subnet(False, 2), cp=cp, hwport=2)
     x0ix = build_intf(netns, 'X0', fake_ip_subnet(False, 3), cp=cp)
+    wait_for_intfs(efcp, [lo,o0ix,o1ix,x0ix], ef_cplane.GET_INTFS_F_NATIVE|ef_cplane.GET_INTFS_F_OTHER)
     assert efcp.get_all_intfs() == [o0ix,o1ix]
     assert efcp.get_all_intfs(ef_cplane.GET_INTFS_F_OTHER) == [lo,x0ix]
     assert efcp.get_all_intfs(0) == []
-    assert efcp.get_all_intfs(ef_cplane.GET_INTFS_F_NATIVE|ef_cplane.GET_INTFS_F_OTHER) == [lo,o0ix,o1ix,x0ix]
 
 def test_efcp_get_all_intfs():
     do_test_efcp_get_all_intfs()
@@ -1434,7 +1482,7 @@ def do_test_efcp_get_related_intfs(cpserver,cp,netns,efcp):
     netns.link('add', kind='vlan', ifname='v3b0', vlan_id=3, link=b0ix)
     v3ix = netns.link_lookup(ifname='v3b0')[0]
     get_lowest_intfs = lambda i: efcp.get_lower_intfs(i, ef_cplane.GET_INTFS_F_NATIVE | ef_cplane.GET_INTFS_F_MOST_DERIVED)
-    assert efcp.get_all_intfs() == [o0ix,o1ix,o2ix,v1ix,v2ix,b0ix,v3ix]
+    wait_for_intfs(efcp, [o0ix,o1ix,o2ix,v1ix,v2ix,b0ix,v3ix])
     assert efcp.get_upper_intfs(o0ix) == [v1ix,v2ix]
     assert efcp.get_lower_intfs(o0ix) == []
     assert get_lowest_intfs(o0ix) == [o0ix]
@@ -1469,7 +1517,7 @@ def do_test_efcp_get_intf(cpserver,cp,netns,efcp):
     b0ix = create_bond(cpserver, netns, 'bond0', ['O0'], mode=1)
     netns.link('add', kind='vlan', ifname='v1o0', vlan_id=1, link=b0ix)
     v1ix = netns.link_lookup(ifname='v1o0')[0]
-    assert efcp.get_all_intfs() == [o0ix,b0ix,v1ix]
+    wait_for_intfs(efcp, [o0ix,b0ix,v1ix])
     o0 = efcp.get_intf(o0ix)
     assert o0.ifindex == o0ix
     assert (o0.flags & (ef_cplane.INTF_F_UP|ef_cplane.INTF_F_ALIEN)) == ef_cplane.INTF_F_UP
@@ -1491,8 +1539,7 @@ def test_efcp_get_intf():
 @efcpdecorate()
 def do_test_efcp_get_addrs(cpserver,cp,netns,efcp):
     o0ix = build_intf(netns, 'O0', fake_ip_subnet(False, 1), cp=cp, hwport=1, state=None)
-    a = efcp.get_intf_addrs(o0ix)
-    assert len(a) == 1
+    a = wait_for_addrs(efcp, o0ix, 1)
     a = a[0]
     assert a.ifindex == o0ix
     assert a.prefix_len == 24

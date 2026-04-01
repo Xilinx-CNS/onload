@@ -54,8 +54,10 @@ static inline int tx_ctpio(ci_netif* ni, int intf_i, ef_vi* vi,
                                       sizeof(host_iov) / sizeof(host_iov[0]));
 
   if( (nsn->oo_vi_flags & OO_VI_FLAGS_TX_CTPIO_ONLY) &&
-      ef_vi_transmit_space_bytes(vi) < total_length)
+      ef_vi_transmit_space_bytes(vi) < total_length) {
+    CITP_STATS_NETIF_INC(ni, ctpio_no_space);
     return -ENOSPC;
+  }
 
   oo_pkt_calc_checksums(ni, pkt, host_iov);
   ef_vi_transmitv_ctpio(vi, total_length, host_iov,
@@ -63,7 +65,10 @@ static inline int tx_ctpio(ci_netif* ni, int intf_i, ef_vi* vi,
   CITP_STATS_NETIF_INC(ni, ctpio_pkts);
   rc = ef_vi_transmitv_ctpio_fallback(vi, iov, iov_len,
                                       OO_PKT_ID(pkt));
+  if( rc == -EAGAIN )
+    CITP_STATS_NETIF_INC(ni, ctpio_fallback_error_txq);
   ci_assert_equal(rc, 0);
+
   return rc;
 }
 #endif

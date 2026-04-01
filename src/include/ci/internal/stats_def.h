@@ -653,6 +653,10 @@ OO_STAT("Number of times CTPIO has been used to send a packet",
         ci_uint32, ctpio_pkts, count)
 OO_STAT("Number of times CTPIO transmits have fallen back to DMA",
         ci_uint32, ctpio_dma_fallbacks, count)
+OO_STAT("Number of times CTPIO fallback failed due to no TXQ space",
+        ci_uint32, ctpio_fallback_error_txq, count)
+OO_STAT("Number of times CTPIO transmits failed due to lack of aperture space",
+        ci_uint32, ctpio_no_space, count)
 #endif
 OO_STAT("Number of calls to sendpage() for a connected TCP socket.",
         ci_uint32, tcp_sendpages, count)

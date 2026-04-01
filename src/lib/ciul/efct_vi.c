@@ -1833,6 +1833,11 @@ int efct_vi_prime(ef_vi* vi, ef_driver_handle dh)
   }
   op.n_rxqs = i;
   op.n_txqs = vi->vi_txq.mask != 0 ? 1 : 0;
+
+  /* If we have no queues, we have nothing to wait for and will never wake */
+  if( op.n_rxqs == 0 && op.n_txqs == 0 )
+    return -ENOENT;
+
   if( op.n_txqs )
     op.txq_current = vi->ep_state->evq.evq_ptr;
   return ci_resource_prime_qs(dh, &op);
