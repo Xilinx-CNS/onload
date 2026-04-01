@@ -717,8 +717,8 @@ int __must_check efx_nic_copy_stats(struct efx_nic *efx, __le64 *dest)
 		udelay(100);
 	}
 	netif_info(efx, drv, efx->net_dev,
-		   "Inconsistent periodic stats DMA buffer generation counts (start %llx end %llx)\n",
-		   le64_to_cpu(generation_start), le64_to_cpu(generation_end));
+		   "Inconsistent periodic stats DMA buffer generation counts (start %llx end %llx num_stats %d)\n",
+		   le64_to_cpu(generation_start), le64_to_cpu(generation_end), efx->num_mac_stats);
 
 	rc = -EIO;
 

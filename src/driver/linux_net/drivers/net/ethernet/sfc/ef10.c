@@ -1496,12 +1496,19 @@ static int efx_ef10_init_nic(struct efx_nic *efx)
 
 	if (nic_data->must_enable_netport_events) {
 		if (efx_nic_port_handle_supported(efx)) {
+			rc = efx_x4_mcdi_probe_stats(efx, &efx->num_mac_stats,
+						     &efx->stats_dma_size);
+			if (rc)
+				return rc;
+
 			rc = efx_x4_mcdi_enable_netport_events(efx);
 			if (rc)
 				return rc;
 		}
 		nic_data->must_enable_netport_events = false;
 	}
+	netif_dbg(efx, drv, efx->net_dev, "%s: num_mac_stats = %u\n",
+		  __func__, efx->num_mac_stats);
 
 	nic_data->mc_stats = kmalloc(efx->stats_dma_size, GFP_KERNEL);
 	if (!nic_data->mc_stats)
@@ -5737,7 +5744,7 @@ static int efx_ef10_probe_post_io(struct efx_nic *efx)
 			return rc;
 
 		pci_dbg(efx->pci_dev,
-			"firmware reports num_mac_stats = %u\n",
+			"firmware reports netport num_mac_stats = %u\n",
 			efx->num_mac_stats);
 
 		rc = efx_x4_mcdi_enable_netport_events(efx);
