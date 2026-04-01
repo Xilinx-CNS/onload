@@ -34,9 +34,8 @@ static int efct_debugfs_read_hw_filters(struct seq_file *file,
     if( filter->refcount > 0 ) {
       if( filter->drv_id == EFCT_HW_FILTER_DRV_ID_DUMMY)
         continue;
-      if( filter->remote_ip )
-        snprintf(remote_ip_buf, sizeof(remote_ip_buf), "%pI4:%d ",
-                 &filter->remote_ip, ntohs(filter->remote_port));
+      snprintf(remote_ip_buf, sizeof(remote_ip_buf), "%pI4:%d ",
+               &filter->remote_ip, ntohs(filter->remote_port));
       seq_printf(file, "%03x: ref: %d\tid: %d/%llu\trxq: %d\t%s:%pI4:%d %s"
                        "%pM %d\n", i,
                  filter->refcount, filter->hw_id, filter->drv_id, filter->rxq,
