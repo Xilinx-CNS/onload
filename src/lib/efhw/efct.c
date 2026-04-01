@@ -1111,6 +1111,11 @@ efct_nic_filter_insert(struct efhw_nic *nic,
     flags |= EFHW_FILTER_F_USE_SW;
   }
 
+  /* efct supports only 3-tuple IP filters, not 5-tuple. We need to convey
+   * this to the common filter code, so it can correctly determine which
+   * hw filters are equivalent. */
+  flags |= EFHW_FILTER_F_3TUPLE_ONLY;
+
   efct_params.flags = flags;
   rc = efct_filter_insert(efct->filter_state, efhw_params->spec, &hw_filter,
                           &efct_params);
