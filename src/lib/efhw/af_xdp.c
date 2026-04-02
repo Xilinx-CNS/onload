@@ -32,6 +32,7 @@
 
 #define XDP_PROG_NAME "xdpsock"
 #define BPF_FS_PATH "/sys/fs/bpf/"
+#define XSKMAP_PIN_PREFIX BPF_FS_PATH "onload_xdp_xsk_"
 
 static char *bpf_link_helper = NULL;
 module_param(bpf_link_helper, charp, S_IRUGO | S_IWUSR);
@@ -953,6 +954,7 @@ __af_xdp_nic_init_hardware(struct efhw_nic *nic,
 {
 	int map_fd, rc;
 	struct efhw_nic_af_xdp* xdp;
+	char map_path[sizeof(XSKMAP_PIN_PREFIX) + IFNAMSIZ];
 
 	xdp = kzalloc(sizeof(*xdp) +
 		      nic->vi_lim * sizeof(struct efhw_af_xdp_vi) +
@@ -976,7 +978,9 @@ __af_xdp_nic_init_hardware(struct efhw_nic *nic,
 		goto fail_map;
 
 	/* Open a pre existing map if it exists, else create one */
-	map_fd = xdp_map_lookup(sys_call_area, BPF_FS_PATH "onload_xdp_xsk");
+	snprintf(map_path, sizeof(map_path), XSKMAP_PIN_PREFIX "%s",
+	         nic->net_dev->name);
+	map_fd = xdp_map_lookup(sys_call_area, map_path);
 	if( map_fd >= 0 ) {
 		EFHW_NOTICE("%s: attaching to existing map", __func__);
 		goto has_map_and_bound_prog;
