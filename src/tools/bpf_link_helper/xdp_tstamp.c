@@ -22,8 +22,7 @@
 
 /* must match map created by onload/src/lib/efhw/af_xdp.c
  *
- * max_entries matches the number passed to
- * /sys/module/sfc_resource/afxdp/register
+ * max_entries modified by xdp_onload_prepare
  */
 struct {
 	__uint(type, BPF_MAP_TYPE_XSKMAP);
