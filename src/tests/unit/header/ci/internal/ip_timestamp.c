@@ -2,11 +2,20 @@
 /* X-SPDX-Copyright-Text: (c) Copyright 2023 Xilinx, Inc. */
 
 /* Functions under test */
+#define CI_UNIT_MOCK_TIMESYNC_WALLCLOCK
 #include <ci/internal/ip_timestamp.h>
 
 /* Test infrastructure */
 #include "unit_test.h"
 #include <ci/net/ipv4.h>
+
+/* Helpers to mock wall clock, to extend certain trailer timestamp formats */
+struct oo_timespec mocked_timesync_wallclock;
+static void mock_wallclock_set(ci_int64 sec, ci_uint32 nsec)
+{
+  mocked_timesync_wallclock.tv_sec = sec;
+  mocked_timesync_wallclock.tv_nsec = nsec;
+}
 
 /* Helpers to build packets with trailers */
 union pkt_buf {
@@ -174,7 +183,8 @@ static void test_rx_pkt_timestamp_cpacket_none(void)
   pkt_udp(pkt, NULL, 0);
   STATE_STASH(buf);
 
-  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_CPACKET);
+  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_CPACKET,
+                              NULL);
   STATE_CHECK(ts, sec, 0);
 
   STATE_FREE(buf);
@@ -197,7 +207,8 @@ static void test_rx_pkt_timestamp_cpacket_basic(void)
   pkt_cpacket(pkt, sec, nsec);
   STATE_STASH(buf);
 
-  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_CPACKET);
+  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_CPACKET,
+                              NULL);
   STATE_CHECK(ts, sec, sec);
   STATE_CHECK(ts, nsec, nsec);
 
@@ -223,7 +234,8 @@ static void test_rx_pkt_timestamp_cpacket_subnano(void)
   pkt_cpacket(pkt, sec, nsec);
   STATE_STASH(buf);
 
-  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_CPACKET);
+  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_CPACKET,
+                              NULL);
   STATE_CHECK(ts, sec, sec);
   STATE_CHECK(ts, nsec, nsec);
   STATE_CHECK_BF(ts, nsec_frac, subnano);
@@ -258,7 +270,8 @@ static void test_rx_pkt_timestamp_cpacket_many(void)
   pkt_cpacket(pkt, sec, nsec);
   STATE_STASH(buf);
 
-  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_CPACKET);
+  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_CPACKET,
+                              NULL);
   STATE_CHECK(ts, sec, sec);
   STATE_CHECK(ts, nsec, nsec);
   STATE_CHECK_BF(ts, nsec_frac, subnano);
@@ -288,7 +301,8 @@ static void test_rx_pkt_timestamp_cpacket_bogus(void)
   pkt_cpacket(pkt, sec, nsec);
   STATE_STASH(buf);
 
-  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_CPACKET);
+  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_CPACKET,
+                              NULL);
   STATE_CHECK(ts, sec, sec);
   STATE_CHECK(ts, nsec, nsec);
   STATE_CHECK_BF(ts, nsec_frac, 0); /* didn't find it, but no disastrous outcome */
@@ -409,7 +423,8 @@ static void test_rx_pkt_timestamp_cpacket_pcap_metawatch(void)
   pkt_append(pkt, pcap, sizeof(pcap));
   STATE_STASH(buf);
 
-  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_CPACKET);
+  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_CPACKET,
+                              NULL);
   STATE_CHECK(ts, sec, 0x5c9a4c08);
   STATE_CHECK(ts, nsec, 0x313ac683);
   STATE_CHECK_BF(ts, nsec_frac, 0x536c8b);
@@ -473,7 +488,8 @@ static void test_rx_pkt_timestamp_cpacket_pcap_wireshark(void)
   pkt_append(pkt, pcap, sizeof(pcap));
   STATE_STASH(buf);
 
-  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_CPACKET);
+  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_CPACKET,
+                              NULL);
   STATE_CHECK(ts, sec, 0x40a34b24);
   STATE_CHECK(ts, nsec, 0x0d4399db);
   STATE_CHECK_BF(ts, nsec_frac, 0x2c52de);
@@ -482,13 +498,14 @@ static void test_rx_pkt_timestamp_cpacket_pcap_wireshark(void)
   STATE_FREE(ts);
 }
 
-static void test_rx_pkt_timestamp_trailer_ttag(void)
+static void test_rx_pkt_timestamp_trailer_ttag_simple_before(void)
 {
   const uint64_t nsec_per_sec = 1000ULL * 1000 * 1000;
-  const uint64_t max_48b_nsec = (1UL << 48) - 1;
   ci_ip_pkt_fmt* pkt;
-  uint32_t sec = (max_48b_nsec / nsec_per_sec) - 1;
-  uint32_t nsec = 999999999;
+  uint64_t ns64 = 0x1234567890abcdefULL;
+  uint64_t ns48 = ns64 & 0xffffffffffffULL;
+  uint64_t sec = ns64 / nsec_per_sec;
+  uint32_t nsec = ns64 % nsec_per_sec;
 
   STATE_ALLOC(union pkt_buf, buf);
   STATE_ALLOC(struct onload_timestamp, ts);
@@ -496,10 +513,13 @@ static void test_rx_pkt_timestamp_trailer_ttag(void)
   pkt = &buf->pkt;
   pkt_init(pkt);
   pkt_udp(pkt, NULL, 0);
-  pkt_ttag(pkt, sec, nsec);
+  pkt_ttag(pkt, ns48 / nsec_per_sec, ns48 % nsec_per_sec);
   STATE_STASH(buf);
 
-  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_TTAG);
+  /* Trailer timestamp is a couple seconds behind wallclock */
+  mock_wallclock_set(sec + 5, 123456789);
+  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_TTAG,
+                              NULL);
   STATE_CHECK(ts, sec, sec);
   STATE_CHECK(ts, nsec, nsec);
   STATE_CHECK_BF(ts, nsec_frac, 0);
@@ -508,11 +528,134 @@ static void test_rx_pkt_timestamp_trailer_ttag(void)
   STATE_FREE(ts);
 }
 
-static void test_rx_pkt_timestamp_trailer_brcm(void)
+static void test_rx_pkt_timestamp_trailer_ttag_simple_after(void)
+{
+  const uint64_t nsec_per_sec = 1000ULL * 1000 * 1000;
+  ci_ip_pkt_fmt* pkt;
+  uint64_t ns64 = 0x234567890abcdef1ULL;
+  uint64_t ns48 = ns64 & 0xffffffffffffULL;
+  uint64_t sec = ns64 / nsec_per_sec;
+  uint32_t nsec = ns64 % nsec_per_sec;
+
+  STATE_ALLOC(union pkt_buf, buf);
+  STATE_ALLOC(struct onload_timestamp, ts);
+
+  pkt = &buf->pkt;
+  pkt_init(pkt);
+  pkt_udp(pkt, NULL, 0);
+  pkt_ttag(pkt, ns48 / nsec_per_sec, ns48 % nsec_per_sec);
+  STATE_STASH(buf);
+
+  /* Trailer timestamp is a couple seconds ahead of wallclock */
+  mock_wallclock_set(sec - 5, 234567890);
+  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_TTAG,
+                              NULL);
+  STATE_CHECK(ts, sec, sec);
+  STATE_CHECK(ts, nsec, nsec);
+  STATE_CHECK_BF(ts, nsec_frac, 0);
+
+  STATE_FREE(buf);
+  STATE_FREE(ts);
+}
+
+static void test_rx_pkt_timestamp_trailer_ttag_wraparound_before(void)
+{
+  const uint64_t nsec_per_sec = 1000ULL * 1000 * 1000;
+  ci_ip_pkt_fmt* pkt;
+  uint64_t ns64 = 0x3456000000000000ULL - 2 * nsec_per_sec - 987654321;
+  uint64_t ns48 = ns64 & 0xffffffffffffULL;
+  uint64_t sec = ns64 / nsec_per_sec;
+  uint32_t nsec = ns64 % nsec_per_sec;
+
+  STATE_ALLOC(union pkt_buf, buf);
+  STATE_ALLOC(struct onload_timestamp, ts);
+
+  pkt = &buf->pkt;
+  pkt_init(pkt);
+  pkt_udp(pkt, NULL, 0);
+  pkt_ttag(pkt, ns48 / nsec_per_sec, ns48 % nsec_per_sec);
+  STATE_STASH(buf);
+
+  /* Trailer timestamp is a couple seconds behind wallclock.
+   * The ns48 of wall clock has wrapped but trailer has not */
+  mock_wallclock_set(sec + 5, 345678901);
+  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_TTAG,
+                              NULL);
+  STATE_CHECK(ts, sec, sec);
+  STATE_CHECK(ts, nsec, nsec);
+  STATE_CHECK_BF(ts, nsec_frac, 0);
+
+  STATE_FREE(buf);
+  STATE_FREE(ts);
+}
+
+static void test_rx_pkt_timestamp_trailer_ttag_wraparound_after(void)
+{
+  const uint64_t nsec_per_sec = 1000ULL * 1000 * 1000;
+  ci_ip_pkt_fmt* pkt;
+  uint64_t ns64 = 0x4567000000000000ULL + 2 * nsec_per_sec + 876543210;
+  uint64_t ns48 = ns64 & 0xffffffffffffULL;
+  uint64_t sec = ns64 / nsec_per_sec;
+  uint32_t nsec = ns64 % nsec_per_sec;
+
+  STATE_ALLOC(union pkt_buf, buf);
+  STATE_ALLOC(struct onload_timestamp, ts);
+
+  pkt = &buf->pkt;
+  pkt_init(pkt);
+  pkt_udp(pkt, NULL, 0);
+  pkt_ttag(pkt, ns48 / nsec_per_sec, ns48 % nsec_per_sec);
+  STATE_STASH(buf);
+
+  /* Trailer timestamp is a couple seconds ahead of wallclock.
+   * The trailer has wrapped but ns48 of wall clock has not */
+  mock_wallclock_set(sec - 5, 456789012);
+  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_TTAG,
+                              NULL);
+  STATE_CHECK(ts, sec, sec);
+  STATE_CHECK(ts, nsec, nsec);
+  STATE_CHECK_BF(ts, nsec_frac, 0);
+
+  STATE_FREE(buf);
+  STATE_FREE(ts);
+}
+
+static void test_rx_pkt_timestamp_trailer_ttag_oob(void)
+{
+  const uint64_t nsec_per_sec = 1000ULL * 1000 * 1000;
+  ci_ip_pkt_fmt* pkt;
+  uint64_t ns64 = 0x567890abcdef1234ULL;
+  uint64_t ns48 = (ns64 + 24 * 3600 * nsec_per_sec) & 0xffffffffffffULL;
+  uint64_t sec = ns64 / nsec_per_sec;
+  uint32_t nsec = ns64 % nsec_per_sec;
+
+  STATE_ALLOC(union pkt_buf, buf);
+  STATE_ALLOC(struct onload_timestamp, ts);
+
+  pkt = &buf->pkt;
+  pkt_init(pkt);
+  pkt_udp(pkt, NULL, 0);
+  pkt_ttag(pkt, ns48 / nsec_per_sec, ns48 % nsec_per_sec);
+  STATE_STASH(buf);
+
+  /* Trailer timestamp and wall clock is off by a day, consider as invalid */
+  mock_wallclock_set(sec, nsec);
+  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_TTAG,
+                              NULL);
+  STATE_CHECK(ts, sec, 0);
+  STATE_CHECK(ts, nsec, 0);
+  STATE_CHECK_BF(ts, nsec_frac, 0);
+
+  STATE_FREE(buf);
+  STATE_FREE(ts);
+}
+
+static void test_rx_pkt_timestamp_trailer_brcm_simple_before(void)
 {
   ci_ip_pkt_fmt* pkt;
-  uint32_t sec = 0x3FFFF;	/* largest 18b value */
-  uint32_t nsec = 999999999;
+  uint64_t wallsecupper = 0x123400000ULL;
+  uint32_t sec = 0x12345;
+  uint32_t nsec = 123456789;
 
   STATE_ALLOC(union pkt_buf, buf);
   STATE_ALLOC(struct onload_timestamp, ts);
@@ -523,9 +666,125 @@ static void test_rx_pkt_timestamp_trailer_brcm(void)
   pkt_trailer_brcm(pkt, sec, nsec);
   STATE_STASH(buf);
 
-  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_BRCM);
-  STATE_CHECK(ts, sec, sec);
+  /* Trailer timestamp is a couple seconds behind wallclock */
+  mock_wallclock_set(wallsecupper + sec + 5, 987654321);
+  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_BRCM,
+                              NULL);
+  STATE_CHECK(ts, sec, wallsecupper + sec);
   STATE_CHECK(ts, nsec, nsec);
+  STATE_CHECK_BF(ts, nsec_frac, 0);
+
+  STATE_FREE(buf);
+  STATE_FREE(ts);
+}
+
+static void test_rx_pkt_timestamp_trailer_brcm_simple_after(void)
+{
+  ci_ip_pkt_fmt* pkt;
+  uint64_t wallsecupper = 0x234100000ULL;
+  uint32_t sec = 0x23456;
+  uint32_t nsec = 234567890;
+
+  STATE_ALLOC(union pkt_buf, buf);
+  STATE_ALLOC(struct onload_timestamp, ts);
+
+  pkt = &buf->pkt;
+  pkt_init(pkt);
+  pkt_udp(pkt, NULL, 0);
+  pkt_trailer_brcm(pkt, sec, nsec);
+  STATE_STASH(buf);
+
+  /* Trailer timestamp is a couple seconds ahead of wallclock */
+  mock_wallclock_set(wallsecupper + sec - 5, 876543210);
+  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_BRCM,
+                              NULL);
+  STATE_CHECK(ts, sec, wallsecupper + sec);
+  STATE_CHECK(ts, nsec, nsec);
+  STATE_CHECK_BF(ts, nsec_frac, 0);
+
+  STATE_FREE(buf);
+  STATE_FREE(ts);
+}
+
+static void test_rx_pkt_timestamp_trailer_brcm_wraparound_before(void)
+{
+  ci_ip_pkt_fmt* pkt;
+  uint64_t wallsecupper = 0x341200000ULL;
+  uint32_t secoff = 2;
+  uint32_t nsec = 345678901;
+
+  STATE_ALLOC(union pkt_buf, buf);
+  STATE_ALLOC(struct onload_timestamp, ts);
+
+  pkt = &buf->pkt;
+  pkt_init(pkt);
+  pkt_udp(pkt, NULL, 0);
+  pkt_trailer_brcm(pkt, 0x40000 - secoff, nsec);
+  STATE_STASH(buf);
+
+  /* Trailer timestamp is a couple seconds behind wallclock.
+   * The ns48 of wall clock has wrapped but trailer has not */
+  mock_wallclock_set(wallsecupper + 5, 765432109);
+  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_BRCM,
+                              NULL);
+  STATE_CHECK(ts, sec, wallsecupper - secoff);
+  STATE_CHECK(ts, nsec, nsec);
+  STATE_CHECK_BF(ts, nsec_frac, 0);
+
+  STATE_FREE(buf);
+  STATE_FREE(ts);
+}
+
+static void test_rx_pkt_timestamp_trailer_brcm_wraparound_after(void)
+{
+  ci_ip_pkt_fmt* pkt;
+  uint64_t wallsecupper = 0x412300000ULL;
+  uint32_t secoff = 2;
+  uint32_t nsec = 456789012;
+
+  STATE_ALLOC(union pkt_buf, buf);
+  STATE_ALLOC(struct onload_timestamp, ts);
+
+  pkt = &buf->pkt;
+  pkt_init(pkt);
+  pkt_udp(pkt, NULL, 0);
+  pkt_trailer_brcm(pkt, secoff, nsec);
+  STATE_STASH(buf);
+
+  /* Trailer timestamp is a couple seconds ahead of wallclock.
+   * The trailer has wrapped but ns48 of wall clock has not */
+  mock_wallclock_set(wallsecupper - 5, 765432109);
+  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_BRCM,
+                              NULL);
+  STATE_CHECK(ts, sec, wallsecupper + secoff);
+  STATE_CHECK(ts, nsec, nsec);
+  STATE_CHECK_BF(ts, nsec_frac, 0);
+
+  STATE_FREE(buf);
+  STATE_FREE(ts);
+}
+
+static void test_rx_pkt_timestamp_trailer_brcm_oob(void)
+{
+  ci_ip_pkt_fmt* pkt;
+  uint64_t wallsecupper = 0x123400000ULL;
+  uint32_t nsec = 567890123;
+
+  STATE_ALLOC(union pkt_buf, buf);
+  STATE_ALLOC(struct onload_timestamp, ts);
+
+  pkt = &buf->pkt;
+  pkt_init(pkt);
+  pkt_udp(pkt, NULL, 0);
+  pkt_trailer_brcm(pkt, 24 * 3600, nsec);
+  STATE_STASH(buf);
+
+  /* Trailer timestamp and wall clock is off by a day, consider as invalid */
+  mock_wallclock_set(wallsecupper, 654321098);
+  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_BRCM,
+                              NULL);
+  STATE_CHECK(ts, sec, 0);
+  STATE_CHECK(ts, nsec, 0);
   STATE_CHECK_BF(ts, nsec_frac, 0);
 
   STATE_FREE(buf);
@@ -540,7 +799,15 @@ int main(void) {
   TEST_RUN(test_rx_pkt_timestamp_cpacket_bogus);
   TEST_RUN(test_rx_pkt_timestamp_cpacket_pcap_metawatch);
   TEST_RUN(test_rx_pkt_timestamp_cpacket_pcap_wireshark);
-  TEST_RUN(test_rx_pkt_timestamp_trailer_ttag);
-  TEST_RUN(test_rx_pkt_timestamp_trailer_brcm);
+  TEST_RUN(test_rx_pkt_timestamp_trailer_ttag_simple_before);
+  TEST_RUN(test_rx_pkt_timestamp_trailer_ttag_simple_after);
+  TEST_RUN(test_rx_pkt_timestamp_trailer_ttag_wraparound_before);
+  TEST_RUN(test_rx_pkt_timestamp_trailer_ttag_wraparound_after);
+  TEST_RUN(test_rx_pkt_timestamp_trailer_ttag_oob);
+  TEST_RUN(test_rx_pkt_timestamp_trailer_brcm_simple_before);
+  TEST_RUN(test_rx_pkt_timestamp_trailer_brcm_simple_after);
+  TEST_RUN(test_rx_pkt_timestamp_trailer_brcm_wraparound_before);
+  TEST_RUN(test_rx_pkt_timestamp_trailer_brcm_wraparound_after);
+  TEST_RUN(test_rx_pkt_timestamp_trailer_brcm_oob);
   TEST_END();
 }

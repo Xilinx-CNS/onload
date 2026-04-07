@@ -7,6 +7,16 @@
 #include <onload/extensions_timestamping.h>
 
 #if CI_CFG_TIMESTAMPING
+
+#ifdef CI_UNIT_MOCK_TIMESYNC_WALLCLOCK
+extern struct oo_timespec mocked_timesync_wallclock;
+#elif defined(__KERNEL__)
+# include <onload/tcp_driver.h>
+#else
+# include <onload/ul/per_thread.h>
+extern void ci_synchronise_clock(ci_netif *ni, struct oo_timesync* oo_ts_local);
+#endif
+
 enum {
   /* PART 1
    * The following values need to match their counterparts in
@@ -228,9 +238,49 @@ ci_rx_pkt_timestamp_cpacket(struct onload_timestamp* ts_out,
   }
 }
 
+static inline uint64_t
+ci_timestamp_extend_generic(uint64_t ts, uint64_t ref_ts,
+                            uint64_t max_tolerance,
+                            uint8_t valid_bits)
+{
+  uint64_t wrap, mask, ref_lo, delta;
+
+  wrap = 1ULL << valid_bits;
+  mask = wrap - 1;
+  ref_lo = ref_ts & mask;
+  /* ts should not have any of the higher bits set */
+  ci_assert(!(ts & ~mask));
+
+  /* The delta should satisfy modular arithmetic rules, mod the value of wrap.
+   *
+   * As an example, for a valid_bits = 4 (i.e. wrap = 16),
+   * a number on the high end subtracted by a number on the low end,
+   * such as 14 - 2, should be treated the same as a low negative minus
+   * a low positive, in this case (-2) - 2. The evaluation is different
+   * in u64, but masking to only bits in the field yields identical values.
+   */
+  delta = (ts - ref_lo) & mask;
+
+  if( delta > wrap / 2 ) {
+    /* In the previous example, delta after mask is 12, same as -4.
+     * Since delta is greater than wrap / 2 = 8, we know the negative is
+     * closer to 0. This wrap - delta normalizes the delta to the
+     * absolute value of the negative version */
+    delta = wrap - delta;
+    if( CI_UNLIKELY(delta > max_tolerance) )
+      return ~0ULL;
+    return ref_ts - delta;
+  } else {
+    if( CI_UNLIKELY(delta > max_tolerance) )
+      return ~0ULL;
+    return ref_ts + delta;
+  }
+}
+
 static inline void
 ci_rx_pkt_timestamp_ttag(struct onload_timestamp* ts_out,
-                         const char *buf_end, const char *pkt_end)
+                         const char *buf_end, const char *pkt_end,
+                         const struct oo_timespec *refclock)
 {
   struct ttag {
     uint8_t ts[6];       /* 48b nsecs */
@@ -238,14 +288,21 @@ ci_rx_pkt_timestamp_ttag(struct onload_timestamp* ts_out,
 
   const struct ttag* ttag = (const struct ttag*)buf_end - 1;
   const uint64_t nsec_per_sec = 1000ULL * 1000 * 1000;
-  uint64_t ts;
+  uint64_t ref_ts, ts;
 
   if( buf_end - pkt_end < sizeof(struct ttag) )
     return;
 
+  /* 64bit nanoseconds is lossless till year 2554 */
+  ref_ts = refclock->tv_sec * nsec_per_sec + refclock->tv_nsec;
   ts = ((uint64_t)ttag->ts[0] << 40) | ((uint64_t)ttag->ts[1] << 32) |
        ((uint64_t)ttag->ts[2] << 24) | ((uint64_t)ttag->ts[3] << 16) |
        ((uint64_t)ttag->ts[4] << 8)  | ((uint64_t)ttag->ts[5]);
+
+  /* Huge overestimation of worst case prop delay: 1 hour. */
+  ts = ci_timestamp_extend_generic(ts, ref_ts, 3600 * nsec_per_sec, 48);
+  if( ts == ~0ULL )
+    return;
 
   ts_out->sec = ts / nsec_per_sec;
   ts_out->nsec = ts - (ts_out->sec * nsec_per_sec);
@@ -255,7 +312,8 @@ ci_rx_pkt_timestamp_ttag(struct onload_timestamp* ts_out,
 
 static inline void
 ci_rx_pkt_timestamp_brcm(struct onload_timestamp* ts_out,
-                         const char *buf_end, const char *pkt_end)
+                         const char *buf_end, const char *pkt_end,
+                         const struct oo_timespec *refclock)
 {
   struct brcm_trailer {
     uint8_t ts[6];      /* 48b timestamp: 18b sec + 30b nsec */
@@ -275,6 +333,15 @@ ci_rx_pkt_timestamp_brcm(struct onload_timestamp* ts_out,
   ts_out->sec = ((uint32_t)(tt->ts[0]) << 10) |
                 ((uint32_t)(tt->ts[1]) << 2) |
                 (tt->ts[2] >> 6);
+
+  /* As above, worst case prop delay: 1 hour. */
+  ts_out->sec = ci_timestamp_extend_generic(ts_out->sec, refclock->tv_sec,
+                                            3600, 18);
+  if( ts_out->sec == ~0ULL ) {
+    ts_out->sec = 0;
+    return;
+  }
+
   ts_out->nsec = ((tt->ts[2] & 0x3F) << 24) |
                  ((uint32_t)(tt->ts[3]) << 16) |
                  ((uint32_t)(tt->ts[4]) << 8) |
@@ -283,9 +350,24 @@ ci_rx_pkt_timestamp_brcm(struct onload_timestamp* ts_out,
   ts_out->flags = 0;
 }
 
+static inline const struct oo_timespec *
+ci_rx_pkt_timestamp_refclock(ci_netif *ni)
+{
+#ifdef CI_UNIT_MOCK_TIMESYNC_WALLCLOCK
+  return &mocked_timesync_wallclock;
+#elif defined(__KERNEL__)
+  return &efab_tcp_driver.timesync->wall_clock;
+#else
+  struct oo_timesync *oo_ts_local = &(__oo_per_thread_get()->timesync);
+  ci_synchronise_clock(ni, oo_ts_local);
+  return &oo_ts_local->wall_clock;
+#endif
+}
+
 static inline void
 ci_rx_pkt_timestamp_trailer(const ci_ip_pkt_fmt* pkt,
-                            struct onload_timestamp* ts_out, int format)
+                            struct onload_timestamp* ts_out, int format,
+                            ci_netif *ni)
 {
   const char *buf_end, *pkt_end;
 
@@ -304,16 +386,18 @@ ci_rx_pkt_timestamp_trailer(const ci_ip_pkt_fmt* pkt,
     ci_rx_pkt_timestamp_cpacket(ts_out, buf_end, pkt_end);
     break;
   case CITP_RX_TIMESTAMPING_TRAILER_FORMAT_TTAG:
-    ci_rx_pkt_timestamp_ttag(ts_out, buf_end, pkt_end);
+    ci_rx_pkt_timestamp_ttag(ts_out, buf_end, pkt_end,
+                             ci_rx_pkt_timestamp_refclock(ni));
     break;
   case CITP_RX_TIMESTAMPING_TRAILER_FORMAT_BRCM:
-    ci_rx_pkt_timestamp_brcm(ts_out, buf_end, pkt_end);
+    ci_rx_pkt_timestamp_brcm(ts_out, buf_end, pkt_end,
+                             ci_rx_pkt_timestamp_refclock(ni));
     break;
   }
 }
 
 static inline void
-ci_rx_pkt_timestamp(const ci_ip_pkt_fmt* pkt, struct onload_timestamp* ts_out,
+ci_rx_pkt_timestamp(ci_netif *ni, const ci_ip_pkt_fmt* pkt, struct onload_timestamp* ts_out,
                     int src, int format)
 {
   switch( src ) {
@@ -321,7 +405,7 @@ ci_rx_pkt_timestamp(const ci_ip_pkt_fmt* pkt, struct onload_timestamp* ts_out,
     ci_rx_pkt_timestamp_nic(pkt, ts_out);
     break;
   case CITP_RX_TIMESTAMPING_SOURCE_TRAILER:
-    ci_rx_pkt_timestamp_trailer(pkt, ts_out, format);
+    ci_rx_pkt_timestamp_trailer(pkt, ts_out, format, ni);
     break;
   default:
     ts_out->sec = 0;
@@ -330,11 +414,11 @@ ci_rx_pkt_timestamp(const ci_ip_pkt_fmt* pkt, struct onload_timestamp* ts_out,
 }
 
 static inline void
-ci_rx_pkt_timespec(const ci_ip_pkt_fmt* pkt, ef_timespec* ts_out, int src,
-                   int trailer_type)
+ci_rx_pkt_timespec(ci_netif *ni, const ci_ip_pkt_fmt* pkt,
+                   ef_timespec* ts_out, int src, int trailer_type)
 {
   struct onload_timestamp ts;
-  ci_rx_pkt_timestamp(pkt, &ts, src, trailer_type);
+  ci_rx_pkt_timestamp(ni, pkt, &ts, src, trailer_type);
   onload_timestamp_to_timespec(&ts, ts_out);
 }
 
