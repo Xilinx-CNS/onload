@@ -130,6 +130,7 @@ int ef_shrub_client_open(struct ef_shrub_client* client,
   struct ef_shrub_shared_metrics metrics;
   struct ef_shrub_request request = {};
   memset(client, 0, sizeof(*client));
+  client->mappings[EF_SHRUB_MAP_SOCKET] = (uint64_t)-1;
 
   rc = ef_shrub_socket_open(&client->socket);
   if( rc < 0 )
@@ -154,6 +155,11 @@ int ef_shrub_client_open(struct ef_shrub_client* client,
   rc = client_mmap(client->mappings, &metrics, buffers);
   if( rc < 0 )
     goto fail_mmap;
+
+  /* Store the socket in the mappings array so that the kernel can take a
+   * reference on it to keep the shrub controller connection alive when the
+   * owning process exits. */
+  client->mappings[EF_SHRUB_MAP_SOCKET] = client->socket;
 
   return 0;
 
