@@ -1149,9 +1149,13 @@ static int tcp_helper_rxq_alloc(tcp_helper_resource_t* trs,
       kfree(dma_addrs);
 
       efct_ubufs_local_attach_internal(vi, qix, rxq, superbufs);
+      wmb();
+      vi->ep_state->rxq.efct_active_qs |= 1u << qix;
+      efrm_rxq_set_active(trs->nic[intf_i].thn_efct_rxq[qix]);
     }
     else if (vi->nic_type.arch == EF_VI_ARCH_EFCT) {
       efct_vi_start_rxq(vi, qix, rxq);
+      efrm_rxq_set_active(trs->nic[intf_i].thn_efct_rxq[qix]);
     }
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
@@ -8512,17 +8516,29 @@ int efab_tcp_helper_efct_superbuf_config_refresh(
 
   if( op->intf_i >= oo_stack_intf_max(&trs->netif) )
     return -EINVAL;
+  if( op->qid >= EF_VI_MAX_EFCT_RXQS )
+    return -EINVAL;
   vi = ci_netif_vi(&trs->netif, op->intf_i);
 
   rc = vi->efct_rxqs.ops->refresh_mappings(vi, op->qid, ubufs, umaps);
   /* "not supported" means that the buffers aren't managed by ef_vi, so
    * fall through and try to get them from efrm in that case. */
-  if( rc != -EOPNOTSUPP )
+  if( rc != -EOPNOTSUPP ) {
+    if( rc == 0 ) {
+      struct tcp_helper_nic* refresh_nic = &trs->nic[op->intf_i];
+
+      /* Set superbuf_pkts in shared memory after kernel superbufs mapped */
+      if( op->superbuf_pkts != 0 )
+        vi->ep_state->rxq.efct_state[op->qid].superbuf_pkts = op->superbuf_pkts;
+
+      if( refresh_nic->thn_efct_rxq[op->qid] )
+        efrm_rxq_set_active(refresh_nic->thn_efct_rxq[op->qid]);
+    }
     return rc;
+  }
 
   nic = &trs->nic[op->intf_i];
-  if( op->qid >= ARRAY_SIZE(nic->thn_efct_rxq) ||
-      ! nic->thn_efct_rxq[op->qid] )
+  if( ! nic->thn_efct_rxq[op->qid] )
     return -EINVAL;
   return efrm_rxq_refresh(nic->thn_efct_rxq[op->qid], ubufs, umaps,
                           op->max_superbufs);

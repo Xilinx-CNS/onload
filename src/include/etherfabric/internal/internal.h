@@ -116,7 +116,9 @@ extern int efct_kbufs_init_internal(ef_vi* vi,
 extern int efct_ubufs_init_internal(ef_vi* vi);
 extern void efct_ubufs_local_attach_internal(ef_vi* vi, int ix, int qid, unsigned bufs);
 extern int efct_ubufs_shared_attach_internal(ef_vi* vi, int ix, int qid,
-                                             void* bufs);
+                                             void* bufs,
+                                             uint32_t* superbuf_pkts_out,
+                                             int* hw_qid_out);
 extern void efct_ubufs_set_is_shrub_controller(ef_vi* vi);
 extern int efct_ubufs_set_shared(ef_vi* vi, int shrub_controller_id, int shrub_server_id);
 extern int efct_ubufs_get_shared_filter_info(ef_vi* vi, unsigned* token,
