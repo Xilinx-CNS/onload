@@ -391,9 +391,10 @@ extern unsigned ci_tp_log CI_HV;
   ((errors) & CI_NETIF_ERROR_SYNRECV_TABLE  ? "SYNRECV ":"")
 
 
-#define CI_NETIF_NIC_ERRORS_FMT       "%s"
+#define CI_NETIF_NIC_ERRORS_FMT       "%s%s"
 #define CI_NETIF_NIC_ERRORS_PRI_ARG(errors)                         \
-  ((errors) & CI_NETIF_NIC_ERROR_REMAP      ? "REMAP ":"")
+  ((errors) & CI_NETIF_NIC_ERROR_REMAP         ? "REMAP ":""),      \
+  ((errors) & CI_NETIF_NIC_ERROR_AWAITING_EFCT ? "EFCT ":"")
 
 
 #define OO_CMSG_FLAGS_FMT  "%s%s%s%s%s%s%s%s"

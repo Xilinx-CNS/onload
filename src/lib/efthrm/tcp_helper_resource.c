@@ -722,6 +722,7 @@ int efab_thr_table_lookup(const char* name, struct net* netns,
   tcp_helper_resource_t *thr;
   ci_dllink *link;
   int match, rc = -ENODEV;
+  int i;
 
   ci_assert(thr_p != NULL);
   ci_assert(flags == EFAB_THR_TABLE_LOOKUP_NO_CHECK_USER ||
@@ -770,9 +771,26 @@ int efab_thr_table_lookup(const char* name, struct net* netns,
         rc = -EBUSY;
       }
       else {
-        /* Success */
-        rc = oo_thr_ref_get(thr->ref, ref_type);
-        *thr_p = thr;
+        /* This is used to spot stacks waiting for resources, so check that
+         * it's not already set for some other reason. */
+        ci_assert_nequal(rc, -EAGAIN);
+
+        /* efct resources are initialised outside the normal stack creation
+         * block, with the result that stacks become visible before it's safe
+         * to attach with another userspace client. Deal with that by asking
+         * attachers to try again later. */
+        for( i = 0; i < thr->netif.state->nic_n; ++i ) {
+          if( thr->netif.state->nic[i].nic_error_flags &
+              CI_NETIF_NIC_ERROR_AWAITING_EFCT ) {
+            rc = -EAGAIN;
+            break;
+          }
+        }
+        if( rc != -EAGAIN ) {
+          /* Success */
+          rc = oo_thr_ref_get(thr->ref, ref_type);
+          *thr_p = thr;
+        }
       }
       break;
     }
@@ -4869,6 +4887,15 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   }
 #endif
 
+  if( NI_OPTS(ni).multiarch_rx_datapath != EF_MULTIARCH_DATAPATH_FF ) {
+    OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
+      ci_netif_state_nic_t* nsn = &ni->state->nic[intf_i];
+      nic = efrm_client_get_nic(rs->nic[intf_i].thn_oo_nic->efrm_client);
+      if( nic->flags & NIC_FLAG_LLCT )
+        ci_atomic32_or(&nsn->nic_error_flags, CI_NETIF_NIC_ERROR_AWAITING_EFCT);
+    }
+  }
+
   /* We're about to expose this stack to other people.  so we should be
    * sufficiently initialised here that other people don't get upset.
    */
@@ -5301,7 +5328,7 @@ static void tcp_helper_reset_stack_locked(tcp_helper_resource_t* thr)
 #endif
 
       /* Remap packets before using them in RX q */
-      nsn->nic_error_flags &=~ CI_NETIF_NIC_ERROR_REMAP;
+      ci_atomic32_and(&nsn->nic_error_flags, ~CI_NETIF_NIC_ERROR_REMAP);
       for( i = 0; i < pkt_sets_n; ++i ) {
         int rc;
 
@@ -5322,7 +5349,7 @@ static void tcp_helper_reset_stack_locked(tcp_helper_resource_t* thr)
           ci_log("ERROR [%d]: failed to remap packet set %d after NIC reset",
                  thr->id, i);
           memset(hw_addrs, 0, sizeof(uint64_t) * (1 << HW_PAGES_PER_SET_S));
-          nsn->nic_error_flags |= CI_NETIF_NIC_ERROR_REMAP;
+          ci_atomic32_or(&nsn->nic_error_flags, CI_NETIF_NIC_ERROR_REMAP);
         }
 
         set_pkt_bufset_hwaddrs(ni, i, intf_i, hw_addrs);

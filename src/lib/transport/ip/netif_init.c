@@ -2779,6 +2779,12 @@ static int alloc_efct_resources(ci_netif* ni)
       rc = efct_superbuf_config_refresh_all(vi);
       if( rc < 0 )
         return rc;
+
+      /* All EFCT resources for this NIC are initialized. Clear the flag
+       * that blocks other processes from attaching. wmb ensures all
+       * preceding state writes are visible before the flag is cleared. */
+      ci_wmb();
+      ci_atomic32_and(&nsn->nic_error_flags, ~CI_NETIF_NIC_ERROR_AWAITING_EFCT);
     }
   }
 

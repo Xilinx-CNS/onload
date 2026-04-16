@@ -112,6 +112,7 @@ static int __citp_netif_alloc(ef_driver_handle* fd, const char *name,
   int rc;
   ci_netif* ni;
   int realloc = 0;
+  int eagain_retries = 0;
 
   CITP_FDTABLE_ASSERT_LOCKED(1);
 
@@ -139,6 +140,15 @@ static int __citp_netif_alloc(ef_driver_handle* fd, const char *name,
       }
       else if( rc == -EACCES)
         goto fail3;
+      else if( rc == -EAGAIN ) {
+        if( ++eagain_retries > 150 ) {
+          LOG_E(ci_log("%s: stack '%s' not ready after %d retries",
+                       __FUNCTION__, name, eagain_retries));
+          goto fail3;
+        }
+        usleep(20000); /* 20ms, ~3s total max */
+        continue;
+      }
     }
 
     rc = ci_netif_ctor(ni, *fd, name, flags);
