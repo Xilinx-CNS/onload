@@ -1014,7 +1014,7 @@ typedef struct {
 #endif
 
 # define CI_NETIF_NIC_ERROR_REMAP               0x00000001u
-# define CI_NETIF_NIC_ERROR_AWAITING_EFCT        0x00000002u
+# define CI_NETIF_NIC_ERROR_AWAITING_EFCT       0x00000002u
   ci_uint32             nic_error_flags;
 #if CI_CFG_CTPIO
   ci_uint32             ctpio_ct_threshold;
