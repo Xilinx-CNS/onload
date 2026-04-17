@@ -56,7 +56,7 @@ void ef_shrub_server_close(struct ef_shrub_server* server);
  *
  * This should be called frequently.
  */
-void ef_shrub_server_poll(struct ef_shrub_server* server);
+int ef_shrub_server_poll(struct ef_shrub_server* server);
 
 /* Check if a shrub server has any connected shrub clients. */
 bool ef_shrub_server_has_clients(struct ef_shrub_server* server);

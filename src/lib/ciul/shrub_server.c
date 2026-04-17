@@ -48,8 +48,10 @@ static int unix_server_poll(struct ef_shrub_server* server)
 {
   int rc;
   struct epoll_event event;
+  int n_events = 0;
   rc = ef_shrub_server_epoll_wait(&server->sockets, &event);
   if( rc > 0 ) {
+    n_events = rc;
     if( event.events & EPOLLHUP )
       rc = server_connection_closed(server, event.data.ptr);
     else if( event.data.ptr == NULL )
@@ -57,7 +59,7 @@ static int unix_server_poll(struct ef_shrub_server* server)
     else if( event.events & EPOLLIN )
       rc = server_request_received(server, event.data.ptr);
   }
-  return rc;
+  return (rc < 0) ? rc : n_events;
 }
 
 static void remove_connection(struct ef_shrub_connection** list,
@@ -344,13 +346,19 @@ fail_sockets:
   return rc;
 }
 
-void ef_shrub_server_poll(struct ef_shrub_server* server)
+int ef_shrub_server_poll(struct ef_shrub_server* server)
 {
+  int n_events = 0;
+  int rc;
   int i;
 
-  unix_server_poll(server);
+  rc = unix_server_poll(server);
+  n_events += (rc > 0) ? rc : 0;
+
   for( i = 0; i < EF_VI_MAX_EFCT_RXQS; ++i )
-    ef_shrub_queue_poll(&server->queues[i]);
+    n_events += ef_shrub_queue_poll(&server->queues[i]);
+
+  return n_events;
 }
 
 void ef_shrub_server_close(struct ef_shrub_server* server)

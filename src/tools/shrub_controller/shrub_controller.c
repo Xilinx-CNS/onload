@@ -680,7 +680,7 @@ static int poll_socket(shrub_controller_config *config)
       ef_shrub_socket_close_socket(client_fd);
     }
   }
-  return rc;
+  return (rc == 0) ? num_events : rc;
 }
 
 static void cleanup_config_socket(shrub_controller_config *config)
@@ -719,13 +719,17 @@ static int create_config_socket(shrub_controller_config *config)
   return 0;
 }
 
-static void poll_shrub_servers(shrub_controller_config *config)
+static int poll_shrub_servers(shrub_controller_config *config)
 {
   shrub_if_config_t *current_interface = config->server_config_head;
+  int n_events = 0;
+
   while ( current_interface != NULL ) {
-    ef_shrub_server_poll(current_interface->shrub_server);
+    n_events += ef_shrub_server_poll(current_interface->shrub_server);
     current_interface = current_interface->next;
   }
+
+  return n_events;
 }
 
 static void handle_controller_dump_requests(shrub_controller_config *config)
@@ -787,12 +791,22 @@ static void handle_controller_auto_close(shrub_controller_config *config)
   is_running = false;
 }
 
-static void reactor_loop_step(shrub_controller_config *config)
+static bool reactor_loop_step(shrub_controller_config *config)
 {
-  poll_shrub_servers(config);
-  poll_socket(config);
+  int n_events = 0;
+  int rc;
+
+  rc = poll_shrub_servers(config);
+  n_events += (rc > 0) ? rc : 0;
+
+  rc = poll_socket(config);
+  n_events += (rc > 0) ? rc : 0;
+
+  /* We aren't too bothered by if any work was done by non-polling functions */
   handle_controller_dump_requests(config);
   handle_controller_auto_close(config);
+
+  return n_events > 0;
 }
 
 static void reactor_loop_spin(shrub_controller_config *config)

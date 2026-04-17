@@ -173,8 +173,8 @@ static void release_buffer(struct ef_shrub_queue* queue,
   }
 }
 
-static void poll_client_fifo(struct ef_shrub_queue* queue,
-                             struct ef_shrub_connection* connection)
+static int poll_client_fifo(struct ef_shrub_queue* queue,
+                            struct ef_shrub_connection* connection)
 {
   int fifo_index = connection->client_fifo_index;
 
@@ -183,27 +183,34 @@ static void poll_client_fifo(struct ef_shrub_queue* queue,
   ef_shrub_buffer_id buffer_index = connection->client_fifo[fifo_index];
 
   if( buffer_index == EF_SHRUB_INVALID_BUFFER )
-    return;
+    return 0;
 
   connection->client_fifo[fifo_index] = EF_SHRUB_INVALID_BUFFER;
   connection->client_fifo_index = next_fifo_index(fifo_index,
                                                   queue->fifo_size);
 
   if( buffer_index >= queue->buffer_count )
-    return; /* TBD: the client is misbehaving, should we disconnect? */
+    return 0; /* TBD: the client is misbehaving, should we disconnect? */
 
   release_buffer(queue, connection, buffer_index, true);
+
+  /* We have processed one item in this client's fifo. */
+  return 1;
 }
 
-static void poll_client_fifos(struct ef_shrub_queue* queue)
+static int poll_client_fifos(struct ef_shrub_queue* queue)
 {
   struct ef_shrub_connection* c;
+  int n_events = 0;
   for( c = queue->connections; c != NULL; c = c->next )
-    poll_client_fifo(queue, c);
+    n_events += poll_client_fifo(queue, c);
+  return n_events;
 }
 
-static void poll_queue_fifo(struct ef_shrub_queue* queue)
+static int poll_queue_fifo(struct ef_shrub_queue* queue)
 {
+  int n_posted = 0;
+
   while( fifo_has_space(queue->fifo, queue->fifo_size, queue->fifo_index) ) {
     struct ef_shrub_queue_buffer* buffer = NULL;
     int buffer_index;
@@ -219,7 +226,7 @@ static void poll_queue_fifo(struct ef_shrub_queue* queue)
     buffer_index = queue->vi->efct_rxqs.ops->next(queue->vi, queue->ix,
                                                   &sentinel, &sbseq);
     if( buffer_index < 0 )
-      return;
+      break;
 
     EF_VI_ASSERT(buffer_index < queue->buffer_count);
     buffer = &queue->buffers[buffer_index];
@@ -230,7 +237,10 @@ static void poll_queue_fifo(struct ef_shrub_queue* queue)
                                                     sbseq);
     buffer->fifo_index = queue->fifo_index;
     queue->fifo_index = next_fifo_index(queue->fifo_index, queue->fifo_size);
+    n_posted++;
   }
+
+  return n_posted;
 }
 
 static bool connection_can_have_buffer(struct ef_shrub_queue* queue,
@@ -249,9 +259,11 @@ static bool connection_can_have_buffer(struct ef_shrub_queue* queue,
   return true;
 }
 
-static void poll_server_fifo(struct ef_shrub_queue* queue,
-                             struct ef_shrub_connection* conn)
+static int poll_server_fifo(struct ef_shrub_queue* queue,
+                            struct ef_shrub_connection* conn)
 {
+  int n_posted = 0;
+
   while( connection_can_have_buffer(queue, conn) ) {
     struct ef_shrub_queue_buffer* buffer;
     ef_shrub_buffer_id buffer_id;
@@ -276,14 +288,19 @@ static void poll_server_fifo(struct ef_shrub_queue* queue,
     conn->server_fifo[conn->server_fifo_index] = buffer_id;
     conn->server_fifo_index = next_fifo_index(conn->server_fifo_index,
                                               conn->fifo_size);
+    n_posted++;
   }
+
+  return n_posted;
 }
 
-static void poll_server_fifos(struct ef_shrub_queue* queue)
+static int poll_server_fifos(struct ef_shrub_queue* queue)
 {
   struct ef_shrub_connection* c;
+  int n_events = 0;
   for( c = queue->connections; c != NULL; c = c->next )
-    poll_server_fifo(queue, c);
+    n_events += poll_server_fifo(queue, c);
+  return n_events;
 }
 
 int ef_shrub_queue_open(struct ef_shrub_queue* queue,
@@ -350,16 +367,20 @@ void ef_shrub_queue_close(struct ef_shrub_queue* queue)
   queue->fifo_size = 0;
 }
 
-void ef_shrub_queue_poll(struct ef_shrub_queue* queue)
+int ef_shrub_queue_poll(struct ef_shrub_queue* queue)
 {
+  int n_events = 0;
+
   /* Handle client requests to free buffers */
-  poll_client_fifos(queue);
+  n_events += poll_client_fifos(queue);
 
   /* Update our own fifo with any newly postable buffers */
-  poll_queue_fifo(queue);
+  n_events += poll_queue_fifo(queue);
 
   /* Post any new buffers to clients that can accept them */
-  poll_server_fifos(queue);
+  n_events += poll_server_fifos(queue);
+
+  return n_events;
 }
 
 void ef_shrub_queue_attached(struct ef_shrub_queue* queue,

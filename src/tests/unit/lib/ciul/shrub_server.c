@@ -177,9 +177,10 @@ void ef_shrub_queue_close(struct ef_shrub_queue* queue)
   // Probably should check when this is called
 }
 
-void ef_shrub_queue_poll(struct ef_shrub_queue* queue)
+int ef_shrub_queue_poll(struct ef_shrub_queue* queue)
 {
   // Probably should check when this is called
+  return 0;
 }
 
 int ef_shrub_server_memfd_create(const char* name, size_t size, bool huge)
