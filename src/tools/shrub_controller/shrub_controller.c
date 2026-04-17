@@ -787,15 +787,18 @@ static void handle_controller_auto_close(shrub_controller_config *config)
   is_running = false;
 }
 
-static int reactor_loop(shrub_controller_config *config)
+static void reactor_loop_step(shrub_controller_config *config)
 {
-  while ( is_running ) {
-    poll_shrub_servers(config);
-    poll_socket(config);
-    handle_controller_dump_requests(config);
-    handle_controller_auto_close(config);
-  }
-  return 0;
+  poll_shrub_servers(config);
+  poll_socket(config);
+  handle_controller_dump_requests(config);
+  handle_controller_auto_close(config);
+}
+
+static void reactor_loop_spin(shrub_controller_config *config)
+{
+  while ( is_running )
+    reactor_loop_step(config);
 }
 
 int parse_interface(const char *arg, shrub_controller_config *config) {
@@ -1157,7 +1160,7 @@ int main(int argc, char *argv[])
   if ( rc )
     goto fail_servers_init;
 
-  reactor_loop(&config);
+  reactor_loop_spin(&config);
 
   tear_down_servers(&config);
 fail_servers_init:
