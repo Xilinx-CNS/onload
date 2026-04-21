@@ -41,6 +41,10 @@
 
 #include <ci/efhw/common.h>
 
+/* Shrub controller lifecycle invariants
+ * - exclusive flock(2) held on /run/onload/controller-N to manage uniqueness
+ * - connect(2) to .../shrub_config to determine readiness
+ */
 
 int (*ci_sys_ioctl)(int, long unsigned int, ...) =
     ioctl; /* taken from cplane/private.h (example code from cplane/client.c) */
@@ -103,7 +107,7 @@ typedef struct
   uintptr_t config_socket_fd;
   int epoll_fd;
   int controller_id;
-  int config_socket_lock_fd;
+  int dir_fd;
   shrub_if_config_t *server_config_head;
   struct oo_cplane_handle *cp;
   int oo_fd_handle;
@@ -111,8 +115,6 @@ typedef struct
   bool use_interrupts;
   char controller_dir[EF_SHRUB_SOCKET_DIR_LEN];
   char log_dir[EF_SHRUB_LOG_LEN];
-  char config_socket[EF_SHRUB_NEGOTIATION_SOCKET_LEN];
-  char config_socket_lock[EF_SHRUB_CONFIG_SOCKET_LOCK_LEN];
   struct shrub_controller_stats controller_stats;
   int auto_close_delay;
   bool had_any_clients;
@@ -315,8 +317,8 @@ static int shrub_server_init(shrub_controller_config *config,
   struct shrub_controller_vi *res = &interface_config->res;
 
   char server_path[EF_SHRUB_SERVER_SOCKET_LEN];
-  rc = snprintf(server_path, sizeof(server_path), "%s" EF_SHRUB_SHRUB_FORMAT,
-                config->controller_dir, interface_config->token_id);
+  rc = snprintf(server_path, sizeof(server_path), EF_SHRUB_SHRUB_FORMAT,
+                interface_config->token_id);
   if ( rc < 0 || rc >= sizeof(server_path) ) {
     ci_log("Error: shrub_controller failed to set server path");
     return -EINVAL;
@@ -377,7 +379,7 @@ static int create_directory(const char *path)
   if ( mkdir(path, 0755) == 0 || errno == EEXIST )
     return rc;
   rc = -errno;
-  ci_log("Error: shrub_controller failed to create the directory '%s'", path);
+  ci_log("Error: shrub_controller failed to create directory '%s': %s", path, strerror(-rc));
   return rc;
 }
 
@@ -391,8 +393,8 @@ static void shrub_dump_summary_to_fd(int fd, shrub_controller_config *config,
   shrub_log_to_fd(fd, buf, buflen, "  dir: %s\n", config->controller_dir);
   shrub_log_to_fd(fd, buf, buflen, "  interrupt mode: %s\n",
                   config->use_interrupts ? "enabled" : "disabled");
-  shrub_log_to_fd(fd, buf, buflen, "  config socket: %s\n",
-                  config->config_socket);
+  shrub_log_to_fd(fd, buf, buflen, "  config socket: %s" EF_SHRUB_NEGOTIATION_SOCKET "\n",
+                  config->controller_dir);
 }
 
 static void shrub_dump_stats_to_fd(int fd, shrub_controller_config *config,
@@ -507,6 +509,8 @@ static int create_onload_config_socket(const char *socket_path, uintptr_t* confi
 {
   int rc = 0;
   struct epoll_event event;
+  const mode_t mode = 0666;
+  mode_t mode_save;
 
   unlink(socket_path);
 
@@ -516,7 +520,9 @@ static int create_onload_config_socket(const char *socket_path, uintptr_t* confi
     return rc;
   }
 
+  mode_save = umask(~mode & 0777);
   rc = ef_shrub_socket_bind(*config_socket_fd, socket_path);
+  umask(mode_save);
   if ( rc < 0 ) {
     ci_log("Error: shrub_controller onload socket bind failed");
     goto cleanup_socket;
@@ -709,7 +715,7 @@ static void cleanup_config_socket(shrub_controller_config *config)
   close(config->epoll_fd);
   if ( config->config_socket_fd != INVALID_SOCKET_FD ) {
     ef_shrub_socket_close_socket(config->config_socket_fd);
-    unlink(config->config_socket);
+    unlink(EF_SHRUB_NEGOTIATION_SOCKET);
     if ( config->debug_mode )
       ci_log("Info: shrub_controller socket closed and cleaning up! ");
   }
@@ -727,17 +733,14 @@ static int create_config_socket(shrub_controller_config *config)
   }
 
   rc = create_onload_config_socket(
-        config->config_socket,
+        EF_SHRUB_NEGOTIATION_SOCKET,
         &config->config_socket_fd,
         config->epoll_fd);
   if ( rc < 0 ) {
     close(config->epoll_fd);
     ci_log("Error: shrub_controller failed to create config socket");
-    return rc;
   }
-
-  chmod(config->config_socket, 0666);
-  return 0;
+  return rc;
 }
 
 static void cleanup_interrupt_state(shrub_controller_config *config)
@@ -1153,92 +1156,54 @@ static int controller_init_paths(shrub_controller_config *config)
   if ( rc < 0 || rc >= sizeof(config->controller_dir) )
     return -EINVAL;
 
-  rc = snprintf(config->config_socket, sizeof(config->config_socket), "%s%s",
-                config->controller_dir, EF_SHRUB_NEGOTIATION_SOCKET);
-  if ( rc < 0 || rc >= sizeof(config->config_socket) )
-    return -EINVAL;
-
   return 0;
 }
 
 static int
-controller_config_socket_lock_create(shrub_controller_config *config)
+controller_open_dir(shrub_controller_config *config)
 {
   int rc;
   int fd;
-  char pid[16];
-  struct flock file_lock = {
-    .l_type = F_WRLCK,
-    .l_start = 0,
-    .l_whence = SEEK_SET,
-    .l_len = 0
-  };
 
-  config->config_socket_lock_fd = -1;
-  rc = snprintf(config->config_socket_lock, sizeof(config->config_socket_lock),
-                "%s%s", config->controller_dir, EF_SHRUB_CONFIG_SOCKET_LOCK);
-  if ( rc < 0 || rc >= sizeof(config->config_socket_lock) )
-    return -EINVAL;
-
-  fd = open(config->config_socket_lock, O_CREAT | O_RDWR,
-            S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-  if ( fd < 0 ) {
-    ci_log("Error: shrub_controller Failed to open config socket lock %s: %s",
-           config->config_socket_lock, strerror(errno));
-    return -errno;
+  fd = open(config->controller_dir, O_RDONLY | O_DIRECTORY);
+  if( fd == -1 && errno == ENOENT ) {
+    rc = create_directory(config->controller_dir);
+    if( rc < 0 )
+      return rc;
+    fd = open(config->controller_dir, O_RDONLY | O_DIRECTORY);
   }
 
-  if ( fcntl(fd, F_SETLK, &file_lock) < 0 ) {
-    if( errno == EACCES || errno == EAGAIN ) {
-      ci_log("Error: shrub_controller %s is already locked. "
-             "Is another shrub controller running?",
-             config->config_socket_lock);
+  if( fd == -1 ) {
+    rc = errno;
+    ci_log("Error: opening shrub_controller directory %s: %s",
+           config->controller_dir, strerror(rc));
+    return -rc;
+  }
+
+  while( (rc = flock(fd, LOCK_EX | LOCK_NB)) == -1 && errno == EINTR );
+  if( rc == -1 ) {
+    rc = errno;
+    if( rc == EWOULDBLOCK ) {
+      ci_log("Error: could not take shrub_controller lock at %s. "
+             "Another shrub controller with id %d is already running",
+             config->controller_dir,
+             config->controller_id);
     } else {
-      ci_log("Error: shrub_controller failed to acquire config "
-             "socket lock %s: %s", config->config_socket_lock,
-             strerror(errno));
+      ci_log("Error: taking shrub_controller lock at %s: %s",
+             config->controller_dir, strerror(rc));
     }
     close(fd);
-    return -errno;
+    return -rc;
   }
 
-  /* Truncating the file does not set the file offset so if the file
-   * already existed then the file offset will not be zero. Explicitly set the
-   * seek position back to the start of the file. Ignore unlikely errors at
-   * this stage. */
-  if ( -1 == ftruncate(fd, 0) ||
-       -1 == lseek(fd, 0, SEEK_SET) ||
-       -1 == sprintf(pid, "%ld\n", (long)getpid()) ||
-       -1 == write(fd, pid, strlen(pid)+1) ) {
-    ci_log("Error: shrub_controller failed to write to lock file: %s",
-           strerror(errno));
+  if( fchdir(fd) == -1 ) {
+    rc = errno;
+    ci_log("Error: entering shrub_controller directory: %s", strerror(rc));
     close(fd);
-    return -errno;
+    return -rc;
   }
 
-  config->config_socket_lock_fd = fd;
-  return 0;
-}
-
-static void
-controller_config_socket_lock_destroy(shrub_controller_config *config)
-{
-  if (config->config_socket_lock_fd != -1) {
-    close(config->config_socket_lock_fd);
-    unlink(config->config_socket_lock);
-  }
-}
-
-static int controller_create_directories(shrub_controller_config *config)
-{
-  int rc;
-
-  if ( (rc = create_directory(EF_SHRUB_SOCK_DIR_PATH)) < 0 )
-    return rc;
-
-  if ( (rc = create_directory(config->controller_dir)) < 0 )
-    return rc;
-
+  config->dir_fd = fd;
   return 0;
 }
 
@@ -1292,6 +1257,7 @@ int main(int argc, char *argv[])
   config.controller_id = 0;
   config.auto_close_delay = AUTO_CLOSE_DELAY_NEVER;
   config.periodic_poll_timeout_ns = PERIODIC_POLL_TIMEOUT_DEFAULT;
+  config.dir_fd = -1;
 
   /* Set sutable prefix */
   ci_server_set_log_prefix(&shrub_log_prefix, SERVER_BIN);
@@ -1361,11 +1327,13 @@ int main(int argc, char *argv[])
   if ( rc )
     return rc;
 
-  rc = controller_create_directories(&config);
+  /* Ensure Onload runtime directory */
+  rc = create_directory(EF_SHRUB_SOCK_DIR_PATH);
   if ( rc )
     return rc;
 
-  rc = controller_config_socket_lock_create(&config);
+  /* Ensure, open and lock controller runtime directory */
+  rc = controller_open_dir(&config);
   if ( rc )
     goto fail_socket_lock_create;
 
@@ -1398,7 +1366,7 @@ fail_cplane_connect:
 fail_create_interrupt_state:
   cleanup_config_socket(&config);
 fail_create_config_socket:
-  controller_config_socket_lock_destroy(&config);
+  close(config.dir_fd);
 fail_socket_lock_create:
   rmdir(config.controller_dir);
 

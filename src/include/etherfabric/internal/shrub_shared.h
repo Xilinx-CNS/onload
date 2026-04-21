@@ -68,7 +68,6 @@ static inline uint32_t ef_shrub_buffer_sbseq(ef_shrub_buffer_id id)
 #define EF_SHRUB_CONTROLLER_PREFIX "controller-"
 #define EF_SHRUB_SHRUB_PREFIX "shrub-"
 #define EF_SHRUB_NEGOTIATION_SOCKET "shrub_config"
-#define EF_SHRUB_CONFIG_SOCKET_LOCK EF_SHRUB_NEGOTIATION_SOCKET "_lock"
 #define EF_SHRUB_CONTROLLER_PATH_FORMAT "%s" EF_SHRUB_CONTROLLER_PREFIX "%d/"
 #define EF_SHRUB_SHRUB_FORMAT EF_SHRUB_SHRUB_PREFIX "%d"
 #define EF_SHRUB_MAX_CONTROLLER 9999
@@ -84,7 +83,6 @@ static inline uint32_t ef_shrub_buffer_sbseq(ef_shrub_buffer_id id)
 #define _SHRUB_CONTROLLER_PREFIX_LEN (sizeof(EF_SHRUB_CONTROLLER_PREFIX)-1)
 #define _SHRUB_SHRUB_PREFIX_LEN (sizeof(EF_SHRUB_SHRUB_PREFIX)-1)
 #define _SHRUB_NEGOTIATION_SOCKET_LEN (sizeof(EF_SHRUB_NEGOTIATION_SOCKET)-1)
-#define _SHRUB_CONFIG_SOCKET_LOCK_LEN (sizeof(EF_SHRUB_CONFIG_SOCKET_LOCK)-1)
 #define _SHRUB_PATH_SEP_LEN (sizeof("/")-1)
 #define _SHRUB_CONTROLLER_LEN                                                  \
   (_SHRUB_CONTROLLER_PREFIX_LEN + EF_SHRUB_MAX_DIGITS)
@@ -102,8 +100,6 @@ static inline uint32_t ef_shrub_buffer_sbseq(ef_shrub_buffer_id id)
 #define EF_SHRUB_LOG_LEN                                                       \
   (_SHRUB_DUMP_LOG_DIR_LEN + _SHRUB_CONTROLLER_LEN +                           \
    EF_SHRUB_DUMP_LOG_SIZE + _SHRUB_PATH_SEP_LEN + 1)
-#define EF_SHRUB_CONFIG_SOCKET_LOCK_LEN                                        \
-  (_SHRUB_SOCKET_DIR_LEN + _SHRUB_CONFIG_SOCKET_LOCK_LEN + 1)
 
 enum ef_shrub_controller_command {
   EF_SHRUB_CONTROLLER_DESTROY,
