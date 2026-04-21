@@ -2243,7 +2243,7 @@ static int alloc_efct_shared_rxq(ci_netif* ni, uint32_t nic_i)
   op.superbuf_pkts = superbuf_pkts;
   rc = oo_resource_op(vi->dh, OO_IOC_EFCT_SUPERBUF_CONFIG_REFRESH, &op);
   if( rc < 0 )
-    return rc;
+    goto fail_detach;
 
   efct_ubufs_release_shrub_fds(vi, qix);
 
@@ -2251,7 +2251,7 @@ static int alloc_efct_shared_rxq(ci_netif* ni, uint32_t nic_i)
    * Sync the userspace vi's rxq_ptr state. */
   rc = efct_vi_sync_rxq(vi, qix, hw_qid);
   if( rc < 0 )
-    return rc;
+    goto fail_detach;
 
   /* Activate queue for the poll path only after both kernel and userspace
    * state is fully initialised. */
@@ -2260,10 +2260,13 @@ static int alloc_efct_shared_rxq(ci_netif* ni, uint32_t nic_i)
 
   rc = set_shrub_token(ni, nic_i, qix, shared_rxq_token);
   if( rc < 0 )
-    /* TODO: detach on failure */
-    return rc;
+    goto fail_detach;
 
   return 0;
+
+fail_detach:
+  vi->efct_rxqs.ops->detach(vi, qix);
+  return rc;
 }
 
 static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
