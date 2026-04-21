@@ -110,6 +110,11 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
    * above call to efrm_rxq_alloc is false, which implies a shared EVQ. */
   ci_assert(efrm_rxq_get_hw(rxq)->uses_shared_evq);
 
+  /* Mark the queue active now that bind has succeeded. The ef_vi path does
+   * not suffer from the multiple context sync issue that we have with onload
+   * so this can be done straight away. */
+  efrm_rxq_set_active(rxq);
+
   rs->rs_base = efrm_rxq_to_resource(rxq);
 out:
   efch_resource_put(vi_rs);
