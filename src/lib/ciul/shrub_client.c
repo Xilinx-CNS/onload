@@ -176,6 +176,18 @@ void ef_shrub_client_close(struct ef_shrub_client* client)
   ef_shrub_socket_close_socket(client->socket);
 }
 
+void ef_shrub_client_release_fds(struct ef_shrub_client* client)
+{
+  int i;
+  for( i = 0; i < EF_SHRUB_FD_COUNT; ++i ) {
+    ef_shrub_socket_close_file(client->mappings[i]);
+    client->mappings[i] = EF_SHRUB_DUMMY_SOCKET;
+  }
+  ef_shrub_socket_close_socket(client->socket);
+  client->socket = EF_SHRUB_DUMMY_SOCKET;
+  client->mappings[EF_SHRUB_MAP_SOCKET] = EF_SHRUB_DUMMY_SOCKET;
+}
+
 int ef_shrub_client_acquire_buffer(struct ef_shrub_client* client,
                                    uint32_t* buffer_id,
                                    bool* sentinel,

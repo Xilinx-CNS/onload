@@ -124,6 +124,7 @@ extern int efct_ubufs_set_shared(ef_vi* vi, int shrub_controller_id, int shrub_s
 extern int efct_ubufs_get_shared_filter_info(ef_vi* vi, unsigned* token,
                                              bool* use_interrupts);
 bool efct_ubufs_rxq_is_local(const ef_vi* vi, int ix);
+void efct_ubufs_release_shrub_fds(ef_vi* vi, int ix);
 volatile uint64_t* efct_ubufs_get_rxq_io_window(ef_vi* vi, int ix);
 void efct_ubufs_set_rxq_io_window(ef_vi* vi, int ix, volatile uint64_t* p);
 int efct_vi_find_rxq(ef_vi* vi, int qid);

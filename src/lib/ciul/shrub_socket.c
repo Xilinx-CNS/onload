@@ -38,8 +38,10 @@ int ef_shrub_socket_close_socket(uintptr_t socket)
 
 int ef_shrub_socket_close_file(uintptr_t file)
 {
-  int rc = ci_sys_close(file);
-  if( rc < 0 )
+  if( file == EF_SHRUB_NO_SOCKET || file == EF_SHRUB_DUMMY_SOCKET )
+    return 0;
+
+  if( ci_sys_close(file) < 0 )
     return -errno;
   return 0;
 }

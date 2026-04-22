@@ -2243,6 +2243,8 @@ static int alloc_efct_shared_rxq(ci_netif* ni, uint32_t nic_i)
   if( rc < 0 )
     return rc;
 
+  efct_ubufs_release_shrub_fds(vi, qix);
+
   /* Now kernel superbufs are mapped and superbuf_pkts is set in shared memory.
    * Sync the userspace vi's rxq_ptr state. */
   rc = efct_vi_sync_rxq(vi, qix, hw_qid);

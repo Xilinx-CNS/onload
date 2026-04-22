@@ -58,6 +58,12 @@ bool efct_ubufs_rxq_is_local(const ef_vi* vi, int ix)
          EF_SHRUB_NO_SOCKET;
 }
 
+void efct_ubufs_release_shrub_fds(ef_vi* vi, int ix)
+{
+  EF_VI_ASSERT(!efct_ubufs_rxq_is_local(vi, ix));
+  ef_shrub_client_release_fds(&get_ubufs(vi)->q[ix].shrub_client);
+}
+
 static void update_filled(ef_vi* vi, int ix)
 {
   ef_vi_efct_rxq_state* state = &vi->ep_state->rxq.efct_state[ix];
