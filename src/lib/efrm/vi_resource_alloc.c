@@ -242,19 +242,12 @@ efrm_vi_irq_free(struct efrm_interrupt_vector *vec)
 }
 
 
-static int efrm_interrupt_vector_acquire(struct efrm_interrupt_vector *vec,
-					 const struct cpumask *affinity)
+static void efrm_interrupt_vector_acquire(struct efrm_interrupt_vector *vec)
 {
-	int rc = 0;
+	EFRM_ASSERT(mutex_is_locked(&vec->vec_acquire_lock));
+	EFRM_ASSERT(vec->num_vis > 0);
 
-	mutex_lock(&vec->vec_acquire_lock);
-	if (vec->num_vis == 0)
-		rc = efrm_vi_irq_setup(vec, affinity);
-	if (rc == 0)
-		++vec->num_vis;
-	mutex_unlock(&vec->vec_acquire_lock);
-
-	return rc;
+	++vec->num_vis;
 }
 
 
@@ -268,43 +261,116 @@ static void efrm_interrupt_vector_release(struct efrm_interrupt_vector *vec)
 }
 
 
-static struct efrm_interrupt_vector*
-efrm_find_least_used_vector(struct efrm_nic *nic)
+static int
+efrm_share_irq(struct efrm_nic *nic, struct efrm_interrupt_vector **vec_out)
 {
 	struct efrm_interrupt_vector *current_vec = NULL;
 	struct efrm_interrupt_vector *least_used_vec = NULL;
 
+	/* We must carefully handle locks to avoid a race condition here. When
+	 * checking a candidate IRQ, we take its lock. If the candidate is not
+	 * better than our currently selected IRQ then we immediately drop its
+	 * lock. Conversely, if the candidate is better than our current best
+	 * candidate, then we drop the lock for the currently best candidate.
+	 * We will only release the lock for the final (best) candidate after
+	 * having acquired the shared vector. */
+	mutex_lock(&nic->irq_list_lock);
 	list_for_each_entry(current_vec, &nic->irq_list, link) {
-		/* The num_vis could be changing under our feet, but
-		 * it's not worth locking each vector to prevent this.
-		 */
-		if (least_used_vec == NULL ||
-		    current_vec->num_vis < least_used_vec->num_vis)
-			least_used_vec = current_vec;
-		if (current_vec->num_vis == 0)
-			break;
-	}
+		mutex_lock(&current_vec->vec_acquire_lock);
 
-	return least_used_vec;
+		if (current_vec->irq != IRQ_NOTCONNECTED &&
+		    (least_used_vec == NULL ||
+		     current_vec->num_vis < least_used_vec->num_vis)) {
+			if (least_used_vec != NULL)
+				mutex_unlock(&least_used_vec->vec_acquire_lock);
+
+			least_used_vec = current_vec;
+			/* If the vector we have found is the best we can get,
+			 * then we can stop searching for anything better. */
+			if (least_used_vec->num_vis == 1)
+				break;
+		} else {
+			mutex_unlock(&current_vec->vec_acquire_lock);
+		}
+	}
+	mutex_unlock(&nic->irq_list_lock);
+
+	if (least_used_vec == NULL)
+		return -ENOSPC;
+
+	efrm_interrupt_vector_acquire(least_used_vec);
+	mutex_unlock(&least_used_vec->vec_acquire_lock);
+	*vec_out = least_used_vec;
+
+	return 0;
 }
 
 
-static struct efrm_interrupt_vector*
-efrm_setup_free_vector(struct efrm_nic *nic, uint32_t irq, uint32_t channel)
+static int
+efrm_find_free_vector(struct efrm_nic *nic,
+		      struct efrm_interrupt_vector **vec_out)
 {
-	struct efrm_interrupt_vector *current_vec = NULL;
 	struct efrm_interrupt_vector *selected_vec = NULL;
+	struct efrm_interrupt_vector *current_vec = NULL;
 
+	/* Search for the first vector that has no IRQ. If we find one, then we
+	 * keep its lock when exiting this function and the caller must unlock
+	 * its mutex when it has finished setting it up. */
+	mutex_lock(&nic->irq_list_lock);
 	list_for_each_entry(current_vec, &nic->irq_list, link) {
+		mutex_lock(&current_vec->vec_acquire_lock);
 		if (current_vec->irq == IRQ_NOTCONNECTED) {
 			selected_vec = current_vec;
-			selected_vec->irq = irq;
-			selected_vec->channel = channel;
 			break;
 		}
+		mutex_unlock(&current_vec->vec_acquire_lock);
 	}
+	mutex_unlock(&nic->irq_list_lock);
 
-	return selected_vec;
+	if (selected_vec == NULL)
+		return -ENOSPC;
+
+	EFRM_ASSERT(mutex_is_locked(&selected_vec->vec_acquire_lock));
+	*vec_out = selected_vec;
+	return 0;
+}
+
+
+static int
+efrm_allocate_irq(struct efrm_nic *nic, const struct cpumask *affinity,
+		  struct efrm_interrupt_vector **vec_out)
+{
+	struct efrm_interrupt_vector *vec = NULL;
+	uint32_t irq, channel;
+	int rc;
+
+	rc = efhw_nic_irq_alloc(&nic->efhw_nic, &channel, &irq);
+	if( rc < 0 )
+		return rc;
+
+	rc = efrm_find_free_vector(nic, &vec);
+	if( rc < 0 )
+		goto free_irq_out;
+
+	vec->irq = irq;
+	vec->channel = channel;
+
+	rc = efrm_vi_irq_setup(vec, affinity);
+	if( rc < 0 )
+		goto release_free_vector_out;
+
+	vec->num_vis++;
+	mutex_unlock(&vec->vec_acquire_lock);
+	*vec_out = vec;
+
+	return rc;
+
+release_free_vector_out:
+	vec->irq = IRQ_NOTCONNECTED;
+	mutex_unlock(&vec->vec_acquire_lock);
+free_irq_out:
+	efhw_nic_irq_free(&nic->efhw_nic, channel, irq);
+	return rc;
 }
 
 
@@ -313,27 +379,15 @@ efrm_interrupt_vector_choose(struct efrm_nic *nic, struct efrm_vi *virs,
 			     const struct cpumask *affinity)
 {
 	struct efrm_interrupt_vector *selected_vec = NULL;
-	uint32_t irq, channel;
 	int rc;
 
-	mutex_lock(&nic->irq_list_lock);
-	rc = efhw_nic_irq_alloc(&nic->efhw_nic, &channel, &irq);
-	if (rc < 0) {
-		/* IRQ allocation failed. Find the least used vector of those
-		 * that have already been allocated.*/
-		selected_vec = efrm_find_least_used_vector(nic);
-	} else {
-		/* IRQ allocation succeeded. Find an unconnected vector and
-		 * update it with the new irq and channel values. */
-		selected_vec = efrm_setup_free_vector(nic, irq, channel);
-	}
-	mutex_unlock(&nic->irq_list_lock);
-
-	EFRM_ASSERT(selected_vec);
-
-	rc = efrm_interrupt_vector_acquire(selected_vec, affinity);
+	/* Try to allocate our own IRQ, but try sharing one if we fail */
+	rc = efrm_allocate_irq(nic, affinity, &selected_vec);
+	if (rc < 0)
+		rc = efrm_share_irq(nic, &selected_vec);
 
 	if (rc >= 0) {
+		EFRM_ASSERT(selected_vec);
 		virs->vec = selected_vec;
 		spin_lock(&selected_vec->vi_irq_lock);
 		list_add(&virs->irq_link, &selected_vec->vi_list);

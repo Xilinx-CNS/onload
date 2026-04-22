@@ -325,18 +325,19 @@ void efct_ubufs_local_attach_internal(ef_vi* vi, int ix, int qid, unsigned n_sup
   }
 
   qs->efct_state[ix].superbuf_pkts = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
-  qs->efct_active_qs |= 1 << ix;
   efct_vi_start_rxq(vi, ix, qid);
   post_buffers(vi, ix);
 }
 
-int efct_ubufs_shared_attach_internal(ef_vi* vi, int ix, int qid, void* superbuf)
+int efct_ubufs_shared_attach_internal(ef_vi* vi, int ix, int qid,
+                                      void* superbuf,
+                                      uint32_t* superbuf_pkts_out,
+                                      int* hw_qid_out)
 {
   int rc;
   struct efct_ubufs* ubufs = get_ubufs(vi);
   struct ef_shrub_client* client = &ubufs->q[ix].shrub_client;
   const struct ef_shrub_shared_metrics* metrics;
-  ef_vi_rxq_state* qs = &vi->ep_state->rxq;
 
   rc = ef_shrub_client_open(client, superbuf, ubufs->server_address, qid,
                             ubufs->shrub_max_client_bufs);
@@ -346,15 +347,8 @@ int efct_ubufs_shared_attach_internal(ef_vi* vi, int ix, int qid, void* superbuf
   }
 
   metrics = &ef_shrub_client_get_state(client)->metrics;
-  qs->efct_state[ix].superbuf_pkts = metrics->buffer_bytes / EFCT_PKT_STRIDE;
-  qs->efct_active_qs |= 1 << ix;
-
-  rc = efct_vi_sync_rxq(vi, ix, metrics->qid);
-  if ( rc < 0 ) {
-    LOG(ef_log("%s: ERROR syncing shrub_client to rxq! rc=%d", __FUNCTION__,
-               rc));
-    return rc;
-  }
+  *superbuf_pkts_out = metrics->buffer_bytes / EFCT_PKT_STRIDE;
+  *hw_qid_out = metrics->qid;
   return ix;
 }
 
@@ -456,11 +450,20 @@ static int efct_ubufs_attach(ef_vi* vi,
 
   if( shared_mode ) {
     void* superbufs = (void*)efct_superbuf_access(vi, ix, 0);
-    rc = efct_ubufs_shared_attach_internal(vi, ix, qid, superbufs);
+    uint32_t superbuf_pkts;
+    int hw_qid;
+    rc = efct_ubufs_shared_attach_internal(vi, ix, qid, superbufs,
+                                           &superbuf_pkts, &hw_qid);
     if( rc < 0 ) {
       LOGVV(ef_log("%s: efct_ubufs_shared_attach_internal %d", __FUNCTION__, rc));
       goto fail;
     }
+    /* ef_vi path: no kernel poll race, activate immediately */
+    vi->ep_state->rxq.efct_state[ix].superbuf_pkts = superbuf_pkts;
+    vi->ep_state->rxq.efct_active_qs |= 1u << ix;
+    rc = efct_vi_sync_rxq(vi, ix, hw_qid);
+    if( rc < 0 )
+      goto fail;
   }
   else {
     rc = efct_ubufs_init_rxq_buffers(vi, ix, fd, n_superbufs,
@@ -472,6 +475,8 @@ static int efct_ubufs_attach(ef_vi* vi,
     }
 
     efct_ubufs_local_attach_internal(vi, ix, qid, n_superbufs);
+    /* ef_vi path: no kernel poll race, activate immediately */
+    vi->ep_state->rxq.efct_active_qs |= 1u << ix;
   }
 
   *qid_out = qid;

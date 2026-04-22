@@ -285,6 +285,7 @@ typedef struct {
   uint32_t      max_superbufs;
   ci_user_ptr_t superbufs;
   ci_user_ptr_t current_mappings;
+  uint32_t      superbuf_pkts;
 } oo_efct_superbuf_config_refresh_t;
 
 typedef struct {

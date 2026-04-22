@@ -1986,6 +1986,7 @@ static int oo_efct_superbuf_config_refresh(ef_vi* vi, int ix)
   op.max_superbufs = CI_EFCT_MAX_SUPERBUFS;
   CI_USER_PTR_SET(op.superbufs, vi->efct_rxqs.q[ix].superbuf);
   CI_USER_PTR_SET(op.current_mappings, vi->efct_rxqs.q[ix].mappings);
+  op.superbuf_pkts = 0;  /* don't set superbuf_pkts (already set or N/A) */
   rc = oo_resource_op(vi->dh, OO_IOC_EFCT_SUPERBUF_CONFIG_REFRESH, &op);
 
   /* Map the rx buffer post register now if needed. It couldn't be done
@@ -2201,6 +2202,9 @@ static int alloc_efct_shared_rxq(ci_netif* ni, uint32_t nic_i)
   unsigned shared_rxq_token;
   bool use_interrupts;
   ef_vi* vi = ci_netif_vi(ni, nic_i);
+  uint32_t superbuf_pkts;
+  int hw_qid;
+  oo_efct_superbuf_config_refresh_t op;
 
   rc = efct_ubufs_get_shared_filter_info(vi, &shared_rxq_token,
                                          &use_interrupts);
@@ -2222,9 +2226,33 @@ static int alloc_efct_shared_rxq(ci_netif* ni, uint32_t nic_i)
   qix = rc;
 
   rc = efct_ubufs_shared_attach_internal(vi, qix, -1,
-                                         (void*)vi->efct_rxqs.q[qix].superbuf);
+                                         (void*)vi->efct_rxqs.q[qix].superbuf,
+                                         &superbuf_pkts, &hw_qid);
   if( rc < 0 )
     return rc;
+
+  /* Trigger kernel superbuf mapping via ioctl. The kernel will also set
+   * superbuf_pkts in shared memory after mapping succeeds. */
+  op.intf_i = vi->efct_rxqs.ops->user_data;
+  op.qid = qix;
+  op.max_superbufs = CI_EFCT_MAX_SUPERBUFS;
+  CI_USER_PTR_SET(op.superbufs, vi->efct_rxqs.q[qix].superbuf);
+  CI_USER_PTR_SET(op.current_mappings, vi->efct_rxqs.q[qix].mappings);
+  op.superbuf_pkts = superbuf_pkts;
+  rc = oo_resource_op(vi->dh, OO_IOC_EFCT_SUPERBUF_CONFIG_REFRESH, &op);
+  if( rc < 0 )
+    return rc;
+
+  /* Now kernel superbufs are mapped and superbuf_pkts is set in shared memory.
+   * Sync the userspace vi's rxq_ptr state. */
+  rc = efct_vi_sync_rxq(vi, qix, hw_qid);
+  if( rc < 0 )
+    return rc;
+
+  /* Activate queue for the poll path only after both kernel and userspace
+   * state is fully initialised. */
+  ci_wmb();
+  vi->ep_state->rxq.efct_active_qs |= 1u << qix;
 
   rc = set_shrub_token(ni, nic_i, qix, shared_rxq_token);
   if( rc < 0 )
@@ -2605,17 +2633,13 @@ static int restore_efct_resources(ci_netif* ni)
 {
   int rc, nic_i;
 
-  ci_netif_lock(ni);
   OO_STACK_FOR_EACH_INTF_I(ni, nic_i) {
     ef_vi* vi = ci_netif_vi(ni, nic_i);
 
     rc = efct_superbuf_config_refresh_all(vi);
-    if( rc < 0 ) {
-      ci_netif_unlock(ni);
+    if( rc < 0 )
       return rc;
-    }
   }
-  ci_netif_unlock(ni);
   return 0;
 }
 
@@ -2751,6 +2775,12 @@ static int alloc_efct_resources(ci_netif* ni)
       rc = efct_superbuf_config_refresh_all(vi);
       if( rc < 0 )
         return rc;
+
+      /* All EFCT resources for this NIC are initialized. Clear the flag
+       * that blocks other processes from attaching. wmb ensures all
+       * preceding state writes are visible before the flag is cleared. */
+      ci_wmb();
+      ci_atomic32_and(&nsn->nic_error_flags, ~CI_NETIF_NIC_ERROR_AWAITING_EFCT);
     }
   }
 
@@ -2837,7 +2867,6 @@ netif_tcp_helper_alloc_u(ef_driver_handle fd, ci_netif* ni,
                         ra.out_netif_mmap_bytes, OO_MMAP_FLAG_DEFAULT, &p);
   if( rc < 0 ) {
     LOG_E(ci_log("%s: oo_resource_mmap %d", __FUNCTION__, rc));
-    ci_netif_unlock(ni);
     return rc;
   }
 
@@ -2869,11 +2898,9 @@ netif_tcp_helper_alloc_u(ef_driver_handle fd, ci_netif* ni,
     goto fail;
   }
 
-  ci_netif_unlock(ni);
   return 0;
 
 fail:
-  ci_netif_unlock(ni);
   netif_tcp_helper_munmap(ni);
   return rc;
 }

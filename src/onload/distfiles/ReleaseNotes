@@ -59,6 +59,12 @@ The SHRUB Controller for managing shared access to X4 Express datapath
 queues is now interrupt-driven.
 
 
+X4 XDP not yet supported
+------------------------
+
+Onload does not yet support XDP with X4 NICs.
+
+
 Controlling IRQ affinity for Onload interrupts
 ----------------------------------------------
 

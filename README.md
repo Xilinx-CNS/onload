@@ -56,7 +56,7 @@ and distributions:
 * Debian 12+
 * Ubuntu LTS 22.04+
 * EL 8.6+, 9.0+, 10.0+
-* kernel.org Linux kernels 5.11 - 6.14
+* kernel.org Linux kernels 5.11 - 7.0
 
 This list differs from the list of supported operating systems in [released
 versions](#support) of OpenOnload from the AMD Solarflare software download

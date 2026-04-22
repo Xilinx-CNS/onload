@@ -26,10 +26,10 @@ skips = [ 'reject-with', ]
 
 def StripComments(line):
 	''' Return c-style comment separately. '''
-	matches = re.match('.*\/\*(.*)\*\/.*', line)
+	matches = re.match(r'.*/\*(.*)\*/.*', line)
 	if matches:
 		matches = str(matches.group(1))
-	return ( matches, re.sub('/\*.*?\*/', '', line, re.S) )
+	return ( matches, re.sub(r'/\*.*?\*/', '', line, flags=re.S) )
 
 def GenerateIptables():
 	''' Open up a connection to iptables, and generate each line from it '''

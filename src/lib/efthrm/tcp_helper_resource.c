@@ -722,6 +722,7 @@ int efab_thr_table_lookup(const char* name, struct net* netns,
   tcp_helper_resource_t *thr;
   ci_dllink *link;
   int match, rc = -ENODEV;
+  int i;
 
   ci_assert(thr_p != NULL);
   ci_assert(flags == EFAB_THR_TABLE_LOOKUP_NO_CHECK_USER ||
@@ -770,9 +771,26 @@ int efab_thr_table_lookup(const char* name, struct net* netns,
         rc = -EBUSY;
       }
       else {
-        /* Success */
-        rc = oo_thr_ref_get(thr->ref, ref_type);
-        *thr_p = thr;
+        /* This is used to spot stacks waiting for resources, so check that
+         * it's not already set for some other reason. */
+        ci_assert_nequal(rc, -EAGAIN);
+
+        /* efct resources are initialised outside the normal stack creation
+         * block, with the result that stacks become visible before it's safe
+         * to attach with another userspace client. Deal with that by asking
+         * attachers to try again later. */
+        for( i = 0; i < thr->netif.state->nic_n; ++i ) {
+          if( thr->netif.state->nic[i].nic_error_flags &
+              CI_NETIF_NIC_ERROR_AWAITING_EFCT ) {
+            rc = -EAGAIN;
+            break;
+          }
+        }
+        if( rc != -EAGAIN ) {
+          /* Success */
+          rc = oo_thr_ref_get(thr->ref, ref_type);
+          *thr_p = thr;
+        }
       }
       break;
     }
@@ -1149,9 +1167,13 @@ static int tcp_helper_rxq_alloc(tcp_helper_resource_t* trs,
       kfree(dma_addrs);
 
       efct_ubufs_local_attach_internal(vi, qix, rxq, superbufs);
+      wmb();
+      vi->ep_state->rxq.efct_active_qs |= 1u << qix;
+      efrm_rxq_set_active(trs->nic[intf_i].thn_efct_rxq[qix]);
     }
     else if (vi->nic_type.arch == EF_VI_ARCH_EFCT) {
       efct_vi_start_rxq(vi, qix, rxq);
+      efrm_rxq_set_active(trs->nic[intf_i].thn_efct_rxq[qix]);
     }
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
@@ -4865,6 +4887,15 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   }
 #endif
 
+  if( NI_OPTS(ni).multiarch_rx_datapath != EF_MULTIARCH_DATAPATH_FF ) {
+    OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
+      ci_netif_state_nic_t* nsn = &ni->state->nic[intf_i];
+      nic = efrm_client_get_nic(rs->nic[intf_i].thn_oo_nic->efrm_client);
+      if( nic->flags & NIC_FLAG_LLCT )
+        ci_atomic32_or(&nsn->nic_error_flags, CI_NETIF_NIC_ERROR_AWAITING_EFCT);
+    }
+  }
+
   /* We're about to expose this stack to other people.  so we should be
    * sufficiently initialised here that other people don't get upset.
    */
@@ -5297,7 +5328,7 @@ static void tcp_helper_reset_stack_locked(tcp_helper_resource_t* thr)
 #endif
 
       /* Remap packets before using them in RX q */
-      nsn->nic_error_flags &=~ CI_NETIF_NIC_ERROR_REMAP;
+      ci_atomic32_and(&nsn->nic_error_flags, ~CI_NETIF_NIC_ERROR_REMAP);
       for( i = 0; i < pkt_sets_n; ++i ) {
         int rc;
 
@@ -5318,7 +5349,7 @@ static void tcp_helper_reset_stack_locked(tcp_helper_resource_t* thr)
           ci_log("ERROR [%d]: failed to remap packet set %d after NIC reset",
                  thr->id, i);
           memset(hw_addrs, 0, sizeof(uint64_t) * (1 << HW_PAGES_PER_SET_S));
-          nsn->nic_error_flags |= CI_NETIF_NIC_ERROR_REMAP;
+          ci_atomic32_or(&nsn->nic_error_flags, CI_NETIF_NIC_ERROR_REMAP);
         }
 
         set_pkt_bufset_hwaddrs(ni, i, intf_i, hw_addrs);
@@ -8512,17 +8543,29 @@ int efab_tcp_helper_efct_superbuf_config_refresh(
 
   if( op->intf_i >= oo_stack_intf_max(&trs->netif) )
     return -EINVAL;
+  if( op->qid >= EF_VI_MAX_EFCT_RXQS )
+    return -EINVAL;
   vi = ci_netif_vi(&trs->netif, op->intf_i);
 
   rc = vi->efct_rxqs.ops->refresh_mappings(vi, op->qid, ubufs, umaps);
   /* "not supported" means that the buffers aren't managed by ef_vi, so
    * fall through and try to get them from efrm in that case. */
-  if( rc != -EOPNOTSUPP )
+  if( rc != -EOPNOTSUPP ) {
+    if( rc == 0 ) {
+      struct tcp_helper_nic* refresh_nic = &trs->nic[op->intf_i];
+
+      /* Set superbuf_pkts in shared memory after kernel superbufs mapped */
+      if( op->superbuf_pkts != 0 )
+        vi->ep_state->rxq.efct_state[op->qid].superbuf_pkts = op->superbuf_pkts;
+
+      if( refresh_nic->thn_efct_rxq[op->qid] )
+        efrm_rxq_set_active(refresh_nic->thn_efct_rxq[op->qid]);
+    }
     return rc;
+  }
 
   nic = &trs->nic[op->intf_i];
-  if( op->qid >= ARRAY_SIZE(nic->thn_efct_rxq) ||
-      ! nic->thn_efct_rxq[op->qid] )
+  if( ! nic->thn_efct_rxq[op->qid] )
     return -EINVAL;
   return efrm_rxq_refresh(nic->thn_efct_rxq[op->qid], ubufs, umaps,
                           op->max_superbufs);

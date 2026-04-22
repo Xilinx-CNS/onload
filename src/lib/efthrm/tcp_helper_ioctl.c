@@ -1143,13 +1143,6 @@ static DEFINE_MUTEX(ctor_mutex);
   if( rc == 0 ) {
     rc = oo_priv_set_stack(priv, trs);
 
-    /* Initially lock the stack in case there are user-allocated resources
-     * which need to be in place before other processes can attach to the
-     * stack. We lock it here, while guarded by `ctor_mutex`, and the lock
-     * must be released once it's safe to attach. */
-    if( rc == 0 )
-      rc = ci_netif_lock(&trs->netif);
-
     if( rc == 0 ) {
       priv->fd_flags = OO_FDFLAG_STACK;
       priv->sock_id = OO_SP_NULL;

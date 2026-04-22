@@ -20,6 +20,7 @@ extern int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix,
                           size_t n_hugepages,
                           struct oo_hugetlb_allocator *hugetlb_alloc,
                           struct efrm_efct_rxq **rxq_out, int* qid_out);
+extern void efrm_rxq_set_active(struct efrm_efct_rxq *rxq);
 
 /** Flush and release rxq resource. To be used with shared queues */
 extern void efrm_rxq_release(struct efrm_efct_rxq *rxq);
