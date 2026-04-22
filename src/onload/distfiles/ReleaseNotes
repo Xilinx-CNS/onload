@@ -65,6 +65,16 @@ X4 XDP not yet supported
 Onload does not yet support XDP with X4 NICs.
 
 
+X4 firmware versions
+--------------------
+
+X4 firmware version 1.3.2.105 introduced a change to the host interface. This
+version of Onload is updated to reflect that but will also operate safely
+with earlier firmware. However, Onload versions older than 9.2.0 are at risk
+for event queue overflow if used with the newer firmware. Users should upgrade
+to this Onload version when updating their X4 firmware.
+
+
 Controlling IRQ affinity for Onload interrupts
 ----------------------------------------------
 
