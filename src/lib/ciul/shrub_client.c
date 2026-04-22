@@ -130,7 +130,7 @@ int ef_shrub_client_open(struct ef_shrub_client* client,
   struct ef_shrub_shared_metrics metrics;
   struct ef_shrub_request request = {};
   memset(client, 0, sizeof(*client));
-  client->mappings[EF_SHRUB_MAP_SOCKET] = (uint64_t)-1;
+  client->mappings[EF_SHRUB_MAP_SOCKET] = EF_SHRUB_NO_SOCKET;
 
   rc = ef_shrub_socket_open(&client->socket);
   if( rc < 0 )

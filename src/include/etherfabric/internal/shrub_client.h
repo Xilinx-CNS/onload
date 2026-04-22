@@ -34,6 +34,18 @@ enum ef_shrub_client_mappings
   EF_SHRUB_MAP_COUNT
 };
 
+/* In kernel we hold a file reference, so NULL is an invalid value. However,
+ * 0 is a legitimate fd, so for userspace we use a value of -1.
+ * Shared stack users have their mappings set up by the kernel, rather than
+ * opening any of their own sockets. We define a dummy value here to indicate
+ * that the mapping is present, but the fd is not. */
+#ifdef __KERNEL__
+#define EF_SHRUB_NO_SOCKET 0
+#else
+#define EF_SHRUB_NO_SOCKET (uint64_t)-1
+#endif
+#define EF_SHRUB_DUMMY_SOCKET (uint64_t)-2
+
 /* Structure for managing a client instance */
 struct ef_shrub_client
 {

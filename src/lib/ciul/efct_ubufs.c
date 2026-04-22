@@ -54,7 +54,8 @@ static const struct efct_ubufs* const_ubufs(const ef_vi* vi)
 
 bool efct_ubufs_rxq_is_local(const ef_vi* vi, int ix)
 {
-  return const_ubufs(vi)->q[ix].shrub_client.mappings[0] == 0;
+  return const_ubufs(vi)->q[ix].shrub_client.mappings[EF_SHRUB_FD_BUFFERS] ==
+         EF_SHRUB_NO_SOCKET;
 }
 
 static void update_filled(ef_vi* vi, int ix)
@@ -663,7 +664,7 @@ static int efct_ubufs_set_shrub_max_client_bufs(ef_vi* vi,
 int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
 {
   struct efct_ubufs* ubufs;
-  int i, rc;
+  int i, j, rc;
 
   rc = efct_superbufs_reserve(vi, NULL);
   if( rc < 0 )
@@ -681,6 +682,9 @@ int efct_ubufs_init(ef_vi* vi, ef_pd* pd, ef_driver_handle pd_dh)
     ef_vi_efct_rxq_state* efct_state = efct_get_rxq_state(vi, i);
 
     rxq->rxq_id = rxq->memreg_id = efch_resource_id_none();
+    rxq->shrub_client.socket = EF_SHRUB_NO_SOCKET;
+    for( j = 0; j < EF_SHRUB_FD_COUNT; ++j )
+      rxq->shrub_client.mappings[j] = EF_SHRUB_NO_SOCKET;
     efct_rxq->live.superbuf_pkts = &efct_state->superbuf_pkts;
     efct_rxq->live.config_generation = &efct_state->config_generation;
 #ifndef __KERNEL__

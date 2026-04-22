@@ -204,6 +204,7 @@ int map_kernel_to_user(uint64_t* kernel_mappings,
                        uint64_t user_buffers)
 {
   int rc;
+  int i;
   size_t buffer_bytes, server_bytes, client_bytes;
   const struct ef_shrub_client_state* state =
     (void*)kernel_mappings[EF_SHRUB_MAP_STATE];
@@ -234,6 +235,12 @@ int map_kernel_to_user(uint64_t* kernel_mappings,
                         state->metrics.client_fifo_offset);
   if( rc < 0 )
     goto fail_client;
+
+  /* This shared stack client doesn't have any actual fds open, because we've
+   * set up its mappings for it, but we do want to mark the mapping as
+   * present, so set the fds to a recognisable dummy value. */
+  for( i = 0; i < EF_SHRUB_FD_COUNT; ++i )
+    user_mappings[i] = EF_SHRUB_DUMMY_SOCKET;
 
   user_mappings[EF_SHRUB_MAP_STATE] =
     user_mappings[EF_SHRUB_MAP_CLIENT_FIFO] + client_bytes;
