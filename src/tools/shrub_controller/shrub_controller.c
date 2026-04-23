@@ -108,6 +108,7 @@ typedef struct
   struct shrub_controller_stats controller_stats;
   int auto_close_delay;
   bool had_any_clients;
+  uint64_t sum_server_buffers;
 } shrub_controller_config;
 
 static void usage(void)
@@ -250,11 +251,14 @@ static int add_server_config(shrub_controller_config *config,
   new_shrub_config->server_started = false;
   config->interface_token++;
   config->server_config_head = new_shrub_config;
+  config->sum_server_buffers += buffer_count;
   return 0;
 }
 
-static void shrub_server_fini(shrub_if_config_t *config)
+static void shrub_server_fini(shrub_controller_config* controller_config,
+                              shrub_if_config_t *config)
 {
+  controller_config->sum_server_buffers -= config->buffer_count;
   if ( config->server_started ) {
     ef_shrub_server_close(config->shrub_server);
     ef_vi_free(&config->res.vi, config->res.dh);
@@ -273,7 +277,7 @@ static void remove_and_stop_interface(shrub_controller_config *config,
     if ( current_interface->token_id == intf_token ) {
       current_interface->ref_count--;
       if ( current_interface->ref_count <= 0 ) {
-        shrub_server_fini(current_interface);
+        shrub_server_fini(config, current_interface);
 
         if ( prev_interface != NULL )
           prev_interface->next = current_interface->next;
@@ -879,7 +883,7 @@ static void tear_down_servers(shrub_controller_config *config)
       ef_shrub_socket_close_socket(current_interface->client_fd);
 
     if ( current_interface->server_started )
-      shrub_server_fini(current_interface);
+      shrub_server_fini(config, current_interface);
 
     free(current_interface);
     current_interface = next_interface;
