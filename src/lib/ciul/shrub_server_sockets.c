@@ -74,20 +74,14 @@ fail:
   return rc;
 }
 
-int ef_shrub_server_epoll_add(struct ef_shrub_server_sockets* sockets,
-                              int fd, epoll_data_t data)
+int ef_shrub_server_epoll_add(int epoll_fd, int fd, epoll_data_t data)
 {
-  int rc;
   struct epoll_event event;
 
   event.events = EPOLLIN;
   event.data = data;
 
-  rc = epoll_ctl(sockets->epoll, EPOLL_CTL_ADD, fd, &event);
-  if( rc < 0 )
-    return -errno;
-
-  return 0;
+  return ret(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &event));
 }
 
 int ef_shrub_server_sockets_open(struct ef_shrub_server_sockets* sockets,
@@ -105,7 +99,7 @@ int ef_shrub_server_sockets_open(struct ef_shrub_server_sockets* sockets,
     goto fail_server_listen;
 
   epoll_data.ptr = NULL;
-  rc = ef_shrub_server_epoll_add(sockets, sockets->listen, epoll_data);
+  rc = ef_shrub_server_epoll_add(sockets->epoll, sockets->listen, epoll_data);
   if( rc < 0 )
     goto fail_epoll_add;
 

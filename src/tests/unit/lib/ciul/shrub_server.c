@@ -68,8 +68,7 @@ void ef_shrub_server_sockets_close(struct ef_shrub_server_sockets* sockets)
   calls->sockets_close++;
 }
 
-int ef_shrub_server_epoll_add(struct ef_shrub_server_sockets* sockets,
-                              int fd, epoll_data_t data)
+int ef_shrub_server_epoll_add(int epoll_fd, int fd, epoll_data_t data)
 {
   calls->epoll_add++;
   calls->fd = fd;

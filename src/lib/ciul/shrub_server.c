@@ -188,7 +188,7 @@ static int server_connection_opened(struct ef_shrub_server* server)
   server->pending_connections = connection;
 
   epoll_data.ptr = connection;
-  rc = ef_shrub_server_epoll_add(&server->sockets, socket, epoll_data);
+  rc = ef_shrub_server_epoll_add(server->sockets.epoll, socket, epoll_data);
   if( rc < 0 )
     server_connection_closed(server, connection);
 
