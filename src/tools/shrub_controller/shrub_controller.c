@@ -58,8 +58,9 @@ static volatile sig_atomic_t call_shrub_dump = 0;
 
 #define AUTO_CLOSE_DELAY_NEVER -1
 
-#define PERIODIC_POLL_TIMEOUT_DEFAULT 5
-#define PERIODIC_POLL_TIMEOUT_MIN 1
+#define MS_TO_NS (1000 * 1000)
+#define PERIODIC_POLL_TIMEOUT_DEFAULT (5ll * MS_TO_NS)
+#define PERIODIC_POLL_TIMEOUT_MIN 1ll
 
 static char* shrub_log_prefix;
 
@@ -114,6 +115,7 @@ typedef struct
   bool had_any_clients;
   uint64_t sum_server_buffers;
   int wakeup_epoll_fd;
+  long long periodic_poll_timeout_ns;
 } shrub_controller_config;
 
 static void usage(void)
@@ -129,6 +131,7 @@ static void usage(void)
   fprintf(stderr, "  -D       Daemonise on startup\n");
   fprintf(stderr, "  -K       Log to kmsg\n");
   fprintf(stderr, "  -C <ms>  Close after <ms> if all clients disconnect\n");
+  fprintf(stderr, "  -p <ns>  Ensure a poll happens every <ns> in interrupt-driven mode\n");
 }
 
 static bool is_hwport_llct(shrub_controller_config *config, ci_hwport_id_t hwport)
@@ -881,13 +884,17 @@ static bool wait_for_wakeup_events(shrub_controller_config *config,
   return rc > 0;
 }
 
-static int get_interrupt_timeout(shrub_controller_config *config)
+static long long get_interrupt_timeout(shrub_controller_config *config)
 {
-  int timeout = PERIODIC_POLL_TIMEOUT_DEFAULT;
+  long long timeout = config->periodic_poll_timeout_ns;
 
-  if ( config->auto_close_delay != AUTO_CLOSE_DELAY_NEVER )
-    timeout = (config->auto_close_delay < timeout)
-            ? config->auto_close_delay : timeout;
+  /* If an auto-close delay is set, then to ensure we respect that value we
+   * must reduce our waiting timeout to at most this value. Otherwise the
+   * shrub controller may remain open for longer than requested. */
+  if ( config->auto_close_delay != AUTO_CLOSE_DELAY_NEVER ) {
+    long long auto_close_delay = config->auto_close_delay * MS_TO_NS;
+    timeout = (auto_close_delay < timeout) ? auto_close_delay : timeout;
+  }
 
   timeout = (timeout < PERIODIC_POLL_TIMEOUT_MIN)
           ? PERIODIC_POLL_TIMEOUT_MIN : timeout;
@@ -897,7 +904,9 @@ static int get_interrupt_timeout(shrub_controller_config *config)
 
 static void reactor_loop_interrupt(shrub_controller_config *config)
 {
-  const int timeout = get_interrupt_timeout(config);
+  int timeout = get_interrupt_timeout(config) / MS_TO_NS;
+  /* Cap the epoll timeout to 1ms to avoid 0ms or infinite spinning */
+  timeout = (timeout < 1) ? 1 : timeout;
 
   prime_server_vis(config);
 
@@ -1207,6 +1216,7 @@ int main(int argc, char *argv[])
   config.interface_token = 1;
   config.controller_id = 0;
   config.auto_close_delay = AUTO_CLOSE_DELAY_NEVER;
+  config.periodic_poll_timeout_ns = PERIODIC_POLL_TIMEOUT_DEFAULT;
 
   /* Set sutable prefix */
   ci_server_set_log_prefix(&shrub_log_prefix, SERVER_BIN);
@@ -1221,7 +1231,7 @@ int main(int argc, char *argv[])
     }
   }
 
-  while ( (option = getopt(argc, argv, "dic:DKC:")) != -1 ) {
+  while ( (option = getopt(argc, argv, "dic:DKC:p:")) != -1 ) {
     switch (option)
     {
     case 'd':
@@ -1249,6 +1259,15 @@ int main(int argc, char *argv[])
       break;
     case 'C':
       config.auto_close_delay = atoi(optarg);
+      break;
+    case 'p':
+      config.periodic_poll_timeout_ns = atoll(optarg);
+      if( config.periodic_poll_timeout_ns < PERIODIC_POLL_TIMEOUT_MIN ) {
+        ci_log("Error: periodic poll timeout must be at least %lldns",
+               PERIODIC_POLL_TIMEOUT_MIN);
+        usage();
+        return EXIT_FAILURE;
+      }
       break;
     default:
       usage();
