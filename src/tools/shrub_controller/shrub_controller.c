@@ -44,6 +44,8 @@
 /* Shrub controller lifecycle invariants
  * - exclusive flock(2) held on /run/onload/controller-N to manage uniqueness
  * - connect(2) to .../shrub_config to determine readiness
+ * - CWD is controller directory, once created, our natural home even as daemon
+ * It is the caller's responsibility to close any unnecessary fds as desired
  */
 
 int (*ci_sys_ioctl)(int, long unsigned int, ...) =
@@ -1314,12 +1316,6 @@ int main(int argc, char *argv[])
     }
   }
 
-  if( daemonise )
-    ci_server_daemonise(&shrub_log_prefix,
-                        SERVER_NAME, SERVER_BIN,
-                        CI_DAEMON_CHDIR_ROOT | CI_DAEMON_CLOSE_FDS |
-                        (log_to_kern ? CI_DAEMON_LOG_TO_KERN : 0));
-
   controller_init_signals();
   rc = controller_init_paths(&config);
   if ( rc )
@@ -1342,6 +1338,13 @@ int main(int argc, char *argv[])
   rc = create_interrupt_state(&config);
   if( rc )
     goto fail_create_interrupt_state;
+
+  /* Satisfy readiness invariant by daemonising only once config created. */
+  if( daemonise )
+    ci_server_daemonise(&shrub_log_prefix,
+                        SERVER_NAME, SERVER_BIN,
+                        CI_DAEMON_CLOSE_FDS |
+                        (log_to_kern ? CI_DAEMON_LOG_TO_KERN : 0));
 
   rc = controller_cplane_connect(&config);
   if ( rc )
