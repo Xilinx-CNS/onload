@@ -76,6 +76,11 @@ int ef_shrub_server_epoll_add(int epoll_fd, int fd, epoll_data_t data)
   return 0;
 }
 
+int ef_shrub_server_epoll_del(int epoll_fd, int fd)
+{
+  return 0;
+}
+
 int ef_shrub_server_epoll_wait(struct ef_shrub_server_sockets* sockets,
                                struct epoll_event* event)
 {

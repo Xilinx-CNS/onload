@@ -84,6 +84,11 @@ int ef_shrub_server_epoll_add(int epoll_fd, int fd, epoll_data_t data)
   return ret(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &event));
 }
 
+int ef_shrub_server_epoll_del(int epoll_fd, int fd)
+{
+  return ret(epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, NULL));
+}
+
 int ef_shrub_server_sockets_open(struct ef_shrub_server_sockets* sockets,
                                  const char* server_addr)
 {
