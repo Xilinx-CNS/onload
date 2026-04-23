@@ -11,6 +11,7 @@
 #include <ci/efhw/efct.h>
 #include <ci/efhw/ef10ct.h>
 #include <ci/efhw/efct_filters.h>
+#include <lib/efhw/tph.h>
 
 #include "linux_resource_internal.h"
 #include "debugfs.h"
@@ -145,6 +146,21 @@ efct_debugfs_read_ef10ct_rxq_state(struct seq_file *file,
   else {
     /* non-shrub */
     seq_printf(file, "  n_buffer_pages: %zd\n", rxq->n_buffer_pages);
+  }
+
+  if ( rxq->steering_tag == EFHW_TPH_STEERING_TAG_UNUSED ) {
+    seq_printf(file, "  steering_tag: Unused\n");
+  }
+  else if ( rxq->steering_tag == EFHW_TPH_STEERING_TAG_TURNED_OFF ) {
+    seq_printf(file, "  steering_tag: TPH steering turned off\n");
+  }
+  else if ( rxq->steering_tag < 0 ) {
+    seq_printf(file, "  steering_tag: Error %d\n", rxq->steering_tag);
+  }
+  else if ( rxq->steering_tag == 0 ) {
+    seq_printf(file, "  steering_tag: No-ST mode\n");  
+  } else {
+    seq_printf(file, "  steering_tag: %d\n", rxq->steering_tag);
   }
 }
 

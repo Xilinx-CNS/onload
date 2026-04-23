@@ -32,8 +32,14 @@ efhw_populate_set_vi_tlp_processing_mcdi_cmd(ci_dword_t *buf,
                                              uint instance,
                                              struct tlp_state *tlp);
 
+/* Special values for steering tag that only have meaning internally
+ * but allow us to track what has actually happened
+  */
+#define EFHW_TPH_STEERING_TAG_UNUSED        (INT_MIN)
+#define EFHW_TPH_STEERING_TAG_TURNED_OFF    (INT_MIN + 1)
+
 int
 efhw_set_tph_steering(struct efhw_nic *nic, uint instance, int set,
-                      int tag_mode);
+                      int tag_mode, uint16_t *tag_used);
 
 #endif /* EFHW_TPH_H */

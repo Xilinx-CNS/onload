@@ -20,6 +20,7 @@
 #include <ci/efhw/efct_wakeup.h>
 #include <ci/efhw/ef10ct.h>
 #include <ci/efhw/mc_driver_pcol.h>
+#include <lib/efhw/tph.h>
 
 #include <linux/ethtool.h>
 #include <linux/mman.h>
@@ -1333,6 +1334,32 @@ static int ef10ct_shared_rxq_alloc(struct efhw_nic *nic)
   return rxq_num;
 }
 
+
+/* Set the TPH steering tag on the NIC for this rxq, and record the value used 
+ * in rxq state */
+static int
+ef10ct_set_tph_steering(struct efhw_nic *nic, int rxq_handle, int rxq_num,
+                        int flag_tph_tag_mode, int flag_enable_tph)
+{
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  uint16_t tag_used;
+  int rc;
+  rc = efhw_set_tph_steering(nic, rxq_handle, flag_enable_tph,
+                             flag_tph_tag_mode, &tag_used);
+ /* Store tag (or EFHW_STEERING_TAG_TURNED_OFF if no tag set, or error if 
+  * problem) for debugfs */
+  if (rc < 0) {
+    ef10ct->rxq[rxq_num].steering_tag = (int32_t)rc;
+  } else {
+    if (flag_enable_tph)
+      ef10ct->rxq[rxq_num].steering_tag = (int32_t)tag_used;
+    else 
+      ef10ct->rxq[rxq_num].steering_tag = EFHW_TPH_STEERING_TAG_TURNED_OFF;
+  }
+  return rc;
+}
+
+
 static int
 ef10ct_shared_rxq_bind(struct efhw_nic* nic,
                        struct efhw_shared_bind_params *params)
@@ -1402,7 +1429,8 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
   }
 
   /* Needs to be done before the queue is active */
-  efhw_set_tph_steering(nic, rxq_handle, flag_enable_tph, flag_tph_tag_mode);
+  rc = ef10ct_set_tph_steering(nic, rxq_handle, rxq_num,
+                               flag_tph_tag_mode, flag_enable_tph);
 
   if( params->hugetlb_alloc != NULL && params->n_hugepages != 0 ) {
     int i;
