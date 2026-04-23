@@ -917,15 +917,48 @@ static void reactor_loop_interrupt(shrub_controller_config *config)
       (config->sum_server_buffers > 0) ? config->sum_server_buffers : 16;
     int reactor_steps_per_wakeup = max_reactor_steps_per_wakeup;
     bool did_work = true;
+    bool events_ready;
 
     /* Wait until any of our FDs report that there's something interesting to
      * do, then try completing work for a bounded number of iterations or
      * until we run out of work. */
-    wait_for_wakeup_events(config, timeout);
+    events_ready = wait_for_wakeup_events(config, timeout);
     while ( reactor_steps_per_wakeup-- > 0 && did_work && is_running )
       did_work = reactor_loop_step(config);
 
     prime_server_vis(config);
+
+    /* We currently don't get woken up when clients write to their FIFO when
+     * freeing a buffer. This is especially problematic where one client is
+     * slightly behind on freeing buffers as the above loop would only bring
+     * them up-to-date after roughly (timeout * client_bufs / remaining_bufs)ms
+     * which is rather punishing.
+     * To work around this, we try to see if we've done any work after being
+     * woken due to timing out, then spin for a short while (~1ms) to do our
+     * best to let such a client catch up. If at any point we think "normal
+     * service" might resume (i.e., buffers are being filled and other clients
+     * are doing work) then we break back out into our usual workflow. */
+    if ( reactor_steps_per_wakeup < max_reactor_steps_per_wakeup - 1 &&
+         ! events_ready && ! wait_for_wakeup_events(config, 0) &&
+         is_running ) {
+      struct timespec start, now;
+
+      clock_gettime(CLOCK_MONOTONIC, &start);
+      now = start;
+
+      while ( timespec_difference_ms(now, start) < 1 &&
+              ! wait_for_wakeup_events(config, 0) &&
+              reactor_steps_per_wakeup > 0 &&
+              is_running ) {
+        /* We need to give the client some time to see their new buffer(s),
+         * process them, and be ready to free them. It's also slightly
+         * friendlier to deschedule ourselves briefly. */
+        usleep(1);
+        did_work = reactor_loop_step(config);
+        reactor_steps_per_wakeup -= (int)did_work;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+      }
+    }
   }
 }
 
