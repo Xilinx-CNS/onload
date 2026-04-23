@@ -3,6 +3,7 @@
 
 #include "ef_vi_internal.h"
 
+#include <etherfabric/vi.h>
 #include <etherfabric/internal/shrub_server.h>
 #include <etherfabric/internal/shrub_shared.h>
 
@@ -11,6 +12,10 @@
 #include "shrub_queue.h"
 #include "logging.h"
 #include "driver_access.h"
+
+struct ef_shrub_server_stats {
+  uint64_t failed_primes;
+};
 
 struct ef_shrub_server {
   struct ef_shrub_server_sockets sockets;
@@ -30,6 +35,7 @@ struct ef_shrub_server {
   struct ef_shrub_connection* closed_connections;
   struct ef_shrub_connection* pending_connections;
   struct ef_shrub_queue queues[EF_VI_MAX_EFCT_RXQS];
+  struct ef_shrub_server_stats stats;
 };
 
 static size_t fifo_size(struct ef_shrub_server* server)
@@ -98,6 +104,21 @@ static void ef_shrub_server_wakeup_set_del(struct ef_shrub_server* server,
   if( rc < 0 )
     ef_log("Warning: failed to remove server VI from wakeup set: %d (%s)",
            rc, strerror(-rc));
+}
+
+void ef_shrub_server_prime(struct ef_shrub_server* server)
+{
+  ef_vi* vi;
+  int rc;
+
+  if( ! server || ! server->use_interrupts ||
+      server->n_wakeup_registered <= 0 )
+    return;
+
+  vi = server->vi;
+  rc = ef_vi_prime(vi, vi->dh, ef_eventq_current(vi));
+  if( rc < 0 )
+    server->stats.failed_primes++;
 }
 
 static int unix_server_poll(struct ef_shrub_server* server)
@@ -480,6 +501,8 @@ void ef_shrub_server_dump_to_fd(struct ef_shrub_server* server, int fd,
                   server->use_interrupts ? "enabled" : "disabled");
   shrub_log_to_fd(fd, buf, buflen, "  Registered wakeup count: %lu\n",
                   server->n_wakeup_registered);
+  shrub_log_to_fd(fd, buf, buflen, "  VI prime failures: %lu\n",
+                  server->stats.failed_primes);
 
   for( i = 0; i < sizeof(server->queues) / sizeof(server->queues[0]); i++ )
     if( server->queues[i].fifo_size )

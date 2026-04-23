@@ -58,6 +58,9 @@ static volatile sig_atomic_t call_shrub_dump = 0;
 
 #define AUTO_CLOSE_DELAY_NEVER -1
 
+#define PERIODIC_POLL_TIMEOUT_DEFAULT 5
+#define PERIODIC_POLL_TIMEOUT_MIN 1
+
 static char* shrub_log_prefix;
 
 struct shrub_controller_stats
@@ -66,6 +69,7 @@ struct shrub_controller_stats
   uint64_t controller_response_failures;
   uint64_t controller_incompatible_clients;
   uint64_t controller_failed_to_neg_client;
+  uint64_t epoll_failures;
 };
 
 struct shrub_controller_vi
@@ -397,6 +401,8 @@ static void shrub_dump_stats_to_fd(int fd, shrub_controller_config *config,
                   config->controller_stats.controller_response_failures);
   shrub_log_to_fd(fd, buf, buflen, "  incompatible clients detected: %lu\n",
                   config->controller_stats.controller_incompatible_clients);
+  shrub_log_to_fd(fd, buf, buflen, "  epoll failures: %lu\n",
+                  config->controller_stats.epoll_failures);
 }
 
 static void shrub_dump_server_to_fd(int fd, shrub_if_config_t *server_config,
@@ -767,6 +773,13 @@ fail_out:
   return rc;
 }
 
+static void prime_server_vis(shrub_controller_config *config)
+{
+  shrub_if_config_t *intf;
+  for( intf = config->server_config_head; intf != NULL; intf = intf->next )
+    ef_shrub_server_prime(intf->shrub_server);
+}
+
 static int poll_shrub_servers(shrub_controller_config *config)
 {
   shrub_if_config_t *current_interface = config->server_config_head;
@@ -855,6 +868,56 @@ static bool reactor_loop_step(shrub_controller_config *config)
   handle_controller_auto_close(config);
 
   return n_events > 0;
+}
+
+static bool wait_for_wakeup_events(shrub_controller_config *config,
+                                   int timeout)
+{
+  struct epoll_event ev;
+  int rc;
+  rc = epoll_wait(config->wakeup_epoll_fd, &ev, 1, timeout);
+  if ( rc < 0 && errno != EINTR )
+    config->controller_stats.epoll_failures++;
+  return rc > 0;
+}
+
+static int get_interrupt_timeout(shrub_controller_config *config)
+{
+  int timeout = PERIODIC_POLL_TIMEOUT_DEFAULT;
+
+  if ( config->auto_close_delay != AUTO_CLOSE_DELAY_NEVER )
+    timeout = (config->auto_close_delay < timeout)
+            ? config->auto_close_delay : timeout;
+
+  timeout = (timeout < PERIODIC_POLL_TIMEOUT_MIN)
+          ? PERIODIC_POLL_TIMEOUT_MIN : timeout;
+
+  return timeout;
+}
+
+static void reactor_loop_interrupt(shrub_controller_config *config)
+{
+  const int timeout = get_interrupt_timeout(config);
+
+  prime_server_vis(config);
+
+  while ( is_running ) {
+    /* If we have no servers, then make sure we can actually do some work for
+     * an arbitrary number of steps. */
+    const int max_reactor_steps_per_wakeup =
+      (config->sum_server_buffers > 0) ? config->sum_server_buffers : 16;
+    int reactor_steps_per_wakeup = max_reactor_steps_per_wakeup;
+    bool did_work = true;
+
+    /* Wait until any of our FDs report that there's something interesting to
+     * do, then try completing work for a bounded number of iterations or
+     * until we run out of work. */
+    wait_for_wakeup_events(config, timeout);
+    while ( reactor_steps_per_wakeup-- > 0 && did_work && is_running )
+      did_work = reactor_loop_step(config);
+
+    prime_server_vis(config);
+  }
 }
 
 static void reactor_loop_spin(shrub_controller_config *config)
@@ -1226,7 +1289,10 @@ int main(int argc, char *argv[])
   if ( rc )
     goto fail_servers_init;
 
-  reactor_loop_spin(&config);
+  if( config.use_interrupts )
+    reactor_loop_interrupt(&config);
+  else
+    reactor_loop_spin(&config);
 
   tear_down_servers(&config);
 fail_servers_init:
