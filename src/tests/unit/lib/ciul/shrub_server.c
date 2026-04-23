@@ -26,6 +26,7 @@ static const unsigned shared_rxq_token = 32435768; /* arbitrary */
 static const bool shrub_use_interrupts = false;
 
 static struct epoll_event* epoll_event;
+static int wakeup_epoll_fd = 7; /* arbitrary */
 static int last_accept_fd = 42; /* arbitrary */
 static uint64_t last_qid = 413732132; /* arbitrary */
 static epoll_data_t last_epoll_data;
@@ -279,8 +280,10 @@ static void init_test(void)
 static void open_server(void)
 {
   ef_shrub_server_open(vi, &server, server_addr, buffer_bytes, buffer_count,
-                       shrub_use_interrupts);
+                       shrub_use_interrupts, &wakeup_epoll_fd);
   STATE_CHECK(calls, resource_op, 1);
+  if( shrub_use_interrupts )
+    STATE_CHECK(calls, epoll_add, 1);
   STATE_REVERT(calls);
 }
 
@@ -363,11 +366,14 @@ static void test_shrub_server_open(void)
   init_test();
 
   rc = ef_shrub_server_open(vi, &server, server_addr, buffer_bytes,
-                            buffer_count, shrub_use_interrupts);
+                            buffer_count, shrub_use_interrupts,
+                            &wakeup_epoll_fd);
   CHECK(rc, ==, 0);
   STATE_CHECK(calls, sockets_open, 1);
   STATE_CHECK(calls, remove, 1);
   STATE_CHECK(calls, resource_op, 1);
+  if( shrub_use_interrupts )
+    STATE_CHECK(calls, epoll_add, 1);
   STATE_CHECK_UNCHANGED(calls);
 
   ef_shrub_server_close(server);

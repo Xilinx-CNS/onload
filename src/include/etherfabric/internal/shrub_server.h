@@ -39,7 +39,8 @@ int ef_shrub_server_open(struct ef_vi* vi,
                          const char* server_addr,
                          size_t buffer_bytes,
                          size_t buffer_count,
-                         bool use_irqs);
+                         bool use_irqs,
+                         const int* controller_wakeup_fd);
 
 /* Shut down the server and destroy the opaque structure. This will close
  * all client connections, although shared buffers and other resources may

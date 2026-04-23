@@ -334,7 +334,8 @@ static int shrub_server_init(shrub_controller_config *config,
   rc = ef_shrub_server_open(&res->vi, &interface_config->shrub_server,
                             server_path, DEFAULT_BUFFER_SIZE,
                             interface_config->buffer_count,
-                            config->use_interrupts);
+                            config->use_interrupts,
+                            &config->wakeup_epoll_fd);
   if ( rc != 0 ) {
     ci_log("Error: shrub_controller failed to call server open");
     goto fail_server_alloc;
