@@ -109,6 +109,7 @@ typedef struct
   int auto_close_delay;
   bool had_any_clients;
   uint64_t sum_server_buffers;
+  int wakeup_epoll_fd;
 } shrub_controller_config;
 
 static void usage(void)
@@ -723,6 +724,48 @@ static int create_config_socket(shrub_controller_config *config)
   return 0;
 }
 
+static void cleanup_interrupt_state(shrub_controller_config *config)
+{
+  if ( ! config->use_interrupts )
+    return;
+
+  close(config->wakeup_epoll_fd);
+}
+
+static int create_interrupt_state(shrub_controller_config *config)
+{
+  struct epoll_event ev = { 0 };
+  int rc;
+
+  if ( ! config->use_interrupts )
+    return 0;
+
+  rc = epoll_create1(0);
+  if ( rc == -1 ) {
+    rc = -errno;
+    ci_log("Error: failed to create epoll fd for interrupt state: %d (%s)",
+           rc, strerror(-rc));
+    goto fail_out;
+  }
+  config->wakeup_epoll_fd = rc;
+
+  ev.events = EPOLLIN;
+  rc = epoll_ctl(config->wakeup_epoll_fd, EPOLL_CTL_ADD, config->epoll_fd, &ev);
+  if ( rc == -1 ) {
+    rc = -errno;
+    ci_log("Error: failed to add config epoll fd to wakeup epoll set: %d (%s)",
+           rc, strerror(-rc));
+    goto cleanup_socket_out;
+  }
+
+  return 0;
+
+cleanup_socket_out:
+  close(config->wakeup_epoll_fd);
+fail_out:
+  return rc;
+}
+
 static int poll_shrub_servers(shrub_controller_config *config)
 {
   shrub_if_config_t *current_interface = config->server_config_head;
@@ -1170,6 +1213,10 @@ int main(int argc, char *argv[])
   if ( rc )
     goto fail_create_config_socket;
 
+  rc = create_interrupt_state(&config);
+  if( rc )
+    goto fail_create_interrupt_state;
+
   rc = controller_cplane_connect(&config);
   if ( rc )
     goto fail_cplane_connect;
@@ -1184,6 +1231,8 @@ int main(int argc, char *argv[])
 fail_servers_init:
   controller_cplane_disconnect(&config);
 fail_cplane_connect:
+  cleanup_interrupt_state(&config);
+fail_create_interrupt_state:
   cleanup_config_socket(&config);
 fail_create_config_socket:
   controller_config_socket_lock_destroy(&config);
