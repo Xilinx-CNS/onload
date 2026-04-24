@@ -2752,6 +2752,9 @@ static void init_resource_alloc(ci_resource_onload_alloc_t* ra,
 static int alloc_efct_resources(ci_netif* ni)
 {
   int rc, nic_i;
+  unsigned efct_interfaces = 0;
+  unsigned tmp;
+  bool need_prime = false;
 
   OO_STACK_FOR_EACH_INTF_I(ni, nic_i) {
     ci_netif_state_nic_t* nsn = &(ni->state->nic[nic_i]);
@@ -2778,12 +2781,32 @@ static int alloc_efct_resources(ci_netif* ni)
       if( rc < 0 )
         return rc;
 
-      /* All EFCT resources for this NIC are initialized. Clear the flag
-       * that blocks other processes from attaching. wmb ensures all
-       * preceding state writes are visible before the flag is cleared. */
-      ci_wmb();
-      ci_atomic32_and(&nsn->nic_error_flags, ~CI_NETIF_NIC_ERROR_AWAITING_EFCT);
+      efct_interfaces |= 1u << nic_i;
     }
+  }
+
+  if( efct_interfaces ) {
+    /* All EFCT resources for this NIC are initialised. We missed the
+     * prime on init that would normally be done, so need to do that now.
+     * Because this requires a syscall for NICs that require in kernel prime we do
+     * all the attaches first then trigger the prime once everything's set up. */
+    ci_netif_lock(ni);
+
+    OO_FOR_EACH_BIT(efct_interfaces, tmp, nic_i) {
+      ci_netif_state_nic_t* nsn = &(ni->state->nic[nic_i]);
+      ci_wmb();
+      ci_atomic32_and(&nsn->nic_error_flags,
+                      ~CI_NETIF_NIC_ERROR_AWAITING_EFCT);
+      if( ci_bit_test_and_clear(&ni->state->evq_primed, nic_i) ) {
+        ci_bit_set(&ni->state->evq_prime_deferred, nic_i);
+        need_prime = true;
+      }
+    }
+
+    if( need_prime )
+      ef_eplock_holder_set_single_flag(&ni->state->lock,
+                                       CI_EPLOCK_NETIF_NEED_PRIME);
+    ci_netif_unlock(ni);
   }
 
   return 0;
