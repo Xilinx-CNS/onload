@@ -54,9 +54,9 @@ This source tree is expected to be compatible with the following Linux kernels
 and distributions:
 
 * Debian 12+
-* Ubuntu LTS 22.04+
-* EL 8.6+, 9.0+, 10.0+
-* kernel.org Linux kernels 5.11 - 7.0
+* Ubuntu LTS 24.04+
+* EL 9.0+, 10.0+
+* kernel.org Linux kernels 6.1 - 7.0
 
 This list differs from the list of supported operating systems in [released
 versions](#support) of OpenOnload from the AMD Solarflare software download

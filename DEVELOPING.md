@@ -13,7 +13,6 @@ Introduction
 Build requirements
 ============
  * binutils
- * gettext
  * gawk
  * gcc
  * sed
@@ -35,8 +34,11 @@ Build requirements
  Note that these dependencies are given for building on Redhat distributions, and
  package names may differ on other distributions.
 
- Additionally, building RPMs requires `python3-devel` and
- automatic versioning by `onload_mkdist` requires `git`.
+ See RPM and Debian package definitions for their respective build dependencies.
+ Automatic versioning by `onload_mkdist` requires `git`.
+
+ Code may use features of C11 subject to the coding standard and should
+ build with gcc-11, as available in EL9.
 
 
 Distributing as tarball

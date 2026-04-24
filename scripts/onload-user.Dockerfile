@@ -74,7 +74,6 @@ RUN microdnf install -y \
   gawk \
   gcc \
   gcc-c++ \
-  gettext \
   glibc-common \
   gzip \
   libpcap-devel \
