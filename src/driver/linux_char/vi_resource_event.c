@@ -266,6 +266,8 @@ int efch_vi_prime(ci_private_char_t* priv, efch_resource_id_t vi_rs_id,
 int efch_vi_prime_qs(ci_private_char_t* priv,
                      const ci_resource_prime_qs_op_t* args)
 {
+  bool any_failed = false;
+  unsigned i;
   int rc;
 
   if( args->n_rxqs > CI_ARRAY_SIZE(args->rxq_current) || args->n_txqs > 1 )
@@ -277,29 +279,32 @@ int efch_vi_prime_qs(ci_private_char_t* priv,
 
   /* EFCT TODO: txqs */
 
-  if( efab_vi_prepare_request_wakeup(priv->cpcp_vi, priv) ) {
-    unsigned i;
-    for( i = 0; i < args->n_rxqs; ++i ) {
-      efch_resource_id_t rs_id = args->rxq_current[i].rxq_id;
-      efch_resource_t* rs;
-      rc = efch_resource_id_lookup(rs_id, &priv->rt, &rs);
-      if( rc < 0 )
-        break;
-      if( rs->rs_base->rs_type != EFRM_RESOURCE_EFCT_RXQ ) {
-        efch_resource_put(rs);
-        rc = -EINVAL;
-        /* It doesn't really matter if we abort half way after priming some
-         * queues and not others: it only means that some spurious wakes will
-         * happen */
-        break;
-      }
-      efrm_rxq_request_wakeup(efrm_rxq_from_resource(rs->rs_base),
-                              args->rxq_current[i].sbseq,
-                              args->rxq_current[i].pktix, true);
-      efch_resource_put(rs);
+  /* This sets us up to request a wakeup, but will return whether we have a
+   * pending wakeup request or not. This doesn't make sense to check as we
+   * prime on rxq-level granularity instead of evq-level, so we just ignore
+   * the return value of this function. */
+  efab_vi_prepare_request_wakeup(priv->cpcp_vi, priv);
+
+  for( i = 0; i < args->n_rxqs; ++i ) {
+    efch_resource_id_t rs_id = args->rxq_current[i].rxq_id;
+    efch_resource_t* rs;
+    rc = efch_resource_id_lookup(rs_id, &priv->rt, &rs);
+    if( rc < 0 ) {
+      any_failed = true;
+      continue;
     }
+    if( rs->rs_base->rs_type != EFRM_RESOURCE_EFCT_RXQ ) {
+      any_failed = true;
+      efch_resource_put(rs);
+      continue;
+    }
+    efrm_rxq_request_wakeup(efrm_rxq_from_resource(rs->rs_base),
+                            args->rxq_current[i].sbseq,
+                            args->rxq_current[i].pktix, true);
+    efch_resource_put(rs);
   }
-  return rc;
+
+  return any_failed ? -EINVAL : 0;
 }
 
 

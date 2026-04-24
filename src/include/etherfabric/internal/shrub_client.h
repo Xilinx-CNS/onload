@@ -98,6 +98,10 @@ int ef_shrub_client_open(struct ef_shrub_client* client,
  */
 void ef_shrub_client_close(struct ef_shrub_client* client);
 
+/* Release userspace file descriptors after the kernel has taken its own
+ * references via fget(). The mmap'd memory regions remain valid. */
+void ef_shrub_client_release_fds(struct ef_shrub_client* client);
+
 /* Acquire the next buffer to be read.
  *
  * client:    connection providing the buffer

@@ -1794,7 +1794,7 @@ int efct_vi_get_pkt_wakeup_params(ef_vi* vi, int qix, unsigned* sbseq,
 int efct_vi_prime(ef_vi* vi, ef_driver_handle dh)
 {
   ci_resource_prime_qs_op_t  op;
-  int i;
+  int i, n_rxqs;
 
   /* The loop below assumes that all rxqs will fit in the fixed array in
    * the operations's arguments. If that assumption no longer holds, then
@@ -1803,17 +1803,19 @@ int efct_vi_prime(ef_vi* vi, ef_driver_handle dh)
   EF_VI_BUILD_ASSERT(CI_ARRAY_SIZE(op.rxq_current) >= EF_VI_MAX_EFCT_RXQS);
 
   op.crp_id = efch_make_resource_id(vi->vi_resource_id);
+  n_rxqs = 0;
   for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
-    op.rxq_current[i].rxq_id =
+    op.rxq_current[n_rxqs].rxq_id =
       vi->efct_rxqs.ops->get_rxq_resource_id(vi, i);
-    if( efch_resource_id_is_none(op.rxq_current[i].rxq_id) )
-      break;
+    if( efch_resource_id_is_none(op.rxq_current[n_rxqs].rxq_id) )
+      continue;
     if( vi->efct_rxqs.ops->get_wakeup_params(vi, i,
-                                             &op.rxq_current[i].sbseq,
-                                             &op.rxq_current[i].pktix) < 0 )
-      break;
+                                             &op.rxq_current[n_rxqs].sbseq,
+                                             &op.rxq_current[n_rxqs].pktix) < 0 )
+      continue;
+    n_rxqs++;
   }
-  op.n_rxqs = i;
+  op.n_rxqs = n_rxqs;
   op.n_txqs = vi->vi_txq.mask != 0 ? 1 : 0;
 
   /* If we have no queues, we have nothing to wait for and will never wake */

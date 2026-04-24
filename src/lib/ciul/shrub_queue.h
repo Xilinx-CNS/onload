@@ -40,7 +40,7 @@ int ef_shrub_queue_open(struct ef_shrub_queue* queue,
                         bool use_interrupts);
 
 void ef_shrub_queue_close(struct ef_shrub_queue* queue);
-void ef_shrub_queue_poll(struct ef_shrub_queue* queue);
+int ef_shrub_queue_poll(struct ef_shrub_queue* queue);
 
 void ef_shrub_queue_attached(struct ef_shrub_queue* queue,
                              struct ef_shrub_connection* connection);

@@ -26,6 +26,7 @@ static const unsigned shared_rxq_token = 32435768; /* arbitrary */
 static const bool shrub_use_interrupts = false;
 
 static struct epoll_event* epoll_event;
+static int wakeup_epoll_fd = 7; /* arbitrary */
 static int last_accept_fd = 42; /* arbitrary */
 static uint64_t last_qid = 413732132; /* arbitrary */
 static epoll_data_t last_epoll_data;
@@ -68,12 +69,16 @@ void ef_shrub_server_sockets_close(struct ef_shrub_server_sockets* sockets)
   calls->sockets_close++;
 }
 
-int ef_shrub_server_epoll_add(struct ef_shrub_server_sockets* sockets,
-                              int fd, epoll_data_t data)
+int ef_shrub_server_epoll_add(int epoll_fd, int fd, epoll_data_t data)
 {
   calls->epoll_add++;
   calls->fd = fd;
   last_epoll_data = data;
+  return 0;
+}
+
+int ef_shrub_server_epoll_del(int epoll_fd, int fd)
+{
   return 0;
 }
 
@@ -177,9 +182,10 @@ void ef_shrub_queue_close(struct ef_shrub_queue* queue)
   // Probably should check when this is called
 }
 
-void ef_shrub_queue_poll(struct ef_shrub_queue* queue)
+int ef_shrub_queue_poll(struct ef_shrub_queue* queue)
 {
   // Probably should check when this is called
+  return 0;
 }
 
 int ef_shrub_server_memfd_create(const char* name, size_t size, bool huge)
@@ -274,8 +280,10 @@ static void init_test(void)
 static void open_server(void)
 {
   ef_shrub_server_open(vi, &server, server_addr, buffer_bytes, buffer_count,
-                       shrub_use_interrupts);
+                       shrub_use_interrupts, &wakeup_epoll_fd);
   STATE_CHECK(calls, resource_op, 1);
+  if( shrub_use_interrupts )
+    STATE_CHECK(calls, epoll_add, 1);
   STATE_REVERT(calls);
 }
 
@@ -358,11 +366,14 @@ static void test_shrub_server_open(void)
   init_test();
 
   rc = ef_shrub_server_open(vi, &server, server_addr, buffer_bytes,
-                            buffer_count, shrub_use_interrupts);
+                            buffer_count, shrub_use_interrupts,
+                            &wakeup_epoll_fd);
   CHECK(rc, ==, 0);
   STATE_CHECK(calls, sockets_open, 1);
   STATE_CHECK(calls, remove, 1);
   STATE_CHECK(calls, resource_op, 1);
+  if( shrub_use_interrupts )
+    STATE_CHECK(calls, epoll_add, 1);
   STATE_CHECK_UNCHANGED(calls);
 
   ef_shrub_server_close(server);

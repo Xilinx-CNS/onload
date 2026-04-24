@@ -25,6 +25,8 @@ struct ef_shrub_connection {
   size_t server_fifo_mmap_offset;
   size_t queue_fifo_index;
 
+  bool requested_wakeups;
+
   size_t referenced_buffer_count;
   size_t max_referenced_buffers;
 

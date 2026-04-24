@@ -3,6 +3,7 @@
 
 #include "ef_vi_internal.h"
 
+#include <etherfabric/vi.h>
 #include <etherfabric/internal/shrub_server.h>
 #include <etherfabric/internal/shrub_shared.h>
 
@@ -11,6 +12,10 @@
 #include "shrub_queue.h"
 #include "logging.h"
 #include "driver_access.h"
+
+struct ef_shrub_server_stats {
+  uint64_t failed_primes;
+};
 
 struct ef_shrub_server {
   struct ef_shrub_server_sockets sockets;
@@ -24,10 +29,13 @@ struct ef_shrub_server {
   unsigned pd_excl_rxq_tok;
   bool use_interrupts;
   struct timespec last_disconnection;
+  const int* controller_wakeup_fd;
+  size_t n_wakeup_registered;
   char socket_path[EF_SHRUB_SERVER_SOCKET_LEN];
   struct ef_shrub_connection* closed_connections;
   struct ef_shrub_connection* pending_connections;
   struct ef_shrub_queue queues[EF_VI_MAX_EFCT_RXQS];
+  struct ef_shrub_server_stats stats;
 };
 
 static size_t fifo_size(struct ef_shrub_server* server)
@@ -44,12 +52,83 @@ static int server_request_received(struct ef_shrub_server* server,
 static int server_connection_closed(struct ef_shrub_server* server,
                                     struct ef_shrub_connection* connection);
 
+static int ef_shrub_server_wakeup_set_add(struct ef_shrub_server* server,
+                                          struct ef_shrub_connection* conn)
+{
+  epoll_data_t epoll_data = {0};
+  int rc;
+
+  if( conn->requested_wakeups )
+    return -EALREADY;
+
+  if( ! server->use_interrupts )
+    return 0;
+
+  if( ! server->controller_wakeup_fd )
+    return -EINVAL;
+
+  if( server->n_wakeup_registered > 0 ) {
+    server->n_wakeup_registered++;
+    conn->requested_wakeups = true;
+    return 0;
+  }
+
+  rc = ef_shrub_server_epoll_add(*server->controller_wakeup_fd, server->vi->dh,
+                                 epoll_data);
+  if( rc < 0 ) {
+    ef_log("Error: failed to add server VI to wakeup set: %d (%s)",
+           rc, strerror(-rc));
+    return rc;
+  }
+
+  server->n_wakeup_registered++;
+  conn->requested_wakeups = true;
+
+  return 0;
+}
+
+static void ef_shrub_server_wakeup_set_del(struct ef_shrub_server* server,
+                                           struct ef_shrub_connection* conn)
+{
+  int rc;
+
+  if( ! server->use_interrupts || ! server->controller_wakeup_fd ||
+      ! conn->requested_wakeups || server->n_wakeup_registered == 0 )
+    return;
+
+  conn->requested_wakeups = false;
+  if( --server->n_wakeup_registered > 0 )
+    return;
+
+  rc = ef_shrub_server_epoll_del(*server->controller_wakeup_fd, server->vi->dh);
+  if( rc < 0 )
+    ef_log("Warning: failed to remove server VI from wakeup set: %d (%s)",
+           rc, strerror(-rc));
+}
+
+void ef_shrub_server_prime(struct ef_shrub_server* server)
+{
+  ef_vi* vi;
+  int rc;
+
+  if( ! server || ! server->use_interrupts ||
+      server->n_wakeup_registered <= 0 )
+    return;
+
+  vi = server->vi;
+  rc = ef_vi_prime(vi, vi->dh, ef_eventq_current(vi));
+  if( rc < 0 )
+    server->stats.failed_primes++;
+}
+
 static int unix_server_poll(struct ef_shrub_server* server)
 {
   int rc;
   struct epoll_event event;
+  int n_events = 0;
   rc = ef_shrub_server_epoll_wait(&server->sockets, &event);
   if( rc > 0 ) {
+    n_events = rc;
     if( event.events & EPOLLHUP )
       rc = server_connection_closed(server, event.data.ptr);
     else if( event.data.ptr == NULL )
@@ -57,7 +136,7 @@ static int unix_server_poll(struct ef_shrub_server* server)
     else if( event.events & EPOLLIN )
       rc = server_request_received(server, event.data.ptr);
   }
-  return rc;
+  return (rc < 0) ? rc : n_events;
 }
 
 static void remove_connection(struct ef_shrub_connection** list,
@@ -185,11 +264,21 @@ static int server_connection_opened(struct ef_shrub_server* server)
   connection->next = server->pending_connections;
   server->pending_connections = connection;
 
-  epoll_data.ptr = connection;
-  rc = ef_shrub_server_epoll_add(&server->sockets, socket, epoll_data);
+  rc = ef_shrub_server_wakeup_set_add(server, connection);
   if( rc < 0 )
-    server_connection_closed(server, connection);
+    goto fail_out;
 
+  epoll_data.ptr = connection;
+  rc = ef_shrub_server_epoll_add(server->sockets.epoll, socket, epoll_data);
+  if( rc < 0 )
+    goto fail_out;
+
+  return rc;
+
+fail_out:
+  /* Closing the connection will remove this server from the wakeup set if
+   * it needs to */
+  server_connection_closed(server, connection);
   return rc;
 }
 
@@ -279,6 +368,8 @@ static int server_connection_closed(struct ef_shrub_server* server,
     connection->socket = -1;
   }
 
+  ef_shrub_server_wakeup_set_del(server, connection);
+
   connection->next = server->closed_connections;
   server->closed_connections = connection;
 
@@ -292,12 +383,17 @@ int ef_shrub_server_open(struct ef_vi* vi,
                          const char* server_addr,
                          size_t buffer_bytes,
                          size_t buffer_count,
-                         bool use_irqs)
+                         bool use_irqs,
+                         const int* controller_wakeup_fd)
 {
   struct ef_shrub_server *server;
+  epoll_data_t epoll_data = {0};
   int rc;
 
   ef_shrub_server_remove(server_addr);
+
+  if( ! controller_wakeup_fd )
+    return -EINVAL;
 
   server = calloc(1, sizeof(*server));
   if( server == NULL)
@@ -306,6 +402,15 @@ int ef_shrub_server_open(struct ef_vi* vi,
   rc = ef_shrub_server_sockets_open(&server->sockets, server_addr);
   if( rc < 0 )
     goto fail_sockets;
+
+  server->controller_wakeup_fd = controller_wakeup_fd;
+  server->use_interrupts = use_irqs;
+  if( use_irqs ) {
+    rc = ef_shrub_server_epoll_add(*server->controller_wakeup_fd,
+                                   server->sockets.epoll, epoll_data);
+    if( rc < 0 )
+      goto fail_add_to_wakeup;
+  }
 
   rc = ef_shrub_server_memfd_create("ef_shrub_client_fifo", 0, false);
   if( rc < 0 )
@@ -328,7 +433,6 @@ int ef_shrub_server_open(struct ef_vi* vi,
 
   server->buffer_count = buffer_count;
   server->buffer_bytes = buffer_bytes;
-  server->use_interrupts = use_irqs;
 
   *server_out = server;
   return 0;
@@ -338,19 +442,29 @@ fail_init_pd_token:
 fail_memfd_server:
   ef_shrub_server_close_fd(server->client_fifo_fd);
 fail_memfd_client:
+  if( use_irqs )
+    ef_shrub_server_epoll_del(*server->controller_wakeup_fd,
+                              server->sockets.epoll);
+fail_add_to_wakeup:
   ef_shrub_server_sockets_close(&server->sockets);
 fail_sockets:
   free(server);
   return rc;
 }
 
-void ef_shrub_server_poll(struct ef_shrub_server* server)
+int ef_shrub_server_poll(struct ef_shrub_server* server)
 {
+  int n_events = 0;
+  int rc;
   int i;
 
-  unix_server_poll(server);
+  rc = unix_server_poll(server);
+  n_events += (rc > 0) ? rc : 0;
+
   for( i = 0; i < EF_VI_MAX_EFCT_RXQS; ++i )
-    ef_shrub_queue_poll(&server->queues[i]);
+    n_events += ef_shrub_queue_poll(&server->queues[i]);
+
+  return n_events;
 }
 
 void ef_shrub_server_close(struct ef_shrub_server* server)
@@ -360,6 +474,13 @@ void ef_shrub_server_close(struct ef_shrub_server* server)
   for( i = 0; i < EF_VI_MAX_EFCT_RXQS; ++i )
     if( server->queues[i].connection_count != 0 )
       ef_shrub_queue_close(&server->queues[i]);
+
+  /* We're closing, so lets bypass any referencing checking here and just
+   * remove ourselves from the wakeup set to be safe. */
+  if( server->n_wakeup_registered > 0 ) {
+    server->n_wakeup_registered = 0;
+    ef_shrub_server_epoll_del(*server->controller_wakeup_fd, server->vi->dh);
+  }
 
   ef_shrub_server_close_fd(server->server_fifo_fd);
   ef_shrub_server_close_fd(server->client_fifo_fd);
@@ -378,6 +499,10 @@ void ef_shrub_server_dump_to_fd(struct ef_shrub_server* server, int fd,
                                    "interrupt mode: %s\n",
                   server->pd_excl_rxq_tok, server->buffer_count,
                   server->use_interrupts ? "enabled" : "disabled");
+  shrub_log_to_fd(fd, buf, buflen, "  Registered wakeup count: %lu\n",
+                  server->n_wakeup_registered);
+  shrub_log_to_fd(fd, buf, buflen, "  VI prime failures: %lu\n",
+                  server->stats.failed_primes);
 
   for( i = 0; i < sizeof(server->queues) / sizeof(server->queues[0]); i++ )
     if( server->queues[i].fifo_size )

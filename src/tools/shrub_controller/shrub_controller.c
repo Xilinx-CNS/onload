@@ -58,6 +58,10 @@ static volatile sig_atomic_t call_shrub_dump = 0;
 
 #define AUTO_CLOSE_DELAY_NEVER -1
 
+#define MS_TO_NS (1000 * 1000)
+#define PERIODIC_POLL_TIMEOUT_DEFAULT (5ll * MS_TO_NS)
+#define PERIODIC_POLL_TIMEOUT_MIN 1ll
+
 static char* shrub_log_prefix;
 
 struct shrub_controller_stats
@@ -66,6 +70,7 @@ struct shrub_controller_stats
   uint64_t controller_response_failures;
   uint64_t controller_incompatible_clients;
   uint64_t controller_failed_to_neg_client;
+  uint64_t epoll_failures;
 };
 
 struct shrub_controller_vi
@@ -108,6 +113,9 @@ typedef struct
   struct shrub_controller_stats controller_stats;
   int auto_close_delay;
   bool had_any_clients;
+  uint64_t sum_server_buffers;
+  int wakeup_epoll_fd;
+  long long periodic_poll_timeout_ns;
 } shrub_controller_config;
 
 static void usage(void)
@@ -123,6 +131,7 @@ static void usage(void)
   fprintf(stderr, "  -D       Daemonise on startup\n");
   fprintf(stderr, "  -K       Log to kmsg\n");
   fprintf(stderr, "  -C <ms>  Close after <ms> if all clients disconnect\n");
+  fprintf(stderr, "  -p <ns>  Ensure a poll happens every <ns> in interrupt-driven mode\n");
 }
 
 static bool is_hwport_llct(shrub_controller_config *config, ci_hwport_id_t hwport)
@@ -250,11 +259,14 @@ static int add_server_config(shrub_controller_config *config,
   new_shrub_config->server_started = false;
   config->interface_token++;
   config->server_config_head = new_shrub_config;
+  config->sum_server_buffers += buffer_count;
   return 0;
 }
 
-static void shrub_server_fini(shrub_if_config_t *config)
+static void shrub_server_fini(shrub_controller_config* controller_config,
+                              shrub_if_config_t *config)
 {
+  controller_config->sum_server_buffers -= config->buffer_count;
   if ( config->server_started ) {
     ef_shrub_server_close(config->shrub_server);
     ef_vi_free(&config->res.vi, config->res.dh);
@@ -273,7 +285,7 @@ static void remove_and_stop_interface(shrub_controller_config *config,
     if ( current_interface->token_id == intf_token ) {
       current_interface->ref_count--;
       if ( current_interface->ref_count <= 0 ) {
-        shrub_server_fini(current_interface);
+        shrub_server_fini(config, current_interface);
 
         if ( prev_interface != NULL )
           prev_interface->next = current_interface->next;
@@ -329,7 +341,8 @@ static int shrub_server_init(shrub_controller_config *config,
   rc = ef_shrub_server_open(&res->vi, &interface_config->shrub_server,
                             server_path, DEFAULT_BUFFER_SIZE,
                             interface_config->buffer_count,
-                            config->use_interrupts);
+                            config->use_interrupts,
+                            &config->wakeup_epoll_fd);
   if ( rc != 0 ) {
     ci_log("Error: shrub_controller failed to call server open");
     goto fail_server_alloc;
@@ -391,6 +404,8 @@ static void shrub_dump_stats_to_fd(int fd, shrub_controller_config *config,
                   config->controller_stats.controller_response_failures);
   shrub_log_to_fd(fd, buf, buflen, "  incompatible clients detected: %lu\n",
                   config->controller_stats.controller_incompatible_clients);
+  shrub_log_to_fd(fd, buf, buflen, "  epoll failures: %lu\n",
+                  config->controller_stats.epoll_failures);
 }
 
 static void shrub_dump_server_to_fd(int fd, shrub_if_config_t *server_config,
@@ -680,7 +695,7 @@ static int poll_socket(shrub_controller_config *config)
       ef_shrub_socket_close_socket(client_fd);
     }
   }
-  return rc;
+  return (rc == 0) ? num_events : rc;
 }
 
 static void cleanup_config_socket(shrub_controller_config *config)
@@ -719,13 +734,66 @@ static int create_config_socket(shrub_controller_config *config)
   return 0;
 }
 
-static void poll_shrub_servers(shrub_controller_config *config)
+static void cleanup_interrupt_state(shrub_controller_config *config)
+{
+  if ( ! config->use_interrupts )
+    return;
+
+  close(config->wakeup_epoll_fd);
+}
+
+static int create_interrupt_state(shrub_controller_config *config)
+{
+  struct epoll_event ev = { 0 };
+  int rc;
+
+  if ( ! config->use_interrupts )
+    return 0;
+
+  rc = epoll_create1(0);
+  if ( rc == -1 ) {
+    rc = -errno;
+    ci_log("Error: failed to create epoll fd for interrupt state: %d (%s)",
+           rc, strerror(-rc));
+    goto fail_out;
+  }
+  config->wakeup_epoll_fd = rc;
+
+  ev.events = EPOLLIN;
+  rc = epoll_ctl(config->wakeup_epoll_fd, EPOLL_CTL_ADD, config->epoll_fd, &ev);
+  if ( rc == -1 ) {
+    rc = -errno;
+    ci_log("Error: failed to add config epoll fd to wakeup epoll set: %d (%s)",
+           rc, strerror(-rc));
+    goto cleanup_socket_out;
+  }
+
+  return 0;
+
+cleanup_socket_out:
+  close(config->wakeup_epoll_fd);
+fail_out:
+  return rc;
+}
+
+static void prime_server_vis(shrub_controller_config *config)
+{
+  shrub_if_config_t *intf;
+  for( intf = config->server_config_head; intf != NULL; intf = intf->next )
+    ef_shrub_server_prime(intf->shrub_server);
+}
+
+static int poll_shrub_servers(shrub_controller_config *config)
 {
   shrub_if_config_t *current_interface = config->server_config_head;
+  int n_events = 0;
+
   while ( current_interface != NULL ) {
-    ef_shrub_server_poll(current_interface->shrub_server);
+    n_events += ef_shrub_server_poll(current_interface->shrub_server);
     current_interface = current_interface->next;
   }
+
+  return n_events;
 }
 
 static void handle_controller_dump_requests(shrub_controller_config *config)
@@ -787,15 +855,117 @@ static void handle_controller_auto_close(shrub_controller_config *config)
   is_running = false;
 }
 
-static int reactor_loop(shrub_controller_config *config)
+static bool reactor_loop_step(shrub_controller_config *config)
 {
-  while ( is_running ) {
-    poll_shrub_servers(config);
-    poll_socket(config);
-    handle_controller_dump_requests(config);
-    handle_controller_auto_close(config);
+  int n_events = 0;
+  int rc;
+
+  rc = poll_shrub_servers(config);
+  n_events += (rc > 0) ? rc : 0;
+
+  rc = poll_socket(config);
+  n_events += (rc > 0) ? rc : 0;
+
+  /* We aren't too bothered by if any work was done by non-polling functions */
+  handle_controller_dump_requests(config);
+  handle_controller_auto_close(config);
+
+  return n_events > 0;
+}
+
+static bool wait_for_wakeup_events(shrub_controller_config *config,
+                                   int timeout)
+{
+  struct epoll_event ev;
+  int rc;
+  rc = epoll_wait(config->wakeup_epoll_fd, &ev, 1, timeout);
+  if ( rc < 0 && errno != EINTR )
+    config->controller_stats.epoll_failures++;
+  return rc > 0;
+}
+
+static long long get_interrupt_timeout(shrub_controller_config *config)
+{
+  long long timeout = config->periodic_poll_timeout_ns;
+
+  /* If an auto-close delay is set, then to ensure we respect that value we
+   * must reduce our waiting timeout to at most this value. Otherwise the
+   * shrub controller may remain open for longer than requested. */
+  if ( config->auto_close_delay != AUTO_CLOSE_DELAY_NEVER ) {
+    long long auto_close_delay = config->auto_close_delay * MS_TO_NS;
+    timeout = (auto_close_delay < timeout) ? auto_close_delay : timeout;
   }
-  return 0;
+
+  timeout = (timeout < PERIODIC_POLL_TIMEOUT_MIN)
+          ? PERIODIC_POLL_TIMEOUT_MIN : timeout;
+
+  return timeout;
+}
+
+static void reactor_loop_interrupt(shrub_controller_config *config)
+{
+  int timeout = get_interrupt_timeout(config) / MS_TO_NS;
+  /* Cap the epoll timeout to 1ms to avoid 0ms or infinite spinning */
+  timeout = (timeout < 1) ? 1 : timeout;
+
+  prime_server_vis(config);
+
+  while ( is_running ) {
+    /* If we have no servers, then make sure we can actually do some work for
+     * an arbitrary number of steps. */
+    const int max_reactor_steps_per_wakeup =
+      (config->sum_server_buffers > 0) ? config->sum_server_buffers : 16;
+    int reactor_steps_per_wakeup = max_reactor_steps_per_wakeup;
+    bool did_work = true;
+    bool events_ready;
+
+    /* Wait until any of our FDs report that there's something interesting to
+     * do, then try completing work for a bounded number of iterations or
+     * until we run out of work. */
+    events_ready = wait_for_wakeup_events(config, timeout);
+    while ( reactor_steps_per_wakeup-- > 0 && did_work && is_running )
+      did_work = reactor_loop_step(config);
+
+    prime_server_vis(config);
+
+    /* We currently don't get woken up when clients write to their FIFO when
+     * freeing a buffer. This is especially problematic where one client is
+     * slightly behind on freeing buffers as the above loop would only bring
+     * them up-to-date after roughly (timeout * client_bufs / remaining_bufs)ms
+     * which is rather punishing.
+     * To work around this, we try to see if we've done any work after being
+     * woken due to timing out, then spin for a short while (~1ms) to do our
+     * best to let such a client catch up. If at any point we think "normal
+     * service" might resume (i.e., buffers are being filled and other clients
+     * are doing work) then we break back out into our usual workflow. */
+    if ( reactor_steps_per_wakeup < max_reactor_steps_per_wakeup - 1 &&
+         ! events_ready && ! wait_for_wakeup_events(config, 0) &&
+         is_running ) {
+      struct timespec start, now;
+
+      clock_gettime(CLOCK_MONOTONIC, &start);
+      now = start;
+
+      while ( timespec_difference_ms(now, start) < 1 &&
+              ! wait_for_wakeup_events(config, 0) &&
+              reactor_steps_per_wakeup > 0 &&
+              is_running ) {
+        /* We need to give the client some time to see their new buffer(s),
+         * process them, and be ready to free them. It's also slightly
+         * friendlier to deschedule ourselves briefly. */
+        usleep(1);
+        did_work = reactor_loop_step(config);
+        reactor_steps_per_wakeup -= (int)did_work;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+      }
+    }
+  }
+}
+
+static void reactor_loop_spin(shrub_controller_config *config)
+{
+  while ( is_running )
+    reactor_loop_step(config);
 }
 
 int parse_interface(const char *arg, shrub_controller_config *config) {
@@ -862,7 +1032,7 @@ static void tear_down_servers(shrub_controller_config *config)
       ef_shrub_socket_close_socket(current_interface->client_fd);
 
     if ( current_interface->server_started )
-      shrub_server_fini(current_interface);
+      shrub_server_fini(config, current_interface);
 
     free(current_interface);
     current_interface = next_interface;
@@ -1079,6 +1249,7 @@ int main(int argc, char *argv[])
   config.interface_token = 1;
   config.controller_id = 0;
   config.auto_close_delay = AUTO_CLOSE_DELAY_NEVER;
+  config.periodic_poll_timeout_ns = PERIODIC_POLL_TIMEOUT_DEFAULT;
 
   /* Set sutable prefix */
   ci_server_set_log_prefix(&shrub_log_prefix, SERVER_BIN);
@@ -1093,7 +1264,7 @@ int main(int argc, char *argv[])
     }
   }
 
-  while ( (option = getopt(argc, argv, "dic:DKC:")) != -1 ) {
+  while ( (option = getopt(argc, argv, "dic:DKC:p:")) != -1 ) {
     switch (option)
     {
     case 'd':
@@ -1122,6 +1293,15 @@ int main(int argc, char *argv[])
     case 'C':
       config.auto_close_delay = atoi(optarg);
       break;
+    case 'p':
+      config.periodic_poll_timeout_ns = atoll(optarg);
+      if( config.periodic_poll_timeout_ns < PERIODIC_POLL_TIMEOUT_MIN ) {
+        ci_log("Error: periodic poll timeout must be at least %lldns",
+               PERIODIC_POLL_TIMEOUT_MIN);
+        usage();
+        return EXIT_FAILURE;
+      }
+      break;
     default:
       usage();
       return EXIT_FAILURE;
@@ -1149,6 +1329,10 @@ int main(int argc, char *argv[])
   if ( rc )
     goto fail_create_config_socket;
 
+  rc = create_interrupt_state(&config);
+  if( rc )
+    goto fail_create_interrupt_state;
+
   rc = controller_cplane_connect(&config);
   if ( rc )
     goto fail_cplane_connect;
@@ -1157,12 +1341,17 @@ int main(int argc, char *argv[])
   if ( rc )
     goto fail_servers_init;
 
-  reactor_loop(&config);
+  if( config.use_interrupts )
+    reactor_loop_interrupt(&config);
+  else
+    reactor_loop_spin(&config);
 
   tear_down_servers(&config);
 fail_servers_init:
   controller_cplane_disconnect(&config);
 fail_cplane_connect:
+  cleanup_interrupt_state(&config);
+fail_create_interrupt_state:
   cleanup_config_socket(&config);
 fail_create_config_socket:
   controller_config_socket_lock_destroy(&config);

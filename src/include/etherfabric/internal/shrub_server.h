@@ -39,7 +39,8 @@ int ef_shrub_server_open(struct ef_vi* vi,
                          const char* server_addr,
                          size_t buffer_bytes,
                          size_t buffer_count,
-                         bool use_irqs);
+                         bool use_irqs,
+                         const int* controller_wakeup_fd);
 
 /* Shut down the server and destroy the opaque structure. This will close
  * all client connections, although shared buffers and other resources may
@@ -56,7 +57,7 @@ void ef_shrub_server_close(struct ef_shrub_server* server);
  *
  * This should be called frequently.
  */
-void ef_shrub_server_poll(struct ef_shrub_server* server);
+int ef_shrub_server_poll(struct ef_shrub_server* server);
 
 /* Check if a shrub server has any connected shrub clients. */
 bool ef_shrub_server_has_clients(struct ef_shrub_server* server);
@@ -66,6 +67,8 @@ bool ef_shrub_server_has_clients(struct ef_shrub_server* server);
  * that source (including later calls to this function) are valid. */
 struct timespec
 ef_shrub_server_get_last_disconnection_time(struct ef_shrub_server* server);
+
+void ef_shrub_server_prime(struct ef_shrub_server* server);
 
 void ef_shrub_server_dump_to_fd(struct ef_shrub_server* server, int fd,
                                 char* buf, size_t buflen);
