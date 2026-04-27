@@ -2429,6 +2429,7 @@ static int netif_tcp_helper_build(ci_netif* ni)
 #if CI_CFG_CTPIO
   unsigned ctpio_io_offset = 0;
 #endif
+  int max_init_vi = -1;
 
   /****************************************************************************
    * Do other mmaps.
@@ -2485,6 +2486,8 @@ static int netif_tcp_helper_build(ci_netif* ni)
                     ns->intf_i_to_hwport[nic_i], nsn->vi_evq_reserved_slots);
     if( rc )
       goto fail2;
+    max_init_vi = nic_i;
+
     if( NI_OPTS(ni).tx_push )
       ef_vi_set_tx_push_threshold(vi, NI_OPTS(ni).tx_push_thresh);
 
@@ -2620,7 +2623,9 @@ static int netif_tcp_helper_build(ci_netif* ni)
 fail3:
   CI_FREE_OBJ(ni->pkt_bufs);
 fail2:
-  cleanup_all_vis(ni);
+  OO_STACK_FOR_EACH_INTF_I(ni, nic_i)
+    if( nic_i <= max_init_vi )
+      cleanup_ef_vi(ci_netif_vi(ni, nic_i));
 fail1:
   return rc;
 }
