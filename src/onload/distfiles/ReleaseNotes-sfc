@@ -1,6 +1,6 @@
 Solarflare 6.X Linux network driver
 ===================================
-Version:  v6_2_1_1000
+Version:  v6_3_0_1000
 
 
 Overview
@@ -12,9 +12,6 @@ Supported hardware platforms
 ----------------------------
 
 The drivers contained in this package support the following adapters:
-
-- Xilinx Alveo Adapters
-  - Xilinx Alveo U25 SmartNIC Accelerator Card
 
 - Solarflare Server Adapters:
   - AMD Solarflare X4522 PCIe Dual Port SFP56
@@ -60,7 +57,7 @@ kernel
 Installation of the driver can be confirmed by typing:
    modinfo sfc | grep version
 and checking for the line:
-   version: v6_2_1_1000
+   version: v6_3_0_1000
 
 All network interfaces available on the system can be found with:
   ifconfig -a
@@ -71,11 +68,11 @@ Linux distribution support for Solarflare Adapters
 
 This driver package is supported on:
  - RedHat Enterprise Linux                        8.6, 8.7, 8.8, 8.9, 8.10
- - RedHat Enterprise Linux                        9.2, 9.3, 9.4, 9.5, 9.6
- - RedHat Enterprise Linux                        10.0
- - Canonical Ubuntu Server LTS                    22.04, 24.04
- - Debian 12 "Bookworm"                           12.0
- - Kernel.org linux kernels                       5.1 to 6.15
+ - RedHat Enterprise Linux                        9.3, 9.4, 9.5, 9.6, 9.7
+ - RedHat Enterprise Linux                        10.0, 10.1
+ - Canonical Ubuntu Server LTS                    22.04, 24.04, 26.04
+ - Debian Linux                                   12.0, 13.0
+ - Kernel.org linux kernels                       5.1 to 7.0
 
 
 AMD aims to support the current and previous major release of each
@@ -94,6 +91,29 @@ Please contact your local AMD support representative or email
 
 Changelog
 ---------
+### v6_3_0_1000
+X4-7485
+~ Address inconsistencies in adapter statistics. This change also requires
+  corresponding firmware support; customers are required to upgrade to firmware
+  version ≥ 1.3.2.
+
+SWNETLINUX-5781
+~ Adjustments to RX queue count defaults. Improving default behaviour on high
+  core count systems. No change in behaviour when rss_cpus is configured by the
+  user.
+
+SWNETLINUX-5848
+~ Do not receive packets when NAPI budget is zero to avoid deadlock.
+
+X4-7414
+~ Add support for VF stats on X4.
+
+SWNETLINUX-5813
+~ Updates and improvements to max MTU handling.
+
+SWNETLINUX-5816
+~ Ensure X4 sensors remain visible after NIC reset.
+
 ### v6_2_1_1000
 SWNETLINUX-5804
 ~ Add 'exp_*' counters for the X4 Express datapath to the ethtool -S output.
@@ -111,8 +131,8 @@ X4-6998
   sys_offset_precise.
 
 SWNETLINUX-5656
-~ Addressed IOMMU errors while RX buffer page sharing is enabled, by skipping
-  page recycling when jumbo packets are discarded.
+~ Resolved IOMMU errors when discarding jumbo frames if RX buffer page sharing
+  was enabled.
 ~ Re-introduce RX buffer page sharing as the default behavior. Users now have
   control over this functionality via a new module parameter
   "rx_buf_page_sharing".
@@ -2838,7 +2858,7 @@ SARFS:
    using in-kernel ARFS is at
    https://www.kernel.org/doc/Documentation/networking/scaling.txt or please
    consult the Solarflare Server Adapter User's Guide [SF-103837-CD] available
-   at https://www.xilinx.com/support/download/nic-software-and-drivers.html#linux
+   at https://www.amd.com/en/support/downloads/solarflare-downloads.html/ethernet-adapters/solarflare/x2-series.html
 
 SXPS:
  ~ This is a feature similar to the kernel feature XPS (Transmit Packet
@@ -2847,7 +2867,7 @@ SXPS:
    in-kernel XPS is at
    https://www.kernel.org/doc/Documentation/networking/scaling.txt or please
    consult the Solarflare Server Adapter User's Guide [SF-103837-CD] available
-   at https://www.xilinx.com/support/download/nic-software-and-drivers.html#linux
+   at https://www.amd.com/en/support/downloads/solarflare-downloads.html/ethernet-adapters/solarflare/x2-series.html
 
 Proxy MCDI authorization:
  ~ This feature had been used by a proof-of-concept userland utility to vet and
@@ -2864,24 +2884,24 @@ Legacy interrupts:
 Support for SFN5000, SFN6000 and SFN7000 family adapters has been
 removed.
 
+Support for PF-IOV has been removed.
 
-NIC partitioning, SR-IOV and PF-IOV modes on SFN7XXX/8XXX adapters
-------------------------------------------------------------------
+Support for SR-IOV with NIC partitioning mode has been removed.
+
+
+NIC partitioning and SR-IOV on SFN8XXX adapters
+-----------------------------------------------
 This release of the Solarflare Linux Net driver supports NIC partitioning
 (multiple PFs) and SR-IOV (VFs).
 
 See "Solarflare Server Adapter User's Guide" SF-103837-CD Issue >=12 available
-from https://www.xilinx.com/support/download/nic-software-and-drivers.html#linux
-for more detailed information on setting up NIC partitioning, SR-IOV or PF-IOV
-modes.
+from <https://www.amd.com/en/support/downloads/solarflare-downloads.html/ethernet-adapters/solarflare/8000-series.html>
+for more detailed information on setting up NIC partitioning or SR-IOV modes.
 
 Some additional details as well as known issues are documented below:
 General:
-  ~ NIC partitioning/SRIOV/PF-IOV features require sfutils >=v4.3.0.1010 which
-    contains adapter firmware v4.2.1.1014 and firmware-variant=full-feature
+  ~ NIC partitioning/SRIOV features require firmware-variant=full-feature
     (setup with sfboot)
-  ~ Please note that Hybrid SR-IOV support for SFN5XXX|6XXX drivers is now
-    deprecated. Please use an older driver to continue using this feature.
   ~ Link control (e.g. setting pause frames with ethtool and controlling MTU) is
     only available on the first PF on each port; (this is referred to as "PF0"
     or the "primary PF")
@@ -2907,7 +2927,7 @@ General:
   ~ At this time PTP will only work with the PF0 on each port and will
     not work with a VF.
 
-NIC partitioning support on SFN7XXX/8XXX adapters:
+NIC partitioning support on 8XXX adapters:
   ~ The sfc.ko driver will bind to multiple PFs on the same physical adapter
     port and create a network interface for each PF.
   ~ Configure with "sfboot switch-mode=partitioning pf-count=X" and cold reboot
@@ -2933,11 +2953,10 @@ NIC partitioning support on SFN7XXX/8XXX adapters:
     another PF's MAC address. For other PFs there is no change in received
     traffic if the interface is put into promiscuous mode.
 
-SR-IOV support on SFN7XXX/8XXX adapters:
+SR-IOV support on SFN8XXX adapters:
   ~ The sfc.ko driver will bind to all VFs and create network interfaces.
   ~ Configure with "sfboot switch-mode=sriov pf-count=1 vf-count=X" and cold
     reboot the server if warned to do so.
-  ~ RHEL6.5 and RHEL7 are supported for the host/hypervisor OS.
   ~ It is possible to consume the VFs using these KVM/libirt modes:
      - network hostdev (VF passed into the VM; migration is only possible if
                         the VF is hot-unplugged)
@@ -2947,12 +2966,8 @@ SR-IOV support on SFN7XXX/8XXX adapters:
     (and ip link) can override the MAC address.
   ~ A VF in a VM will be unable to set its own MAC address. See the item on
     active-backup bonding.
-  ~ To enable VFs (for RHEL6.5 and RHEL 7)
+  ~ To enable VFs :
       echo <num vfs> > /sys/class/ethX/device/sriov_numvfs
-  ~ To enable VFs on older operating systems set the sfc.ko module parameter
-    "max_vfs". If set to a single integer this is the number of VFs to enable
-    and will apply to all PFs. If you wish to configure this to be a different
-    value for each PF set this to a comma separated list.
   ~ Please ensure that you enable all BIOS settings that refer to virtualization
     and SR-IOV (note there might be several e.g. SRIOV, IOMMU, VT, VT-x, VT-d,
     IO virtualization)
@@ -2972,35 +2987,6 @@ SR-IOV support on SFN7XXX/8XXX adapters:
                   [ state { auto | enable | disable} ] ]"
   ~ Setting VF spoofcheck/rate/qos (e.g. via the ip command) is not supported
     at this time.
-
-SR-IOV with NIC partitioning mode support on SFN7XXX/8XXX adapters:
-  ~ This mode offers partitioning of the adapter. Each partition is on a unique
-    VLAN and within this layer2 broadcast domain there is switching on the
-    adapter between the PF and VFs.
-  ~ This support is currently considered EXPERIMENTAL i.e. all features are
-    present, but there has only been limited testing. Solarflare will support
-    the use of this feature in a test environment, but does not recommend use
-    in a production environment until this feature becomes GA.
-    Note that both SR-IOV and NIC partitioning as individual features are both
-    considered GA quality.
-  ~ Ensure you are using adapter firmware >= v4.4.2.1011
-  ~ It is necessary to configure NIC partitioning with unique VLANs in this mode
-  ~ Configure with:
-    "sfboot switch-mode=partitioning-with-sriov \
-       pf-count=X  pf-vlans=<VLAN>[,<VLAN>]... \
-       vf-count=Y"
-    and cold reboot the server if warned to do so.
-
-PF-IOV mode support on SFN7XXX/8XXX adapters:
-  ~ This mode offers switching between PFs. Use this mode where a server does
-    not support SR-IOV (otherwise please use SR-IOV mode as this provides up-to
-    240VFs versus only 16PFs)
-  ~ Configure with "sfboot switch-mode=pfiov pf-count=X" and cold reboot the
-    server if warned to do so.
-  ~ In RHEL7 passing through a PCI function uses the new VFIO mechanism.
-    Due to a missing capability flag on SFN7XXX/8XXX hardware, VFIO will only
-    allow all PFs to be passed into a guest together. This will be addressed
-    with a kernel quirk.
 
 
 Known issues with the platform (KVM/libvirt/iproute2/kernel)
@@ -3050,17 +3036,20 @@ Issue 47490:
 
 Known Issues with Solarflare driver/firmware
 --------------------------------------------
+SWNETLINUX-5731:
+~ Attempts to use ethtool -X <intf> context feature for managing RSS contexts
+  will fail in kernels 6.17 and later. There are no issues using RSS with
+  default context configuration.
+
+X4-7594:
+~ VFs on X4 adapters should be configured with an MTU of 1500 or less.
+
 X4-7148:
 ~ For X4 adapters, the statistics counters rx_eth_crc_err and rx_frm_trunc
   reported in ethtool (derived from per-queue receive events) are inconsistent
   with DMA based counters reported by other tools. Packets which are received
   with CRC errors may be reported by the adapter as frame truncation events.
   All other counters remain accurate and unaffected.
-
-X4-7064:
-~ Executing ethtool selftest "ethtool -t" can cause the network interface to
-  become unresponsive, resulting in command timeouts and operational failures.
-  Avoid using ethtool selftest.
 
 SWNETLINUX-5369 / SWNETLINUX-5144:
  ~ Changes to net driver RX/TX ring sizes with ethtool are not properly applied
@@ -3098,24 +3087,6 @@ Issue 4991:
  ~ Message "Periodic DMA statistics are not updating. Restarting
    periodic collection" might appear in systems logs. This can be
    ignored
-SF-119015-KI / Issue 72914:
- ~ [SFN7xxx series firmware only].
-   There is an issue when using MCFW where a transmit queue using TSO may lockup
-   and cause a NETDEV watchdog.
- ~ In the default configuration of "pf-count=1" (where there is no NIC
-   partitioning) the NETDEV watchdog will occur on TX queue >=31, this will
-   only be used if there are more than 32 logical CPUs in the machine, or if the
-   "rss_cpus" module parameter is explicitly set.
- ~ As a workaround please set the module parameter to at most "rss_cpus=31".
- ~ As a fix please update adapter firmware using the "sfutils" package from
-   https://www.xilinx.com/support/download/nic-software-and-drivers.html#linux
-   to MCFW >= v6.2.7.1000
-
-Issue 50868:
-  ~ If using a SFN7142Q adapter with adapter firmware v4.1.0.6742 and running
-    sfupdate, after the update the two network interfaces from the second QSFP+
-    port will be in a disabled state. Please reload the driver to correct this.
-    This issue has been resolved in adapter firmware >=v4.1.1.1022.
 
 
 Copyright

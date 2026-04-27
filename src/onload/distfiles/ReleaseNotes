@@ -90,4 +90,22 @@ The solar_clusterd script has moved to the SolarCapture repository:
 https://github.com/Xilinx-CNS/solarcapture/tree/main/src/solar_clusterd
 
 
+Notice for future releases
+==========================
+
+Programmatic interface planned to configure SHRUB
+-------------------------------------------------
+
+A programmatic interface is planned for ef_vi applications to configure
+SHRUB without using Onload-style EF_* environment variables for this purpose.
+When this programmatic interface is available it should be used by all
+ef_vi and TCPDirect applications instead of present arrangements.
+
+
+Last OpenOnload release supporting Red Hat Enterprise Linux 8
+-------------------------------------------------------------
+
+Future OpenOnload releases will not support RHEL 8.
+
+
 (c) Copyright 2026 Advanced Micro Devices, Inc.
