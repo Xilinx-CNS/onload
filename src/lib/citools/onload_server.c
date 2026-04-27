@@ -56,16 +56,13 @@ void ci_server_daemonise(char** log_prefix,
   int devnull;
   int i;
   sigset_t sigset;
-  struct rlimit rlim;
 
   /* Start with some tidy-up.  We don't check errors here as failure is non-
    * fatal. */
 
   /* Close all files above stderr. */
-  if( (flags & CI_DAEMON_CLOSE_FDS) &&
-      getrlimit(RLIMIT_NOFILE, &rlim) == 0 )
-    for( i = STDERR_FILENO + 1; i < rlim.rlim_max; ++i )
-      close(i);
+  if( (flags & CI_DAEMON_CLOSE_FDS) )
+    close_range(STDERR_FILENO + 1, ~0U, 0);
 
   /* Reset all signal handlers. */
   for( i = 0; i < _NSIG; ++i )

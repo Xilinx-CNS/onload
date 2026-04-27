@@ -12,7 +12,6 @@
 #define _GNU_SOURCE
 #include <sys/resource.h>
 #include <string.h>
-#include <dirent.h>
 #include <syslog.h>
 
 #include <ci/compat.h>
@@ -51,7 +50,7 @@ static void set_log_prefix(const char* stack_name)
 }
 
 /* Fixme: log via ioctl, always.  We need to implement log-via-syslog. */
-static int log_fd;
+static int log_fd = -1;
 static void citp_log_fn_drv(const char* msg)
 {
   ioctl(log_fd, OO_IOC_PRINTK, (long) msg);
@@ -163,8 +162,6 @@ int main(int argc, char** argv)
 {
   ci_netif* ni = malloc(sizeof(ci_netif));
   int rc;
-  DIR* dir;
-  struct dirent* ent;
   int devnull;
   struct sigaction act;
   char stack_name[strlen(OO_STRINGIFY(INT_MAX)) + 1];
@@ -191,23 +188,9 @@ int main(int argc, char** argv)
    * And see ci_netif_start_helper() for the first part of
    * daemonizing. */
 
-  /* We can getrlimit(RLIMIT_NOFILE) and then close() all the files up to
-   * rlim_max, but RLIMIT_NOFILE is inherited from the user app and may be
-   * very high; but the number of files at stack creation time is likely to
-   * be low.  So let's use fewer syscalls.
-   */
-  dir = opendir("/proc/self/fd");
-  if( dir == NULL ) {
-    ci_log("Can't open /proc/self/fd: not closing "
-           "inherited file descriptors");
-  }
-  else {
-    while( (ent = readdir(dir)) != NULL ) {
-      int fd = atoi(ent->d_name);
-      if( fd != log_fd )
-        close(fd);
-    }
-  }
+  if ((log_fd > 0 && close_range(0, log_fd - 1, 0) == -1) ||
+      close_range(log_fd + 1, ~0U, 0) == -1)
+    ci_log("Cannot close inherited file descriptors: %s", strerror(errno));
 
   /* STDIN */
   devnull = open("/dev/null", O_RDONLY);
