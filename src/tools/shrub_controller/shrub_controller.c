@@ -34,6 +34,7 @@
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/timerfd.h>
 #include <sys/un.h>
 #include <time.h>
 #include <unistd.h>
@@ -59,6 +60,7 @@ static volatile sig_atomic_t call_shrub_dump = 0;
 #define AUTO_CLOSE_DELAY_NEVER -1
 
 #define MS_TO_NS (1000 * 1000)
+#define SEC_TO_NS (1000 * MS_TO_NS)
 #define PERIODIC_POLL_TIMEOUT_DEFAULT (5ll * MS_TO_NS)
 #define PERIODIC_POLL_TIMEOUT_MIN 1ll
 
@@ -71,6 +73,7 @@ struct shrub_controller_stats
   uint64_t controller_incompatible_clients;
   uint64_t controller_failed_to_neg_client;
   uint64_t epoll_failures;
+  uint64_t timerfd_settime_failures;
 };
 
 struct shrub_controller_vi
@@ -115,6 +118,7 @@ typedef struct
   bool had_any_clients;
   uint64_t sum_server_buffers;
   int wakeup_epoll_fd;
+  int wakeup_timer_fd;
   long long periodic_poll_timeout_ns;
 } shrub_controller_config;
 
@@ -406,6 +410,8 @@ static void shrub_dump_stats_to_fd(int fd, shrub_controller_config *config,
                   config->controller_stats.controller_incompatible_clients);
   shrub_log_to_fd(fd, buf, buflen, "  epoll failures: %lu\n",
                   config->controller_stats.epoll_failures);
+  shrub_log_to_fd(fd, buf, buflen, "  timerfd set time failures: %lu\n",
+                  config->controller_stats.timerfd_settime_failures);
 }
 
 static void shrub_dump_server_to_fd(int fd, shrub_if_config_t *server_config,
@@ -739,6 +745,7 @@ static void cleanup_interrupt_state(shrub_controller_config *config)
   if ( ! config->use_interrupts )
     return;
 
+  close(config->wakeup_timer_fd);
   close(config->wakeup_epoll_fd);
 }
 
@@ -768,8 +775,29 @@ static int create_interrupt_state(shrub_controller_config *config)
     goto cleanup_socket_out;
   }
 
+  rc = timerfd_create(CLOCK_MONOTONIC, 0);
+  if ( rc == -1 ) {
+    rc = -errno;
+    ci_log("Error: failed to create timerfd for wakeup timeout: %d (%s)",
+           rc, strerror(-rc));
+    goto cleanup_socket_out;
+  }
+  config->wakeup_timer_fd = rc;
+
+  ev.data.fd = config->wakeup_timer_fd;
+  rc = epoll_ctl(config->wakeup_epoll_fd, EPOLL_CTL_ADD,
+                 config->wakeup_timer_fd, &ev);
+  if ( rc == -1 ) {
+    rc = -errno;
+    ci_log("Error: failed to add timerfd to wakeup epoll set: %d (%s)",
+           rc, strerror(-rc));
+    goto cleanup_timer_out;
+  }
+
   return 0;
 
+cleanup_timer_out:
+  close(config->wakeup_timer_fd);
 cleanup_socket_out:
   close(config->wakeup_epoll_fd);
 fail_out:
@@ -881,7 +909,7 @@ static bool wait_for_wakeup_events(shrub_controller_config *config,
   rc = epoll_wait(config->wakeup_epoll_fd, &ev, 1, timeout);
   if ( rc < 0 && errno != EINTR )
     config->controller_stats.epoll_failures++;
-  return rc > 0;
+  return rc > 0 && ev.data.fd != config->wakeup_timer_fd;
 }
 
 static long long get_interrupt_timeout(shrub_controller_config *config)
@@ -904,9 +932,18 @@ static long long get_interrupt_timeout(shrub_controller_config *config)
 
 static void reactor_loop_interrupt(shrub_controller_config *config)
 {
-  int timeout = get_interrupt_timeout(config) / MS_TO_NS;
-  /* Cap the epoll timeout to 1ms to avoid 0ms or infinite spinning */
-  timeout = (timeout < 1) ? 1 : timeout;
+  long long timeout_ns = get_interrupt_timeout(config);
+  int timeout_ms = (timeout_ns + MS_TO_NS - 1) / MS_TO_NS;
+  struct itimerspec timeout_spec = {0};
+
+  /* This should always be true, as the calculation above rounds up to the next
+   * whole millisecond and the number of nanoseconds are guaranteed to be at
+   * least 1. */
+  ci_assert(timeout_ms > 0);
+
+  timeout_spec.it_value.tv_sec = timeout_ns / SEC_TO_NS;
+  timeout_spec.it_value.tv_nsec = timeout_ns -
+                                  (timeout_spec.it_value.tv_sec * SEC_TO_NS);
 
   prime_server_vis(config);
 
@@ -918,11 +955,16 @@ static void reactor_loop_interrupt(shrub_controller_config *config)
     int reactor_steps_per_wakeup = max_reactor_steps_per_wakeup;
     bool did_work = true;
     bool events_ready;
+    int rc;
+
+    rc = timerfd_settime(config->wakeup_timer_fd, 0, &timeout_spec, NULL);
+    if ( rc != 0 )
+      config->controller_stats.timerfd_settime_failures++;
 
     /* Wait until any of our FDs report that there's something interesting to
      * do, then try completing work for a bounded number of iterations or
      * until we run out of work. */
-    events_ready = wait_for_wakeup_events(config, timeout);
+    events_ready = wait_for_wakeup_events(config, timeout_ms);
     while ( reactor_steps_per_wakeup-- > 0 && did_work && is_running )
       did_work = reactor_loop_step(config);
 
