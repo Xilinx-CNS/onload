@@ -1715,6 +1715,7 @@ typedef struct {
 #define CI_IP_CACHE_REQUEST_HWPORT     2
 
   ci_mtu_t        mtu;
+  ci_mtu_t        unconstrained_mtu;
   ci_ifid_t       ifindex;
   cicp_encap_t    encap;
   ci_int16        intf_i;

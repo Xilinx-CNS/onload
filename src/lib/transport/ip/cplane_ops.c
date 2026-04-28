@@ -284,6 +284,7 @@ cicp_user_retrieve(ci_netif*                    ni,
   /* Initialise to placate compiler. */
   ci_addr_sh_t pre_nat_laddr = addr_sh_any;
   int /*bool*/ nat_applied = 0;
+  unsigned max_mtu;
 
   /* This function must be called when "the route is unusable".  I.e. when
    * the route is invalid or if there is no ARP.  In the second case, we
@@ -393,7 +394,7 @@ cicp_user_retrieve(ci_netif*                    ni,
     if( rc != 0 )
       goto alien_route;
   }
-  ipcache->mtu = data.base.mtu;
+  ipcache->mtu = ipcache->unconstrained_mtu = data.base.mtu;
   /* Use the local address returned by the control plane if we're not doing
    * NAT, but if we are doing NAT, then use the pre-NAT source address.  This
    * doesn't lose any information, as the route lookup only returns a different
@@ -406,6 +407,15 @@ cicp_user_retrieve(ci_netif*                    ni,
   ipcache->nexthop = CI_ADDR_FROM_ADDR_SH(data.base.next_hop);
   if( ! ci_ip_cache_is_onloadable(ni, ipcache))
     goto alien_route;
+
+  max_mtu = ni->state->nic[ipcache->intf_i].vi_tx_max_frame_len;
+  if( max_mtu != 0 ) {
+    unsigned eth_overhead = ETH_HLEN + ETH_VLAN_HLEN + 4/*FCS*/;
+    if( max_mtu <= eth_overhead )
+      ipcache->mtu = 0;
+    else if( ipcache->mtu > max_mtu - eth_overhead )
+      ipcache->mtu = max_mtu - eth_overhead;
+  }
 
   /* Layout the Ethernet header, and set the source mac.
    * Route resolution already issues ARP request, so there is no need to
@@ -457,6 +467,7 @@ cicp_ip_cache_update_from(ci_netif* ni, ci_ip_cached_hdrs* ipcache,
   ipcache->nexthop = from_ipcache->nexthop;
   /* ipcache->pmtus = something; */
   ipcache->mtu = from_ipcache->mtu;
+  ipcache->unconstrained_mtu = from_ipcache->unconstrained_mtu;
   ipcache->ifindex = from_ipcache->ifindex;
   ipcache->iif_ifindex = from_ipcache->iif_ifindex;
   ipcache->encap = from_ipcache->encap;

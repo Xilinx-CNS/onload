@@ -1722,6 +1722,7 @@ int ci_udp_sendmsg(ci_udp_iomsg_args *a,
         goto send_via_os;
     }
     sinf.ipcache.mtu = us->s.pkt.mtu;
+    sinf.ipcache.unconstrained_mtu = us->s.pkt.unconstrained_mtu;
   }
 #ifndef __KERNEL__
   else if(CI_UNLIKELY( msg->msg_name == NULL )) {
@@ -1797,6 +1798,7 @@ int ci_udp_sendmsg(ci_udp_iomsg_args *a,
           us->ephemeral_pkt.status != retrrc_nomac )
         goto send_via_os;
       sinf.ipcache.mtu = us->ephemeral_pkt.mtu;
+      sinf.ipcache.unconstrained_mtu = us->ephemeral_pkt.unconstrained_mtu;
       ++us->stats.n_tx_cp_match;
     }
     else if( si_trylock_and_inc(ni, &sinf, us->stats.n_tx_lock_cp) ) {
@@ -1818,6 +1820,7 @@ int ci_udp_sendmsg(ci_udp_iomsg_args *a,
           us->ephemeral_pkt.status != retrrc_nomac )
         goto send_via_os;
       sinf.ipcache.mtu = us->ephemeral_pkt.mtu;
+      sinf.ipcache.unconstrained_mtu = us->ephemeral_pkt.unconstrained_mtu;
     }
     else {
       /* Need control plane lookup and could not grab stack lock; so do
