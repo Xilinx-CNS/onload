@@ -56,6 +56,7 @@ static int efrm_nondl_add_device(struct net_device *net_dev, int n_vis)
 
   nic = &lnic->efrm_nic.efhw_nic;
   nic->mtu = net_dev->mtu + ETH_HLEN; /* ? + ETH_VLAN_HLEN */
+  efhw_nic_check_mtu(nic);
 
   return 0;
 }

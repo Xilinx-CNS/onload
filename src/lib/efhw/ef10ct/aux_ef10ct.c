@@ -480,6 +480,7 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
   nic = &lnic->efrm_nic.efhw_nic;
   nic->mtu = net_dev->mtu + ETH_HLEN;
   nic->arch_extra = ef10ct;
+  efhw_nic_check_mtu(nic);
 
   /* Init shared evqs for use with rx vis. */
   for( i = 0; i < ef10ct->shared_n; i++ ) {

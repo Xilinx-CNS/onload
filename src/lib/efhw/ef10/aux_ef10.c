@@ -385,6 +385,7 @@ static int ef10_probe(struct auxiliary_device *auxdev,
    * we're not. */
   EFRM_ASSERT(rc == 0);
 
+  efhw_nic_check_mtu(nic);
   efrm_notify_nic_probe(nic, net_dev);
   rtnl_unlock();
   return 0;
