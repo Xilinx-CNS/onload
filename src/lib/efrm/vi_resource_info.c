@@ -31,6 +31,8 @@ static void common_vi_get_mappings(struct efrm_vi* vi_rs, struct efhw_nic* nic,
   if( vm->txq_size != 0 )
     vm->txq_descriptors = efhw_iopages_ptr(&vi_rs->q[EFHW_TXQ].host_pages);
 
+  vm->tx_max_frame_len = nic->max_tx_mtu;
+
   vm->out_flags = vi_rs->out_flags;
 }
 

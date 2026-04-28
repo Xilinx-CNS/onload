@@ -139,6 +139,7 @@ struct efrm_vi_mappings {
 	unsigned         txq_size;
 	void*            txq_descriptors;
 
+	unsigned         tx_max_frame_len;
 	unsigned         out_flags;
 };
 
