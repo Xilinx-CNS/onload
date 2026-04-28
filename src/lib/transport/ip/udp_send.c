@@ -1452,8 +1452,17 @@ void ci_udp_sendmsg_onload(ci_netif* ni, ci_udp_state* us,
   }
 
   if( bytes_to_send > sinf->ipcache.mtu - CI_IPX_HDR_SIZE(af) -
-      sizeof(ci_udp_hdr) )
-    need_frag = true;
+      sizeof(ci_udp_hdr) ) {
+    /* If we are constrained by limits on the NIC datapath, rather than the MTU
+     * itself, then we should avoid fragmentation. Ideally we would choose an
+     * alternative datapath but we don't have a mechanism to do that
+     * conveniently, so let the OS sort it out */
+    if( bytes_to_send > sinf->ipcache.unconstrained_mtu - CI_IPX_HDR_SIZE(af) -
+        sizeof(ci_udp_hdr) )
+      need_frag = true;
+    else
+      goto send_via_os;
+  }
 
   /* For now we don't allocate packets in advance, so init to NULL */
   pf.alloc_pkt = NULL;
