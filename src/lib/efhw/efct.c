@@ -442,6 +442,8 @@ efct_nic_sw_ctor(struct efhw_nic *nic,
   nic->default_q_size[EFHW_TXQ] = EFHW_DEFAULT_Q_SIZE_MIN;
   nic->default_q_size[EFHW_RXQ] = EFHW_DEFAULT_Q_SIZE_MIN;
 
+  nic->max_tx_mtu = EFCT_TX_MAX_FRAME_BYTES;
+
   return 0;
 }
 

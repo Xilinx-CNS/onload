@@ -101,6 +101,7 @@ static const struct efrm_debugfs_parameter efhw_debugfs_nic_parameters[] = {
   EFRM_X64_PARAMETER(struct efhw_nic, filter_flags),
   EFRM_U32_PARAMETER(struct efhw_nic, resetting),
   EFRM_U32_PARAMETER(struct efhw_nic, mtu),
+  EFRM_U32_PARAMETER(struct efhw_nic, max_tx_mtu),
   EFRM_U32_PARAMETER(struct efhw_nic, num_evqs),
   EFRM_U32_PARAMETER(struct efhw_nic, num_dmaqs),
   EFRM_U32_PARAMETER(struct efhw_nic, num_timers),

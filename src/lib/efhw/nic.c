@@ -198,6 +198,7 @@ int efhw_nic_ctor(struct efhw_nic *nic,
 	nic->int_prime_reg = 0;
 	nic->vi_irq_n_ranges = 0;
 	nic->mtu = 1500 + ETH_HLEN; /* ? + ETH_VLAN_HLEN */
+	nic->max_tx_mtu = 0;
 
 	if( timer_quantum_ns )
 		nic->timer_quantum_ns = timer_quantum_ns;
