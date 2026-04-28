@@ -2077,14 +2077,14 @@ ef10ct_filter_query(struct efhw_nic *nic, int filter_id,
 static int
 ef10ct_multicast_block(struct efhw_nic *nic, bool block)
 {
-  return -ENOSYS;
+  return -EPROTONOSUPPORT;
 }
 
 
 static int
 ef10ct_unicast_block(struct efhw_nic *nic, bool block)
 {
-  return -ENOSYS;
+  return -EPROTONOSUPPORT;
 }
 
 
