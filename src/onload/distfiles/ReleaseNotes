@@ -55,9 +55,10 @@ now be allocated instead of the previous maximum of 128.
 X4 ef_vi applications can obtain filter ID for received packet
 --------------------------------------------------------------
 
-Applications can now gain access to the ID of the filter used to receive
-a packet on X4 in ef_vi. The new function call ef_vi_receive_get_filter_id()
-that supports this may also be used with X3 adapters.
+Applications can now read the ID of the filter used to receive
+a packet on the X4 Enterprise path in ef_vi. A new function call,
+ef_vi_receive_get_filter_id(), provides access to this data including
+with the X4 Express path and X3.
 
 
 X4 SHRUB Controller now interrupt-driven
