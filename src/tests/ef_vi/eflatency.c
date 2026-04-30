@@ -221,7 +221,7 @@ static void output_results(struct timeval start, struct timeval end)
   div = freq / 1e3;
   if( cfg_save_file ) {
     int i;
-    char* subst = strstr(cfg_save_file, "$s");
+    const char* subst = strstr(cfg_save_file, "$s");
     FILE* fp;
 
     if( subst ) {
