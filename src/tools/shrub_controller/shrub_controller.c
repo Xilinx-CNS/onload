@@ -1011,13 +1011,13 @@ static void reactor_loop_spin(shrub_controller_config *config)
 }
 
 int parse_interface(const char *arg, shrub_controller_config *config) {
-  char *buffer_pos = strchr(arg, '/');
+  const char *buffer_pos = strchr(arg, '/');
   char iface[IFNAMSIZ] = {0};
   int buffer_count;
   unsigned int ifindex;
   ci_hwport_id_t hw_port;
   size_t iface_len;
-  char *buffer_str;
+  const char *buffer_str;
 
   if ( buffer_pos ) {
     iface_len = buffer_pos - arg;
