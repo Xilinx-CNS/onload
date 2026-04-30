@@ -641,7 +641,8 @@ int parse_interface_with_flags(const char* s, char** interface_out,
                                enum ef_pd_flags *pd_flags_out,
                                ef_driver_handle driver_handle)
 {
-  char *flags, ifname[IF_NAMESIZE];
+  const char *flags;
+  char ifname[IF_NAMESIZE];
   bool requested_express = false;
   unsigned long cap;
   int rc;
