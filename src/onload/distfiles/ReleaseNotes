@@ -52,6 +52,15 @@ As a result, up to 256 VIs with TXQs on the X4 Express datapath can
 now be allocated instead of the previous maximum of 128.
 
 
+X4 ef_vi applications can obtain filter ID for received packet
+--------------------------------------------------------------
+
+Applications can now read the ID of the filter used to receive
+a packet on the X4 Enterprise path in ef_vi. A new function call,
+ef_vi_receive_get_filter_id(), provides access to this data including
+with the X4 Express path and X3.
+
+
 X4 SHRUB Controller now interrupt-driven
 ----------------------------------------
 

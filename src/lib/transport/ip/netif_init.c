@@ -2429,6 +2429,7 @@ static int netif_tcp_helper_build(ci_netif* ni)
 #if CI_CFG_CTPIO
   unsigned ctpio_io_offset = 0;
 #endif
+  int max_init_vi = -1;
 
   /****************************************************************************
    * Do other mmaps.
@@ -2485,6 +2486,8 @@ static int netif_tcp_helper_build(ci_netif* ni)
                     ns->intf_i_to_hwport[nic_i], nsn->vi_evq_reserved_slots);
     if( rc )
       goto fail2;
+    max_init_vi = nic_i;
+
     if( NI_OPTS(ni).tx_push )
       ef_vi_set_tx_push_threshold(vi, NI_OPTS(ni).tx_push_thresh);
 
@@ -2620,7 +2623,9 @@ static int netif_tcp_helper_build(ci_netif* ni)
 fail3:
   CI_FREE_OBJ(ni->pkt_bufs);
 fail2:
-  cleanup_all_vis(ni);
+  OO_STACK_FOR_EACH_INTF_I(ni, nic_i)
+    if( nic_i <= max_init_vi )
+      cleanup_ef_vi(ci_netif_vi(ni, nic_i));
 fail1:
   return rc;
 }
@@ -2631,6 +2636,14 @@ fail1:
 
 #ifndef __KERNEL__
 
+static bool want_user_efct_resources(ci_netif* ni, int intf_i)
+{
+  uint32_t shared_rx_mask = OO_VI_FLAGS_RX_SHARED | OO_VI_FLAGS_RX_KERNEL_SHARED;
+  bool user_rx = (ni->state->nic[intf_i].oo_vi_flags & shared_rx_mask) ==
+                 OO_VI_FLAGS_RX_SHARED;
+  return (NI_OPTS(ni).multiarch_rx_datapath != EF_MULTIARCH_DATAPATH_FF) && user_rx;
+}
+
 static int restore_efct_resources(ci_netif* ni)
 {
   int rc, nic_i;
@@ -2638,9 +2651,11 @@ static int restore_efct_resources(ci_netif* ni)
   OO_STACK_FOR_EACH_INTF_I(ni, nic_i) {
     ef_vi* vi = ci_netif_vi(ni, nic_i);
 
-    rc = efct_superbuf_config_refresh_all(vi);
-    if( rc < 0 )
-      return rc;
+    if( want_user_efct_resources(ni, nic_i) ) {
+      rc = efct_superbuf_config_refresh_all(vi);
+      if( rc < 0 )
+        return rc;
+    }
   }
   return 0;
 }
@@ -2757,13 +2772,9 @@ static int alloc_efct_resources(ci_netif* ni)
   bool need_prime = false;
 
   OO_STACK_FOR_EACH_INTF_I(ni, nic_i) {
-    ci_netif_state_nic_t* nsn = &(ni->state->nic[nic_i]);
     ef_vi* vi = ci_netif_vi(ni, nic_i);
 
-    /* FIXME shouldn't have architecture check here */
-    if( vi->efct_rxqs.active_qs &&
-        NI_OPTS(ni).multiarch_rx_datapath != EF_MULTIARCH_DATAPATH_FF &&
-        nsn->vi_arch == EFHW_ARCH_EF10CT ) {
+    if( want_user_efct_resources(ni, nic_i) ) {
 
       if( ! NI_OPTS(ni).shrub_unicast ) {
         rc = alloc_efct_exclusive_rxq(ni, nic_i);
