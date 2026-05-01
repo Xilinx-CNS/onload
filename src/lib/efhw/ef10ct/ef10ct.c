@@ -149,6 +149,9 @@ ef10ct_nic_init_hardware(struct efhw_nic *nic,
                          struct efhw_ev_handler *ev_handlers,
                          const uint8_t *mac_addr)
 {
+  /* These are reported incorrectly, so need blatting out */
+  uint64_t unsupported_filter_flags = NIC_FILTER_FLAG_RX_TYPE_UCAST_MISMATCH |
+                                      NIC_FILTER_FLAG_RX_TYPE_MCAST_MISMATCH;
   memcpy(nic->mac_addr, mac_addr, ETH_ALEN);
   nic->ev_handlers = ev_handlers;
   nic->flags |= NIC_FLAG_TX_CTPIO | NIC_FLAG_CTPIO_ONLY
@@ -165,6 +168,7 @@ ef10ct_nic_init_hardware(struct efhw_nic *nic,
              | NIC_FLAG_RX_FILTER_ID
              ;
   nic->filter_flags |= ef10ct_nic_supported_filter_flags(nic);
+  nic->filter_flags &= ~unsupported_filter_flags;
 
   nic->sw_bts = kzalloc(EFHW_MAX_SW_BTS * sizeof(struct efhw_sw_bt),
                         GFP_KERNEL);
@@ -2018,6 +2022,12 @@ ef10ct_filter_insert(struct efhw_nic *nic,
     .filter_flags = nic->filter_flags,
   };
   int rc;
+
+  /* Early check for all/mismatch type filters, which aren't supported, but which
+   * aren't handled by other checking. */
+  if( (efhw_params->spec->match_flags & ~EFX_FILTER_MATCH_OUTER_VID) ==
+      EFX_FILTER_MATCH_LOC_MAC_IG )
+    return -EPROTONOSUPPORT;
 
   rc = efx_spec_to_ethtool_flow(efhw_params->spec, &hw_filter);
   if( rc < 0 )
