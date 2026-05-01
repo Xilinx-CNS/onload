@@ -64,8 +64,18 @@ with the X4 Express path and X3.
 X4 SHRUB Controller now interrupt-driven
 ----------------------------------------
 
-The SHRUB Controller for managing shared access to X4 Express datapath
-queues is now interrupt-driven.
+The SHRUB Controller for managing shared access to X4 Express datapath queues
+no longer spins when interrupts are enabled, instead waiting for interesting
+events to occur before doing any work. This enables multiple shrub controllers
+to run on the same core. Users should be aware that clients freeing buffers
+do not generate interrupts.
+
+As before, enabling interrupts can be done by providing the -i flag at shrub
+controller creation time. For Onload, the EF_SHRUB_USE_INTERRUPTS environment
+variable configures this if a shrub controller is not manually created. An
+additional -p option has been added to the shrub controller, which allows the
+specification of a time after which a poll must occur even if no interrupts
+have been seen. No corresponding option exists yet in Onload to configure this.
 
 
 X4 XDP not yet supported
