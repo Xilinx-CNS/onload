@@ -94,6 +94,18 @@ for event queue overflow if used with the newer firmware. Users should upgrade
 to this Onload version when updating their X4 firmware.
 
 
+X4 Express path MTU
+-------------------
+
+The X4 Express path only supports an MTU up to 1500. If the link MTU is
+configured to a larger value via the net driver, this can result in UDP TX
+traffic beyond the max supported size being fragmented or sent via the kernel.
+Incoming RX traffic directed to an express path RXQ that exceeds the supported
+limit will be dropped. To avoid this, the stack should be configured to use the
+X4 Enterprise path or the link MTU should be configured to a value supported by
+both paths.
+
+
 Controlling IRQ affinity for Onload interrupts
 ----------------------------------------------
 
