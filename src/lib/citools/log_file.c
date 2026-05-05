@@ -28,7 +28,7 @@ void ci_log_file(const char* msg)
   v[1].iov_base = "\n";
   v[1].iov_len = 1;
 
-  writev(ci_log_file_fd, v, 2);
+  ci_log_ignore_result(writev(ci_log_file_fd, v, 2));
 }
 
 /*! \cidoxg_end */
