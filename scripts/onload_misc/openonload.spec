@@ -362,6 +362,12 @@ to build efsend_cplane.
 %setup -q -n %{name}-%{pkgversion}
 sed 's@py_modules@package_dir={"": "scripts"},py_modules@' < scripts/onload_misc/setup.py > setup.py
 
+%if 0%{?rhel} >= 10
+%generate_buildrequires
+%pyproject_buildrequires
+%endif
+
+
 %build
 %if %{with kmod}
 KPATH=%{_usrsrc}/kernels/%{kernel} # RHEL
@@ -397,7 +403,11 @@ mkdir build
 %endif
 %endif
 %if %{with user}
+%if 0%{?rhel} >= 10
+%pyproject_wheel
+%else
 %py3_build
+%endif
 %endif
 
 %install
@@ -415,7 +425,11 @@ mkdir -p "$i_prefix/etc/depmod.d"
   %{?have_sdci: --have-sdci}
 %endif
 %if %{with user}
+%if 0%{?rhel} >= 10
+%pyproject_install
+%else
 %py3_install
+%endif
 sed -s -i -E '1s|^#![[:space:]]*(/usr)?/bin/(env[[:space:]]+)?python3|#!/usr/libexec/platform-python|; t; 1q1' \
   $i_prefix%{_sbindir}/sfcirqaffinity $i_prefix%{_sbindir}/sfcaffinity_config
 # Removing these files is fine since they would only ever be generated on a build machine.
@@ -533,9 +547,8 @@ rm -fR $RPM_BUILD_ROOT
 /usr/share/onload/onload_modules-load.d.conf
 /usr/share/onload/sysconfig_onload_modules
 
-%{python3_sitelib}/sfc*.py
-%{python3_sitelib}/__pycache__/sfc*.pyc
-%{python3_sitelib}/*Onload*.egg-info
+%pycached %{python3_sitelib}/sfc*.py
+%{python3_sitelib}/*Onload*.*-info
 %endif
 
 %changelog
