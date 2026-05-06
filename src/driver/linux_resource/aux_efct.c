@@ -438,6 +438,7 @@ int efct_probe(struct auxiliary_device *auxdev,
   nic = &lnic->efrm_nic.efhw_nic;
   nic->mtu = net_dev->mtu + ETH_HLEN;
   nic->arch_extra = efct;
+  efhw_nic_check_mtu(nic);
 
   /* Setting the nic here marks the device as ready for use. */
   efct->nic = nic;

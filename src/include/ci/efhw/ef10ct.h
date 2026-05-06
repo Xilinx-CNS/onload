@@ -68,6 +68,9 @@ struct efhw_nic_ef10ct_rxq {
   /* Shared rxqs only */
   struct efhw_nic_efct_rxq_wakeup_bits apps;
   uint32_t pktix; /* Total number of packets, shift right for sbufs */
+
+  /* Only needed for debugfs output */
+  int32_t steering_tag;
 };
 
 struct ef10ct_shared_kernel_evq {

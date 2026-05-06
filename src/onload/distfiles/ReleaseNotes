@@ -64,8 +64,18 @@ with the X4 Express path and X3.
 X4 SHRUB Controller now interrupt-driven
 ----------------------------------------
 
-The SHRUB Controller for managing shared access to X4 Express datapath
-queues is now interrupt-driven.
+The SHRUB Controller for managing shared access to X4 Express datapath queues
+no longer spins when interrupts are enabled, instead waiting for interesting
+events to occur before doing any work. This enables multiple shrub controllers
+to run on the same core. Users should be aware that clients freeing buffers
+do not generate interrupts.
+
+As before, enabling interrupts can be done by providing the -i flag at shrub
+controller creation time. For Onload, the EF_SHRUB_USE_INTERRUPTS environment
+variable configures this if a shrub controller is not manually created. An
+additional -p option has been added to the shrub controller, which allows the
+specification of a time after which a poll must occur even if no interrupts
+have been seen. No corresponding option exists yet in Onload to configure this.
 
 
 X4 XDP not yet supported
@@ -84,6 +94,18 @@ for event queue overflow if used with the newer firmware. Users should upgrade
 to this Onload version when updating their X4 firmware.
 
 
+X4 Express path MTU
+-------------------
+
+The X4 Express path only supports an MTU up to 1500. If the link MTU is
+configured to a larger value via the net driver, this can result in UDP TX
+traffic beyond the max supported size being fragmented or sent via the kernel.
+Incoming RX traffic directed to an express path RXQ that exceeds the supported
+limit will be dropped. To avoid this, the stack should be configured to use the
+X4 Enterprise path or the link MTU should be configured to a value supported by
+both paths.
+
+
 Controlling IRQ affinity for Onload interrupts
 ----------------------------------------------
 
@@ -97,6 +119,17 @@ solar_clusterd script moved to SolarCapture
 
 The solar_clusterd script has moved to the SolarCapture repository:
 https://github.com/Xilinx-CNS/solarcapture/tree/main/src/solar_clusterd
+
+
+Installation from tar.gz release packages
+-----------------------------------------
+
+Installing Onload from 'tarball' release packages is deprecated in general
+in favour of OS-specific release mechanisms, source RPMs and Debian source
+packages.
+
+Support for Onload on new major versions of Operating Systems, which in this
+case means Ubuntu 26.04, will not include installation from tar.gz packages.
 
 
 Notice for future releases

@@ -728,6 +728,7 @@ typedef struct oo_p_dllink oo_p_dllink_t;
     FTL_TFIELD_INT(ctx, ci_uint8, flags, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))       \
     FTL_TFIELD_IPXADDR(ctx, nexthop, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS)) \
     FTL_TFIELD_INT(ctx, ci_mtu_t, mtu, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))                     \
+    FTL_TFIELD_INT(ctx, ci_mtu_t, unconstrained_mtu, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))                     \
     FTL_TFIELD_INT(ctx, ci_ifid_t, ifindex, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))                \
     FTL_TFIELD_INT(ctx, cicp_encap_t, encap, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))                \
     FTL_TFIELD_INT(ctx, ci_int16, intf_i, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))            \

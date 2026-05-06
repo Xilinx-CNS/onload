@@ -1452,8 +1452,17 @@ void ci_udp_sendmsg_onload(ci_netif* ni, ci_udp_state* us,
   }
 
   if( bytes_to_send > sinf->ipcache.mtu - CI_IPX_HDR_SIZE(af) -
-      sizeof(ci_udp_hdr) )
-    need_frag = true;
+      sizeof(ci_udp_hdr) ) {
+    /* If we are constrained by limits on the NIC datapath, rather than the MTU
+     * itself, then we should avoid fragmentation. Ideally we would choose an
+     * alternative datapath but we don't have a mechanism to do that
+     * conveniently, so let the OS sort it out */
+    if( bytes_to_send > sinf->ipcache.unconstrained_mtu - CI_IPX_HDR_SIZE(af) -
+        sizeof(ci_udp_hdr) )
+      need_frag = true;
+    else
+      goto send_via_os;
+  }
 
   /* For now we don't allocate packets in advance, so init to NULL */
   pf.alloc_pkt = NULL;
@@ -1722,6 +1731,7 @@ int ci_udp_sendmsg(ci_udp_iomsg_args *a,
         goto send_via_os;
     }
     sinf.ipcache.mtu = us->s.pkt.mtu;
+    sinf.ipcache.unconstrained_mtu = us->s.pkt.unconstrained_mtu;
   }
 #ifndef __KERNEL__
   else if(CI_UNLIKELY( msg->msg_name == NULL )) {
@@ -1797,6 +1807,7 @@ int ci_udp_sendmsg(ci_udp_iomsg_args *a,
           us->ephemeral_pkt.status != retrrc_nomac )
         goto send_via_os;
       sinf.ipcache.mtu = us->ephemeral_pkt.mtu;
+      sinf.ipcache.unconstrained_mtu = us->ephemeral_pkt.unconstrained_mtu;
       ++us->stats.n_tx_cp_match;
     }
     else if( si_trylock_and_inc(ni, &sinf, us->stats.n_tx_lock_cp) ) {
@@ -1818,6 +1829,7 @@ int ci_udp_sendmsg(ci_udp_iomsg_args *a,
           us->ephemeral_pkt.status != retrrc_nomac )
         goto send_via_os;
       sinf.ipcache.mtu = us->ephemeral_pkt.mtu;
+      sinf.ipcache.unconstrained_mtu = us->ephemeral_pkt.unconstrained_mtu;
     }
     else {
       /* Need control plane lookup and could not grab stack lock; so do

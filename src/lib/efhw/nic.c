@@ -171,6 +171,18 @@ static int efhw_nic_check_buffer_table_orders(struct efhw_nic *nic)
 	return 0;
 }
 
+void efhw_nic_check_mtu(struct efhw_nic *nic)
+{
+	/* We allow any MTU, but warn if it is too large for the datapath.
+	 * The datapath is responsible for dealing with large packets. */
+	if( nic->max_tx_mtu != 0 && nic->mtu > nic->max_tx_mtu )
+		EFHW_WARN("%s: WARNING: MTU %d is larger than the maximum tx "
+		          "length %d. Packets might be fragmented or sent via "
+		          "an alternative datapath.",
+		          __func__, nic->mtu, nic->max_tx_mtu);
+}
+
+
 /* make this separate from initialising data structure
 ** to allow this to be called at a later time once we can access PCI
 ** config space to find out what hardware we have
@@ -198,6 +210,7 @@ int efhw_nic_ctor(struct efhw_nic *nic,
 	nic->int_prime_reg = 0;
 	nic->vi_irq_n_ranges = 0;
 	nic->mtu = 1500 + ETH_HLEN; /* ? + ETH_VLAN_HLEN */
+	nic->max_tx_mtu = 0;
 
 	if( timer_quantum_ns )
 		nic->timer_quantum_ns = timer_quantum_ns;
@@ -217,6 +230,7 @@ int efhw_nic_ctor(struct efhw_nic *nic,
 	if( rc < 0 )
 		spin_lock_destroy(&nic->pci_dev_lock);
 
+	efhw_nic_check_mtu(nic);
 	return rc;
 }
 

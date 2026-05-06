@@ -33,7 +33,12 @@ CI_NORETURN ci_server_init_failed(const char* srv_name,
 
 void ci_server_set_log_prefix(char** log_prefix, const char* srv_bin)
 {
-  asprintf(log_prefix, "%s[%d]: ", srv_bin, getpid());
+  int rc = asprintf(log_prefix, "%s[%d]: ", srv_bin, getpid());
+  if( rc < 0 ) {
+    ci_log("Failed to set log prefix %s[%d]", srv_bin, getpid());
+    return;
+  }
+
   ci_set_log_prefix(*log_prefix);
 }
 

@@ -61,11 +61,12 @@ efhw_populate_set_vi_tlp_processing_mcdi_cmd(ci_dword_t *buf,
 
 int
 efhw_set_tph_steering(struct efhw_nic *nic, uint instance, int set,
-                      int tag_mode)
+                      int tag_mode, uint16_t *tag_used)
 {
 #if CI_HAVE_SDCI
-  uint16_t tag = 0;
   int rc;
+
+  *tag_used = 0;
 
   if( tag_mode != 0 ) {
     struct pci_dev *nic_pci_dev = efhw_nic_get_pci_dev(nic);
@@ -73,7 +74,7 @@ efhw_set_tph_steering(struct efhw_nic *nic, uint instance, int set,
     if( nic_pci_dev ) {
       /* TODO verify that raw_smp_processor_id() returns the right value */
       rc = pcie_tph_get_cpu_st(nic_pci_dev, TPH_MEM_TYPE_VM,
-                               raw_smp_processor_id(), &tag);
+                               raw_smp_processor_id(), tag_used);
       pci_dev_put(nic_pci_dev);
     } else {
       rc = -ENODEV;
@@ -84,7 +85,7 @@ efhw_set_tph_steering(struct efhw_nic *nic, uint instance, int set,
                         rc);
   }
 
-  rc = efhw_nic_set_vi_tlp_processing(nic, instance, set, tag);
+  rc = efhw_nic_set_vi_tlp_processing(nic, instance, set, *tag_used);
   if( rc != 0 )
     EFHW_WARN_LIMITED("Failed to set steering tag (error %d), continuing without it",
                       rc);

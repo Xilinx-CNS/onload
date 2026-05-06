@@ -72,6 +72,8 @@ extern void* efhw_nic_acquire_drv_device(struct efhw_nic*);
 extern void efhw_nic_release_drv_device(struct efhw_nic*, void*);
 extern void efhw_nic_flush_drv(struct efhw_nic*);
 
+extern void efhw_nic_check_mtu(struct efhw_nic*);
+
 static inline uint8_t efhw_vi_nic_flags(const struct efhw_nic* nic)
 {
 	uint8_t flags = 0;

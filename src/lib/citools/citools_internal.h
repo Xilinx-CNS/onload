@@ -23,6 +23,11 @@
 
 extern const char* ci_log_prefix  CI_HF;
 
+/* Some I/O functions can be configured to emit compile-time warnings if
+ * the result is ignored. Use this for low-level logging functions when there
+ * is nothing useful to be done if the output fails or is incomplete. */
+static inline void ci_log_ignore_result(int rc) {(void)rc;}
+
 
 #endif  /* __INTERNAL_H__ */
 

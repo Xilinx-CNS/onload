@@ -20,6 +20,7 @@
 #include <ci/efhw/efct_wakeup.h>
 #include <ci/efhw/ef10ct.h>
 #include <ci/efhw/mc_driver_pcol.h>
+#include <lib/efhw/tph.h>
 
 #include <linux/ethtool.h>
 #include <linux/mman.h>
@@ -90,6 +91,8 @@ ef10ct_nic_sw_ctor(struct efhw_nic *nic,
   nic->default_q_size[EFHW_TXQ] = EFHW_DEFAULT_Q_SIZE_MIN;
   nic->default_q_size[EFHW_RXQ] = EFHW_DEFAULT_Q_SIZE_MIN;
 
+  nic->max_tx_mtu = EFCT_TX_MAX_FRAME_BYTES;
+
   nic->efhw_func = &ef10ct_char_functional_units;
   return 0;
 }
@@ -146,6 +149,9 @@ ef10ct_nic_init_hardware(struct efhw_nic *nic,
                          struct efhw_ev_handler *ev_handlers,
                          const uint8_t *mac_addr)
 {
+  /* These are reported incorrectly, so need blatting out */
+  uint64_t unsupported_filter_flags = NIC_FILTER_FLAG_RX_TYPE_UCAST_MISMATCH |
+                                      NIC_FILTER_FLAG_RX_TYPE_MCAST_MISMATCH;
   memcpy(nic->mac_addr, mac_addr, ETH_ALEN);
   nic->ev_handlers = ev_handlers;
   nic->flags |= NIC_FLAG_TX_CTPIO | NIC_FLAG_CTPIO_ONLY
@@ -162,6 +168,7 @@ ef10ct_nic_init_hardware(struct efhw_nic *nic,
              | NIC_FLAG_RX_FILTER_ID
              ;
   nic->filter_flags |= ef10ct_nic_supported_filter_flags(nic);
+  nic->filter_flags &= ~unsupported_filter_flags;
 
   nic->sw_bts = kzalloc(EFHW_MAX_SW_BTS * sizeof(struct efhw_sw_bt),
                         GFP_KERNEL);
@@ -1333,6 +1340,32 @@ static int ef10ct_shared_rxq_alloc(struct efhw_nic *nic)
   return rxq_num;
 }
 
+
+/* Set the TPH steering tag on the NIC for this rxq, and record the value used 
+ * in rxq state */
+static int
+ef10ct_set_tph_steering(struct efhw_nic *nic, int rxq_handle, int rxq_num,
+                        int flag_tph_tag_mode, int flag_enable_tph)
+{
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  uint16_t tag_used;
+  int rc;
+  rc = efhw_set_tph_steering(nic, rxq_handle, flag_enable_tph,
+                             flag_tph_tag_mode, &tag_used);
+ /* Store tag (or EFHW_STEERING_TAG_TURNED_OFF if no tag set, or error if 
+  * problem) for debugfs */
+  if (rc < 0) {
+    ef10ct->rxq[rxq_num].steering_tag = (int32_t)rc;
+  } else {
+    if (flag_enable_tph)
+      ef10ct->rxq[rxq_num].steering_tag = (int32_t)tag_used;
+    else 
+      ef10ct->rxq[rxq_num].steering_tag = EFHW_TPH_STEERING_TAG_TURNED_OFF;
+  }
+  return rc;
+}
+
+
 static int
 ef10ct_shared_rxq_bind(struct efhw_nic* nic,
                        struct efhw_shared_bind_params *params)
@@ -1402,7 +1435,8 @@ ef10ct_shared_rxq_bind(struct efhw_nic* nic,
   }
 
   /* Needs to be done before the queue is active */
-  efhw_set_tph_steering(nic, rxq_handle, flag_enable_tph, flag_tph_tag_mode);
+  rc = ef10ct_set_tph_steering(nic, rxq_handle, rxq_num,
+                               flag_tph_tag_mode, flag_enable_tph);
 
   if( params->hugetlb_alloc != NULL && params->n_hugepages != 0 ) {
     int i;
@@ -1989,6 +2023,12 @@ ef10ct_filter_insert(struct efhw_nic *nic,
   };
   int rc;
 
+  /* Early check for all/mismatch type filters, which aren't supported, but which
+   * aren't handled by other checking. */
+  if( (efhw_params->spec->match_flags & ~EFX_FILTER_MATCH_OUTER_VID) ==
+      EFX_FILTER_MATCH_LOC_MAC_IG )
+    return -EPROTONOSUPPORT;
+
   rc = efx_spec_to_ethtool_flow(efhw_params->spec, &hw_filter);
   if( rc < 0 )
     return rc;
@@ -2077,14 +2117,14 @@ ef10ct_filter_query(struct efhw_nic *nic, int filter_id,
 static int
 ef10ct_multicast_block(struct efhw_nic *nic, bool block)
 {
-  return -ENOSYS;
+  return -EPROTONOSUPPORT;
 }
 
 
 static int
 ef10ct_unicast_block(struct efhw_nic *nic, bool block)
 {
-  return -ENOSYS;
+  return -EPROTONOSUPPORT;
 }
 
 

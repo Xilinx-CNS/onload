@@ -987,6 +987,7 @@ typedef struct {
   CI_ULCONST ci_uint16  vi_instance;
   CI_ULCONST ci_uint16  vi_rxq_size;
   CI_ULCONST ci_uint16  vi_txq_size;
+  CI_ULCONST ci_uint16  vi_tx_max_frame_len;
   CI_ULCONST ci_uint16  vi_channel_or_irq;
   CI_ULCONST ci_uint8   vi_arch;
   CI_ULCONST ci_uint8   vi_variant;
@@ -1714,6 +1715,7 @@ typedef struct {
 #define CI_IP_CACHE_REQUEST_HWPORT     2
 
   ci_mtu_t        mtu;
+  ci_mtu_t        unconstrained_mtu;
   ci_ifid_t       ifindex;
   cicp_encap_t    encap;
   ci_int16        intf_i;

@@ -28,7 +28,13 @@ void shrub_log_to_fd(int fd, char* buf, size_t buflen, const char* fmt, ...)
    * were actually written to buf.
    */
   if( full_write > 0 ) {
-    size_t bytes_to_write = (full_write >= buflen) ? buflen - 1 : full_write;
-    write(fd, buf, bytes_to_write + 1);
+    size_t bytes_to_write = (full_write >= buflen) ? buflen : full_write + 1;
+    do {
+      int rc = write(fd, buf, bytes_to_write);
+      if( rc <= 0 )
+        break;
+      buf += rc;
+      bytes_to_write -= rc;
+    } while( bytes_to_write > 0 );
   }
 }

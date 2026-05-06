@@ -31,16 +31,19 @@ void ci_app_grep(const char *label, const char *file, size_t map_len, char *find
     return;
 
   if (!(buf = malloc(map_len+1)))
-      return;
+    goto fail_malloc;
   buf[map_len] = 0;
 
-  read(fd, buf, map_len);
+  if (read(fd, buf, map_len) < 0)
+    goto fail_read;
   if ((p1 = strstr(buf, find))) {
     if ((p2 = strstr(p1 ,"\n"))) {
       printf("%s %.*s\n", label, (int)(p2-p1), p1);
     }
   }
+fail_read:
   free(buf);
+fail_malloc:
   close(fd);
 }
 

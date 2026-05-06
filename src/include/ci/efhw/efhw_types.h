@@ -633,6 +633,7 @@ struct efhw_nic {
 # define NIC_RESETTING_FLAG_VANISHED    0x00000004
 
 	unsigned mtu;		/*!< MAC MTU (includes MAC hdr) */
+	unsigned max_tx_mtu;	/*!< limit imposed by NIC, zero if no limit */
 
 	/*! Bus for hotplug purposes, as we can't rely on pci_dev->bus. */
 	unsigned char bus_number;

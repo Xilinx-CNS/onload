@@ -2108,6 +2108,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     nsn->vi_evq_reserved_slots = alloc_info.evq_reserved_events;
     nsn->vi_rxq_size = vm->rxq_size;
     nsn->vi_txq_size = vm->txq_size;
+    nsn->vi_tx_max_frame_len = vm->tx_max_frame_len;
     nsn->timer_quantum_ns = vm->timer_quantum_ns;
     nsn->rx_prefix_len = vm->rxq_prefix_len;
     nsn->rx_ts_correction = vm->rx_ts_correction;

@@ -137,10 +137,13 @@ static int efrm_netdev_event(struct notifier_block *this,
     if (nic) {
       EFRM_TRACE("%s: old=%d new=%d", __func__, nic->mtu, new_mtu);
       nic->mtu = new_mtu;
+      efhw_nic_check_mtu(nic);
     }
     nic = efhw_nic_find(net_dev, NIC_FLAG_LLCT, 0);
-    if (nic)
+    if (nic) {
       nic->mtu = new_mtu;
+      efhw_nic_check_mtu(nic);
+    }
   }
   if (event == NETDEV_CHANGENAME) {
     nic = efhw_nic_find(net_dev, 0, 0);

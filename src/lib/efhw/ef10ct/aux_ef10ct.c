@@ -9,6 +9,7 @@
 #include <ci/efhw/efct_filters.h>
 #include <ci/efhw/iopage.h>
 #include <lib/efhw/aux.h>
+#include <lib/efhw/tph.h>
 
 #include "linux_resource_internal.h"
 #include "efrm_internal.h"
@@ -225,6 +226,7 @@ static int ef10ct_resource_init(struct efx_auxdev *edev,
   for( i = 0; i < ef10ct->rxq_n; i++ ) {
     ef10ct->rxq[i].evq_id = EF10CT_QUEUE_NUM_NO_QUEUE;
     mutex_init(&ef10ct->rxq[i].bind_lock);
+    ef10ct->rxq[i].steering_tag = EFHW_TPH_STEERING_TAG_UNUSED;
   }
 
   /* Claim we have a single IRQ range so that efrm can pre-allocate memory for
@@ -478,6 +480,7 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
   nic = &lnic->efrm_nic.efhw_nic;
   nic->mtu = net_dev->mtu + ETH_HLEN;
   nic->arch_extra = ef10ct;
+  efhw_nic_check_mtu(nic);
 
   /* Init shared evqs for use with rx vis. */
   for( i = 0; i < ef10ct->shared_n; i++ ) {

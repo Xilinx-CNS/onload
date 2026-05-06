@@ -232,6 +232,10 @@
 /* size of each receive buffer posted to RX_BUFFER_POST (DP_RX_BUFFER_SIZE) */
 #define EFCT_RX_SUPERBUF_BYTES  1048576
 
+/* maximum size of a transmitted frame. This value is taken from a footnote in
+ * XN-200500-TC (X3 Low Latency Host Interface Specification). */
+#define EFCT_TX_MAX_FRAME_BYTES 1982
+
 /* size of each packet's space within a buffer (including metadata)
  * In principle, this could be set to other values; but we don't support that */
 #define EFCT_PKT_STRIDE 2048
