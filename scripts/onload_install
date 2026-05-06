@@ -595,6 +595,16 @@ calculate_install_paths() {
     usrsharedir="${usrdir}/share"
   fi
 
+  # On merged-/usr systems, writing directly via /sbin can turn a symlink into
+  # a real directory in staged installs. Install these tools into /usr/sbin.
+  if [ "$sbindir" = "/sbin" ] && [ "$usrsbindir" = "/usr/sbin" ]; then
+    if [ -n "$i_prefix" ]; then
+      [ -L "$i_prefix/sbin" ] && sbindir="$usrsbindir"
+    elif [ -L "/sbin" ] && [ "$(readlink -f /sbin)" = "/usr/sbin" ]; then
+      sbindir="$usrsbindir"
+    fi
+  fi
+
   # Where do we put everything?
   i_usr="$i_prefix$usrdir"
   i_usrlibexec="$i_prefix$libexecdir/onload"
