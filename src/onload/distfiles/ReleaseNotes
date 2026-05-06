@@ -121,6 +121,17 @@ The solar_clusterd script has moved to the SolarCapture repository:
 https://github.com/Xilinx-CNS/solarcapture/tree/main/src/solar_clusterd
 
 
+Installation from tar.gz release packages
+-----------------------------------------
+
+Installing Onload from 'tarball' release packages is deprecated in general
+in favour of OS-specific release mechanisms, source RPMs and Debian source
+packages.
+
+Support for Onload on new major versions of Operating Systems, which in this
+case means Ubuntu 26.04, will not include installation from tar.gz packages.
+
+
 Notice for future releases
 ==========================
 
