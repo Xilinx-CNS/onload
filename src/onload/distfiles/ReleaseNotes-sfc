@@ -1,6 +1,6 @@
 Solarflare 6.X Linux network driver
 ===================================
-Version:  v6_3_0_1000
+Version:  v6_3_1_1000
 
 
 Overview
@@ -57,7 +57,7 @@ kernel
 Installation of the driver can be confirmed by typing:
    modinfo sfc | grep version
 and checking for the line:
-   version: v6_3_0_1000
+   version: v6_3_1_1000
 
 All network interfaces available on the system can be found with:
   ifconfig -a
@@ -91,6 +91,11 @@ Please contact your local AMD support representative or email
 
 Changelog
 ---------
+### v6_3_1_1000
+SWNETLINUX-5886
+~ Fix memory leak when bad (e.g. bad CRC) packets are received; this was a
+  regression introduced in 6.2.1 and later driver releases.
+
 ### v6_3_0_1000
 X4-7485
 ~ Address inconsistencies in adapter statistics. This change also requires
