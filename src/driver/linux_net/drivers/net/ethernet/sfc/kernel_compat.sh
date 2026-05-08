@@ -190,7 +190,8 @@ EFX_NEED_DEVLINK_FLASH_UPDATE_TIMEOUT_NOTIFY	nsymbol	devlink_flash_update_timeou
 EFX_HAVE_DEVLINK_ALLOC_DEV		symtype	devlink_alloc		include/net/devlink.h	struct devlink *(const struct devlink_ops *, size_t, struct device *)
 EFX_HAVE_VOID_DEVLINK_REGISTER		symtype	devlink_register	include/net/devlink.h	void(struct devlink *)
 EFX_NEED_ETHTOOL_FLASH_DEVICE		nsymbol devlink_compat_flash_update	include/net/devlink.h
-EFX_HAVE_DEVLINK_HEALTH_REPORTER	symtype	devlink_health_reporter_create	include/net/devlink.h	struct devlink_health_reporter *(struct devlink *, const struct devlink_health_reporter_ops *, u64, void *)
+EFX_HAVE_DEVLINK_HEALTH_REPORTER	symtype	devlink_health_reporter_create	include/net/devlink.h	struct devlink_health_reporter *(struct devlink *, const struct devlink_health_reporter_ops *, void *)
+EFX_HAVE_DEVLINK_HEALTH_REPORTER_OLD	symtype	devlink_health_reporter_create	include/net/devlink.h	struct devlink_health_reporter *(struct devlink *, const struct devlink_health_reporter_ops *, u64, void *)
 EFX_HAVE_VOID_DEVLINK_FMSG_STRING_PUT   symtype devlink_fmsg_string_put include/net/devlink.h void(struct devlink_fmsg *, const char *)
 EFX_HAVE_DEVLINK_HEALTH_REPORTER_OPS_EXTACK memtype struct_devlink_health_reporter_ops diagnose include/net/devlink.h int(*)(struct devlink_health_reporter *, struct devlink_fmsg *,	struct netlink_ext_ack *)
 EFX_HAVE_ETHTOOL_COALESCE_CQE		memtype	struct_ethtool_ops	get_coalesce	include/linux/ethtool.h	int (*)(struct net_device *, struct ethtool_coalesce *, struct kernel_ethtool_coalesce *, struct netlink_ext_ack *)

@@ -762,38 +762,31 @@ int efx_probe_devlink(struct efx_nic *efx)
 		efx->devlink_reporter_nvlog =
 			devlink_health_reporter_create(efx->devlink,
 						       &sfc_devlink_nvlog_ops,
-						       0,
 						       devlink_private);
 		efx->devlink_reporter_nvlog_clear =
 			devlink_health_reporter_create(efx->devlink,
 						       &sfc_devlink_nvlog_clear_ops,
-						       0,
 						       devlink_private);
 		if (efx->type->revision == EFX_REV_X4) {
 			efx->devlink_reporter_ramlog =
 				devlink_health_reporter_create(efx->devlink,
 							       &sfc_devlink_ramlog_ops,
-							       0,
 							       devlink_private);
 			efx->devlink_reporter_ramlog_clear =
 				devlink_health_reporter_create(efx->devlink,
 							       &sfc_devlink_ramlog_clear_ops,
-							       0,
 							       devlink_private);
 			efx->devlink_reporter_nvcfg_next =
 				devlink_health_reporter_create(efx->devlink,
 							       &sfc_devlink_nvcfg_next_ops,
-							       0,
 							       devlink_private);
 			efx->devlink_reporter_nvcfg_active =
 				devlink_health_reporter_create(efx->devlink,
 							       &sfc_devlink_nvcfg_active_ops,
-							       0,
 							       devlink_private);
 			efx->devlink_reporter_nvcfg_stored =
 				devlink_health_reporter_create(efx->devlink,
 							       &sfc_devlink_nvcfg_stored_ops,
-							       0,
 							       devlink_private);
 		}
 	}

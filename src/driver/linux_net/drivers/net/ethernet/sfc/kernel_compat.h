@@ -1588,6 +1588,20 @@ void devlink_flash_update_timeout_notify(struct devlink *devlink,
 					 const char *component,
 					 unsigned long timeout);
 #endif
+
+#if defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER_OLD)
+static inline struct devlink_health_reporter *
+efx_devlink_health_reporter_create(struct devlink *devlink,
+				   const struct devlink_health_reporter_ops *ops,
+				   void *priv)
+{
+	return devlink_health_reporter_create(devlink, ops, 0, priv);
+}
+#undef devlink_health_reporter_create
+#define devlink_health_reporter_create efx_devlink_health_reporter_create
+#define EFX_HAVE_DEVLINK_HEALTH_REPORTER
+#endif /* EFX_HAVE_DEVLINK_HEALTH_REPORTER_OLD */
+
 #else
 
 /* devlink is not available, provide a 'fake' devlink info request structure
