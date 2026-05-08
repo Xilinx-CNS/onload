@@ -219,6 +219,26 @@ void efx_discard_rx_packet(struct efx_channel *channel,
 {
 	struct efx_rx_queue *rx_queue = efx_channel_get_rx_queue(channel);
 
+	/* When discarding with page sharing enabled, drop the extra reference
+	 * for pages whose last buffer is being freed, unless the page is in
+	 * the recycle ring.
+	 */
+	if (rx_queue->efx->rx_buf_page_share) {
+		struct efx_rx_buffer *buf;
+		unsigned int i;
+
+		for (i = 0, buf = rx_buf;
+		     i < n_frags;
+		     i++, buf = efx_rx_buf_next(rx_queue, buf)) {
+			if (buf->page &&
+			    !(buf->flags & EFX_RX_PAGE_IN_RECYCLE_RING) &&
+			    (buf->flags & EFX_RX_BUF_LAST_IN_PAGE)) {
+				efx_unmap_rx_buffer(rx_queue->efx, buf);
+				put_page(buf->page);
+			}
+		}
+	}
+
 	efx_free_rx_buffers(rx_queue, rx_buf, n_frags);
 }
 

@@ -174,7 +174,7 @@ struct efx_mcdi_mon_attribute {
 	unsigned int index;
 	unsigned int type;
 	enum hwmon_sensor_types hwmon_type;
-	unsigned int limit_value;
+	int limit_value;
 	enum efx_hwmon_attribute hwmon_attribute;
 	u8 file_index;
 	bool is_dynamic;
@@ -282,7 +282,7 @@ struct efx_dynamic_sensor {
 #endif
 	/* Sensor state from readings and events */
 	unsigned int state;
-	unsigned int value;
+	int value;
 };
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
@@ -332,9 +332,10 @@ static void efx_mcdi_handle_dynamic_sensor_state_change(struct efx_nic *efx,
 				      DEFAULT_RATELIMIT_BURST);
 	struct efx_mcdi_mon *hwmon = efx_mcdi_mon(efx);
 	struct efx_dynamic_sensor *sensor;
-	unsigned int handle, state, value;
+	unsigned int handle, state;
 	const char *name = NULL;
 	const char *state_txt;
+	int value;
 
 	/* Ignore event if dynamic sensors have not been initialised */
 	if (!hwmon || !hwmon->sensor_list)
@@ -383,7 +384,9 @@ static void efx_mcdi_handle_dynamic_sensor_state_change(struct efx_nic *efx,
 		}
 	} else {
 		/* Second event of pair holds sensor value */
-		value = EFX_QWORD_FIELD(*ev, MCDI_EVENT_DYNAMIC_SENSORS_VALUE);
+		BUILD_BUG_ON(MCDI_EVENT_DYNAMIC_SENSORS_VALUE_WIDTH != 32);
+		value = (s32)EFX_QWORD_FIELD(*ev,
+					     MCDI_EVENT_DYNAMIC_SENSORS_VALUE);
 
 		/* Retrieve sensor handle from first event */
 		handle = READ_ONCE(hwmon->pend_sensor_state_handle);
@@ -482,7 +485,9 @@ efx_mcdi_dynamic_sensor_list_reading_update(struct efx_nic *efx,
 			outlen -= MC_CMD_DYNAMIC_SENSORS_GET_READINGS_OUT_VALUES_LEN;
 			continue;
 		}
-		sensor->value = MCDI_DWORD(entry, DYNAMIC_SENSORS_READING_VALUE);
+		BUILD_BUG_ON(MC_CMD_DYNAMIC_SENSORS_READING_VALUE_WIDTH != 32);
+		sensor->value = (s32)MCDI_DWORD(entry, DYNAMIC_SENSORS_READING_VALUE);
+
 		sensor->state = MCDI_DWORD(entry, DYNAMIC_SENSORS_READING_STATE);
 
 		i++;
@@ -989,7 +994,7 @@ static int efx_mcdi_mon_get_entry(struct device *dev, unsigned int index,
 static int efx_mcdi_mon_get_dynamic_reading(struct device *dev,
 					    unsigned int index,
 					    unsigned int *state_out,
-					    unsigned int *value_out)
+					    int *value_out)
 {
 	struct efx_nic *efx = dev_get_drvdata(dev);
 	struct efx_mcdi_mon *hwmon = efx_mcdi_mon(efx);
@@ -1022,7 +1027,7 @@ static int efx_mcdi_mon_get_dynamic_reading(struct device *dev,
 
 static int efx_mcdi_mon_get_value(struct device *dev, unsigned int index,
 				  enum hwmon_sensor_types hwmon_type,
-				  unsigned int *value)
+				  int *value)
 {
 	struct efx_nic *efx = dev_get_drvdata(dev);
 	unsigned int state;
@@ -1061,10 +1066,10 @@ static int efx_mcdi_mon_get_value(struct device *dev, unsigned int index,
 	return 0;
 }
 
-static unsigned int
+static int
 efx_mcdi_mon_get_limit(struct efx_mcdi_mon_attribute *mon_attr)
 {
-	unsigned int value;
+	int value;
 
 	value = mon_attr->limit_value;
 
@@ -1117,13 +1122,14 @@ static ssize_t efx_mcdi_mon_show_value(struct device *dev,
 {
 	struct efx_mcdi_mon_attribute *mon_attr =
 		container_of(attr, struct efx_mcdi_mon_attribute, dev_attr);
-	unsigned int value = 0;
-	int rc = efx_mcdi_mon_get_value(dev, mon_attr->index,
-					mon_attr->hwmon_type, &value);
+	int value = 0;
+	int rc;
 
+	rc = efx_mcdi_mon_get_value(dev, mon_attr->index,
+				    mon_attr->hwmon_type, &value);
 	if (rc)
 		return rc;
-	return scnprintf(buf, PAGE_SIZE, "%u\n", value);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", value);
 }
 
 static ssize_t efx_mcdi_mon_show_limit(struct device *dev,
@@ -1132,9 +1138,9 @@ static ssize_t efx_mcdi_mon_show_limit(struct device *dev,
 {
 	struct efx_mcdi_mon_attribute *mon_attr =
 		container_of(attr, struct efx_mcdi_mon_attribute, dev_attr);
-	unsigned int value = efx_mcdi_mon_get_limit(mon_attr);
+	int value = efx_mcdi_mon_get_limit(mon_attr);
 
-	return scnprintf(buf, PAGE_SIZE, "%u\n", value);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", value);
 }
 
 static ssize_t efx_mcdi_mon_show_alarm(struct device *dev,
@@ -1335,8 +1341,8 @@ static int efx_hwmon_read(struct device *dev,
 	const struct efx_nic *efx = dev_get_drvdata(dev);
 	struct efx_mcdi_mon_attribute *mon_attr =
 		efx_hwmon_get_attribute(efx, type, attr, channel);
-	int	rc;
-	unsigned int value = 0;
+	int value = 0;
+	int rc;
 
 	*val = 0;
 	if (!mon_attr)
