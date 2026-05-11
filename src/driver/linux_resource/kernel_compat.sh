@@ -193,6 +193,9 @@ EFRM_HAVE_FLOWI4_DSCP	member	struct_flowi_common flowic_dscp	include/net/flow.h
 
 EFRM_HAVE_SOCKADDR_UNSIZED	symtype	kernel_bind	include/linux/net.h	int(struct socket*, struct sockaddr_unsized*, int)
 
+EFRM_HAVE_NET_NETDEV_LOCK_H		file	include/net/netdev_lock.h
+EFRM_HAVE_NETDEV_LOCK_OPS		symbol	netdev_lock_ops		include/net/netdev_lock.h	include/linux/netdevice.h
+
 # TODO move onload-related stuff from net kernel_compat
 " | grep -E -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }

@@ -60,6 +60,10 @@
 #include <driver/linux_resource/autocompat.h>
 #include <ci/tools.h>
 
+#ifdef EFRM_HAVE_NET_NETDEV_LOCK_H
+#include <net/netdev_lock.h>
+#endif
+
 /********* Memory allocation *************/
 
 #ifndef IN_KERNEL_COMPAT_C
@@ -549,5 +553,19 @@ static inline int efrm_follow_pfn(struct vm_area_struct *vma,
 #define EFRM_SOCKADDR_UNSIZED_PTR(x) ((struct sockaddr*)(x))
 #endif
 
+static inline void efrm_netdev_lock_ops(struct net_device *dev)
+{
+#ifdef EFRM_HAVE_NETDEV_LOCK_OPS
+	/* Kernel 6.15 added netdev_lock_ops to netdev_ops and ethtool_ops */
+	netdev_lock_ops(dev);
+#endif
+}
+
+static inline void efrm_netdev_unlock_ops(struct net_device *dev)
+{
+#ifdef EFRM_HAVE_NETDEV_LOCK_OPS
+	netdev_unlock_ops(dev);
+#endif
+}
 
 #endif /* DRIVER_LINUX_RESOURCE_KERNEL_COMPAT_H */
