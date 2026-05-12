@@ -35,31 +35,26 @@
 #define CI_LOG_I(x)       x              /* information */
 #define CI_LOG_V(x)       x              /* verbose     */
 
-/* Build time asserts. We paste a counter into the type name so that
- * the macro can be used more than once per file. */
 #ifndef CI_BUILD_ASSERT
-#define __CI_BUILD_ASSERT_NAME(_x) __CI_BUILD_ASSERT_ILOATHECPP(_x)
-#define __CI_BUILD_ASSERT_ILOATHECPP(_x)  __CI_BUILD_ASSERT__ ##_x
-#define CI_BUILD_ASSERT(e)\
- typedef char  __CI_BUILD_ASSERT_NAME(__COUNTER__)[(e)?1:-1] \
-    __attribute__((unused))
+/* Build time asserts. Direct use of static_assert is preferred for
+ * more concise error reporting. */
+#ifndef __cplusplus
+#define CI_BUILD_ASSERT(x) _Static_assert(x, #x)
+#else
+#define CI_BUILD_ASSERT(x) static_assert(x, #x)
 #endif
 
 /* verifies compile time expression is 0 or positive -
  * no-op for runtime expressions */
-#if __GNUC__ * 100 + __GNUC_MINOR__ >= 409
+#ifndef __cplusplus
 #define CI_BUILD_ASSERT_CONSTANT_NON_NEGATIVE(c) \
-  do {                                                              \
-    char __CI_BUILD_ASSERT_NAME(__LINE__)                           \
-         [ __builtin_choose_expr(__builtin_constant_p(c), (c), 0)]  \
-         __attribute__((unused));                                   \
-  } while(0)
+  _Static_assert(__builtin_choose_expr(__builtin_constant_p(c), (c), 0) >= 0,\
+                 #c " >= 0")
 #else
-  /* RHEL6 and RHEL7 complain on the code above:
-   * error: first argument to ‘__builtin_choose_expr’ not a constant
-   */
 #define CI_BUILD_ASSERT_CONSTANT_NON_NEGATIVE(c) \
-  do {(void) sizeof(struct { int x[(int)(c)]; });} while(0)
+  static_assert(__builtin_choose_expr(__builtin_constant_p(c), (c), 0) >= 0,\
+                 #c " >= 0")
+#endif
 #endif
 
 #ifdef _PREFAST_
