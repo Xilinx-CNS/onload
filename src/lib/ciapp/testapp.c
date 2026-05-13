@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 
 
 int         ci_app_standard_opts = 1; /* true */
@@ -392,6 +393,7 @@ static int parse_cfg_opt(int argc, char** argv, const char* context)
   const ci_cfg_desc* a;
   const char* val = NULL;
   int result = 1;
+  long long int number;
 
   /* is it "-" ? */
   if( argv[0][1] == 0 )  bad_cla(context, argv[0], "- is not allowed");
@@ -425,12 +427,16 @@ static int parse_cfg_opt(int argc, char** argv, const char* context)
       ++(*(int*) a->value);
     break;
   case CI_CFG_BOOL:
-    {
-      int optval = 1;
-      if( val && sscanf(val, "%d", &optval) != 1 )
-	bad_cla(context, argv[0], "expected integer or nothing");
-      *((bool*) a->value) = optval;
-    }
+    number = 1;
+    if( val && sscanf(val, "%lli", &number) != 1 )
+      bad_cla(context, argv[0], "expected integer or nothing");
+    *((bool*) a->value) = number;
+    break;
+  case CI_CFG_ID:
+    if( !val || sscanf(val, "%lli", &number) != 1 || number < 0 ||
+        (unsigned long long) number >= (unsigned long long)(id_t) -1 )
+      bad_cla(context, argv[0], "expected non-sentinel id_t(3) value");
+    *((id_t*) a->value) = number;
     break;
   case CI_CFG_INT:
     if( !val || sscanf(val, "%i", (int*) a->value) != 1 )

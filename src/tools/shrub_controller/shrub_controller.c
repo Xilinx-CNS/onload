@@ -25,6 +25,7 @@
 #include <etherfabric/vi.h>
 #include <fcntl.h>
 #include <ftw.h>
+#include <grp.h>
 #include <ci/app/testapp.h>
 #include <net/if.h>
 #include <onload/driveraccess.h>
@@ -59,6 +60,7 @@ static volatile sig_atomic_t call_shrub_dump = 0;
 #define DEFAULT_BUFFER_SIZE 1024 * 1024
 
 static const int NO_FD = -1;
+static const id_t NO_ID = (id_t) -1;
 
 #define DEV_KMSG "/dev/kmsg"
 #define SERVER_BIN "shrub_controller"
@@ -128,6 +130,8 @@ typedef struct
   int wakeup_epoll_fd;
   int wakeup_timer_fd;
   long long periodic_poll_timeout_ns;
+  id_t uid;
+  id_t gid;
 } shrub_controller_config;
 
 size_t get_config_definitions(ci_cfg_desc **defs,
@@ -147,6 +151,10 @@ size_t get_config_definitions(ci_cfg_desc **defs,
       "milliseconds after last client disconnects to close and exit" },
     { 'p', "poll",          CI_CFG_UINT64, &config->periodic_poll_timeout_ns,
       "nanoseconds within which to poll when in interrupt-driven mode" },
+    { 0,   "uid",           CI_CFG_ID,     &config->uid,
+      "Drop privileges to this UID after start" },
+    { 0,   "gid",           CI_CFG_ID,     &config->gid,
+      "Drop privileges to this GID after start, see also --uid option" },
   };
   if( (*defs = malloc(sizeof cfg_opts)) )
     memcpy(*defs, cfg_opts, sizeof cfg_opts);
@@ -1105,6 +1113,13 @@ static void tear_down_servers(shrub_controller_config *config)
   config->server_config_head = NULL;
 }
 
+CI_NORETURN init_failed(const char* msg, ...)
+{
+  va_list args;
+  va_start(args, msg);
+  ci_server_init_failed_v(SERVER_NAME, msg, args);
+}
+
 static int controller_servers_init(shrub_controller_config *config,
                                    char **intfs, int n_intfs)
 {
@@ -1116,8 +1131,8 @@ static int controller_servers_init(shrub_controller_config *config,
     if ( (rc = parse_interface(intfs[i], config)) < 0 ||
         (rc = shrub_server_init(config, config->server_config_head)) < 0) {
       tear_down_servers(config);
-      ci_server_init_failed(SERVER_NAME, "starting server %d of %d for interface '%s'",
-                            i, n_intfs, intfs[i]);
+      init_failed("starting server %d of %d for interface '%s'",
+                  i, n_intfs, intfs[i]);
       return  rc;
     }
   }
@@ -1213,19 +1228,27 @@ controller_open_dir(shrub_controller_config *config)
       ci_log("Error: taking shrub_controller lock at %s: %s",
              config->controller_dir, strerror(rc));
     }
-    close(fd);
-    return -rc;
+    goto fail;
   }
 
   if( fchdir(fd) == -1 ) {
     rc = errno;
     ci_log("Error: entering shrub_controller directory: %s", strerror(rc));
-    close(fd);
-    return -rc;
+    goto fail;
+  }
+
+  if( (config->uid != NO_ID || config->gid != NO_ID) &&
+      fchown(fd, config->uid, config->gid) == -1 ) {
+    rc = errno;
+    ci_log("Error: changing shrub_controller dir ownership: %s", strerror(rc));
+    goto fail;
   }
 
   config->dir_fd = fd;
   return 0;
+fail:
+  close(fd);
+  return -rc;
 }
 
 static int controller_cplane_connect(shrub_controller_config *config)
@@ -1265,6 +1288,32 @@ static void controller_cplane_disconnect(shrub_controller_config *config)
   oo_fd_close(config->oo_fd_handle);
 }
 
+static void drop_privileges(shrub_controller_config *config)
+{
+  int rc;
+
+  /* Clear supplementary groups */
+  if( config->gid != NO_ID || config->uid != NO_ID ) {
+    rc = setgroups(0, NULL);
+    if( rc == -1 )
+      init_failed("Failed to drop supplemental groups: %s", strerror(errno));
+  }
+
+  /* Then set GID */
+  if( config->gid != NO_ID ) {
+    rc = setresgid(config->gid, config->gid, config->gid);
+    if( rc == -1 )
+      init_failed("Failed to drop GID to %d: %s", config->gid, strerror(errno));
+  }
+
+  /* And finally set UID */
+  if( config->uid != NO_ID ) {
+    rc = setresuid(config->uid, config->uid, config->uid);
+    if( rc == -1 )
+      init_failed("Failed to drop UID to %d: %s", config->uid, strerror(errno));
+  }
+}
+
 int main(int argc, char *argv[])
 {
   int rc = 0;
@@ -1273,13 +1322,14 @@ int main(int argc, char *argv[])
   struct stat stat;
 
   ci_app_standard_opts = 0;
-  shrub_controller_config config = {0};
-  config.config_socket_fd = NO_FD;
+  shrub_controller_config config = {
+    .dir_fd = NO_FD, .config_socket_fd = NO_FD,
+    .uid = NO_ID, .gid = NO_ID,
+  };
   config.interface_token = 1;
   config.controller_id = 0;
   config.auto_close_delay = AUTO_CLOSE_DELAY_NEVER;
   config.periodic_poll_timeout_ns = PERIODIC_POLL_TIMEOUT_DEFAULT;
-  config.dir_fd = -1;
 
   cfg_opts_n = get_config_definitions(&cfg_opts, &config);
   if( !cfg_opts )
@@ -1355,6 +1405,8 @@ int main(int argc, char *argv[])
   rc = controller_servers_init(&config, &argv[1], argc - 1);
   if ( rc )
     goto fail_servers_init;
+
+  drop_privileges(&config);
 
   if( config.use_interrupts )
     reactor_loop_interrupt(&config);
