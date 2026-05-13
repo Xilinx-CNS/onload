@@ -25,7 +25,7 @@
 #include <etherfabric/vi.h>
 #include <fcntl.h>
 #include <ftw.h>
-#include <getopt.h>
+#include <ci/app/testapp.h>
 #include <net/if.h>
 #include <onload/driveraccess.h>
 #include <signal.h>
@@ -63,6 +63,7 @@ static volatile sig_atomic_t call_shrub_dump = 0;
 #define DEV_KMSG "/dev/kmsg"
 #define SERVER_BIN "shrub_controller"
 #define SERVER_NAME "Onload Shrub Server"
+#define POSITIONAL_ARGS "[<interface>[/<buffer_count>]...]"
 
 #define AUTO_CLOSE_DELAY_NEVER -1
 
@@ -127,21 +128,30 @@ typedef struct
   long long periodic_poll_timeout_ns;
 } shrub_controller_config;
 
-static void usage(void)
-{
-  fprintf(stderr, "Usage:\n");
-  fprintf(stderr, "  shrub_controller <flags> "
-                  "[<interface>[/<buffer_count>]]...\n");
-  fprintf(stderr, "Options:\n");
-  fprintf(stderr, "  -d       Enable debug mode\n");
-  fprintf(stderr, "  -i       Enable interrupts\n");
-  fprintf(stderr, "  -c <id>  Set controller_id (valid values 0 - %d)\n",
-          EF_SHRUB_MAX_CONTROLLER);
-  fprintf(stderr, "  -D       Daemonise on startup\n");
-  fprintf(stderr, "  -K       Log to kmsg\n");
-  fprintf(stderr, "  -C <ms>  Close after <ms> if all clients disconnect\n");
-  fprintf(stderr, "  -p <ns>  Ensure a poll happens every <ns> in interrupt-driven mode\n");
-}
+size_t get_config_definitions(ci_cfg_desc **defs,
+                              shrub_controller_config *config,
+                              bool *daemonise,
+                              bool *log_to_kern) {
+  ci_cfg_desc cfg_opts[] = {
+    { 'c', "controller-id", CI_CFG_INT,    &config->controller_id,
+      "controller id in range [0, " OO_STRINGIFY(EF_SHRUB_MAX_CONTROLLER) "]" },
+    { 'd', NULL,            CI_CFG_BOOL,   &config->debug_mode,
+      "enable debug mode" },
+    { 'i', "interrupts",    CI_CFG_BOOL,   &config->use_interrupts,
+      "use interrupt-driven mode" },
+    { 'D', "daemonise",     CI_CFG_BOOL,   daemonise,
+      "run in the background" },
+    { 'K', "log-to-kmsg",   CI_CFG_BOOL,   log_to_kern,
+      "log to kmsg" },
+    { 'C', "auto-close",    CI_CFG_UINT,   &config->auto_close_delay,
+      "milliseconds after last client disconnects to close and exit" },
+    { 'p', "poll",          CI_CFG_UINT64, &config->periodic_poll_timeout_ns,
+      "nanoseconds within which to poll when in interrupt-driven mode" },
+  };
+  if( (*defs = malloc(sizeof cfg_opts)) )
+    memcpy(*defs, cfg_opts, sizeof cfg_opts);
+  return sizeof cfg_opts / sizeof *cfg_opts;
+};
 
 static bool is_hwport_llct(shrub_controller_config *config, ci_hwport_id_t hwport)
 {
@@ -1097,7 +1107,8 @@ static int controller_servers_init(shrub_controller_config *config,
     if ( (rc = parse_interface(intfs[i], config)) < 0 ||
         (rc = shrub_server_init(config, config->server_config_head)) < 0) {
       tear_down_servers(config);
-      usage();
+      ci_server_init_failed(SERVER_NAME, "starting server %d of %d for interface '%s'",
+                            i, n_intfs, intfs[i]);
       return  rc;
     }
   }
@@ -1250,8 +1261,11 @@ int main(int argc, char *argv[])
   int rc = 0;
   bool daemonise = false;
   bool log_to_kern = false;
+  ci_cfg_desc *cfg_opts;
+  size_t cfg_opts_n;
   struct stat stat;
-  int option;
+
+  ci_app_standard_opts = 0;
   shrub_controller_config config = {0};
   config.config_socket_fd = INVALID_SOCKET_FD;
   config.interface_token = 1;
@@ -1260,7 +1274,11 @@ int main(int argc, char *argv[])
   config.periodic_poll_timeout_ns = PERIODIC_POLL_TIMEOUT_DEFAULT;
   config.dir_fd = -1;
 
-  /* Set sutable prefix */
+  cfg_opts_n = get_config_definitions(&cfg_opts, &config, &daemonise, &log_to_kern);
+  if( !cfg_opts )
+    return EXIT_FAILURE;
+
+  /* Set suitable prefix */
   ci_server_set_log_prefix(&shrub_log_prefix, SERVER_BIN);
 
   /* Ensure that early errors are not lost */
@@ -1273,48 +1291,22 @@ int main(int argc, char *argv[])
     }
   }
 
-  while ( (option = getopt(argc, argv, "dic:DKC:p:")) != -1 ) {
-    switch (option)
-    {
-    case 'd':
-      config.debug_mode = true;
-      ci_log("Info: shrub_controller Debug Mode Enabled!");
-      break;
-    case 'i':
-      config.use_interrupts = true;
-      break;
-    case 'c':
-      config.controller_id = atoi(optarg);
-      if( config.controller_id < 0 ||
-          config.controller_id > EF_SHRUB_MAX_CONTROLLER ) {
-        ci_log("Error: shrub_controller id should be between 0 and %d",
-               EF_SHRUB_MAX_CONTROLLER);
-        usage();
-        return EXIT_FAILURE;
-      }
-      break;
-    case 'D':
-      daemonise = true;
-      break;
-    case 'K':
-      log_to_kern = true;
-      break;
-    case 'C':
-      config.auto_close_delay = atoi(optarg);
-      break;
-    case 'p':
-      config.periodic_poll_timeout_ns = atoll(optarg);
-      if( config.periodic_poll_timeout_ns < PERIODIC_POLL_TIMEOUT_MIN ) {
-        ci_log("Error: periodic poll timeout must be at least %lldns",
-               PERIODIC_POLL_TIMEOUT_MIN);
-        usage();
-        return EXIT_FAILURE;
-      }
-      break;
-    default:
-      usage();
-      return EXIT_FAILURE;
-    }
+  ci_app_getopt(POSITIONAL_ARGS, &argc, argv, cfg_opts, cfg_opts_n);
+
+  if( config.debug_mode )
+    ci_log("Info: shrub_controller Debug Mode Enabled!");
+  if( config.controller_id < 0 ||
+      config.controller_id > EF_SHRUB_MAX_CONTROLLER ) {
+    ci_log("Error: shrub_controller id should be between 0 and %d",
+           EF_SHRUB_MAX_CONTROLLER);
+    ci_app_opt_usage(cfg_opts, cfg_opts_n);
+    return EXIT_FAILURE;
+  }
+  if( config.periodic_poll_timeout_ns < PERIODIC_POLL_TIMEOUT_MIN ) {
+    ci_log("Error: periodic poll timeout must be at least %lldns",
+           PERIODIC_POLL_TIMEOUT_MIN);
+    ci_app_opt_usage(cfg_opts, cfg_opts_n);
+    return EXIT_FAILURE;
   }
 
   if( daemonise )
@@ -1323,12 +1315,12 @@ int main(int argc, char *argv[])
   controller_init_signals();
   rc = controller_init_paths(&config);
   if ( rc )
-    return rc;
+    goto fail_early_init;
 
   /* Ensure Onload runtime directory */
   rc = create_directory(EF_SHRUB_SOCK_DIR_PATH);
   if ( rc )
-    return rc;
+    goto fail_early_init;
 
   /* Ensure, open and lock controller runtime directory */
   rc = controller_open_dir(&config);
@@ -1353,7 +1345,7 @@ int main(int argc, char *argv[])
   if ( rc )
     goto fail_cplane_connect;
 
-  rc = controller_servers_init(&config, &argv[optind], argc - optind);
+  rc = controller_servers_init(&config, &argv[1], argc - 1);
   if ( rc )
     goto fail_servers_init;
 
@@ -1373,6 +1365,8 @@ fail_create_config_socket:
   close(config.dir_fd);
 fail_socket_lock_create:
   rmdir(config.controller_dir);
+fail_early_init:
+  free(cfg_opts);
 
   return rc;
 }

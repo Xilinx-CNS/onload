@@ -16,6 +16,7 @@
 #include <ci/app.h>
 
 #include <string.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -405,7 +406,8 @@ static int parse_cfg_opt(int argc, char** argv, const char* context)
 
   /* the option value (if required) may be part of this arg or the next */
   if( !val || *val == 0 ) {
-    if( a->type == CI_CFG_FLAG || a->type == CI_CFG_USAGE || argc == 1 ) {
+    if( a->type == CI_CFG_FLAG || a->type == CI_CFG_BOOL ||
+        a->type == CI_CFG_USAGE || argc == 1 ) {
       val = 0;
     } else {
       val = argv[1];
@@ -421,6 +423,14 @@ static int parse_cfg_opt(int argc, char** argv, const char* context)
     }
     else
       ++(*(int*) a->value);
+    break;
+  case CI_CFG_BOOL:
+    {
+      int optval = 1;
+      if( val && sscanf(val, "%d", &optval) != 1 )
+	bad_cla(context, argv[0], "expected integer or nothing");
+      *((bool*) a->value) = optval;
+    }
     break;
   case CI_CFG_INT:
     if( !val || sscanf(val, "%i", (int*) a->value) != 1 )

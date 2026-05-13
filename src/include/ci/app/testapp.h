@@ -38,6 +38,7 @@ typedef struct ci_cfg_desc_s {
 # define CI_CFG_IRANGE 7
 # define CI_CFG_INT64  8
 # define CI_CFG_UINT64 9
+# define CI_CFG_BOOL  10 /* bool-typed flag */
   void*        value;
   const char*  usage;
   void       (*fn)(const char*, const struct ci_cfg_desc_s*);
