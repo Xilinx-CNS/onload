@@ -117,6 +117,8 @@ typedef struct
   int oo_fd_handle;
   bool debug_mode;
   bool use_interrupts;
+  bool daemonise;
+  bool log_to_kern;
   char controller_dir[EF_SHRUB_SOCKET_DIR_LEN];
   char log_dir[EF_SHRUB_LOG_LEN];
   struct shrub_controller_stats controller_stats;
@@ -129,9 +131,7 @@ typedef struct
 } shrub_controller_config;
 
 size_t get_config_definitions(ci_cfg_desc **defs,
-                              shrub_controller_config *config,
-                              bool *daemonise,
-                              bool *log_to_kern) {
+                              shrub_controller_config *config) {
   ci_cfg_desc cfg_opts[] = {
     { 'c', "controller-id", CI_CFG_INT,    &config->controller_id,
       "controller id in range [0, " OO_STRINGIFY(EF_SHRUB_MAX_CONTROLLER) "]" },
@@ -139,9 +139,9 @@ size_t get_config_definitions(ci_cfg_desc **defs,
       "enable debug mode" },
     { 'i', "interrupts",    CI_CFG_BOOL,   &config->use_interrupts,
       "use interrupt-driven mode" },
-    { 'D', "daemonise",     CI_CFG_BOOL,   daemonise,
+    { 'D', "daemonise",     CI_CFG_BOOL,   &config->daemonise,
       "run in the background" },
-    { 'K', "log-to-kmsg",   CI_CFG_BOOL,   log_to_kern,
+    { 'K', "log-to-kmsg",   CI_CFG_BOOL,   &config->log_to_kern,
       "log to kmsg" },
     { 'C', "auto-close",    CI_CFG_UINT,   &config->auto_close_delay,
       "milliseconds after last client disconnects to close and exit" },
@@ -1259,8 +1259,6 @@ static void controller_cplane_disconnect(shrub_controller_config *config)
 int main(int argc, char *argv[])
 {
   int rc = 0;
-  bool daemonise = false;
-  bool log_to_kern = false;
   ci_cfg_desc *cfg_opts;
   size_t cfg_opts_n;
   struct stat stat;
@@ -1274,7 +1272,7 @@ int main(int argc, char *argv[])
   config.periodic_poll_timeout_ns = PERIODIC_POLL_TIMEOUT_DEFAULT;
   config.dir_fd = -1;
 
-  cfg_opts_n = get_config_definitions(&cfg_opts, &config, &daemonise, &log_to_kern);
+  cfg_opts_n = get_config_definitions(&cfg_opts, &config);
   if( !cfg_opts )
     return EXIT_FAILURE;
 
@@ -1309,7 +1307,7 @@ int main(int argc, char *argv[])
     return EXIT_FAILURE;
   }
 
-  if( daemonise )
+  if( config.daemonise )
     close_range(STDERR_FILENO + 1, ~0U, 0);
 
   controller_init_signals();
@@ -1336,10 +1334,10 @@ int main(int argc, char *argv[])
     goto fail_create_interrupt_state;
 
   /* Satisfy readiness invariant by daemonising only once config created. */
-  if( daemonise )
+  if( config.daemonise )
     ci_server_daemonise(&shrub_log_prefix,
                         SERVER_NAME, SERVER_BIN,
-                        (log_to_kern ? CI_DAEMON_LOG_TO_KERN : 0));
+                        (config.log_to_kern ? CI_DAEMON_LOG_TO_KERN : 0));
 
   rc = controller_cplane_connect(&config);
   if ( rc )
