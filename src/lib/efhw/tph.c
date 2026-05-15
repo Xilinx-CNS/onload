@@ -80,10 +80,27 @@ efhw_set_tph_steering(struct efhw_nic *nic, uint instance, int set,
       rc = -ENODEV;
     }
 
-    if( rc != 0 ) {
-      *tag_mode = 0;
-      EFHW_WARN_LIMITED("Failed to read steering tag (error %d), continuing without it",
-                        rc);
+    if( nic->flags & NIC_FLAG_CXL_CACHE_ENABLED ) {
+      /* We need to transform the tag returned by OS if we're using CXL.cache.
+       * TPH uses tags from 1-16 (with 0 meaning no ST mode) whereas CXL.cache
+       * uses values 0-15 (with no support for no ST mode). If for some reason
+       * we get a tag with a value of 0 after a successful call then we treat
+       * it as a failed read. */
+      if( rc == 0 && *tag_used > 0 ) {
+        *tag_used = *tag_used - 1;
+      } else {
+        /* CXL.cache has no fall back to no ST mode */
+        EFHW_WARN_LIMITED("Failed to read steering tag (error %d) or got invalid steering tag, not configuring SDCI",
+                          rc);
+        return rc < 0 ? rc : -EINVAL;
+      }
+    } else {
+      /* PCIe and CXL.io can fall back to no ST mode if tag can't be read */
+      if( rc != 0 ) {
+        *tag_mode = 0;
+        EFHW_WARN_LIMITED("Failed to read steering tag (error %d), continuing without it",
+                          rc);
+      }
     }
   }
 

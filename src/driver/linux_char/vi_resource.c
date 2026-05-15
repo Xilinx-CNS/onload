@@ -140,6 +140,15 @@ vi_resource_alloc(struct efrm_vi_attr *attr,
     goto fail_q_alloc;
   }
 
+  if( (nic->flags & NIC_FLAG_CXL_CACHE_ENABLED) &&
+      (vi_flags & EFHW_VI_ENABLE_TPH) &&
+      ! (vi_flags & EFHW_VI_TPH_TAG_MODE) ) {
+    EFCH_ERR("%s: VI with TPH enabled but No ST Mode is unsupported if CXL.cache is enabled.",
+             __FUNCTION__);
+    rc = -EINVAL;
+    goto fail_q_alloc;
+  }
+
   /* We take one less than the actual reserved amount here to maintain the old
    * queue sizing behaviour. */
   evq_reservation = efhw_get_evq_reserved_slots(nic, vi_flags) - 1;

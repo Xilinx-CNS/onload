@@ -1457,11 +1457,19 @@ static void populate_tph_settings(ci_netif* ni, struct efhw_nic* nic,
                                   struct vi_allocate_info* info)
 {
   if( NI_OPTS(ni).tph_mode != 0 ) {
-    info->ef_vi_flags |= EF_VI_ENABLE_TPH;
-    info->efhw_flags |= EFHW_VI_ENABLE_TPH;
-    if( NI_OPTS(ni).tph_mode == 2 ) {
-      info->ef_vi_flags |= EF_VI_TPH_TAG_MODE;
-      info->efhw_flags |= EFHW_VI_TPH_TAG_MODE;
+    if( nic->flags & NIC_FLAG_CXL_CACHE_ENABLED &&
+        NI_OPTS(ni).tph_mode == 1 ) {
+      NI_LOG(ni, CONFIG_WARNINGS,
+             "[%s]: EF_TPH_MODE=1 (No ST Mode) is not supported with CXL.cache. Falling back to EF_TPH_MODE=0 (No SDCI)",
+             ni->state->pretty_name);
+    }
+    else {
+      info->ef_vi_flags |= EF_VI_ENABLE_TPH;
+      info->efhw_flags |= EFHW_VI_ENABLE_TPH;
+      if( NI_OPTS(ni).tph_mode == 2 ) {
+        info->ef_vi_flags |= EF_VI_TPH_TAG_MODE;
+        info->efhw_flags |= EFHW_VI_TPH_TAG_MODE;
+      }
     }
   }
 }
