@@ -2555,16 +2555,18 @@ oof_socket_add_wild(struct oof_manager* fm, struct oof_socket* skf,
      * stack, resulting in unaccelerated sockets in this stack. Return an error
      * here to prevent this.
      */
-    if( fm->fm_hwports_no5tuple )
+    if( fm->fm_hwports_no5tuple ) {
       rc = -EEXIST;
-    else
+    }
+    else {
       OO_DEBUG_IPF(other_skf = oof_wild_socket(lp, lpa, skf->af_space);
-                   if( other_skf != NULL )
-                     ci_log(FSK_FMT "STEAL "IPX_TRIPLE_FMT" from "SK_FMT,
-                            FSK_PRI_ARGS(skf),
-                            IPX_TRIPLE_ARGS(lp->lp_protocol,
-                            AF_IP(laddr), lp->lp_lport),
-                            SK_PRI_ARGS(other_skf)));
+      if( other_skf != NULL )
+        ci_log(FSK_FMT "STEAL "IPX_TRIPLE_FMT" from "SK_FMT,
+                   FSK_PRI_ARGS(skf),
+                   IPX_TRIPLE_ARGS(lp->lp_protocol,
+                   AF_IP(laddr), lp->lp_lport),
+                   SK_PRI_ARGS(other_skf)));
+    }
   }
   if( nat_preimage.n_results > 0 )
     oof_nat_table_lookup_free(&nat_preimage);
