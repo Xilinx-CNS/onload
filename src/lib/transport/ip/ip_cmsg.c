@@ -352,7 +352,7 @@ void ip_cmsg_recv_timestamping(ci_netif *ni, const ci_ip_pkt_fmt *pkt,
       (flags & ONLOAD_SOF_TIMESTAMPING_ONLOAD_V2 &&
        flags & ONLOAD_SOF_TIMESTAMPING_TRAILER) )
     ci_rx_pkt_timestamp_trailer(pkt, &trailertime,
-                                NI_OPTS(ni).rx_timestamping_trailer_fmt);
+                                NI_OPTS(ni).rx_timestamping_trailer_fmt, ni);
 
   /* Populate extension API v1 timestamps */
   if( flags & ONLOAD_SOF_TIMESTAMPING_ONLOAD ) {

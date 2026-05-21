@@ -714,7 +714,7 @@ citp_udp_ordered_data(citp_fdinfo* fdi, struct timespec* limit,
 
   do {
     struct timespec stamp;
-    ci_rx_pkt_timespec(pkt, &stamp,
+    ci_rx_pkt_timespec(epi->sock.netif, pkt, &stamp,
                        NI_OPTS(epi->sock.netif).rx_timestamping_ordering,
                        NI_OPTS(epi->sock.netif).rx_timestamping_trailer_fmt);
 
