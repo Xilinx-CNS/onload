@@ -880,6 +880,8 @@ static int af_xdp_dmaq_kick(struct efhw_nic *nic, int instance)
  * Initialisation and configuration discovery
  *
  *---------------------------------------------------------------------------*/
+static int af_xdp_pre_ethtool(struct efhw_nic *nic);
+static void af_xdp_post_ethtool(struct efhw_nic *nic);
 /* Update the efhw_nic struct with the nic's supported RSS hash key length
  * and indirection table length. */
 static int
@@ -891,12 +893,16 @@ af_xdp_rss_get_support(struct efhw_nic *nic)
 
 	ASSERT_RTNL();
 
+	rc = af_xdp_pre_ethtool(nic);
+	if (rc)
+		return rc;
+
 	ops = dev->ethtool_ops;
 	if (!ops->get_rxfh_indir_size) {
 		EFHW_WARN("%s: %s does not support `get_rxfh_indir_size` operation",
 							__FUNCTION__, dev->name);
 		rc = -EOPNOTSUPP;
-		goto unlock_out;
+		goto out_ethtool;
 	}
 
 	nic->rss_indir_size = ops->get_rxfh_indir_size(dev);
@@ -905,12 +911,13 @@ af_xdp_rss_get_support(struct efhw_nic *nic)
 		EFHW_WARN("%s: %s does not support `get_rxfh_key_size` operation",
 							__FUNCTION__, dev->name);
 		rc = -EOPNOTSUPP;
-		goto unlock_out;
+		goto out_ethtool;
 	}
 
 	nic->rss_key_size = ops->get_rxfh_key_size(dev);
 
-unlock_out:
+out_ethtool:
+	af_xdp_post_ethtool(nic);
 	return rc;
 }
 
@@ -1276,6 +1283,42 @@ static enum efhw_page_map_type af_xdp_buffer_map_type(struct efhw_nic *nic)
  *
  *--------------------------------------------------------------------*/
 
+static int af_xdp_pre_ethtool(struct efhw_nic *nic)
+{
+  struct net_device *dev = nic->net_dev;
+  int rc;
+
+  efrm_netdev_lock_ops(dev);
+
+  if( !netif_device_present(dev) ) {
+    rc = -ENODEV;
+    goto err;
+  }
+
+  if( dev->ethtool_ops->begin ) {
+    rc = dev->ethtool_ops->begin(dev);
+    if( rc < 0 )
+      goto err;
+  }
+
+  /* efrm_netdev_lock_ops stay locked until af_xdp_post_ethtool */
+  return 0;
+
+err:
+  efrm_netdev_unlock_ops(dev);
+  return rc;
+}
+
+static void af_xdp_post_ethtool(struct efhw_nic *nic)
+{
+  struct net_device *dev = nic->net_dev;
+
+  if( dev->ethtool_ops->complete )
+    dev->ethtool_ops->complete(dev);
+
+  efrm_netdev_unlock_ops(dev);
+}
+
 static int
 af_xdp_ethtool_set_rxfh_context(struct efhw_nic *nic, const u32 *indir,
                                 const u8 *key, u8 hfunc, u32 *rss_context,
@@ -1283,13 +1326,16 @@ af_xdp_ethtool_set_rxfh_context(struct efhw_nic *nic, const u32 *indir,
 {
   struct net_device *dev = nic->net_dev;
   const struct ethtool_ops *ops = dev->ethtool_ops;
+  int rc;
 
   EFHW_ASSERT(rss_context);
 
+  rc = af_xdp_pre_ethtool(nic);
+  if( rc )
+    return rc;
+
 #ifndef EFRM_HAVE_SET_RXFH_CONTEXT
   /* linux >= 6.8 removes ethtool_ops::set_rxfh_context(). We use set_rxfh(). */
-
-  int rc;
   struct ethtool_rxfh_param rxfh = {
     .hfunc = hfunc,
     .indir_size = nic->rss_indir_size,
@@ -1303,22 +1349,27 @@ af_xdp_ethtool_set_rxfh_context(struct efhw_nic *nic, const u32 *indir,
   if( !ops->set_rxfh ) {
     EFHW_WARN("%s: %s does not support `set_rxfh` operation", __FUNCTION__,
               dev->name);
-    return -EOPNOTSUPP;
+    rc = -EOPNOTSUPP;
+    goto out_ethtool;
   }
 
   rc = ops->set_rxfh(dev, &rxfh, NULL);
   if( rc == 0 )
     *rss_context = rxfh.rss_context;
-
-  return rc;
 #else
   if( !ops->set_rxfh_context ) {
     EFHW_WARN("%s: %s does not support `set_rxfh_context` operation",
               __FUNCTION__, dev->name);
-    return -EOPNOTSUPP;
+    rc = -EOPNOTSUPP;
+    goto out_ethtool;
   }
-  return ops->set_rxfh_context(dev, indir, key, hfunc, rss_context, delete);
+
+  rc = ops->set_rxfh_context(dev, indir, key, hfunc, rss_context, delete);
 #endif
+
+out_ethtool:
+  af_xdp_post_ethtool(nic);
+  return rc;
 }
 
 static int
@@ -1462,22 +1513,28 @@ af_xdp_filter_insert(struct efhw_nic *nic, struct efhw_filter_params *params)
 
 	rtnl_lock();
 
+	rc = af_xdp_pre_ethtool(nic);
+	if ( rc )
+		goto out_unlock;
+
 	ops = dev->ethtool_ops;
 	if (!ops->set_rxnfc) {
 		rc = -EOPNOTSUPP;
-		goto unlock_out;
+		goto out_ethtool;
 	}
 
 	ctx.netdev = dev;
 	rc = rmgr_set_location(&ctx, &info.fs);
 	if ( rc < 0 )
-		goto unlock_out;
+		goto out_ethtool;
 
 	rc = ops->set_rxnfc(dev, &info);
 	if ( rc >= 0 )
 		rc = info.fs.location;
 
-unlock_out:
+out_ethtool:
+	af_xdp_post_ethtool(nic);
+out_unlock:
 	rtnl_unlock();
 	return rc;
 }
@@ -1488,6 +1545,7 @@ af_xdp_filter_remove(struct efhw_nic *nic, int filter_id)
 	struct net_device *dev = nic->net_dev;
 	struct ethtool_rxnfc info;
 	const struct ethtool_ops *ops;
+	int rc;
 
 	if (filter_id == AF_XDP_NO_FILTER_MAGIC_ID)
 		return;
@@ -1497,9 +1555,20 @@ af_xdp_filter_remove(struct efhw_nic *nic, int filter_id)
 	info.fs.location = filter_id;
 
 	rtnl_lock();
+
+	rc = af_xdp_pre_ethtool(nic);
+	if (rc) {
+		EFHW_ERR("%s: Failed to begin removing flow steering rule on %s (rc=%d)",
+		         __FUNCTION__, dev->name, rc);
+		goto out_unlock;
+	}
+
 	ops = dev->ethtool_ops;
 	if (ops->set_rxnfc)
 		ops->set_rxnfc(dev, &info);
+
+	af_xdp_post_ethtool(nic);
+out_unlock:
 	rtnl_unlock();
 }
 
