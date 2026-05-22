@@ -1684,7 +1684,7 @@ static void ci_tcp_rx_handle_ack(ci_tcp_state* ts, ci_netif* netif,
     if( ci_ip_queue_is_empty(&ts->retrans) ||
         (! is_dupack && ! (rxp->flags & CI_TCP_SACKED)) )
       ts->dup_acks = 0;
-    else
+    else if ( is_dupack )
       ci_tcp_rx_dupack(ts, netif, rxp);
   }
 
