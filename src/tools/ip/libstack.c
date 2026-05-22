@@ -2891,11 +2891,11 @@ static void signal_handler(int signum)
 
 int libstack_init()
 {
+  ci_set_log_prefix("");
+  ci_dllist_init(&stacks_list);
   if( cfg_filter )
     if( ! sockbuf_filter_prepare(&sft, cfg_filter) )
       return -1;
-  ci_set_log_prefix("");
-  ci_dllist_init(&stacks_list);
   if( libstack_mappings_init() )
     return -1;
   CI_TEST(signal(SIGUSR1, signal_handler) != SIG_ERR);
