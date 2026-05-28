@@ -5,7 +5,7 @@
 #include "../cplane.h"
 #include <onload/oof_interface.h>
 
-int test_llct_sanity_ll()
+int test_llct_sanity_ll(void)
 {
   return __test_sanity(OOFT_NIC_X4_FF, OOFT_RX_LL);
 }

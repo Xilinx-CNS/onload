@@ -716,8 +716,8 @@ static void orm_dump_struct_ci_netif_config_opts(char* label, ci_netif_config_op
   { \
     int new_len = strlen(#field_name); \
     if( new_len > 5 && ( \
-        strcmp(#field_name + new_len - 5, "_be32") == 0 || \
-        strcmp(#field_name + new_len - 5, "_be16") == 0) ) \
+        strcmp(&(#field_name)[new_len - 5], "_be32") == 0 || \
+        strcmp(&(#field_name)[new_len - 5], "_be16") == 0) ) \
       new_len -= 5; \
     FTL_TFIELD_INT3(ctx, type, field_name, new_len, format_string, conversion_function, display_flags) \
   }

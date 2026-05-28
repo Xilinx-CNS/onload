@@ -193,7 +193,8 @@ ci_ip_pkt_fmt* ci_netif_pkt_alloc_slow_ptrerr(ci_netif* ni, int flags)
 }
 
 
-ci_inline void __ci_dbg_poison_header(ci_ip_pkt_fmt* pkt, ci_uint32 pattern) 
+#if CI_CFG_POISON_BUFS
+ci_inline void __ci_dbg_poison_header(ci_ip_pkt_fmt* pkt, ci_uint32 pattern)
 {
   unsigned i;
   ci_uint32* pkt_u32 = (ci_uint32 *)oo_ether_hdr(pkt);
@@ -202,6 +203,7 @@ ci_inline void __ci_dbg_poison_header(ci_ip_pkt_fmt* pkt, ci_uint32 pattern)
     sizeof(ci_tcp_hdr);
   for( i = 0; i < len/4; i++ )  pkt_u32[i] = patn_u32;
 }
+#endif
 
 
 #if defined(__KERNEL__) && OO_DO_STACK_POLL

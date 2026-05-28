@@ -63,7 +63,7 @@ static void usage(const char* msg)
 
 #define MAX_PATHNAME 300
 #define MAX_CMDNAME 16
-#define MAX_CMDLINE 60
+#define MAX_CMDLINE 100
 
 struct procs {
   pid_t pid;
@@ -179,4 +179,3 @@ main(int argc, char* argv[])
 
   return 0;
 }
-

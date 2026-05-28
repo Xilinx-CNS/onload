@@ -102,16 +102,6 @@ static int ci_udp_sys_getsockname( ci_fd_t sock, citp_socket* ep )
   return 0;
 }
 
-/* Wrapper for call down to OS disconnect. */
-ci_inline int ci_udp_sys_disconnect( ci_fd_t sock, citp_socket* ep )
-{
-  struct sockaddr_in sin;
-  
-  sin.sin_family = AF_UNSPEC;
-  return ci_sys_connect( sock, (struct sockaddr*)&sin, sizeof(sin) );
-}
-
-
 static void ci_udp_clr_filters(citp_socket* ep)
 {
   ci_udp_state* us = SOCK_TO_UDP(ep->s);

@@ -203,16 +203,6 @@ void cp_init_mibs_fwd_blob(void* romem, struct cp_mibs* mibs)
 #endif
 
 
-static inline int ci_rot_r(ci_uint32 i, int n)
-{
-  n = n & 0x1f;
-  /* gcc-4.8 recognizes it and converts to the "roll" instruction,
-   * see https://gcc.gnu.org/bugzilla/show_bug.cgi?id=57157 .
-   * "i << (32-n)" has undefinded behaviour for n==0. */
-  return (i >> n) | (i << ((-n) & 31));
-}
-
-
 int cp_get_acceleratable_llap_count(struct cp_mibs* mib)
 {
   int count = 0;

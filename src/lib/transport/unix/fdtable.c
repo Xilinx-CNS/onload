@@ -484,7 +484,7 @@ static int patch_libc_close_nocancel(void)
 }
 
 
-int citp_fdtable_ctor()
+int citp_fdtable_ctor(void)
 {
   struct rlimit rlim;
   int rc;

@@ -126,7 +126,7 @@ static void sleep_forever(void)
 }
 
 
-int main()
+int main(void)
 {
   pthread_t thread1 = 0;
   pthread_t thread2 = 0;
@@ -171,4 +171,3 @@ int main()
 
   return ok;
 }
-

@@ -55,20 +55,6 @@ cp_llap_notify_oof_of_removal(struct cp_session* s, ci_ifid_t ifindex)
   __cp_llap_notify_oof(s, ifindex, 0, 0, 0, zero_mac);
 }
 
-/*
- * Retrieve MIB table index in cp_session structure to pass it into ioctl call
- * within oo_op_cplane_ipmod structure mib_id parameter.
- */
-static inline int cp_get_mib_index(struct cp_session* s, struct cp_mibs* mib)
-{
-  if( &s->mib[0] == mib )
-    return 0;
-  else if( &s->mib[1] == mib )
-    return 1;
-  else
-    return -1;
-}
-
 void
 __cp_ipif_notify_oof(struct cp_session* s, int af,
                      struct cp_ip_with_prefix* laddr, bool add)
@@ -274,10 +260,12 @@ void cp_llap_set_hwports(struct cp_session* s, struct cp_mibs* mib,
 
   /* NOTE: Use arithmetic | to ensure all functions get executed.  It's also
    * important to update the type before updating the hwports, in order to
-   * avoid upsetting assertions. */
-  if( llap_update_type(s, mib, llap_id, type) |
-      llap_update_rx_hwports(s, mib, llap_id, rx_hwports) |
-      llap_update_tx_hwports(s, mib, llap_id, tx_hwports) ) {
+   * avoid upsetting assertions. The (unsigned) casts silence clang's
+   * -Wbitwise-instead-of-logical; bitwise OR on the bool returns is what we
+   * actually want here. */
+  if( (unsigned)llap_update_type(s, mib, llap_id, type) |
+      (unsigned)llap_update_rx_hwports(s, mib, llap_id, rx_hwports) |
+      (unsigned)llap_update_tx_hwports(s, mib, llap_id, tx_hwports) ) {
     cp_fwd_llap_update(s, mib, llap_id, old_rx_hwports);
     fix_upper_layers(s, mib, &mib->llap[llap_id], 0, notify);
     if( notify && !rx_hwports != !old_rx_hwports ) {

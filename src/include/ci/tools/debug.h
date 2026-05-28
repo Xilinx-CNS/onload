@@ -45,22 +45,14 @@
     __attribute__((unused))
 #endif
 
-/* verifies compile time expression is 0 or positive -
- * no-op for runtime expressions */
-#if __GNUC__ * 100 + __GNUC_MINOR__ >= 409
+/* Verifies compile time expression is 0 or positive; no-op for runtime
+ * expressions. */
 #define CI_BUILD_ASSERT_CONSTANT_NON_NEGATIVE(c) \
   do {                                                              \
     char __CI_BUILD_ASSERT_NAME(__LINE__)                           \
          [ __builtin_choose_expr(__builtin_constant_p(c), (c), 0)]  \
          __attribute__((unused));                                   \
   } while(0)
-#else
-  /* RHEL6 and RHEL7 complain on the code above:
-   * error: first argument to ‘__builtin_choose_expr’ not a constant
-   */
-#define CI_BUILD_ASSERT_CONSTANT_NON_NEGATIVE(c) \
-  do {(void) sizeof(struct { int x[(int)(c)]; });} while(0)
-#endif
 
 #ifdef _PREFAST_
 

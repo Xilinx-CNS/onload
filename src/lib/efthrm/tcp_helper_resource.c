@@ -6180,7 +6180,7 @@ static int efab_is_onloaded(void* ctx, struct net* netns, ci_ifid_t ifindex)
 
 
 int
-efab_tcp_driver_ctor()
+efab_tcp_driver_ctor(void)
 {
   int rc = 0;
 

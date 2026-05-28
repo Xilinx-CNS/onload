@@ -2889,7 +2889,7 @@ static void signal_handler(int signum)
 }
 
 
-int libstack_init()
+int libstack_init(void)
 {
   if( cfg_filter )
     if( ! sockbuf_filter_prepare(&sft, cfg_filter) )

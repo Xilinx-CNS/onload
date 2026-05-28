@@ -291,7 +291,7 @@ ci_inline void ci_tcp_estabs_handle(ci_netif *ni, ci_tcp_state *ts, int state)
   **
   ** ?? So on what platform(s) does it represent something else?
   */
-  if( (ts->s.b.state == CI_TCP_ESTABLISHED ) )
+  if( ts->s.b.state == CI_TCP_ESTABLISHED )
     CI_TCP_STATS_DEC_CURR_ESTAB(ni);
 
   if ((state == CI_TCP_CLOSED) &&

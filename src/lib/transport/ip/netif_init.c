@@ -297,7 +297,9 @@ static ci_uint32 citp_auto_flowlabels = CI_AUTO_FLOWLABELS_DEFAULT;
 /* Interface for sysctl. */
 ci_inline int ci_sysctl_get_values(char *path, ci_uint32 *ret, int n)
 {
-  char name[CI_CFG_PROC_PATH_LEN_MAX + strlen(CI_CFG_PROC_PATH)];
+  /* sizeof not strlen: strlen is not a constant expression in C.  The extra
+   * byte from the null terminator provides space for the path's terminator. */
+  char name[CI_CFG_PROC_PATH_LEN_MAX + sizeof(CI_CFG_PROC_PATH)];
   char buf[CI_CFG_PROC_LINE_LEN_MAX];
   int buflen;
   char *p = buf;

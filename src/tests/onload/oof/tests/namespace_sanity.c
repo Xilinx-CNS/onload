@@ -60,7 +60,7 @@ static void second_namespace_init(struct net* net_ns)
 /* This test covers adding the different types of sockets to a basic cplane
  * environment.
  */
-int test_namespace_sanity()
+int test_namespace_sanity(void)
 {
   tcp_helper_resource_t* thr1;
   struct ooft_endpoint* udp_wild;

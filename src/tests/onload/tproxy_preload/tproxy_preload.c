@@ -405,7 +405,9 @@ static void parse_params(void)
   do {
       next = strchr(curr, ',');
       /* process curr to next-1 */
-      if( ((rc = sscanf(curr, "connect_bind=%46[0-9a-fA-F:.]-%46[0-9a-fA-F:.]@hash=%3[a-z]:%d/%d",
+      /* %45[...] leaves one byte for the nul terminator, fitting in
+       * INET6_ADDRSTRLEN (46). %46 would let sscanf write 47 bytes. */
+      if( ((rc = sscanf(curr, "connect_bind=%45[0-9a-fA-F:.]-%45[0-9a-fA-F:.]@hash=%3[a-z]:%d/%d",
                        addr_s, addr_e, hash_name, &tconnect.hash_id, &tconnect.hash_size)) >= 1) &&
           (inet_aton(addr_s, &tconnect.bind_start) &&
             inet_aton(rc >= 2 ? addr_e : addr_s, &tconnect.bind_end)) ) {
@@ -429,7 +431,7 @@ static void parse_params(void)
           toeplitz_hash_prepare();
         }
       }
-      if( ((rc = sscanf(curr, "connect6_bind=%46[0-9a-fA-F:.]-%46[0-9a-fA-F:.]@hash=%3[a-z]:%d/%d",
+      if( ((rc = sscanf(curr, "connect6_bind=%45[0-9a-fA-F:.]-%45[0-9a-fA-F:.]@hash=%3[a-z]:%d/%d",
                        addr_s, addr_e, hash_name, &tconnect6.hash_id, &tconnect6.hash_size)) >= 1) &&
           (inet_pton(AF_INET6, addr_s, &tconnect6.bind_start) &&
             inet_pton(AF_INET6, rc >= 2 ? addr_e : addr_s, &tconnect6.bind_end)) ) {
