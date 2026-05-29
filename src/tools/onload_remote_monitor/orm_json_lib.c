@@ -816,6 +816,14 @@ static void orm_dump_struct_ci_netif_config_opts(char* label, ci_netif_config_op
 #include "ftl_decls.h"
 
 
+static void orm_dump_synrecv(ci_netif* ni, ci_tcp_state_synrecv* tsr, void* arg)
+{
+  dump_buf_literal("{");
+  orm_dump_struct_ci_tcp_state_synrecv("tcp_listen_synrecv", tsr, *(int *)arg);
+  dump_buf_cleanup();
+  dump_buf_literal_comma("}");
+}
+
 static void orm_waitable_dump(ci_netif* ni, const char* sock_type,
                               int output_flags, const sockbuf_filter_t* sft)
 {
@@ -833,6 +841,11 @@ static void orm_waitable_dump(ci_netif* ni, const char* sock_type,
           sockbuf_filter_matches(sft, wo) ) {
         dump_buf_cat("\"%d\":{", W_FMT(w));
         orm_dump_struct_ci_tcp_socket_listen("tcp_listen_sockets", &wo->tcp_listen, output_flags);
+        dump_buf_literal("\"tcp_listenq_bucket\":[");
+        ci_tcp_listenq_bucket_iter(ni, ci_ni_aux_p2bucket(ni, wo->tcp_listen.bucket),
+                                   orm_dump_synrecv, NULL, &output_flags);
+        dump_buf_cleanup();
+        dump_buf_literal_comma("]");
         dump_buf_cleanup();
         dump_buf_literal_comma("}");
       }
