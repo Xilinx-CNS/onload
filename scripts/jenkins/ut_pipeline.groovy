@@ -63,7 +63,7 @@ void doDeveloperBuild(String build_profile=null) {
 
         tasks[thread_title] = {
           node('unit-test-master') {
-            def workspace = "workspace/${new URLDecoder().decode(env.JOB_NAME)}/exec-${env.EXECUTOR_NUMBER}-${thread_title}" 
+            def workspace = "workspace/${env.JOB_NAME}/exec-${env.EXECUTOR_NUMBER}-${thread_title}" 
             ws(workspace) {
               if( component == 'efct_driver' ) {
                   dir("x3-net") {
@@ -88,7 +88,7 @@ void doDeveloperBuild(String build_profile=null) {
 
 void doTests() {
   node("unit-test-master") {
-    def workspace = "workspace/${new URLDecoder().decode(env.JOB_NAME)}/exec-${env.EXECUTOR_NUMBER}-unit_tests"
+    def workspace = "workspace/${env.JOB_NAME}/exec-${env.EXECUTOR_NUMBER}-unit_tests"
     ws(workspace) {
       def path = "PATH=\"\$PATH:\$PWD/scripts\""
       stage("Prepare test build") {
