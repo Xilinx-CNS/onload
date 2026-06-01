@@ -35,68 +35,70 @@ def tm = new TestManager(this)
 @Field
 def scmmanager = new SCMManager(this)
 
-void doDeveloperBuild(String build_profile=null) {
+@Field
+final String PROFILE_PREFIX = 'transport_config_opt_'
+
+/**
+ * Generate all developer build tasks for a given profile (or default).
+ * Returns a Map of task-name -> closure suitable for parallel execution.
+ * Uses CPS-safe for-loops (closures in collectEntries don't survive serialization).
+ */
+Map generateBuildTasks(String build_profile=null) {
   def components = ['kernel_driver', 'userspace', 'efct_driver', 'kernel_driver_no_sfc']
   def debugnesses = ['DEBUG', 'NDEBUG']
+  def profile_label = build_profile ?: 'default'
+  def tasks = [:]
 
-  def stage_name = 'Developer Build'
-  if( build_profile ) {
-    stage_name += " (profile: ${build_profile})"
-  }
-  stage(stage_name) {
-    tasks = [:]
+  for (int i = 0; i < components.size(); i++) {
+    for (int j = 0; j < debugnesses.size(); j++) {
+      def component = components[i]
+      def debugness = debugnesses[j]
+      def thread_title = "${profile_label}/${component}-${debugness}"
+      def defines = [:]
+      if (debugness == 'NDEBUG') {
+        defines['NDEBUG'] = '1'
+      }
+      if (build_profile) {
+        defines['TRANSPORT_CONFIG_OPT_HDR'] = "ci/internal/${PROFILE_PREFIX}${build_profile}.h"
+      }
 
-    for( def component_i=0; component_i<components.size(); component_i++) {
-      def component = components[component_i]
-      for( def debugness_i=0; debugness_i<debugnesses.size(); debugness_i++) {
-        def debugness = debugnesses[debugness_i]
-
-        def thread_title = "${component}-${debugness}"
-
-        def defines = [:]
-        if( debugness == 'NDEBUG' ) {
-          defines['NDEBUG'] = '1'
-        }
-        if( build_profile ) {
-          defines['TRANSPORT_CONFIG_OPT_HDR'] = "ci/internal/transport_config_opt_${build_profile}.h"
-        }
-
-        tasks[thread_title] = {
-          node('unit-test-master') {
-            def workspace = "workspace/${env.JOB_NAME}/exec-${env.EXECUTOR_NUMBER}-${thread_title}" 
-            ws(workspace) {
-              if( component == 'efct_driver' ) {
-                  dir("x3-net") {
-                    echo("Checking out x3")
-                    Map options = [:]
-                    options['branch'] = 'dev'
-                    x3net = scmmanager.cloneGit(options, 'ssh://git@github.com/Xilinx-CNS/x3-net-linux.git')
-                  }
+      tasks[thread_title] = {
+        node('unit-test-master') {
+          ws("workspace/${env.JOB_NAME}/${env.BUILD_NUMBER}/${thread_title}") {
+            if (component == 'efct_driver') {
+              dir("x3-net") {
+                scmmanager.cloneGit([branch: 'dev'], 'ssh://git@github.com/Xilinx-CNS/x3-net-linux.git')
               }
-              scmmanager.cloneGit(scm)
-              utils.rake(["build:${component}"], defines: defines)
-              deleteDir() // Delete the manually allocated workspace
             }
+            unstash('onload-full')
+            utils.rake(["build:${component}"], defines: defines)
+            deleteDir()
           }
         }
       }
     }
+  }
+  return tasks
+}
 
-    utils.parallel(tasks)
+Closure testTask(String path, String sub_dir, String target) {
+  def test_dir = "build/gnu_x86_64/tests/onload"
+  return {
+    sh(script: "${path} make -C ${test_dir}/${sub_dir} all && ${path} make -C ${test_dir}/${sub_dir} ${target}")
   }
 }
 
 void doTests() {
   node("unit-test-master") {
-    def workspace = "workspace/${env.JOB_NAME}/exec-${env.EXECUTOR_NUMBER}-unit_tests"
-    ws(workspace) {
+    ws("workspace/${env.JOB_NAME}/${env.BUILD_NUMBER}/unit_tests") {
       def path = "PATH=\"\$PATH:\$PWD/scripts\""
       stage("Prepare test build") {
-        scmmanager.cloneGit(scm)
+        unstash('onload-full')
         sh(script: "scripts/onload_build --strict --debug --user --build-profile=cloud")
       }
       stage("Run Tests") {
         utils.parallel([
+<<<<<<< HEAD
           "cplane unit":  {
             sh(script: "$path make -C build/gnu_x86_64/tests/onload/cplane_unit all")
             sh(script: "$path make -C build/gnu_x86_64/tests/onload/cplane_unit test")
@@ -115,6 +117,12 @@ void doTests() {
             sh(script: "$path make -C build/gnu_x86_64/tests/onload/cplane_sysunit all")
             sh(script: "$path make -C build/gnu_x86_64/tests/onload/cplane_sysunit test")
           }
+=======
+          "cplane unit":   testTask(path, 'cplane_unit', 'test'),
+          "OOF unit":      testTask(path, 'oof', 'tests'),
+          "ORM unit":      testTask(path, 'onload_remote_monitor/internal_tests', 'test'),
+          "cplane system": testTask(path, 'cplane_sysunit', 'test')
+>>>>>>> b51e522b5c (ON-17381: ut_pipeline enable parallelism and modern groovy)
         ])
       }
     }
@@ -127,35 +135,21 @@ void doAutosmoke(repo, branch, bookmark, pretend=false) {
 }
 
 String[] list_build_profiles() {
-  def profiles = []
-
+  def excluded = ['af_xdp', 'localcrc'] as Set
+  def profiles = [null]
   dir('src/include') {
-    def files = findFiles(glob: 'ci/internal/transport_config_opt_*.h')
-    for( int i = 0; i < files.size(); ++i ) {
-      def profile_name = files[i].name.replaceFirst(/^transport_config_opt_/, '').replaceFirst(/\.h$/,'')
-      if( profile_name.equals("ulhelper") && !env.BRANCH_NAME.equals("master") ) {
+    def files = findFiles(glob: "ci/internal/${PROFILE_PREFIX}*.h")
+    for (int i = 0; i < files.size(); i++) {
+      def name = files[i].name.replaceFirst(/^${PROFILE_PREFIX}/, '').replaceFirst(/\.h$/, '')
+      if (excluded.contains(name)) {
         continue
       }
-
-      if ( profile_name.equals("localcrc") ) {
+      if (name == 'ulhelper' && env.BRANCH_NAME != 'master') {
         continue
       }
-
-      /* We want to handle cloud builds separately as the unit tests depend on
-       * this build. */
-      if( profile_name.equals("cloud") ) {
-        continue
-      }
-
-      /* "extra" is the default profile that has already been built before
-       * we ran the unit tests.  "af_xdp" requires a newer kernel that we have
-       * available. */
-      if( ! ['extra', 'af_xdp'].contains(profile_name) ) {
-        profiles.add(profile_name)
-      }
+      profiles.add(name)
     }
   }
-
   return profiles
 }
 
@@ -183,7 +177,11 @@ void doUnitTestsPipeline() {
         echo("Version(long): ${onload_version_long}")
         echo("Version(short): ${onload_version_short}")
 
-        /* We save the src to support the coverage reports */
+        sh 'echo "File count before stash:" && find . -not -path "./.git/*" -type f | wc -l && du -sh --exclude=.git . && find . -maxdepth 1 -type d | sort'
+
+        /* Stash only source tree needed for builds (excludes leftover workspace dirs) */
+        stash(name: 'onload-full', includes: 'src/**,scripts/**,mk/**,rakelib/**,Gemfile*,Rakefile,Makefile,imports.mk,versions.env,pyproject.toml')
+        /* Src-only stash for coverage reports */
         stash(name: 'onload-src', includes: 'src/**/*', useDefaultExcludes: false)
 
         build_profiles = list_build_profiles()
@@ -199,15 +197,13 @@ void doUnitTestsPipeline() {
       }
     }
 
-    doDeveloperBuild()
-    doDeveloperBuild("cloud")
-
-    doTests()
-
-    /* Build for each build profile */
-    for( int i = 0; i < build_profiles.size(); ++i ) {
-      doDeveloperBuild(build_profiles[i])
+    /* All builds are independent — run them in a single flat parallel block. */
+    def all_tasks = [:]
+    for (int i = 0; i < build_profiles.size(); i++) {
+      all_tasks += generateBuildTasks(build_profiles[i])
     }
+    all_tasks['Unit Tests'] = { doTests() }
+    utils.parallel(all_tasks)
 
     def scm_source = autosmoke.sourceUrl()
     def built_package_locations
