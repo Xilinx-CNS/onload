@@ -56,21 +56,38 @@
 #include <asm/insn.h>
 #include <asm/percpu.h>
 
-asmlinkage int efab_linux_sys_epoll_create1(int flags)
+asmlinkage int syscall_dispatch_epoll_create1(int flags)
 {
   return (int)SYSCALL_DISPATCHn(1, epoll_create1, (int), flags);
 }
 
-asmlinkage int efab_linux_sys_epoll_ctl(int epfd, int op, int fd,
-                                        struct epoll_event *event)
+int efab_linux_sys_epoll_create1(int flags)
+{
+  if( ! efrm_syscall_table_found )
+    return -ENOSYS;
+
+  return syscall_dispatch_epoll_create1(flags);
+}
+
+asmlinkage int syscall_dispatch_epoll_ctl(int epfd, int op, int fd,
+                                          struct epoll_event *event)
 {
   return (int)SYSCALL_DISPATCHn(4, epoll_ctl,
                                 (int, int, int, struct epoll_event*),
                                 epfd, op, fd, event);
 }
 
-asmlinkage int efab_linux_sys_epoll_wait(int epfd, struct epoll_event *events,
-                                         int maxevents, int timeout)
+int efab_linux_sys_epoll_ctl(int epfd, int op, int fd,
+                             struct epoll_event *event)
+{
+  if( ! efrm_syscall_table_found )
+    return -ENOSYS;
+
+  return syscall_dispatch_epoll_ctl(epfd, op, fd, event);
+}
+
+asmlinkage int syscall_dispatch_epoll_wait(int epfd, struct epoll_event *events,
+                                           int maxevents, int timeout)
 {
 #ifdef __aarch64__
   return (int)SYSCALL_DISPATCHn(6, epoll_pwait,
@@ -85,17 +102,39 @@ asmlinkage int efab_linux_sys_epoll_wait(int epfd, struct epoll_event *events,
 #endif
 }
 
+int efab_linux_sys_epoll_wait(int epfd, struct epoll_event *events,
+                              int maxevents, int timeout)
+{
+  if( ! efrm_syscall_table_found )
+    return -ENOSYS;
+
+  return syscall_dispatch_epoll_wait(epfd, events, maxevents, timeout);
+}
+
 #ifdef EFRM_HAVE_EPOLL_PWAIT2
 asmlinkage
-int efab_linux_sys_epoll_pwait2(int epfd, struct epoll_event *events,
-                                int maxevents,
-                                const struct __kernel_timespec *timeout,
-                                const sigset_t *sigmask)
+int syscall_dispatch_epoll_pwait2(int epfd, struct epoll_event *events,
+                                  int maxevents,
+                                  const struct __kernel_timespec *timeout,
+                                  const sigset_t *sigmask)
 {
   return (int)SYSCALL_DISPATCHn(6, epoll_pwait2,
                                 (int, struct epoll_event*, int,
                                  struct timespec *, const sigset_t*, size_t),
                                 epfd, events, maxevents, timeout, sigmask,
                                 sizeof(*sigmask));
+}
+
+
+int efab_linux_sys_epoll_pwait2(int epfd, struct epoll_event *events,
+                                int maxevents,
+                                const struct __kernel_timespec *timeout,
+                                const sigset_t *sigmask)
+{
+  if( ! efrm_syscall_table_found )
+    return -ENOSYS;
+
+  return syscall_dispatch_epoll_pwait2(epfd, events, maxevents, timeout,
+                                       sigmask);
 }
 #endif /* EFRM_HAVE_EPOLL_PWAIT2 */

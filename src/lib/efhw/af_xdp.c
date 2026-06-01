@@ -202,11 +202,19 @@ static struct efhw_af_xdp_vi* vi_by_instance(struct efhw_nic* nic, int instance)
 
 /* Invoke the bpf() syscall args is assumed to be kernel memory */
 noinline
-static int xdp_sys_bpf(int cmd, unsigned long user_addr)
+static int syscall_dispatch_xdp(int cmd, unsigned long user_addr)
 {
   int rc = SYSCALL_DISPATCHn(3, bpf, (int, unsigned long, size_t),
                              cmd, user_addr, sizeof(union bpf_attr));
   return rc;
+}
+
+static int xdp_sys_bpf(int cmd, unsigned long user_addr)
+{
+  if( ! efrm_syscall_table_found )
+    return -ENOSYS;
+
+  return syscall_dispatch_xdp(cmd, user_addr);
 }
 
 /* Allocate an FD for a file. Some operations need them. */

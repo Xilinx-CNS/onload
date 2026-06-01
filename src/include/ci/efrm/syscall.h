@@ -23,6 +23,7 @@ extern void** efrm_syscall_table;
 struct pt_regs;
 typedef long (*syscall_fn_t)(const struct pt_regs *regs, unsigned int nr);
 extern syscall_fn_t efrm_x64_sys_call;
+extern bool efrm_syscall_table_found;
 extern long efrm_syscall_table_call(const struct pt_regs *regs, unsigned int nr);
 #endif
 

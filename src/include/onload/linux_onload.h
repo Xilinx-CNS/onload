@@ -95,14 +95,14 @@ static inline int oo_sock_recvmsg(struct socket *sock, struct msghdr *msg,
  *
  *--------------------------------------------------------------------*/
 
-extern asmlinkage int efab_linux_sys_epoll_create1(int flags);
-extern asmlinkage int efab_linux_sys_epoll_ctl(int epfd, int op, int fd,
-                                               struct epoll_event *event);
-extern asmlinkage int efab_linux_sys_epoll_wait(int epfd,
-                                                struct epoll_event *events,
-                                                int maxevents, int timeout);
+extern int efab_linux_sys_epoll_create1(int flags);
+extern int efab_linux_sys_epoll_ctl(int epfd, int op, int fd,
+                                    struct epoll_event *event);
+extern int efab_linux_sys_epoll_wait(int epfd,
+                                     struct epoll_event *events,
+                                     int maxevents, int timeout);
 #ifdef EFRM_HAVE_EPOLL_PWAIT2
-extern asmlinkage
+extern
 int efab_linux_sys_epoll_pwait2(int epfd, struct epoll_event *events,
                                 int maxevents,
                                 const struct __kernel_timespec *timeout,

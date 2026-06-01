@@ -16,6 +16,8 @@ EXPORT_SYMBOL(efrm_syscall_table);
 void *efrm_entry_SYSCALL_64_addr = NULL;
 syscall_fn_t efrm_x64_sys_call = NULL;
 EXPORT_SYMBOL(efrm_x64_sys_call);
+bool efrm_syscall_table_found = false;
+EXPORT_SYMBOL(efrm_syscall_table_found);
 
 static void* find_entry_SYSCALL_64(void)
 {
@@ -200,7 +202,7 @@ static bool ibt_enabled(void)
 static bool check_syscall_ibt_valid(const void *p)
 {
   if( ibt_enabled() && ! is_endbr64(p) ) {
-    EFRM_ERR("%s: FATAL: Found syscall function, but missing endbr64 instruction. To use onload, please disable IBT with ibt=off in your kernel command line.",
+    EFRM_ERR("%s: WARNING: Found syscall function, but missing endbr64 instruction. Some onload functions may require disablement of IBT with ibt=off in your kernel command line.",
              __FUNCTION__);
     return false;
   }
@@ -495,5 +497,13 @@ EXPORT_SYMBOL(efrm_syscall_table_call);
  * and bpf) */
 int efrm_syscall_ctor(void)
 {
-  return find_syscall() ? 0 : -ENOENT;
+  /* If we can't find what we want, then warn the user but still allow the
+   * module to be loaded. We add extra validation at call-sites to avoid
+   * invalid calls where we failed to find the syscall table. */
+  efrm_syscall_table_found = find_syscall();
+  if( ! efrm_syscall_table_found ) {
+    EFRM_ERR("%s: Failed to find valid syscall table, continuing without it, but some functionality may not be available (epoll/bpf).",
+             __FUNCTION__);
+  }
+  return 0;
 }
