@@ -18,10 +18,6 @@ struct oo_hw_filter_spec;
 #define OO_IFID_ALL (-2)
 
 enum {
-  /* Members of an unacceleratable bond.  ie. Filters should not be used
-   * with unavailable hwports because traffic arriving on them goes via the
-   * kernel stack. */
-  OOF_HWPORT_AVAIL_TAG_BOND,
   /* Hwports in the network namespace of this oof_manager. */
   OOF_HWPORT_AVAIL_TAG_NAMESPACE,
   /* Number of tags */
@@ -74,10 +70,6 @@ oof_hwport_up_down(struct oof_manager* fm, int hwport, int up, unsigned flags,
 
 extern void
 oof_hwport_removed(struct oof_manager* fm, int hwport);
-
-extern void
-oof_hwport_un_available(ci_hwport_id_t hwport, int available, int tag,
-                        void *arg);
 
 extern void
 oof_do_deferred_work(struct oof_manager*);
