@@ -1632,9 +1632,13 @@ static void ci_netif_reinit_txq(ci_netif* ni, int intf_i)
 {
   int rc;
 #ifdef __KERNEL__
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   tcp_helper_resource_t* thr = netif2tcp_helper_resource(ni);
 
   rc = efab_tcp_helper_reinit_txq(thr, intf_i);
+#else
+  rc = -ENOSYS;
+#endif
 #else
   oo_reinit_txq_t op = {
     .intf_i = intf_i,
