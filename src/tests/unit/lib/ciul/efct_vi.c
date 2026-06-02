@@ -17,6 +17,12 @@
 /* Test infrastructure */
 #include "unit_test.h"
 
+#include <ci/internal/transport_config_opt.h>
+
+#if CI_CFG_CXL
+#include <ci/tools/cpu_features.h>
+#endif
+
 /* Default rx metadata values */
 static uint64_t rx_len = 42;
 static uint64_t rx_flt = 7;
@@ -1959,6 +1965,14 @@ static void test_efct_polling_rx_evs_evq_overflow(void)
 
 int main(void)
 {
+#if CI_CFG_CXL
+  if( ! ci_cpu_has_feature(CI_CPU_FEATURE_MOVDIR64B) ) {
+    fprintf(stderr,
+            "SKIP: CPU does not support movdir64b, required for CXL profile\n");
+    TEST_END();
+  }
+#endif
+
   for( meta_offset = 0; meta_offset < 2; ++meta_offset ) {
     TEST_RUN(test_efct_idle);
     TEST_RUN(test_efct_attach_local);
