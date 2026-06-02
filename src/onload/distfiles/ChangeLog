@@ -5,6 +5,8 @@ Update sfc net driver to v6.3.1
 
 Add support for:
 
+ - Red Hat Enterprise Linux 9.8
+ - Red Hat Enterprise Linux 10.2
  - Canonical Ubuntu Server LTS 26.04
  - kernel.org Linux kernels 6.15 now without excluding shrub support
  - kernel.org Linux kernels 6.16 - 7.0

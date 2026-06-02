@@ -12,8 +12,8 @@ Linux distribution support
 
  This package can be installed on:
  - Red Hat Enterprise Linux 8.10
- - Red Hat Enterprise Linux 9.4 - 9.7
- - Red Hat Enterprise Linux 10.0 - 10.1
+ - Red Hat Enterprise Linux 9.4 - 9.8
+ - Red Hat Enterprise Linux 10.0 - 10.2
  - Canonical Ubuntu Server LTS 24.04 and 26.04
  - Debian 12 "Bookworm"
  - Debian 13 "Trixie"
