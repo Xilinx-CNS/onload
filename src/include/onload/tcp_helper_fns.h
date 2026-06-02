@@ -252,7 +252,9 @@ extern int efab_tcp_helper_pkt_buf_map(tcp_helper_resource_t* trs,
 extern int efab_tcp_helper_design_parameters(tcp_helper_resource_t* trs,
                                              oo_design_parameters_t* arg);
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 extern int efab_tcp_helper_reinit_txq(tcp_helper_resource_t* trs, int intf_i);
+#endif
 
 extern void
 tcp_helper_cluster_ref(tcp_helper_cluster_t* thc);

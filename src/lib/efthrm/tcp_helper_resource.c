@@ -174,8 +174,10 @@ static void
 tcp_helper_close_pending_endpoints(tcp_helper_resource_t*);
 #endif
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 static void tcp_helper_reinit_txqs_work(struct work_struct* data);
 static int tcp_helper_reinit_txqs_locked(tcp_helper_resource_t* thr);
+#endif
 
 #if CI_CFG_NIC_RESET_SUPPORT
 static void
@@ -5992,6 +5994,7 @@ tcp_helper_stop(tcp_helper_resource_t* trs)
                        __FUNCTION__, trs->id));
 }
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 static void tcp_helper_dump_stack_on_exit(ci_netif *ni)
 {
   int id = ni->state->stack_id;
@@ -6007,6 +6010,7 @@ static void tcp_helper_dump_stack_on_exit(ci_netif *ni)
   full_dump_udp_stats_to_logger(ni, ci_log_dump_on_exit_fn, &id);
 #endif
 }
+#endif /* ! CI_CFG_UL_INTERRUPT_HELPER */
 
 /*--------------------------------------------------------------------
  *!
@@ -7318,6 +7322,7 @@ tcp_helper_stop_periodic_work(tcp_helper_resource_t* rs)
 }
 #endif
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 static void
 tcp_helper_stop_txq_reinit(tcp_helper_resource_t* trs)
 {
@@ -7329,6 +7334,7 @@ tcp_helper_stop_txq_reinit(tcp_helper_resource_t* trs)
   cancel_delayed_work_sync(&trs->reinit_txq_work);
   cancel_delayed_work_sync(&trs->reinit_txq_work);
 }
+#endif
 
 /*--------------------------------------------------------------------*/
 
@@ -8634,6 +8640,7 @@ int efab_tcp_helper_design_parameters(tcp_helper_resource_t* trs,
   return copy_to_user(user_data, &dp, dp.known_size) ? -EFAULT : 0;
 }
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 #define TXQ_REINIT_ATTEMPT_DELAY (5 * HZ)
 #define TXQ_REINIT_MAX_ATTEMPTS (5)
 
@@ -8760,6 +8767,7 @@ int efab_tcp_helper_reinit_txq(tcp_helper_resource_t* trs, int intf_i)
 
   return 0;
 }
+#endif /* ! CI_CFG_UL_INTERRUPT_HELPER */
 
 static tcp_helper_resource_t*
 thr_ref2thr(oo_thr_ref_t ref)

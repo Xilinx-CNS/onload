@@ -1032,10 +1032,14 @@ oo_design_parameters_rsop(ci_private_t* priv, void *arg)
 static int
 oo_reinit_txq_rsop(ci_private_t* priv, void* arg)
 {
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   oo_reinit_txq_t* op = (oo_reinit_txq_t*)arg;
   if (priv->thr == NULL)
     return -EINVAL;
   return efab_tcp_helper_reinit_txq(priv->thr, op->intf_i);
+#else
+  return -ENOSYS;
+#endif
 }
 
 static int
