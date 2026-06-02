@@ -71,7 +71,9 @@ Map generateBuildTasks(String build_profile=null) {
               }
             }
             unstash('onload-full')
-            utils.rake(["build:${component}"], defines: defines)
+            def cmd = ["./scripts/build-component", component]
+            cmd += defines.collect { k, v -> "${k}=${v}" }
+            sh(script: cmd.join(' '))
             deleteDir()
           }
         }
@@ -180,17 +182,14 @@ void doUnitTestsPipeline() {
         sh 'echo "File count before stash:" && find . -not -path "./.git/*" -type f | wc -l && du -sh --exclude=.git . && find . -maxdepth 1 -type d | sort'
 
         /* Stash only source tree needed for builds (excludes leftover workspace dirs) */
-        stash(name: 'onload-full', includes: 'src/**,scripts/**,mk/**,rakelib/**,Gemfile*,Rakefile,Makefile,imports.mk,versions.env,pyproject.toml')
+        stash(name: 'onload-full', includes: 'src/**,scripts/**,mk/**,Makefile,imports.mk,versions.env,pyproject.toml')
         /* Src-only stash for coverage reports */
         stash(name: 'onload-src', includes: 'src/**/*', useDefaultExcludes: false)
 
         build_profiles = list_build_profiles()
         echo("Profiles: ${build_profiles}")
 
-        timeout(30) {
-          sh 'bundle check || bundle install'
-        }
-        def gcov = utils.rake(['build:which_gcov'], capture: true)
+        def gcov = sh(script: './scripts/which-gcov', returnStdout: true).trim()
         gcovr_options = [
           '--gcov-executable', gcov,
         ]
