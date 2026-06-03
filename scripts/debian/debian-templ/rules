@@ -188,7 +188,11 @@ ifneq (,$(filter #TYPE#-source,$(DOPACKAGES)))
 	dh_installdirs -p$(psource)  usr/src/modules/$(sname)/debian
 
 	# Copy only the driver source to the proper location
-	cp Makefile  debian/$(psource)/usr/src/modules/$(sname)
+	if [ -f "debian/Makefile" ]; then \
+		cp debian/Makefile  debian/$(psource)/usr/src/modules/$(sname); \
+	else \
+		cp Makefile  debian/$(psource)/usr/src/modules/$(sname); \
+	fi
 	cp -r src  debian/$(psource)/usr/src/modules/$(sname)
 	cp -r scripts  debian/$(psource)/usr/src/modules/$(sname)
 	cp -r mk  debian/$(psource)/usr/src/modules/$(sname)
@@ -207,6 +211,20 @@ ifneq (,$(filter #TYPE#-dkms,$(DOPACKAGES)))
 	install -D -m 644 dkms_override.conf debian/$(pdkms)/etc/dkms/$(sname).conf
 	dh_installdirs -p$(pdkms) usr/src/
 	tar xf ../#TYPE#_#VERSION#.orig.tar.gz -C debian/$(pdkms)/usr/src/
+	if [ -f "debian/Makefile" ]; then \
+		install -D -m 644 debian/Makefile debian/$(pdkms)/usr/src/#TYPE#-#VERSION#/Makefile; \
+	fi
+
+	if [ -f "debian/dkms.append.conf" ]; then \
+	 	cat debian/dkms.append.conf >> debian/$(pdkms)/usr/src/#TYPE#-#VERSION#/dkms.conf; \
+	fi
+
+	if [ -f $(CURDIR)/debian/patches/series ]; then \
+		( cd debian/$(pdkms)/usr/src/#TYPE#-#VERSION# && \
+		  QUILT_PATCHES=$(CURDIR)/debian/patches \
+		  QUILT_SERIES=$(CURDIR)/debian/patches/series \
+		  quilt push -a ); \
+	fi
 endif
 
 	# Add here commands to install the package into debian/#TYPE#.
@@ -295,7 +313,7 @@ ifneq (,$(filter #TYPE#-user,$(DOPACKAGES)))
 	dh_installdirs -p$(userpackage) lib/onload
 
 	i_prefix=$(CURDIR)/debian/$(userpackage) scripts/onload_install --verbose \
-		--packaged --userfiles --modprobe --modulesloadd \
+		--packaged --userfiles --modprobe --modulesloadd --udev \
 		$(BUILD_FLAGS) $(SETUID)
 endif
 
