@@ -333,6 +333,7 @@ ifneq (,$(filter #TYPE#-user,$(DOPACKAGES)))
 
 	i_prefix=$(CURDIR)/debian/$(userpackage) scripts/onload_install --verbose \
 		--packaged --userfiles --modprobe --modulesloadd --udev \
+		$(if $(wildcard pyproject.toml),,--python-layout=deb) \
 		$(BUILD_FLAGS) $(SETUID)
 endif
 
