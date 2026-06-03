@@ -505,23 +505,24 @@ static int shrub_dump(shrub_controller_config *config, int fd, size_t bufsize)
   return 0;
 }
 
-static int create_onload_config_socket(const char *socket_path, uintptr_t* config_socket_fd, int epoll_fd)
+static int create_onload_config_socket(shrub_controller_config *config)
 {
-  int rc = 0;
   struct epoll_event event;
   const mode_t mode = 0666;
   mode_t mode_save;
+  int rc;
 
-  unlink(socket_path);
+  unlinkat(config->dir_fd, EF_SHRUB_NEGOTIATION_SOCKET, 0);
 
-  rc = ef_shrub_socket_open(config_socket_fd);
+  rc = ef_shrub_socket_open(&config->config_socket_fd);
   if ( rc < 0 ) {
     ci_log("Error: shrub_controller onload handshake socket config failed");
     return rc;
   }
+  const int fd = config->config_socket_fd;
 
   mode_save = umask(~mode & 0777);
-  rc = ef_shrub_socket_bind(*config_socket_fd, socket_path);
+  rc = ef_shrub_socket_bind(fd, EF_SHRUB_NEGOTIATION_SOCKET);
   umask(mode_save);
   if ( rc < 0 ) {
     ci_log("Error: shrub_controller onload socket bind failed");
@@ -531,25 +532,25 @@ static int create_onload_config_socket(const char *socket_path, uintptr_t* confi
   /* We have a connection per-interface per-client. Onload clients will use
    * all interfaces by default, and it's reasonable that many apps are starting
    * up at once, so we need a generous backlog. */
-  rc = ef_shrub_socket_listen(*config_socket_fd, 2048);
+  rc = ef_shrub_socket_listen(fd, 2048);
   if ( rc < 0 ) {
     ci_log("Error: shrub_controller onload socket listen failed");
     goto cleanup_socket;
   }
 
   /* Add config_socket_fd to the epoll instance */
-  event.data.fd = *config_socket_fd;
+  event.data.fd = fd;
   event.events = EPOLLIN;
-  if ( epoll_ctl(epoll_fd, EPOLL_CTL_ADD, *config_socket_fd, &event) == -1 ) {
+  if ( epoll_ctl(config->epoll_fd, EPOLL_CTL_ADD, fd, &event) == -1 ) {
     rc = -errno;
-    ci_log("Error: shrub_controller epoll_ctl failed to add config_socket_fd");
+    ci_log("Error: shrub_controller epoll_ctl failed to add config socket");
     goto cleanup_socket;
   }
 
   return rc;
 
 cleanup_socket:
-  ef_shrub_socket_close_socket(*config_socket_fd);
+  ef_shrub_socket_close_socket(fd);
   return rc;
 }
 
@@ -715,7 +716,7 @@ static void cleanup_config_socket(shrub_controller_config *config)
   close(config->epoll_fd);
   if ( config->config_socket_fd != INVALID_SOCKET_FD ) {
     ef_shrub_socket_close_socket(config->config_socket_fd);
-    unlink(EF_SHRUB_NEGOTIATION_SOCKET);
+    unlinkat(config->dir_fd, EF_SHRUB_NEGOTIATION_SOCKET, 0);
     if ( config->debug_mode )
       ci_log("Info: shrub_controller socket closed and cleaning up! ");
   }
@@ -732,10 +733,7 @@ static int create_config_socket(shrub_controller_config *config)
     return rc;
   }
 
-  rc = create_onload_config_socket(
-        EF_SHRUB_NEGOTIATION_SOCKET,
-        &config->config_socket_fd,
-        config->epoll_fd);
+  rc = create_onload_config_socket(config);
   if ( rc < 0 ) {
     close(config->epoll_fd);
     ci_log("Error: shrub_controller failed to create config socket");
