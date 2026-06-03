@@ -16,7 +16,10 @@
 #export DH_VERBOSE=1
 
 
+# Only enable pybuild if the source ships a pyproject.toml
+ifneq (,$(wildcard pyproject.toml))
 export PYBUILD_SYSTEM=pyproject
+endif
 
 # some default definitions, important!
 #
@@ -290,7 +293,9 @@ endif
 # Build architecture-dependent files here.
 binary-arch: build install
 	dh_lintian
+ifneq (,$(wildcard pyproject.toml))
 	pybuild --verbose --build
+endif
 	dh_testdir -a
 	dh_testroot -a
 	dh_installsysusers -a --name=onload || dh_sysuser -a onload_cplane home=/run/openonload
@@ -302,8 +307,10 @@ binary-arch: build install
 #	dh_installemacsen -a
 #	dh_installpam -a
 #	dh_installmime -a
+ifneq (,$(wildcard pyproject.toml))
 	pybuild --verbose --install --dest-dir debian/$(userpackage)
 	dh_python3 -a
+endif
 #	dh_installinit -a
 	dh_installcron -a
 #	dh_installman -a
