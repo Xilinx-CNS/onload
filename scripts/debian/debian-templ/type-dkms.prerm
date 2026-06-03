@@ -1,4 +1,4 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # SPDX-FileCopyrightText: (c) Copyright 2023 Advanced Micro Devices, Inc.
 
-dkms remove -m #TYPE# -v #VERSION#
+#DEBHELPER#

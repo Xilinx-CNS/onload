@@ -1,10 +1,17 @@
+#!/bin/sh
 # SPDX-License-Identifier: BSD-2-Clause
 # SPDX-FileCopyrightText: (c) Copyright 2023-2024 Advanced Micro Devices, Inc.
 
-# Remove if already exists
-dkms remove -m #TYPE# -v #VERSION# --all > /dev/null 2>&1 || true
+set -e
 
-# Build and install
-dkms add -m #TYPE# -v #VERSION#
-dkms build -m #TYPE# -v #VERSION#
-dkms install -m #TYPE# -v #VERSION# --force
+case "$1" in
+    triggered)
+        dkms autoinstall -m #TYPE# -v #VERSION# --force
+        # HACK: Force initramfs update because x3522 package does not trigger it
+        dpkg-trigger update-initramfs
+    ;;
+esac
+
+#DEBHELPER#
+
+exit 0
