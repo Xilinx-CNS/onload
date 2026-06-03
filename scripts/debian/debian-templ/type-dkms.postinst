@@ -4,11 +4,34 @@
 
 set -e
 
+install_dkms() {
+    # Remove if already exists
+    dkms remove -m #TYPE# -v #VERSION# --all > /dev/null 2>&1 || true
+
+    # Build and install
+    dkms add -m #TYPE# -v #VERSION#
+    dkms build -m #TYPE# -v #VERSION#
+    dkms install -m #TYPE# -v #VERSION# --force
+}
+
 case "$1" in
+    configure)
+        install_dkms
+    ;;
+
     triggered)
-        dkms autoinstall -m #TYPE# -v #VERSION# --force
+        install_dkms
         # HACK: Force initramfs update because x3522 package does not trigger it
         dpkg-trigger update-initramfs
+    ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+       exit 0
+    ;;
+
+    *)
+        echo "postinst called with unknown argument \`$1'" >&2
+        exit 1
     ;;
 esac
 
