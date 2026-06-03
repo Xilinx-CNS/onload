@@ -215,7 +215,7 @@ build_sdeb() {
   try rm -rf "${sdeb_dir:?}/*"
   try mkdir -p "$sdeb_dir"
   maybe_install debuild
-  mksrcdeb_args=(--tarball "$tarball_path" --out "$sdeb_dir")
+  mksrcdeb_args+=(--tarball "$tarball_path" --out "$sdeb_dir")
   trylog "$sdeb_dir/build.log" \
     "$bin/debian/onload_mksrcdeb.sh" "${mksrcdeb_args[@]}"
   local debiansource_paths=("$sdeb_dir"/*debiansource.tgz)
@@ -373,6 +373,7 @@ read_args() {
   fi
 }
 read_args mkdist_args
+read_args mksrcdeb_args
 read_args rpmbuild_args
 read_args rpmbuild_source_args
 read_args rpmbuild_binary_args
@@ -431,6 +432,7 @@ usage() {
   err "Env vars:"
   err "  KVER                             Sets kernel version (--kernelver)"
   err "  mkdist_args                      Extra params for onload_mkdist"
+  err "  mksrcdeb_args                    Extra params for onload_mksrcdeb"
   err "  rpmbuild_args                    Extra params for all rpmbuild builds"
   err "  rpmbuild_source_args             Extra params for rpmbuild source build"
   err "  rpmbuild_binary_args             Extra params for rpmbuild binary build"
