@@ -78,5 +78,6 @@ extern int test_cluster_compat(void);
 extern int test_threshold_sharing(void);
 extern int test_mcast_hw_errors(void);
 extern int test_mcast_del(void);
+extern int test_mcast_del_sw(void);
 
 #endif /* __OOF_TEST_H__ */
