@@ -164,5 +164,8 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "mcast_del_sw") )
     test_mcast_del_sw();
 
+  if( all || !strcmp(argv[1], "mcast_interface_update") )
+    test_mcast_interface_update();
+
   return 0;
 }
