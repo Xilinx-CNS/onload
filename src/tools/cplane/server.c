@@ -192,8 +192,7 @@ CI_NORETURN init_failed(const char* msg, ...)
 {
   va_list args;
   va_start(args, msg);
-  ci_server_init_failed(SERVER_NAME, msg, args);
-  va_end(args);
+  ci_server_init_failed_v(SERVER_NAME, msg, args);
 }
 
 /* We pass the cp_session parameter through the function call chain, and in

@@ -18,17 +18,23 @@
 #define DEV_KMSG "/dev/kmsg"
 
 
+CI_NORETURN ci_server_init_failed_v(const char* srv_name,
+                                    const char* msg, va_list args)
+{
+  ci_vlog(msg, args);
+  ci_log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+  ci_log("!!! %s has FAILED TO START !!!", srv_name);
+  ci_log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+  exit(1);
+}
+
+
 CI_NORETURN ci_server_init_failed(const char* srv_name,
                                   const char* msg, ...)
 {
   va_list args;
   va_start(args, msg);
-  ci_vlog(msg, args);
-  va_end(args);
-  ci_log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-  ci_log("!!! %s has FAILED TO START !!!", srv_name);
-  ci_log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-  exit(1);
+  ci_server_init_failed_v(srv_name, msg, args);
 }
 
 
