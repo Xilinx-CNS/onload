@@ -173,5 +173,8 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "addr_reactivate") )
     test_addr_reactivate();
 
+  if( all || !strcmp(argv[1], "mcast_install") )
+    test_mcast_install();
+
   return 0;
 }
