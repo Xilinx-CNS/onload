@@ -134,5 +134,8 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "llct_sanity_ll") )
     test_llct_sanity_ll();
 
+  if( all || !strcmp(argv[1], "hidden_socket") )
+    test_hidden_socket();
+
   return 0;
 }
