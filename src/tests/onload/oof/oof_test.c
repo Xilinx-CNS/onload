@@ -140,5 +140,8 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "del_sw") )
     test_del_sw();
 
+  if( all || !strcmp(argv[1], "addr_lifecycle") )
+    test_addr_lifecycle();
+
   return 0;
 }
