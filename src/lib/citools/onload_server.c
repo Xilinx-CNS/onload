@@ -13,6 +13,7 @@
 
 #include <ci/tools/log.h>
 #include <ci/tools/debug.h>
+#include <ci/tools/onload_server.h>
 
 #define DEV_KMSG "/dev/kmsg"
 
@@ -46,8 +47,9 @@ void ci_server_set_log_prefix(char** log_prefix, const char* srv_bin)
 /* Fork off a daemon process according to the recipe in "man 7 daemon".  This
  * function returns only in the context of the daemon, and only on success;
  * otherwise, it exits. */
-void ci_server_daemonise(bool log_to_kern, char** log_prefix,
-                         const char* srv_name, const char* srv_bin)
+void ci_server_daemonise(char** log_prefix,
+                         const char* srv_name, const char* srv_bin,
+                         unsigned flags)
 {
   pid_t child;
   int rc;
@@ -60,7 +62,8 @@ void ci_server_daemonise(bool log_to_kern, char** log_prefix,
    * fatal. */
 
   /* Close all files above stderr. */
-  if( getrlimit(RLIMIT_NOFILE, &rlim) == 0 )
+  if( (flags & CI_DAEMON_CLOSE_FDS) &&
+      getrlimit(RLIMIT_NOFILE, &rlim) == 0 )
     for( i = STDERR_FILENO + 1; i < rlim.rlim_max; ++i )
       close(i);
 
@@ -98,10 +101,12 @@ void ci_server_daemonise(bool log_to_kern, char** log_prefix,
   ci_log("Spawned daemon process %d", getpid());
 
   umask(0);
-  rc = chdir("/");
-  if( rc == -1 )
-    ci_server_init_failed(srv_name, "Failed to change to root directory: %s",
-                          strerror(errno));
+  if( flags & CI_DAEMON_CHDIR_ROOT ) {
+    rc = chdir("/");
+    if( rc == -1 )
+      ci_server_init_failed(srv_name, "Failed to change to root directory: %s",
+                            strerror(errno));
+  }
 
   devnull = open("/dev/null", O_RDONLY);
   if( devnull == -1 )
@@ -113,13 +118,13 @@ void ci_server_daemonise(bool log_to_kern, char** log_prefix,
                           strerror(errno));
   close(devnull);
 
-  devnull = open(log_to_kern ? DEV_KMSG : "/dev/null", O_WRONLY);
+  devnull = open(flags & CI_DAEMON_LOG_TO_KERN ? DEV_KMSG : "/dev/null", O_WRONLY);
   if( devnull == -1 )
     ci_server_init_failed(srv_name, "Failed to open /dev/null for writing: %s",
                           strerror(errno));
 
   /* Start logging to syslog before we nullify std{out,err}. */
-  if( ! log_to_kern ) {
+  if( ! (flags & CI_DAEMON_LOG_TO_KERN) ) {
     ci_set_log_prefix("");
     ci_log_fn = ci_log_syslog;
     openlog(NULL, LOG_PID, LOG_DAEMON);

@@ -1351,8 +1351,10 @@ int main(int argc, char *argv[])
   }
 
   if( daemonise )
-    ci_server_daemonise(log_to_kern, &shrub_log_prefix, SERVER_NAME,
-                        SERVER_BIN);
+    ci_server_daemonise(&shrub_log_prefix,
+                        SERVER_NAME, SERVER_BIN,
+                        CI_DAEMON_CHDIR_ROOT | CI_DAEMON_CLOSE_FDS |
+                        (log_to_kern ? CI_DAEMON_LOG_TO_KERN : 0));
 
   controller_init_signals();
   rc = controller_init_paths(&config);

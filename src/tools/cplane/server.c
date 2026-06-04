@@ -925,8 +925,10 @@ int main(int argc, char** argv)
     sched_setaffinity(0, sizeof(cfg_affinity), (cpu_set_t*)&cfg_affinity);
 
   if( cfg_daemonise )
-    ci_server_daemonise(ci_cfg_log_to_kern, &cp_log_prefix, SERVER_NAME,
-                        SERVER_BIN);
+    ci_server_daemonise(&cp_log_prefix,
+                        SERVER_NAME, SERVER_BIN,
+                        CI_DAEMON_CHDIR_ROOT | CI_DAEMON_CLOSE_FDS |
+                        (ci_cfg_log_to_kern ? CI_DAEMON_LOG_TO_KERN : 0));
 
   /* If a namespace was specified on the command line, switch into it before
    * bringing up any of our state. */
