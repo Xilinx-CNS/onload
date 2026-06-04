@@ -182,5 +182,8 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "mcast_connected") )
     test_mcast_connected();
 
+  if( all || !strcmp(argv[1], "socket_replace") )
+    test_socket_replace();
+
   return 0;
 }
