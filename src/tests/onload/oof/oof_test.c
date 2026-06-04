@@ -206,5 +206,8 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "llct_hw_fallback") )
     test_llct_hw_fallback();
 
+  if( all || !strcmp(argv[1], "mcast_filter_transfer") )
+    test_mcast_filter_transfer();
+
   return 0;
 }
