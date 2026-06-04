@@ -146,5 +146,8 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "filter_redirect") )
     test_filter_redirect();
 
+  if( all || !strcmp(argv[1], "mcast_input_validation") )
+    test_mcast_input_validation();
+
   return 0;
 }
