@@ -29,6 +29,17 @@ extern void context_free(struct ooft_task* task);
 extern int oo_debug_bits;
 extern int scalable_filter_gid;
 
+/* SW-filter insert fault injection (mock oof_cb_sw_filter_insert).
+ * While oof_sw_filter_insert_fail_count != 0, a matching insert returns
+ * oof_sw_filter_insert_fail_rc instead of installing the filter, and the
+ * count is decremented (if > 0).  oof_sw_filter_insert_fail_laddr, when
+ * non-zero, restricts injection to inserts for that local address (BE).
+ * An injected failure is NOT recorded as a bad add, so it models a
+ * genuine insertion failure rather than an unexpected insert. */
+extern int oof_sw_filter_insert_fail_count;
+extern int oof_sw_filter_insert_fail_rc;
+extern unsigned oof_sw_filter_insert_fail_laddr;
+
 enum ooft_rx_mode {
   OOFT_RX_FF,
   OOFT_RX_LL,

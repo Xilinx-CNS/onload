@@ -29,6 +29,8 @@ void ooft_init_efrm_client(struct efrm_client* client, int hwport)
   client->filter_id = 0;
   client->hwport = hwport;
   oo_nics[hwport].efrm_client = client;
+  oo_nics[hwport].oo_nic_flags = 0;
+  oo_nics[hwport].alternate_hwport = -1;
 }
 
 
@@ -124,6 +126,7 @@ struct ooft_hw_filter* ooft_client_add_hw_filter(ci_dllist* list,
 
   if( spec )
     memcpy(&filter->spec, spec, sizeof(struct efx_filter_spec));
+  filter->op_seq = 0;
 
   ci_dllist_push_tail(list, &filter->client_link);
   return filter;
@@ -142,6 +145,34 @@ void ooft_client_expect_hw_remove(struct efrm_client* client,
 void ooft_client_expect_hw_remove_all(struct efrm_client* client)
 {
   ooft_hw_filter_expect_remove_list(&client->hw_filters_added);
+}
+
+
+unsigned ooft_hw_filter_min_op_seq(ci_dllist* list)
+{
+  struct ooft_hw_filter* filter;
+  unsigned min = 0;
+
+  CI_DLLIST_FOR_EACH2(struct ooft_hw_filter, filter, client_link, list)
+    if( filter->op_seq != 0 && (min == 0 || filter->op_seq < min) )
+      min = filter->op_seq;
+
+  return min;
+}
+
+
+unsigned ooft_client_removed_max_op_seq_since(struct efrm_client* client,
+                                              unsigned since)
+{
+  struct ooft_hw_filter* filter;
+  unsigned max = 0;
+
+  CI_DLLIST_FOR_EACH2(struct ooft_hw_filter, filter, client_link,
+                      &client->hw_filters_removed)
+    if( filter->op_seq > since && filter->op_seq > max )
+      max = filter->op_seq;
+
+  return max;
 }
 
 
@@ -265,6 +296,85 @@ int ooft_client_hw_filter_match(struct efx_filter_spec* spec1,
 }
 
 
+void ooft_client_expect_hw_add_mac(struct efrm_client* client,
+                                   int dmaq_id, int stack_id,
+                                   const unsigned char mac[6],
+                                   int vlan_id)
+{
+  struct ooft_hw_filter* filter;
+  filter = ooft_client_add_hw_filter(&client->hw_filters_to_add, NULL);
+  struct efx_filter_spec* spec = &filter->spec;
+  int flags = EFX_FILTER_FLAG_RX_SCATTER;
+
+  efx_filter_init_rx(spec, EFX_FILTER_PRI_REQUIRED, flags, dmaq_id);
+  efx_filter_set_stack_id(spec, stack_id);
+  efx_filter_set_eth_local(spec, vlan_id, mac);
+
+  LOG_FILTER_OP(ooft_log_hw_filter_op(client, spec, 1, "INSERT"));
+}
+
+
+void ooft_client_expect_hw_add_ethertype(struct efrm_client* client,
+                                         int dmaq_id,
+                                         const unsigned char mac[6],
+                                         int vlan_id,
+                                         uint16_t ethertype_be)
+{
+  struct ooft_hw_filter* filter;
+  filter = ooft_client_add_hw_filter(&client->hw_filters_to_add, NULL);
+  struct efx_filter_spec* spec = &filter->spec;
+  int flags = EFX_FILTER_FLAG_RX_SCATTER;
+
+  efx_filter_init_rx(spec, EFX_FILTER_PRI_REQUIRED, flags, dmaq_id);
+  spec->ether_type = ethertype_be;
+  spec->match_flags |= EFX_FILTER_MATCH_ETHER_TYPE;
+  efx_filter_set_eth_local(spec, vlan_id, mac);
+
+  LOG_FILTER_OP(ooft_log_hw_filter_op(client, spec, 1, "INSERT"));
+}
+
+
+void ooft_client_expect_hw_add_ipproto_mac(struct efrm_client* client,
+                                           int dmaq_id,
+                                           const unsigned char mac[6],
+                                           int vlan_id,
+                                           uint16_t ethertype_be,
+                                           uint8_t ip_proto)
+{
+  struct ooft_hw_filter* filter;
+  filter = ooft_client_add_hw_filter(&client->hw_filters_to_add, NULL);
+  struct efx_filter_spec* spec = &filter->spec;
+  int flags = EFX_FILTER_FLAG_RX_SCATTER;
+
+  efx_filter_init_rx(spec, EFX_FILTER_PRI_REQUIRED, flags, dmaq_id);
+  spec->ip_proto = ip_proto;
+  spec->ether_type = ethertype_be;
+  spec->match_flags |= EFX_FILTER_MATCH_ETHER_TYPE | EFX_FILTER_MATCH_IP_PROTO;
+  efx_filter_set_eth_local(spec, vlan_id, mac);
+
+  LOG_FILTER_OP(ooft_log_hw_filter_op(client, spec, 1, "INSERT"));
+}
+
+
+void ooft_client_expect_hw_add_ipproto(struct efrm_client* client,
+                                       int dmaq_id,
+                                       uint16_t ethertype_be,
+                                       uint8_t ip_proto)
+{
+  struct ooft_hw_filter* filter;
+  filter = ooft_client_add_hw_filter(&client->hw_filters_to_add, NULL);
+  struct efx_filter_spec* spec = &filter->spec;
+  int flags = EFX_FILTER_FLAG_RX_SCATTER;
+
+  efx_filter_init_rx(spec, EFX_FILTER_PRI_REQUIRED, flags, dmaq_id);
+  spec->ip_proto = ip_proto;
+  spec->ether_type = ethertype_be;
+  spec->match_flags |= EFX_FILTER_MATCH_ETHER_TYPE | EFX_FILTER_MATCH_IP_PROTO;
+
+  LOG_FILTER_OP(ooft_log_hw_filter_op(client, spec, 1, "INSERT"));
+}
+
+
 /* This function will remove any filters from the in list where the fields
  * specified in match_flags match the match_spec.  The removed filters are
  * then placed on the out_matches list.
@@ -305,4 +415,3 @@ void ooft_client_hw_filter_matches_hwport(ci_dllist* in,
     }
   }
 }
-

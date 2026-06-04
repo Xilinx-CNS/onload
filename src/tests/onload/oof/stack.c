@@ -16,6 +16,10 @@
 #include <onload/oof_onload.h>
 #include <arpa/inet.h>
 
+#include "oof_tproxy_ipproto.h"
+#include "efrm_interface.h"
+#include "oof_impl.h"
+
 static int thr_id = 0;
 
 static void ooft_free_filter_list(ci_dllist* list);
@@ -50,9 +54,39 @@ tcp_helper_resource_t* ooft_alloc_stack_mode(int n_eps, enum ooft_rx_mode mode)
 
 void ooft_free_stack(tcp_helper_resource_t* thr)
 {
+  if( thr->thc != NULL )
+    ooft_stack_set_cluster(thr, NULL);
   oo_filter_ns_put(&efab_tcp_driver, thr->ofn);
   free(thr->eps);
   free(thr);
+}
+
+
+static int thc_id = 0;
+
+tcp_helper_cluster_t* ooft_alloc_cluster(const char* name)
+{
+  tcp_helper_cluster_t* thc = calloc(1, sizeof(tcp_helper_cluster_t));
+  ci_assert(thc);
+  thc->cluster_id = thc_id++;
+  strncpy(thc->thc_name, name, sizeof(thc->thc_name) - 1);
+  return thc;
+}
+
+void ooft_free_cluster(tcp_helper_cluster_t* thc)
+{
+  ci_assert_equal(thc->thc_refs, 0);
+  free(thc);
+}
+
+void ooft_stack_set_cluster(tcp_helper_resource_t* thr,
+                            tcp_helper_cluster_t* thc)
+{
+  if( thr->thc != NULL )
+    --thr->thc->thc_refs;
+  thr->thc = thc;
+  if( thc != NULL )
+    ++thc->thc_refs;
 }
 
 
@@ -159,6 +193,88 @@ int ooft_endpoint_mcast_add(struct ooft_endpoint* ep, unsigned group,
 {
   return oof_socket_mcast_add(ep->thr->ofn->ofn_filter_manager, &ep->skf,
                               group, idx->id);
+}
+
+void ooft_endpoint_mcast_del(struct ooft_endpoint* ep, unsigned group,
+                             struct ooft_ifindex* idx)
+{
+  oof_socket_mcast_del(ep->thr->ofn->ofn_filter_manager, &ep->skf,
+                       group, idx->id);
+}
+
+
+int ooft_endpoint_mcast_membership_count(struct ooft_endpoint* ep)
+{
+  struct oof_mcast_member* mm;
+  int count = 0;
+
+  CI_DLLIST_FOR_EACH2(struct oof_mcast_member, mm, mm_socket_link,
+                      &ep->skf.sf_mcast_memberships)
+    ++count;
+
+  return count;
+}
+
+
+int ooft_endpoint_mcast_membership_count_for(struct ooft_endpoint* ep,
+                                             unsigned group,
+                                             struct ooft_ifindex* idx)
+{
+  struct oof_mcast_member* mm;
+  int count = 0;
+
+  CI_DLLIST_FOR_EACH2(struct oof_mcast_member, mm, mm_socket_link,
+                      &ep->skf.sf_mcast_memberships)
+    if( mm->mm_maddr == group && mm->mm_ifindex == idx->id )
+      ++count;
+
+  return count;
+}
+
+
+int ooft_endpoint_mcast_membership_has_filter(struct ooft_endpoint* ep,
+                                              unsigned group,
+                                              struct ooft_ifindex* idx)
+{
+  struct oof_mcast_member* mm;
+
+  CI_DLLIST_FOR_EACH2(struct oof_mcast_member, mm, mm_socket_link,
+                      &ep->skf.sf_mcast_memberships)
+    if( mm->mm_maddr == group && mm->mm_ifindex == idx->id )
+      return mm->mm_filter != NULL;
+
+  return 0;
+}
+
+
+int ooft_endpoint_mcast_filter_count_for_addr(struct ooft_endpoint* ep,
+                                              unsigned group)
+{
+  struct oof_mcast_member* mm;
+  struct oof_mcast_member* seen;
+  int count = 0;
+
+  CI_DLLIST_FOR_EACH2(struct oof_mcast_member, mm, mm_socket_link,
+                      &ep->skf.sf_mcast_memberships) {
+    int already_seen = 0;
+    if( mm->mm_maddr != group || mm->mm_filter == NULL )
+      continue;
+
+    CI_DLLIST_FOR_EACH2(struct oof_mcast_member, seen, mm_socket_link,
+                        &ep->skf.sf_mcast_memberships) {
+      if( seen == mm )
+        break;
+      if( seen->mm_maddr == group && seen->mm_filter == mm->mm_filter ) {
+        already_seen = 1;
+        break;
+      }
+    }
+
+    if( ! already_seen )
+      ++count;
+  }
+
+  return count;
 }
 
 
@@ -304,6 +420,22 @@ bool ooft_endpoint_want_unicast_hwport(struct ooft_endpoint* ep,
 }
 
 
+static int ooft_filter_vi_stack_ids(tcp_helper_resource_t* thr, int hwport,
+                                    int* vi_id, int* stack_id)
+{
+  if( thr->thc != NULL ) {
+    *vi_id = tcp_helper_cluster_vi_base(thr->thc, hwport);
+    *stack_id = tcp_helper_cluster_vi_hw_stack_id(thr->thc, hwport);
+  }
+  else {
+    *vi_id = tcp_helper_rx_vi_id(thr, hwport);
+    *stack_id = tcp_helper_vi_hw_stack_id(thr, hwport);
+  }
+
+  return *vi_id >= 0 && *stack_id >= 0;
+}
+
+
 /* Adds a filter with the supplied local address on each hwport in this
  * endpoint's namespace.  Other fields are taken from the endpoint.
  * flag OOFT_EXPECT_FLAG_WILD would omit details of remote to create semi-wild filters.
@@ -326,14 +458,17 @@ void ooft_endpoint_expect_hw_unicast(struct ooft_endpoint* ep,
     if( !ooft_endpoint_want_unicast_hwport(ep, hw) )
       continue;
 
-    if( (1 << i) & hwport_mask)
+    if( (1 << i) & hwport_mask) {
+      int vi_id, stack_id;
+      if( ! ooft_filter_vi_stack_ids(ep->thr, i, &vi_id, &stack_id) )
+        continue;
       ooft_client_expect_hw_add_ip(oo_nics[i].efrm_client,
-                                   tcp_helper_rx_vi_id(ep->thr, i),
-                                   tcp_helper_vi_hw_stack_id(ep->thr, i),
+                                   vi_id, stack_id,
                                    EFX_FILTER_VID_UNSPEC,
                                    ep->proto, laddr_be, ep->lport_be,
                                    raddr_be,
                                    rport_be);
+    }
   }
 }
 
@@ -394,6 +529,32 @@ void ooft_endpoint_expect_multicast_filters(struct ooft_endpoint* ep,
   int i;
   int vlans;
   struct ooft_hwport* hw;
+  for( i = 0; i < CI_CFG_MAX_HWPORTS; i++ ) {
+    if( (1 << i) & hwport_mask ) {
+      hw = HWPORT_FROM_CLIENT(oo_nics[i].efrm_client);
+      vlans = hw->flags & OOF_HWPORT_FLAG_VLAN_FILTERS;
+      ooft_client_expect_hw_add_ip(oo_nics[i].efrm_client,
+                                   tcp_helper_rx_vi_id(ep->thr, i),
+                                   tcp_helper_vi_hw_stack_id(ep->thr, i),
+                                   vlans ? idx->vlan_id:EFX_FILTER_VID_UNSPEC,
+                                   ep->proto, laddr_be, ep->lport_be,
+                                   vlans ? 0 : ep->raddr_be,
+                                   vlans ? 0 : ep->rport_be);
+    }
+  }
+}
+
+void ooft_endpoint_expect_multicast_hw_filters(struct ooft_endpoint* ep,
+                                               struct ooft_ifindex* idx,
+                                               unsigned hwport_mask,
+                                               unsigned laddr_be)
+{
+  int i;
+  int vlans;
+  struct ooft_hwport* hw;
+
+  ci_assert_equal(ep->proto, IPPROTO_UDP);
+
   for( i = 0; i < CI_CFG_MAX_HWPORTS; i++ ) {
     if( (1 << i) & hwport_mask ) {
       hw = HWPORT_FROM_CLIENT(oo_nics[i].efrm_client);
@@ -490,3 +651,104 @@ int ooft_endpoint_check_sw_filters(struct ooft_endpoint* ep)
   return rc;
 }
 
+
+/* ---------------------------------------
+ * Tproxy filter expectation helpers
+ * --------------------------------------- */
+
+void ooft_expect_tproxy_filters(tcp_helper_resource_t* thr,
+                                struct ooft_ifindex* idx)
+{
+  int i;
+
+  for( i = 0; i < CI_CFG_MAX_HWPORTS; i++ ) {
+    if( !((1 << i) & idx->hwport_mask) )
+      continue;
+    if( !oo_nics[i].efrm_client )
+      continue;
+
+    struct efrm_client* client = oo_nics[i].efrm_client;
+    int vi_id, stack_id;
+    int j;
+
+    if( ! ooft_filter_vi_stack_ids(thr, i, &vi_id, &stack_id) )
+      continue;
+
+    /* MAC filter (RSS_DST) */
+    ooft_client_expect_hw_add_mac(client, vi_id, stack_id,
+                                  idx->mac, idx->vlan_id);
+
+    /* ARP ethertype filter (kernel redirect, dmaq_id=0) */
+    ooft_client_expect_hw_add_ethertype(client, 0, idx->mac,
+                                        idx->vlan_id, htons(0x0806));
+
+    /* IP-protocol filters (kernel redirect, dmaq_id=0) */
+    for( j = 0; j < (int)OOF_TPROXY_IPPROTO_FILTER_COUNT; j++ )
+      ooft_client_expect_hw_add_ipproto_mac(client, 0, idx->mac,
+                                            idx->vlan_id,
+                                            htons(oof_tproxy_ipprotos[j][0]),
+                                            oof_tproxy_ipprotos[j][1]);
+  }
+}
+
+
+void ooft_expect_tproxy_filters_global(tcp_helper_resource_t* thr,
+                                       struct ooft_ifindex* idx)
+{
+  struct oof_manager* fm = thr->ofn->ofn_filter_manager;
+  unsigned allowed_hwport_mask = fm->fm_hwports_available &
+                                 (fm->fm_hwports_up | fm->fm_hwports_down);
+  int i, j;
+
+  for( i = 0; i < CI_CFG_MAX_HWPORTS; i++ ) {
+    if( !((1 << i) & idx->hwport_mask) )
+      continue;
+    if( !oo_nics[i].efrm_client )
+      continue;
+
+    struct efrm_client* client = oo_nics[i].efrm_client;
+    int vi_id, stack_id;
+
+    if( ! ooft_filter_vi_stack_ids(thr, i, &vi_id, &stack_id) )
+      continue;
+
+    ooft_client_expect_hw_add_mac(client, vi_id, stack_id,
+                                  idx->mac, idx->vlan_id);
+    ooft_client_expect_hw_add_ethertype(client, 0, idx->mac,
+                                        idx->vlan_id, htons(0x0806));
+  }
+
+  for( i = 0; i < CI_CFG_MAX_HWPORTS; i++ ) {
+    if( !((1 << i) & allowed_hwport_mask) )
+      continue;
+    if( !oo_nics[i].efrm_client )
+      continue;
+
+    struct efrm_client* client = oo_nics[i].efrm_client;
+
+    for( j = 0; j < (int)OOF_TPROXY_IPPROTO_FILTER_COUNT; j++ )
+      ooft_client_expect_hw_add_ipproto(client, 0,
+                                        htons(oof_tproxy_ipprotos[j][0]),
+                                        oof_tproxy_ipprotos[j][1]);
+  }
+}
+
+
+void ooft_expect_tproxy_filters_remove(tcp_helper_resource_t* thr,
+                                       struct ooft_ifindex* idx)
+{
+  struct oof_manager* fm = thr->ofn->ofn_filter_manager;
+  unsigned allowed_hwport_mask = fm->fm_hwports_available &
+                                 (fm->fm_hwports_up | fm->fm_hwports_down);
+  unsigned hwport_mask = idx->hwport_mask | allowed_hwport_mask;
+  int i;
+
+  for( i = 0; i < CI_CFG_MAX_HWPORTS; i++ ) {
+    if( !((1 << i) & hwport_mask) )
+      continue;
+    if( !oo_nics[i].efrm_client )
+      continue;
+
+    ooft_client_expect_hw_remove_all(oo_nics[i].efrm_client);
+  }
+}

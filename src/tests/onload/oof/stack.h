@@ -83,6 +83,10 @@ extern tcp_helper_resource_t* ooft_alloc_stack(int n_eps);
 extern tcp_helper_resource_t* ooft_alloc_stack_mode(int n_eps,
                                                     enum ooft_rx_mode mode);
 extern void ooft_free_stack(tcp_helper_resource_t* thr);
+extern tcp_helper_cluster_t* ooft_alloc_cluster(const char* name);
+extern void ooft_free_cluster(tcp_helper_cluster_t* thc);
+extern void ooft_stack_set_cluster(tcp_helper_resource_t* thr,
+                                   tcp_helper_cluster_t* thc);
 extern struct ooft_endpoint* ooft_alloc_endpoint(tcp_helper_resource_t* thr,
                             int proto, uint32_t laddr_be, uint16_t lport_be,
                             uint32_t raddr_be, uint32_t rport_be);
@@ -96,6 +100,17 @@ extern int ooft_endpoint_add(struct ooft_endpoint* ep, int flags);
 extern int ooft_endpoint_add_wild(struct ooft_endpoint* ep, int flags);
 extern int ooft_endpoint_mcast_add(struct ooft_endpoint* ep, unsigned group,
                                    struct ooft_ifindex* idx);
+extern void ooft_endpoint_mcast_del(struct ooft_endpoint* ep, unsigned group,
+                                    struct ooft_ifindex* idx);
+extern int ooft_endpoint_mcast_membership_count(struct ooft_endpoint* ep);
+extern int ooft_endpoint_mcast_membership_count_for(struct ooft_endpoint* ep,
+                                                    unsigned group,
+                                                    struct ooft_ifindex* idx);
+extern int ooft_endpoint_mcast_membership_has_filter(struct ooft_endpoint* ep,
+                                                     unsigned group,
+                                                     struct ooft_ifindex* idx);
+extern int ooft_endpoint_mcast_filter_count_for_addr(struct ooft_endpoint* ep,
+                                                     unsigned group);
 int ooft_endpoint_udp_connect(struct ooft_endpoint* ep, int flags);
 
 /* ---------------------------------------
@@ -135,6 +150,10 @@ extern void ooft_endpoint_expect_multicast_filters(struct ooft_endpoint* ep,
                                                    struct ooft_ifindex* idx,
                                                    unsigned hwport_mask,
                                                    unsigned laddr_be);
+extern void ooft_endpoint_expect_multicast_hw_filters(struct ooft_endpoint* ep,
+                                                      struct ooft_ifindex* idx,
+                                                      unsigned hwport_mask,
+                                                      unsigned laddr_be);
 extern void ooft_endpoint_expect_multicast_filters_remove(
                                                    struct ooft_endpoint* ep,
                                                    struct ooft_ifindex* idx,
@@ -143,6 +162,16 @@ extern void ooft_endpoint_expect_multicast_filters_remove(
 
 extern int ooft_endpoint_check_sw_filters(struct ooft_endpoint* ep);
 extern int ooft_stack_check_sw_filters(tcp_helper_resource_t* thr);
+
+/* ---------------------------------------
+ * Tproxy filter expectation helpers
+ * --------------------------------------- */
+extern void ooft_expect_tproxy_filters(tcp_helper_resource_t* thr,
+                                       struct ooft_ifindex* idx);
+extern void ooft_expect_tproxy_filters_global(tcp_helper_resource_t* thr,
+                                              struct ooft_ifindex* idx);
+extern void ooft_expect_tproxy_filters_remove(tcp_helper_resource_t* thr,
+                                              struct ooft_ifindex* idx);
 
 
 #endif /* __OOF_TEST_STACK_H__ */
