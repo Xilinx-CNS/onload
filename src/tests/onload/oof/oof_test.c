@@ -143,5 +143,8 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "addr_lifecycle") )
     test_addr_lifecycle();
 
+  if( all || !strcmp(argv[1], "filter_redirect") )
+    test_filter_redirect();
+
   return 0;
 }

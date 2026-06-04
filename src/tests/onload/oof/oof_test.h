@@ -72,5 +72,6 @@ extern int test_llct_sanity_ll(void);
 extern int test_hidden_socket(void);
 extern int test_del_sw(void);
 extern int test_addr_lifecycle(void);
+extern int test_filter_redirect(void);
 
 #endif /* __OOF_TEST_H__ */
