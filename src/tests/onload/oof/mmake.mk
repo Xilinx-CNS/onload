@@ -25,7 +25,7 @@ TEST_SRCS := tests/sanity.c tests/multicast_sanity.c tests/namespace_sanity.c \
 	tests/socket_replace.c tests/tproxy_global.c \
 	tests/tproxy_sanity.c tests/nat_table.c \
 	tests/hw_filter_errors.c tests/llct_hw_fallback.c \
-	tests/mcast_filter_transfer.c
+	tests/mcast_filter_transfer.c tests/cluster_multi.c
 HDRS := cplane.h oof_impl.h stack_interface.h driverlink_interface.h  \
 	oof_test.h tcp_filters_deps.h efrm_interface.h oo_hw_filter.h \
 	tcp_filters_internal.h onload_kernel_compat.h stack.h utils.h \

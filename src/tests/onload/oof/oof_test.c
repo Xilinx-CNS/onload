@@ -209,5 +209,8 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "mcast_filter_transfer") )
     test_mcast_filter_transfer();
 
+  if( all || !strcmp(argv[1], "cluster_multi") )
+    test_cluster_multi();
+
   return 0;
 }

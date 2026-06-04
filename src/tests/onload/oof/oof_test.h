@@ -94,5 +94,6 @@ extern int test_nat_table(void);
 extern int test_hw_filter_errors(void);
 extern int test_llct_hw_fallback(void);
 extern int test_mcast_filter_transfer(void);
+extern int test_cluster_multi(void);
 
 #endif /* __OOF_TEST_H__ */
