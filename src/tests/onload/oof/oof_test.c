@@ -155,5 +155,8 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "threshold_sharing") )
     test_threshold_sharing();
 
+  if( all || !strcmp(argv[1], "mcast_hw_errors") )
+    test_mcast_hw_errors();
+
   return 0;
 }
