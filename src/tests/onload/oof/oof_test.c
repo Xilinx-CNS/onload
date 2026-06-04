@@ -203,5 +203,8 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "hw_filter_errors") )
     test_hw_filter_errors();
 
+  if( all || !strcmp(argv[1], "llct_hw_fallback") )
+    test_llct_hw_fallback();
+
   return 0;
 }
