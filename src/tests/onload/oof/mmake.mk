@@ -16,7 +16,7 @@ TEST_SRCS := tests/sanity.c tests/multicast_sanity.c tests/namespace_sanity.c \
 	tests/replication_sanity.c tests/multipath_replication.c \
 	tests/multicast_local_addr.c tests/hidden_socket.c tests/del_sw.c \
 	tests/addr_lifecycle.c tests/filter_redirect.c \
-	tests/mcast_input_validation.c
+	tests/mcast_input_validation.c tests/cluster_compat.c
 HDRS := cplane.h oof_impl.h stack_interface.h driverlink_interface.h  \
 	oof_test.h tcp_filters_deps.h efrm_interface.h oo_hw_filter.h \
 	tcp_filters_internal.h onload_kernel_compat.h stack.h utils.h \

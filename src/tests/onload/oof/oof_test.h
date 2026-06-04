@@ -74,5 +74,6 @@ extern int test_del_sw(void);
 extern int test_addr_lifecycle(void);
 extern int test_filter_redirect(void);
 extern int test_mcast_input_validation(void);
+extern int test_cluster_compat(void);
 
 #endif /* __OOF_TEST_H__ */

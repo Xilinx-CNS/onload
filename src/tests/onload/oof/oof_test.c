@@ -149,5 +149,8 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "mcast_input_validation") )
     test_mcast_input_validation();
 
+  if( all || !strcmp(argv[1], "cluster_compat") )
+    test_cluster_compat();
+
   return 0;
 }
