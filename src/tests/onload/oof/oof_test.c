@@ -158,5 +158,8 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "mcast_hw_errors") )
     test_mcast_hw_errors();
 
+  if( all || !strcmp(argv[1], "mcast_del") )
+    test_mcast_del();
+
   return 0;
 }
