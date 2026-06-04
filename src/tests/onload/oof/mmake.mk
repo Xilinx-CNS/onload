@@ -22,7 +22,8 @@ TEST_SRCS := tests/sanity.c tests/multicast_sanity.c tests/namespace_sanity.c \
 	tests/mcast_interface_update.c tests/hwport_lifecycle.c \
 	tests/addr_reactivate.c tests/mcast_install.c \
 	tests/udp_connect.c tests/mcast_connected.c \
-	tests/socket_replace.c tests/tproxy_global.c
+	tests/socket_replace.c tests/tproxy_global.c \
+	tests/tproxy_sanity.c
 HDRS := cplane.h oof_impl.h stack_interface.h driverlink_interface.h  \
 	oof_test.h tcp_filters_deps.h efrm_interface.h oo_hw_filter.h \
 	tcp_filters_internal.h onload_kernel_compat.h stack.h utils.h \
@@ -31,7 +32,9 @@ HDRS := cplane.h oof_impl.h stack_interface.h driverlink_interface.h  \
 OBJS := $(patsubst %,%.o,$(SRCS))
 OBJS += $(patsubst %,%.o,$(TEST_SRCS))
 
-TESTS := $(patsubst tests/%.c,"./oof_test %",$(TEST_SRCS))
+# Keep tproxy_sanity available for manual execution while ON-17563 is open.
+DEFAULT_TEST_SRCS := $(filter-out tests/tproxy_sanity.c,$(TEST_SRCS))
+TESTS := $(patsubst tests/%.c,"./oof_test %",$(DEFAULT_TEST_SRCS))
 TESTS += "./oof_test tproxy_global_refcount"
 # Add the local include directory before the standard include path to allow
 # us to replace system includes where needed.

@@ -191,5 +191,8 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "tproxy_global_refcount") )
     test_tproxy_global_refcount();
 
+  if( all || !strcmp(argv[1], "tproxy_sanity") )
+    test_tproxy_sanity();
+
   return 0;
 }
