@@ -170,5 +170,8 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "hwport_lifecycle") )
     test_hwport_lifecycle();
 
+  if( all || !strcmp(argv[1], "addr_reactivate") )
+    test_addr_reactivate();
+
   return 0;
 }
