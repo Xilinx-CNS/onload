@@ -185,5 +185,11 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "socket_replace") )
     test_socket_replace();
 
+  if( all || !strcmp(argv[1], "tproxy_global") )
+    test_tproxy_global();
+
+  if( all || !strcmp(argv[1], "tproxy_global_refcount") )
+    test_tproxy_global_refcount();
+
   return 0;
 }

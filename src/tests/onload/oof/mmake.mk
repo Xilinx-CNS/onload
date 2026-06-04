@@ -22,7 +22,7 @@ TEST_SRCS := tests/sanity.c tests/multicast_sanity.c tests/namespace_sanity.c \
 	tests/mcast_interface_update.c tests/hwport_lifecycle.c \
 	tests/addr_reactivate.c tests/mcast_install.c \
 	tests/udp_connect.c tests/mcast_connected.c \
-	tests/socket_replace.c
+	tests/socket_replace.c tests/tproxy_global.c
 HDRS := cplane.h oof_impl.h stack_interface.h driverlink_interface.h  \
 	oof_test.h tcp_filters_deps.h efrm_interface.h oo_hw_filter.h \
 	tcp_filters_internal.h onload_kernel_compat.h stack.h utils.h \
@@ -32,6 +32,7 @@ OBJS := $(patsubst %,%.o,$(SRCS))
 OBJS += $(patsubst %,%.o,$(TEST_SRCS))
 
 TESTS := $(patsubst tests/%.c,"./oof_test %",$(TEST_SRCS))
+TESTS += "./oof_test tproxy_global_refcount"
 # Add the local include directory before the standard include path to allow
 # us to replace system includes where needed.
 MMAKE_INCLUDE := -I$(TOPPATH)/$(CURRENT)/include $(MMAKE_INCLUDE)
