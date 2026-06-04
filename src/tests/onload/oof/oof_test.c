@@ -176,5 +176,8 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "mcast_install") )
     test_mcast_install();
 
+  if( all || !strcmp(argv[1], "udp_connect") )
+    test_udp_connect();
+
   return 0;
 }
