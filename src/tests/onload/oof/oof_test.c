@@ -137,5 +137,8 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "hidden_socket") )
     test_hidden_socket();
 
+  if( all || !strcmp(argv[1], "del_sw") )
+    test_del_sw();
+
   return 0;
 }
