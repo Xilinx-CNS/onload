@@ -58,7 +58,7 @@ static volatile sig_atomic_t call_shrub_dump = 0;
 
 #define DEFAULT_BUFFER_SIZE 1024 * 1024
 
-#define INVALID_SOCKET_FD ((uintptr_t)-1)
+static const int NO_FD = -1;
 
 #define DEV_KMSG "/dev/kmsg"
 #define SERVER_BIN "shrub_controller"
@@ -108,7 +108,7 @@ typedef struct shrub_if_config_s
 typedef struct
 {
   int interface_token;
-  uintptr_t config_socket_fd;
+  int config_socket_fd;
   int epoll_fd;
   int controller_id;
   int dir_fd;
@@ -527,10 +527,15 @@ static int create_onload_config_socket(shrub_controller_config *config)
 
   unlinkat(config->dir_fd, EF_SHRUB_NEGOTIATION_SOCKET, 0);
 
-  rc = ef_shrub_socket_open(&config->config_socket_fd);
-  if ( rc < 0 ) {
-    ci_log("Error: shrub_controller onload handshake socket config failed");
-    return rc;
+  {
+    uintptr_t fd_ret;
+    rc = ef_shrub_socket_open(&fd_ret);
+    if ( rc < 0 ) {
+      ci_log("Error: shrub_controller onload handshake socket config failed");
+      config->config_socket_fd = NO_FD;
+      return rc;
+    }
+    config->config_socket_fd = fd_ret;
   }
   const int fd = config->config_socket_fd;
 
@@ -539,7 +544,7 @@ static int create_onload_config_socket(shrub_controller_config *config)
   umask(mode_save);
   if ( rc < 0 ) {
     ci_log("Error: shrub_controller onload socket bind failed");
-    goto cleanup_socket;
+    goto fail_with_socket;
   }
 
   /* We have a connection per-interface per-client. Onload clients will use
@@ -548,7 +553,7 @@ static int create_onload_config_socket(shrub_controller_config *config)
   rc = ef_shrub_socket_listen(fd, 2048);
   if ( rc < 0 ) {
     ci_log("Error: shrub_controller onload socket listen failed");
-    goto cleanup_socket;
+    goto fail_with_socket;
   }
 
   /* Add config_socket_fd to the epoll instance */
@@ -557,19 +562,21 @@ static int create_onload_config_socket(shrub_controller_config *config)
   if ( epoll_ctl(config->epoll_fd, EPOLL_CTL_ADD, fd, &event) == -1 ) {
     rc = -errno;
     ci_log("Error: shrub_controller epoll_ctl failed to add config socket");
-    goto cleanup_socket;
+    goto fail_with_socket;
   }
 
-  return rc;
+  ci_assert(rc == 0);
+  return 0;
 
-cleanup_socket:
+fail_with_socket:
   ef_shrub_socket_close_socket(fd);
+  config->config_socket_fd = NO_FD;
   return rc;
 }
 
 static int process_create_command(shrub_controller_config *config,
                                   ci_hwport_id_t hw_port, int ifindex,
-                                  uint32_t buffer_count, uintptr_t client_fd)
+                                  uint32_t buffer_count, int client_fd)
 {
   int rc = search_for_existing_server(config, hw_port);
 
@@ -621,13 +628,13 @@ static int poll_socket(shrub_controller_config *config)
   int ifindex = -1;
   struct epoll_event events[max_events];
   int response_status = 0;
-  uintptr_t client_fd = 0;
   int i;
   int num_events = epoll_wait(config->epoll_fd, events, max_events, 0);
 
   for (i = 0; i < num_events; ++i) {
     if ( events[i].data.fd == config->config_socket_fd ) {
-      rc = ef_shrub_socket_accept(config->config_socket_fd, &client_fd);
+      uintptr_t fd_ret;
+      rc = ef_shrub_socket_accept(config->config_socket_fd, &fd_ret);
       if ( rc < 0 ) {
         config->controller_stats.controller_accept_failures++;
         if ( config->debug_mode )
@@ -635,6 +642,7 @@ static int poll_socket(shrub_controller_config *config)
                  "the config socket failed");
         continue;
       }
+      const int client_fd = fd_ret;
 
       response_status = ef_shrub_socket_recv(client_fd, &request, sizeof(request));
 
@@ -727,8 +735,9 @@ static int poll_socket(shrub_controller_config *config)
 static void cleanup_config_socket(shrub_controller_config *config)
 {
   close(config->epoll_fd);
-  if ( config->config_socket_fd != INVALID_SOCKET_FD ) {
+  if ( config->config_socket_fd != NO_FD ) {
     ef_shrub_socket_close_socket(config->config_socket_fd);
+    config->config_socket_fd = NO_FD;
     unlinkat(config->dir_fd, EF_SHRUB_NEGOTIATION_SOCKET, 0);
     if ( config->debug_mode )
       ci_log("Info: shrub_controller socket closed and cleaning up! ");
@@ -1265,7 +1274,7 @@ int main(int argc, char *argv[])
 
   ci_app_standard_opts = 0;
   shrub_controller_config config = {0};
-  config.config_socket_fd = INVALID_SOCKET_FD;
+  config.config_socket_fd = NO_FD;
   config.interface_token = 1;
   config.controller_id = 0;
   config.auto_close_delay = AUTO_CLOSE_DELAY_NEVER;
