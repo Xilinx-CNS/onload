@@ -2789,7 +2789,7 @@ static void handle_rx_listen(ci_netif* netif, ci_tcp_socket_listen* tls,
     }
 
     /* If listen queue is full: */
-    if( (tls->n_listenq >= ci_tcp_listenq_max(netif)) |
+    if( (tls->n_listenq >= ci_tcp_listenq_max(netif)) ||
         ( ! ci_ni_aux_can_alloc(netif, CI_TCP_AUX_TYPE_SYNRECV) ) ) {
 
       /* If we cope with acceptq, we can try syncookie. */

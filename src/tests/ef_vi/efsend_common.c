@@ -51,7 +51,7 @@ int init_udp_pkt(void* pkt_buf, int paylen, ef_vi *vi,
   return etherlen + ip_len;
 }
 
-void common_usage()
+void common_usage(void)
 {
   fprintf(stderr, "usage:\n");
   fprintf(stderr, "  efsend [options] <interface> <mcast-ip> <mcast-port>\n");

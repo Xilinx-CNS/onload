@@ -111,6 +111,7 @@ extern int ooft_ns_check_hw_filters(struct net*);
 extern void ooft_cplane_claim_added_hw_filters(struct ooft_cplane* cp,
                                                ci_dllist* list);
 extern void ooft_cplane_expect_hw_remove_all(struct ooft_cplane* cp);
+extern void ooft_hw_filter_expect_remove_all(struct net* ns);
 
 /* Allocs cplane data representing a "boring" setup with 2 X2 NICs, each
  * with a single base interface in the the same namespace.  It adds a single
@@ -123,6 +124,7 @@ extern struct ooft_hwport* ooft_alloc_hwport(struct ooft_cplane* cp,
                                              struct net* ns,
                                              enum ooft_hwport_type type);
 extern void ooft_hwport_up_down(struct ooft_hwport* hw, int up);
+extern void ooft_hwport_removed(struct ooft_hwport* hw);
 
 extern struct ooft_ifindex* ooft_alloc_ifindex(struct ooft_cplane* cp,
                                                struct net* ns, int vlan_id,

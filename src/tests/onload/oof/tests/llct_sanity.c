@@ -5,7 +5,7 @@
 #include "../cplane.h"
 #include <onload/oof_interface.h>
 
-int test_llct_sanity()
+int test_llct_sanity(void)
 {
   /* This is the default configuration, where the stack can use both paths */
   return __test_sanity(OOFT_NIC_X4_FF, OOFT_RX_BOTH);

@@ -296,6 +296,6 @@ int __test_sanity(enum ooft_nic_type nic_type, enum ooft_rx_mode mode)
   done_testing();
 }
 
-int test_sanity() {
+int test_sanity(void) {
   return __test_sanity(OOFT_NIC_X2_FF, OOFT_RX_FF);
 }

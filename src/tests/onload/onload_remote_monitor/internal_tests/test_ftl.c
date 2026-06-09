@@ -97,7 +97,7 @@ int main(int argc, char* argv[])
 
 #define FTL_TFIELD_INTBE16(ctx, field_name, flags) \
   CI_BUILD_ASSERT2(TYPE_TEST((v.field_name), ci_uint16)); \
-  ok(strcmp(#field_name + sizeof(#field_name) - 6, "_be16") == 0 || \
+  ok(strcmp(&(#field_name)[sizeof(#field_name) - 6], "_be16") == 0 || \
      strcmp(#field_name, "ether_type") == 0, \
      "confirm that the field %s.%s 's name matches pattern or is valid. " \
      "Add name exception if needed.", \
@@ -105,7 +105,7 @@ int main(int argc, char* argv[])
 
 #define FTL_TFIELD_INTBE32(ctx, field_name, flags) \
   CI_BUILD_ASSERT2(sizeof(v.field_name) == sizeof(ci_uint32)); \
-  ok(strcmp(#field_name + sizeof(#field_name) - 6, "_be32") == 0 || \
+  ok(strcmp(&(#field_name)[sizeof(#field_name) - 6], "_be32") == 0 || \
      strcmp(#field_name, "nexthop") == 0, \
      "confirm that the field %s.%s 's name matches pattern or is valid. " \
      "Add name exception if needed.", \

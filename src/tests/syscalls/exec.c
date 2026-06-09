@@ -106,7 +106,7 @@ void close_fd_s(fd_s *fds) {
 
 
 /*! Allocate a new fd structure */
-fd_s *malloc_fd_s() {
+fd_s *malloc_fd_s(void) {
   fd_s *ret;
   ret=(fd_s*)calloc(1,sizeof(*ret));
   CI_TEST(ret);
@@ -127,7 +127,7 @@ void sanity_check_fd_s(fd_s *fds) {
 
 
 /*! Creates the socket_order string */
-char *create_socket_order() {
+char *create_socket_order(void) {
   static char socket_order[MAX_SOCKET_ORDER_LEN];
   char *so_pos;
   fd_s *fds;
@@ -147,7 +147,7 @@ char *create_socket_order() {
 
 
 /*! Assumes that -o has been stripped off */
-void parse_socket_order() {
+void parse_socket_order(void) {
   const char *so_pos;
   fd_s *fds;
   so_pos = socket_order_opt;
@@ -232,7 +232,7 @@ void set_other_state(fd_s *fds, int state) {
 
 
 /*! Advance the current position */
-void adv_pos() {
+void adv_pos(void) {
   play_pos++;
   print_order();
 }
@@ -245,13 +245,13 @@ void adv_pos() {
 
 
 /*! Print some info about the current position */
-void print_pos() {
+void print_pos(void) {
   DEBUG_LOG("play_pos=%d replay_pos=%d",play_pos,replay_pos);
 }
 
 
 /*! Print the order of fds */
-void print_order() {
+void print_order(void) {
   fd_s *this_fds;
 
   if (LOG_ORDER&&((PLAYING&&LOG_PLAY)||LOG_REPLAY)) {
@@ -264,7 +264,7 @@ void print_order() {
 }
 
 /*! Call close_fd_s() for all sockets marked close on exec */
-void remove_close_on_exec() {
+void remove_close_on_exec(void) {
   fd_s *this_fds,*temp;
   CI_DLLIST_FOR_EACH3(fd_s,this_fds,dllink,&fds_list,temp) {
     if (this_fds->close_on_exec) {
@@ -624,7 +624,7 @@ void udp_recvfrom_type(fd_s *fds, is_l5_t is_l5) {
 /*    Only needs executing on the client but done on both as this*/
 /*      keeps random numbers in sync */
 void
-socket_pair_unix()
+socket_pair_unix(void)
 {
   int socks[2];
   int rc;
@@ -989,7 +989,7 @@ void close_file(fd_s *fds) {
  **************************************************************************/
 
 /*! Fork and kill the parent process */
-void fork_kill_parent() {
+void fork_kill_parent(void) {
   pid_t local_pid;
   int old_pid = pid;
 
@@ -1027,7 +1027,7 @@ void fork_kill_parent() {
 /* number of sockets then they will take differrent paths */
 /* It would be possible for one fork to keep track of all others but not currently */
 void
-fork_split_socket()
+fork_split_socket(void)
 {
   pid_t local_pid;
   int new_id=0;
@@ -1752,7 +1752,7 @@ fd_s *do_file_open(const char *pathname, int flags) {
 
 
 /* Wrapper to do_exec2 */
-void do_exec() {
+void do_exec(void) {
   do_exec2(play_pos);
 }
 
@@ -1814,13 +1814,13 @@ void main_label(char *text) {
 
 
 /*! Check that the state does not indicate any open sockets */
-void check_no_open_sockets() {
+void check_no_open_sockets(void) {
   ci_assert(ci_dllist_is_empty(&fds_list));
 }
 
 
 /*! Close all sockets */
-void do_cleanup() {
+void do_cleanup(void) {
   fd_s *this_fds;
   ci_uint32 this_pos;
   fd_s *temp;          // Temp used by CI_DLLIST_FOR_EACH3
@@ -2105,7 +2105,7 @@ void supervisor_remove_process(int pid, int id, ci_dllist *list, int timeout) {
 
 
 /*! The loop of the supervising process */
-void supervisor_process() {
+void supervisor_process(void) {
   int socks[2];
 
   if (supervisor_fd==0) {
@@ -2225,7 +2225,7 @@ void print_warnings(void)
 
 /*! Function that calls accept() and waits for the user to run the client */
 /*  This will get called for exec'ed processes as well - but will REPLAY */
-void wait_for_client() {
+void wait_for_client(void) {
   fd_s *fds;
   char arg1[32];
 
@@ -2291,7 +2291,7 @@ static port_range_t ignored_port_range[] =
 
 /*! Get the next port number */
 /* Sets the global first_iter_port */
-int get_next_port(){
+int get_next_port(void) {
   port_range_t *r = &ignored_port_range[0];
   next_port++;
   while (r->from >= 0)
@@ -2315,7 +2315,7 @@ void set_next_port(int id)
 }
 
 /*! Decide if we need to run do_exec() on this cycle */
-void check_exec_pos() {
+void check_exec_pos(void) {
   if ((mode==STROBE) && (exec_pos!=0) && (exec_pos==play_pos)) {
     do_exec2(play_pos);
   }
@@ -2519,7 +2519,7 @@ int main(int argc, char *argv[]) {
 
 /*! Do a soak test */
 void
-soak_test()
+soak_test(void)
 {
   fd_s *fds;
   fd_state state;
@@ -2600,7 +2600,7 @@ soak_test()
 
 
 /*! Main */		   
-void strobe_exec_over() {
+void strobe_exec_over(void) {
   fd_s *sa,*sb, *sc; //Temp sockets
   fd_s *da, *db;     //Datagram sockets
   int fd0;

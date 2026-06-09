@@ -15,6 +15,7 @@
 struct ooft_hw_filter {
   int filter_id;
   int hwport;
+  unsigned op_seq;
   struct efx_filter_spec spec;
 
   /* Used for test management to specify what filters are expected to be
@@ -71,11 +72,34 @@ extern struct ooft_hw_filter* ooft_client_add_hw_filter(ci_dllist* list,
 extern int ooft_hw_filter_match(struct efx_filter_spec* spec,
                                 struct ooft_hw_filter* filter);
 extern void ooft_hw_filter_expect_remove_list(ci_dllist* list);
+extern unsigned ooft_hw_filter_min_op_seq(ci_dllist* list);
+extern unsigned ooft_client_removed_max_op_seq_since(struct efrm_client* client,
+                                                     unsigned since);
 
 extern void ooft_log_hw_filter_op(struct efrm_client* client,
                                   struct efx_filter_spec* spec,
                                   int expect, const char* op);
 extern void ooft_dump_hw_filter_list(ci_dllist* list);
+
+extern void ooft_client_expect_hw_add_mac(struct efrm_client* client,
+                                          int dmaq_id, int stack_id,
+                                          const unsigned char mac[6],
+                                          int vlan_id);
+extern void ooft_client_expect_hw_add_ethertype(struct efrm_client* client,
+                                                int dmaq_id,
+                                                const unsigned char mac[6],
+                                                int vlan_id,
+                                                uint16_t ethertype_be);
+extern void ooft_client_expect_hw_add_ipproto_mac(struct efrm_client* client,
+                                                  int dmaq_id,
+                                                  const unsigned char mac[6],
+                                                  int vlan_id,
+                                                  uint16_t ethertype_be,
+                                                  uint8_t ip_proto);
+extern void ooft_client_expect_hw_add_ipproto(struct efrm_client* client,
+                                              int dmaq_id,
+                                              uint16_t ethertype_be,
+                                              uint8_t ip_proto);
 
 extern void ooft_client_hw_filter_matches(ci_dllist* in,
                                           ci_dllist* out_matches,

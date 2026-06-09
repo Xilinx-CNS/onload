@@ -82,8 +82,10 @@ static int efct_ef_eventq_has_many_events(const ef_vi* vi, int n_events)
 #define PKT_ID_RXQ_BITS   3
 #define PKT_ID_TOTAL_BITS (PKT_ID_PKT_BITS + PKT_ID_SBUF_BITS + PKT_ID_RXQ_BITS)
 
-/* Enforce compile-time restrictions on the pkt_id fields */
-static inline void assert_pkt_id_fields(void)
+/* Enforce compile-time restrictions on the pkt_id fields. Never called;
+ * exists only to host EF_VI_BUILD_ASSERT()s in a place where the macros
+ * see complete types. The unused attribute keeps clang happy. */
+static inline void __attribute__((unused)) assert_pkt_id_fields(void)
 {
   /* Packet index must be large enough for the number of packets in a superbuf.
    * We check against the expected value here, and (at runtime) against the
@@ -918,7 +920,12 @@ static int rx_rollover(ef_vi* vi, int qix)
   /* Preload the superbuf's refcount with all the (potential) packets in
    * it - more efficient than incrementing for each rx individually */
   EF_VI_ASSERT(rxq_ptr->superbuf_pkts > 0);
-  EF_VI_ASSERT(rxq_ptr->superbuf_pkts < (1 << PKT_ID_PKT_BITS));
+  /* rxq_ptr->superbuf_pkts is a uint16_t, which makes any "< (1 << 16)"
+   * check tautological (clang -Wtautological-constant-out-of-range-compare).
+   * The PKT_ID_PKT_BITS == 16 invariant is asserted at build time, see
+   * EF_VI_BUILD_ASSERT() in efct_design_params_check() above. If the
+   * field is ever widened to uint32_t (matching ef_vi_efct_rxq_state),
+   * reinstate the runtime bound check here. */
   desc = efct_rx_desc(vi, meta_pkt);
   desc->refcnt = rxq_ptr->superbuf_pkts;
   desc->superbuf_pkts = rxq_ptr->superbuf_pkts;
@@ -1988,4 +1995,3 @@ int efct_vi_init(ef_vi* vi)
 
   return 0;
 }
-

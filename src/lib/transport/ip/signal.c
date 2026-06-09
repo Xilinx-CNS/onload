@@ -426,7 +426,8 @@ oo_signal_install_to_onload(int sig, const struct sigaction *act,
     return rc;
   }
   LOG_SIG(ci_log("%s(%d): new handler %p seq %x",
-                 __func__, sig, act ? act->sa_handler : (void*)-1, seq));
+                 __func__, sig,
+                 act ? (void*)act->sa_handler : (void*)-1, seq));
   new_store = &store->act[! (seq & 1)];
 
   if( oldact != NULL )

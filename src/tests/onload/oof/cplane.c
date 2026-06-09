@@ -117,6 +117,17 @@ void ooft_cplane_expect_hw_remove_all(struct ooft_cplane* cp)
 }
 
 
+void ooft_hw_filter_expect_remove_all(struct net* ns)
+{
+  int i;
+
+  for( i = 0; i < CI_CFG_MAX_HWPORTS; i++ ) {
+    if( (1 << i) & ns->hwport_mask )
+      ooft_client_expect_hw_remove_all(oo_nics[i].efrm_client);
+  }
+}
+
+
 void ooft_cplane_claim_added_hw_filters(struct ooft_cplane* cp,
                                         ci_dllist* list)
 {
@@ -385,6 +396,12 @@ void ooft_free_cplane(struct ooft_cplane* cp)
 void ooft_hwport_up_down(struct ooft_hwport* hw, int up)
 {
   oof_onload_hwport_up_down(&efab_tcp_driver, hw->id, up, hw->flags, 1);
+}
+
+
+void ooft_hwport_removed(struct ooft_hwport* hw)
+{
+  oof_onload_hwport_removed(&efab_tcp_driver, hw->id);
 }
 
 

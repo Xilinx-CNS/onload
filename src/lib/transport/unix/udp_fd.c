@@ -33,47 +33,6 @@
 
 
 /* ****************************************************
- * Module utils
- */
-
-#ifndef NDEBUG
-ci_inline char * __decode_flags(int fl)
-{
-  static char buf[32];
-  char * t = buf;
-  size_t n = sizeof(buf);
-
-  *buf = 0;
-  if( fl & MSG_OOB) {
-    t += snprintf(t, n, "OOB ");
-    n = t - buf;
-  }
-
-  if( fl & MSG_PEEK) {
-    t += snprintf(t, n, "PEEK ");
-    n = t - buf;
-  }
-  if( fl & MSG_NOSIGNAL) {
-    t += snprintf(t, n, "NSIG ");
-    n = t - buf;
-  }
-  if( fl & MSG_TRUNC) {
-    t += snprintf(t, n, "TRNC ");
-    n = t - buf;
-  }
-  if( fl & MSG_DONTWAIT) {
-    t += snprintf(t, n, "NWT ");
-    n = t - buf;
-  }
-  if( fl & MSG_WAITALL) {
-    t += snprintf(t, n, "WALL ");
-    n = t - buf;
-  }
-  return buf;
-}
-#endif
-
-/* ****************************************************
  * Intercept handlers
  */
 

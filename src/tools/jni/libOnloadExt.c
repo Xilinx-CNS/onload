@@ -94,7 +94,7 @@ Java_OnloadExt_ResetStackOptions (JNIEnv* env, jclass cls)
 
 
 
-static int AreContstantsOk()
+static int AreContstantsOk(void)
 {
 	/* TODO: Make this a compile-time check */
 	/* TODO: Better still, make the creation of these defines automatic so

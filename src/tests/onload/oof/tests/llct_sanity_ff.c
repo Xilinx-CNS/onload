@@ -5,7 +5,7 @@
 #include "../cplane.h"
 #include <onload/oof_interface.h>
 
-int test_llct_sanity_ff()
+int test_llct_sanity_ff(void)
 {
   /* This differs from test_sanity() even though it's only using the FF path
    * because the test is performed in a config where the extra datapath is

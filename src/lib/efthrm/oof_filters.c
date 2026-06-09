@@ -1112,18 +1112,10 @@ oof_manager_alloc(unsigned local_addr_max, void* owner_private)
   fm->fm_hwports_rx_shared = 0;
   fm->fm_hwports_rx_shared_new = 0;
   fm->fm_hwports_mcast_update_seen = 0;
-  {
-    int tag;
-    /* Each hwport is available for each tag until we're told otherwise... */
-    for( tag = 0; tag < OOF_HWPORT_AVAIL_TAG_NUM; tag++ ) {
-      fm->fm_hwports_avail_per_tag[tag] = (unsigned) -1;
-      fm->fm_hwports_avail_per_tag_new[tag] = (unsigned) -1;
-    }
-    /* ...except for namespaces, where each hwport is unavailable until the
-     * control plane informs us about it. */
-    fm->fm_hwports_avail_per_tag[OOF_HWPORT_AVAIL_TAG_NAMESPACE] = 0;
-    fm->fm_hwports_avail_per_tag_new[OOF_HWPORT_AVAIL_TAG_NAMESPACE] = 0;
-  }
+  /* Each hwport is unavailable in this namespace until the control plane
+   * informs us otherwise. */
+  fm->fm_hwports_avail_per_tag[OOF_HWPORT_AVAIL_TAG_NAMESPACE] = 0;
+  fm->fm_hwports_avail_per_tag_new[OOF_HWPORT_AVAIL_TAG_NAMESPACE] = 0;
   fm->fm_hwports_available = 0;
   ci_dllist_init(&fm->fm_cplane_updates);
   return fm;
@@ -1890,8 +1882,7 @@ void oof_hwport_removed(struct oof_manager* fm, int hwport)
 
 
 /* A physical interface is (or isn't) unavailable for the reason indicated by
- * [tag] (for example, if it is a member of an unacceleratable bond).  We
- * should(n't) install filters on this hwport. */
+ * [tag].  We should(n't) install filters on this hwport. */
 static void
 __oof_hwport_un_available(struct oof_manager* fm, ci_hwport_id_t hwport,
                           int available, int tag)
@@ -5443,15 +5434,12 @@ int oof_hwports_list(struct oof_manager* fm, struct seq_file* seq)
     unsigned portmask = 1 << i;
     if( portmask &
         (fm->fm_hwports_up | fm->fm_hwports_down | fm->fm_hwports_removed) ) {
-      seq_printf(seq, "port %d%s%s%s\t%s%s%s\tcapable of%s%s%s\n", i,
+      seq_printf(seq, "port %d%s%s%s\t%s%s\tcapable of%s%s%s\n", i,
                  (portmask & fm->fm_hwports_up) ? " up" : "",
                  (portmask & fm->fm_hwports_down) ? " down" : "",
                  (portmask & fm->fm_hwports_removed) ? " removed" : "",
                  (portmask & fm->fm_hwports_available) ?
                  "\t\t" : "forbidden by",
-                 (portmask &
-                  fm->fm_hwports_avail_per_tag[OOF_HWPORT_AVAIL_TAG_BOND]) ?
-                 "" : " bond",
                  (portmask &
                   fm->fm_hwports_avail_per_tag[OOF_HWPORT_AVAIL_TAG_NAMESPACE])?
                  "" : " namespace",

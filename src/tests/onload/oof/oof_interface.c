@@ -7,6 +7,7 @@
 #include <ci/tools.h>
 #include <ci/net/ipv4.h>
 #include <onload/oof_interface.h>
+#include <onload/oof_onload.h>
 #include <onload/oof_hw_filter.h>
 #include <onload/oof_socket.h>
 
@@ -58,6 +59,11 @@ void oof_cb_callback_set_filter(struct oof_socket* skf)
 }
 
 
+/* SW-filter insert fault injection: see oof_test.h.  Off by default. */
+int oof_sw_filter_insert_fail_count = 0;
+int oof_sw_filter_insert_fail_rc = -ENOMEM;
+unsigned oof_sw_filter_insert_fail_laddr = 0;
+
 int
 oof_cb_sw_filter_insert(struct oof_socket* s, int af,
                         const ci_addr_t laddr, int lport,
@@ -68,6 +74,16 @@ oof_cb_sw_filter_insert(struct oof_socket* s, int af,
   struct ooft_sw_filter* filter;
   ci_dllink* link;
   int rc = 0;
+
+  /* Injected failure: model a genuine insertion failure without recording
+   * a bad add, so the caller's error handling can be exercised. */
+  if( oof_sw_filter_insert_fail_count != 0 &&
+      (oof_sw_filter_insert_fail_laddr == 0 ||
+       oof_sw_filter_insert_fail_laddr == laddr.ip4) ) {
+    if( oof_sw_filter_insert_fail_count > 0 )
+      --oof_sw_filter_insert_fail_count;
+    return oof_sw_filter_insert_fail_rc;
+  }
 
   CI_DLLIST_FOR_EACH(link, &ep->sw_filters_to_add) {
     filter = CI_CONTAINER(struct ooft_sw_filter, socket_link, link);
@@ -99,6 +115,12 @@ oof_cb_sw_filter_remove(struct oof_socket* s, int af,
   struct ooft_endpoint* ep = CI_CONTAINER(struct ooft_endpoint, skf, s);
   struct ooft_sw_filter* filter;
   ci_dllink* link;
+
+  /* Model the guard in the real oof_cb_sw_filter_remove
+   * (src/lib/efthrm/oof_interface.c) which skips removal when SW filters
+   * have already been stripped by oof_socket_del_sw(). */
+  if( s->sf_flags & OOF_SOCKET_SW_FILTER_WAS_REMOVED )
+    return;
 
   CI_DLLIST_FOR_EACH(link, &ep->sw_filters_to_remove) {
     filter = CI_CONTAINER(struct ooft_sw_filter, socket_link, link);
@@ -169,9 +191,9 @@ oof_cb_add_global_tproxy_filter(struct oo_hw_filter_spec* filter, int proto,
                                 unsigned* installed_hwport_mask,
                                 void* owner_priv)
 {
-  /* Not yet implemented */
-  assert(0);
-  return -EINVAL;
+  return oo_filter_ns_add_global_tproxy_filter(owner_priv, filter, proto,
+                                               hwport_mask,
+                                               installed_hwport_mask);
 }
 
 int
@@ -179,8 +201,8 @@ oof_cb_remove_global_tproxy_filter(int proto, unsigned hwport_mask,
                                    unsigned* installed_hwport_mask,
                                    void* owner_priv)
 {
-  /* Not yet implemented */
-  assert(0);
-  return -EINVAL;
+  return oo_filter_ns_remove_global_tproxy_filter(owner_priv, proto,
+                                                  hwport_mask,
+                                                  installed_hwport_mask);
 }
 

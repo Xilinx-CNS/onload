@@ -1874,7 +1874,7 @@ static const struct proc_ops efrm_fops_rules = {
 /* Initialisation and shutdown entry points. */
 /* ***************************************** */
 
-void efrm_filter_shutdown()
+void efrm_filter_shutdown(void)
 {
 	/* Complete shutdown */
 	int rc = 0;
@@ -1902,7 +1902,7 @@ void efrm_filter_shutdown()
 	mutex_unlock( &efrm_ft_mutex );
 }
 
-void efrm_filter_init()
+void efrm_filter_init(void)
 {
 	/* First time init */
 #ifdef CONFIG_NET_NS
@@ -1921,7 +1921,7 @@ void efrm_filter_init()
 	mutex_unlock( &efrm_ft_mutex );
 }
 
-void efrm_filter_install_proc_entries()
+void efrm_filter_install_proc_entries(void)
 {
 	/* Add the /proc/ files that are not per-interface. */
 	efrm_pd_add_rule = efrm_proc_create_file( "firewall_add", 0200,
@@ -1930,7 +1930,7 @@ void efrm_filter_install_proc_entries()
 					NULL, &efrm_fops_del_rule, NULL );
 }
 
-void efrm_filter_remove_proc_entries()
+void efrm_filter_remove_proc_entries(void)
 {
 	/* Remove the /proc/ files that are not per-interface. */
 	efrm_proc_remove_file( efrm_pd_add_rule );

@@ -5,7 +5,7 @@
 #include "../cplane.h"
 #include <onload/oof_interface.h>
 
-int test_sanity_no5tuple()
+int test_sanity_no5tuple(void)
 {
   return __test_sanity(OOFT_NIC_AFXDP, OOFT_RX_FF);
 }
