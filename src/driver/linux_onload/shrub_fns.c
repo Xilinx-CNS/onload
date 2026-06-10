@@ -16,6 +16,7 @@
 #include <linux/mm.h>
 #include <linux/moduleparam.h>
 #include <linux/spinlock.h>
+#include <linux/highuid.h>
 
 #include "onload_kernel_compat.h"
 
@@ -86,6 +87,38 @@ MODULE_PARM_DESC(shrub_controller_path,
                  "Sets the path to the shrub_controller binary. Defaults to "
                  DEFAULT_SHRUB_CONTROLLER_PATH" if empty.");
 
+static int shrub_controller_uid = DEFAULT_OVERFLOWUID; /* nobody */
+static int shrub_controller_gid = DEFAULT_OVERFLOWGID; /* nobody */
+static int shrub_controller_client_gid = 0;            /* unspecified */
+static int shrub_controller_client_mode = 0;    /* unspecified, octal */
+
+module_param(shrub_controller_uid, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(shrub_controller_uid,
+                 "UID to drop privileges to for the shrub controller.");
+
+module_param(shrub_controller_gid, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(shrub_controller_gid,
+                 "GID to drop privileges to for the shrub controller.");
+
+module_param(shrub_controller_client_gid, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(shrub_controller_client_gid,
+                 "GID to which restricted clients should belong");
+
+module_param(shrub_controller_client_mode, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(shrub_controller_client_mode,
+                 "mode for shrub servers, restricting clients");
+
+typedef char int_str_t[12];
+_Static_assert(INT_MAX <= 040000000000, "int strings sized ok");
+static inline int write_dec(int_str_t str, int val) {
+  int rc = snprintf(str, sizeof(int_str_t), "%d", val);
+  return rc < 0 || rc >= (int)sizeof(int_str_t) ? -EINVAL : rc;
+}
+static inline int write_oct(int_str_t str, int val) {
+  int rc = snprintf(str, sizeof(int_str_t), "%o", val);
+  return rc < 0 || rc >= (int)sizeof(int_str_t) ? -EINVAL : rc;
+}
+
 static int shrub_spawn_server(char* controller_id, bool debug,
                               bool use_interrupts, char* auto_close_delay)
 {
@@ -100,6 +133,10 @@ static int shrub_spawn_server(char* controller_id, bool debug,
     "-C",
     auto_close_delay,
     /* slots for extra args */
+    NULL, NULL,
+    NULL, NULL,
+    NULL, NULL,
+    NULL, NULL,
     NULL,
     NULL,
     /* terminator */
@@ -112,16 +149,45 @@ static int shrub_spawn_server(char* controller_id, bool debug,
   };
   /* This must be the index of the first NULL slot in the argv array */
   int extra_arg_idx = 7;
-
-  path = kmalloc(PATH_MAX, GFP_KERNEL);
-  if ( !path )
-    return -ENOMEM;
+  int_str_t uid, gid, client_gid, client_mode;
 
   if( debug )
     argv[extra_arg_idx++] = "-d";
 
   if( use_interrupts )
     argv[extra_arg_idx++] = "-i";
+
+  if( shrub_controller_uid ) {
+    if( write_dec(uid, shrub_controller_uid) < 0 )
+      return -EINVAL;
+    argv[extra_arg_idx++] = "--uid";
+    argv[extra_arg_idx++] =  uid;
+  }
+
+  if( shrub_controller_gid ) {
+    if( write_dec(gid, shrub_controller_gid) < 0 )
+      return -EINVAL;
+    argv[extra_arg_idx++] = "--gid";
+    argv[extra_arg_idx++] =  gid;
+  }
+
+  if( shrub_controller_client_gid ) {
+    if( write_dec(client_gid, shrub_controller_client_gid) < 0 )
+      return -EINVAL;
+    argv[extra_arg_idx++] = "--client-gid";
+    argv[extra_arg_idx++] = client_gid;
+  }
+
+  if( shrub_controller_client_mode ) {
+    if( write_oct(client_mode, shrub_controller_client_mode) < 0 )
+      return -EINVAL;
+    argv[extra_arg_idx++] = "--client-mode";
+    argv[extra_arg_idx++] = client_mode;
+  }
+
+  path = kmalloc(PATH_MAX, GFP_KERNEL);
+  if ( !path )
+    return -ENOMEM;
 
   /* We must create enough slots for extra arguments we pass to the shrub
    * controller, as otherwise we may not terminate the array correctly. */
@@ -149,10 +215,9 @@ static int shrub_spawn_server(char* controller_id, bool debug,
 }
 
 int oo_shrub_spawn_server(ci_private_t *priv, void *arg) {
-  int rc;
   shrub_ioctl_data_t *shrub_data;
-  char controller_id[EF_SHRUB_MAX_DIGITS + 1];
-  char auto_close_delay[sizeof(OO_STRINGIFY(INT_MIN))];
+  int_str_t controller_id;
+  int_str_t auto_close_delay;
   
   if ( !priv || !arg ) 
     return -EINVAL;
@@ -160,18 +225,15 @@ int oo_shrub_spawn_server(ci_private_t *priv, void *arg) {
   shrub_data = (shrub_ioctl_data_t *) arg;
 
   if ( shrub_data->controller_id > EF_SHRUB_MAX_CONTROLLER ) {
-    LOG_E(ci_log("%s: ERROR: controller_id out of range: %d\n",
+    LOG_E(ci_log("%s: ERROR: controller_id out of range: %u\n",
           __FUNCTION__, shrub_data->controller_id));
     return -EINVAL;
   }
 
-  rc = snprintf(controller_id, sizeof(controller_id), "%u", shrub_data->controller_id);
-  if ( rc < 0 || rc >= sizeof(controller_id) )
+  if ( write_dec(controller_id, shrub_data->controller_id) < 0 )
     return -EINVAL;
 
-  rc = snprintf(auto_close_delay, sizeof(auto_close_delay), "%d",
-                shrub_data->auto_close_delay);
-  if ( rc < 0 || rc >= sizeof(auto_close_delay) )
+  if ( write_dec(auto_close_delay, shrub_data->auto_close_delay) < 0)
     return -EINVAL;
 
   return shrub_spawn_server(controller_id, shrub_data->debug,
