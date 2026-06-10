@@ -119,6 +119,8 @@ Vendor:           Advanced Micro Devices, Inc.
 Provides:         openonload = %{version}-%{release}
 Provides:         user(onload_cplane)
 Provides:         group(onload_cplane)
+Provides:         user(onload_shrub)
+Provides:         group(onload_shrub)
 %if 0%{?rhel} >= 8
 Recommends:       openonload-devel = %{version}-%{release}
 %endif
