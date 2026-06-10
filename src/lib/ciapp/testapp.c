@@ -134,7 +134,7 @@ static ci_cfg_desc std_opts[] = {
 
 static int parse_cfg_opt(int argc, char** argv, const char* context);
 static void parse_cfg_string(char* s);
-static void bad_cla(const char* context, const char* cla, const char* msg);
+static CI_NORETURN bad_cla(const char* context, const char* cla, const char* msg);
 
 
 /**********************************************************************
@@ -394,6 +394,7 @@ static int parse_cfg_opt(int argc, char** argv, const char* context)
   const char* val = NULL;
   int result = 1;
   long long int number;
+  unsigned int unum;
 
   /* is it "-" ? */
   if( argv[0][1] == 0 )  bad_cla(context, argv[0], "- is not allowed");
@@ -437,6 +438,11 @@ static int parse_cfg_opt(int argc, char** argv, const char* context)
         (unsigned long long) number >= (unsigned long long)(id_t) -1 )
       bad_cla(context, argv[0], "expected non-sentinel id_t(3) value");
     *((id_t*) a->value) = number;
+    break;
+  case CI_CFG_MODE:
+    if( !val || sscanf(val, "%o", &unum) != 1 || unum > 07777 )
+      bad_cla(context, argv[0], "expected octal file mode");
+    *((mode_t*) a->value) = unum;
     break;
   case CI_CFG_INT:
     if( !val || sscanf(val, "%i", (int*) a->value) != 1 )
@@ -520,7 +526,7 @@ static void parse_cfg_string(char* s)
 }
 
 
-static void bad_cla(const char* context, const char* cla, const char* msg)
+static CI_NORETURN bad_cla(const char* context, const char* cla, const char* msg)
 {
   ci_log("ERROR: bad %s option: %s", context, cla);
   if( msg )  ci_log("ERROR: %s", msg);

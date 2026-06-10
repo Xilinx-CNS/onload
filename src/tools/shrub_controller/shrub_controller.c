@@ -58,6 +58,7 @@ static volatile sig_atomic_t is_running = 1;
 static volatile sig_atomic_t call_shrub_dump = 0;
 
 #define DEFAULT_BUFFER_SIZE 1024 * 1024
+static const mode_t DEFAULT_CLIENT_MODE = 0666;
 
 static const int NO_FD = -1;
 static const id_t NO_ID = (id_t) -1;
@@ -133,6 +134,8 @@ typedef struct
   long long periodic_poll_timeout_ns;
   id_t uid;
   id_t gid;
+  id_t client_gid;
+  mode_t client_mode;
 } shrub_controller_config;
 
 size_t get_config_definitions(ci_cfg_desc **defs,
@@ -156,6 +159,10 @@ size_t get_config_definitions(ci_cfg_desc **defs,
       "Drop privileges to this UID after start" },
     { 0,   "gid",           CI_CFG_ID,     &config->gid,
       "Drop privileges to this GID after start, see also --uid option" },
+    { 0,   "client-gid",    CI_CFG_ID,     &config->client_gid,
+      "Group id allowed to connect to controller when restricted" },
+    { 0,   "client-mode",   CI_CFG_MODE,   &config->client_mode,
+      "Mode for shrub sockets, determining client access rights" },
   };
   if( (*defs = malloc(sizeof cfg_opts)) )
     memcpy(*defs, cfg_opts, sizeof cfg_opts);
@@ -544,8 +551,6 @@ static int shrub_dump(shrub_controller_config *config, int fd, size_t bufsize)
 static int create_onload_config_socket(shrub_controller_config *config)
 {
   struct epoll_event event;
-  const mode_t mode = 0666;
-  mode_t mode_save;
   int rc;
 
   unlinkat(config->dir_fd, EF_SHRUB_NEGOTIATION_SOCKET, 0);
@@ -562,9 +567,7 @@ static int create_onload_config_socket(shrub_controller_config *config)
   }
   const int fd = config->config_socket_fd;
 
-  mode_save = umask(~mode & 0777);
   rc = ef_shrub_socket_bind(fd, EF_SHRUB_NEGOTIATION_SOCKET);
-  umask(mode_save);
   if ( rc < 0 ) {
     ci_log("Error: shrub_controller onload socket bind failed");
     goto fail_with_socket;
@@ -1215,6 +1218,9 @@ controller_open_dir(shrub_controller_config *config)
 {
   int rc;
   int fd;
+  mode_t dir_mode;
+  uid_t dir_uid;
+  gid_t dir_gid;
 
   fd = open(config->controller_dir, O_RDONLY | O_DIRECTORY);
   if( fd == -1 && errno == ENOENT ) {
@@ -1252,10 +1258,32 @@ controller_open_dir(shrub_controller_config *config)
     goto fail;
   }
 
-  if( (config->uid != NO_ID || config->gid != NO_ID) &&
-      fchown(fd, config->uid, config->gid) == -1 ) {
+  /* Set ownership regardless of whether requested to clear any
+   * stale rights, but only error out if we were configured with
+   * an identity or client group. */
+  dir_gid = config->client_gid != NO_ID ? config->client_gid :
+            (config->gid != NO_ID ? config->gid : getegid());
+  dir_uid = config->uid != NO_ID ? config->uid : geteuid();
+
+  if( (fchown(fd, dir_uid, dir_gid) == -1 ) &&
+      (config->uid != NO_ID || config->gid != NO_ID ||
+       config->client_gid != NO_ID) ) {
     rc = errno;
     ci_log("Error: changing shrub_controller dir ownership: %s", strerror(rc));
+    goto fail;
+  }
+
+  /* Ensure contents created under the controller directory
+   * get the client group set (even after we have dropped
+   * to the controller user/group). Give r-x access to the
+   * directory for any clients eligible to connect to sockets */
+  dir_mode = 0700;
+  dir_mode |= config->client_gid == NO_ID ? 0 : S_ISGID;
+  dir_mode |= config->client_mode & 0070 ? 0050 : 0;
+  dir_mode |= config->client_mode & 0007 ? 0005 : 0;
+  if( fchmod(fd, dir_mode) == -1) {
+    rc = errno;
+    ci_log("Error: changing shrub_controller dir mode: %s", strerror(rc));
     goto fail;
   }
 
@@ -1341,6 +1369,8 @@ int main(int argc, char *argv[])
     .dir_fd = NO_FD, .config_socket_fd = NO_FD,
     .log_dir_fd = NO_FD,
     .uid = NO_ID, .gid = NO_ID,
+    .client_gid = NO_ID,
+    .client_mode = DEFAULT_CLIENT_MODE,
   };
   config.interface_token = 1;
   config.controller_id = 0;
@@ -1391,6 +1421,7 @@ int main(int argc, char *argv[])
     goto fail_early_init;
 
   /* Ensure Onload runtime directory */
+  umask(0022);
   rc = create_directory(EF_SHRUB_SOCK_DIR_PATH);
   if ( rc )
     goto fail_early_init;
@@ -1403,6 +1434,8 @@ int main(int argc, char *argv[])
   /* Open log directory, but this is best-effort only */
   log_open_dir(&config);
 
+  /* Apply this umask for the next (rest-of-life) phase of the controller */
+  umask(~config.client_mode & 0777);
   rc = create_config_socket(&config);
   if ( rc )
     goto fail_create_config_socket;
@@ -1412,10 +1445,14 @@ int main(int argc, char *argv[])
     goto fail_create_interrupt_state;
 
   /* Satisfy readiness invariant by daemonising only once config created. */
-  if( config.daemonise )
+  if( config.daemonise ) {
     ci_server_daemonise(&shrub_log_prefix,
                         SERVER_NAME, SERVER_BIN,
                         (config.log_to_kern ? CI_DAEMON_LOG_TO_KERN : 0));
+
+    /* Restore after umask was reset by daemonise helper */
+    umask(~config.client_mode & 0777);
+  }
 
   rc = controller_cplane_connect(&config);
   if ( rc )

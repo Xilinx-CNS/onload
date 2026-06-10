@@ -40,6 +40,7 @@ typedef struct ci_cfg_desc_s {
 # define CI_CFG_UINT64 9
 # define CI_CFG_BOOL  10 /* bool-typed flag */
 # define CI_CFG_ID    11 /* id_t */
+# define CI_CFG_MODE  12 /* mode_t, accepting octal */
   void*        value;
   const char*  usage;
   void       (*fn)(const char*, const struct ci_cfg_desc_s*);
