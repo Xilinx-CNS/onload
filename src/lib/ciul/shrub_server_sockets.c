@@ -58,12 +58,9 @@ static int unix_server_listen(struct ef_shrub_server_sockets* sockets,
   addr.sun_family = AF_UNIX;
   strcpy(addr.sun_path, server_addr);
 
+  /* Use mode of prevailing umask, avoiding path race */
   rc = bind(sockets->listen, (struct sockaddr*)&addr,
             offsetof(struct sockaddr_un, sun_path) + path_len + 1);
-  if( rc < 0 )
-    goto fail;
-
-  rc = chmod(server_addr, 0666);
   if( rc < 0 )
     goto fail;
 
