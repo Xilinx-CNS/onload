@@ -147,6 +147,12 @@ cmd_mknod() {
 ######################################################################
 # The mod_params command is typically called in /etc/modprobe.d/onload.conf
 
+resolve() {
+  local id
+  id=$(getent "$1" "$2" | cut -d: -f3)
+  [ -n "$id" ] && echo "$id"
+}
+
 cmd_mod_params() {
   case "$1" in
     onload)
@@ -156,6 +162,15 @@ cmd_mod_params() {
       fi
       echo cplane_server_uid=$(id -u $ONLOAD_CPLANE_USER) \
            cplane_server_gid=$(id -g $ONLOAD_CPLANE_USER)
+      shrub_uid=$(resolve passwd onload_shrub)
+      shrub_gid=$(resolve group onload_shrub)
+      shrub_client_gid=${ONLOAD_GROUP:+$(resolve group "$ONLOAD_GROUP" || \
+        err "WARNING: ONLOAD_GROUP defines non-existent shrub client access group $ONLOAD_GROUP")}
+      echo ${shrub_uid:+shrub_controller_uid=$shrub_uid} \
+           ${shrub_gid:+shrub_controller_gid=$shrub_gid} \
+           ${shrub_client_gid:+shrub_controller_client_gid=$shrub_client_gid} \
+           ${ONLOAD_MODE:+shrub_controller_client_mode=0$ONLOAD_MODE} \
+           $ONLOAD_MOD_PARAMS_APPEND
       ;;
   esac
   exit 0
