@@ -1,0 +1,2 @@
+interest /usr/share/doc/xilinx-efct-dkms/changelog.gz
+activate-noawait update-initramfs

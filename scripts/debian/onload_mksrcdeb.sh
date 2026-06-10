@@ -21,6 +21,8 @@ usage() {
   err "options:"
   err "  --tarball <path>   - onload tarball to create packages for"
   err "  --out <path>       - directory to write source package to"
+  err "  --debian-revision <n>"
+  err "                     - Debian package revision (default 1)"
   err
   exit 1
 }
@@ -36,11 +38,13 @@ onloadver=
 package=
 basename=
 outdir=$(pwd)
+debian_revision=${DEBIAN_REVISION:-1}
 
 while [ $# -gt 0 ]; do
   case "$1" in
   --tarball)        shift; tarball=$1;;
   --out)            shift; outdir=$1;;
+  --debian-revision) shift; debian_revision=$1;;
   -*)               usage;;
   *)                break;;
   esac
@@ -84,7 +88,12 @@ try mkdir -p "$tempfile/$onloaddir/debian"
 # control files
 for i in $(find "$TOP"/debian/debian-templ/* -type f); do
   ni="${tempfile}/${onloaddir}/debian/$(basename "$i")"
-  try sed -e "s/#VERSION#/$onloadver/g" -e "s/#TYPE#/$onloadtype/g" -e "s/#SOVERSION#/${soversion}/g" < "$i" > "$ni";
+  try sed \
+    -e "s/#VERSION#/$onloadver/g" \
+    -e "s/#TYPE#/$onloadtype/g" \
+    -e "s/#SOVERSION#/${soversion}/g" \
+    -e "s/#DEBIAN_REVISION#/${debian_revision}/g" \
+    < "$i" > "$ni";
 done
 
 for i in $(find "${tempfile}"/"${onloaddir}"/debian/type-* -type f); do
@@ -112,4 +121,3 @@ try rm -rf "$tempfile"
 echo ""
 echo "Wrote $outdir/$package-debiansource.tgz"
 echo ""
-

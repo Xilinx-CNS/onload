@@ -1,4 +1,4 @@
-#TYPE# (#VERSION#-1) unstable; urgency=low
+#TYPE# (#VERSION#-#DEBIAN_REVISION#) unstable; urgency=low
 
   * Initial release of Debian packages
 

@@ -1,0 +1,64 @@
+#!/bin/sh
+PREREQ=""
+prereqs()
+{
+   echo "$PREREQ"
+}
+
+case $1 in
+prereqs)
+   prereqs
+   exit 0
+   ;;
+esac
+
+. /usr/share/initramfs-tools/hook-functions
+# Begin real processing below this line
+
+# In ther future, it's possible to extend this script to a split dkms-prefer package with something like
+#
+# CONF_FILE="/etc/initramfs-tools/dkms-prefer.modules"
+# # Read module list
+# MODULES_LIST=""
+# if [ -f "$CONF_FILE" ]; then
+#   # strip comments and blanks
+#   MODULES_LIST="$(sed -e 's/#.*$//' -e '/^[[:space:]]*$/d' "$CONF_FILE")"
+# fi
+#
+# But we keep it simple for now.
+MODULES_LIST="xilinx_efct sfc"
+
+# Nothing to do?
+[ -n "${MODULES_LIST:-}" ] || exit 0
+
+# Provided by initramfs-tools
+DKMS_BASE="/lib/modules/${version}/updates/dkms"
+DEST_DKMS_DIR="${DESTDIR}${DKMS_BASE}"
+KERNEL_BASE="${DESTDIR}/lib/modules/${version}/kernel"
+
+mkdir -p "$DEST_DKMS_DIR"
+
+for mod in $MODULES_LIST; do
+  # Does *any* DKMS file for this module exist (host filesystem)?
+  if find "/lib/modules/${version}/updates/dkms" -maxdepth 1 -type f -name "${mod}.ko*" -print -quit | grep -q .; then
+    # Copy all matching DKMS files into the image (no globbing in the shell)
+    find "/lib/modules/${version}/updates/dkms" -maxdepth 1 -type f -name "${mod}.ko*" \
+    | while IFS= read -r f; do
+      [ -n "$f" ] && copy_file module "$f" "$DKMS_BASE/"
+    done
+
+
+    # Remove any in-tree copies of the same module from the image
+    if [ -d "$KERNEL_BASE" ]; then
+      find "$KERNEL_BASE" -type f -name "${mod}.ko*" -delete || true
+    fi
+
+    # Ensure dependencies get pulled in
+    manual_add_modules "$mod" || true
+    echo "initramfs-tools: using DKMS '${mod}' (updates/dkms) for ${version}" >&2
+  else
+    # No DKMS — warn and fall back to in-tree
+    echo "initramfs-tools: WARNING: DKMS module '${mod}' not found for ${version}; using in-tree if available" >&2
+    manual_add_modules "$mod" || true
+  fi
+done
