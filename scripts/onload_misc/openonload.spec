@@ -133,7 +133,7 @@ Requires(pre):    shadow-utils
 %global base_build_requires gawk gcc sed make bash automake libtool autoconf
 BuildRequires:    %{base_build_requires}
 
-%global user_build_requires libpcap-devel libcap-devel python%{python3_pkgversion}-devel python%{python3_pkgversion}-setuptools
+%global user_build_requires libpcap-devel libcap-devel python%{python3_pkgversion}-devel python%{python3_pkgversion}-setuptools systemd-rpm-macros
 %if %{with user}
 BuildRequires:    %{user_build_requires}
 %endif
@@ -474,13 +474,6 @@ mkdir -p %{buildroot}%{_usrsrc}
 tar xf %{SOURCE0} -C %{buildroot}%{_usrsrc}
 %endif
 
-%pre
-getent group onload_cplane >/dev/null || groupadd -r onload_cplane
-getent passwd onload_cplane >/dev/null || \
-  useradd -r -g onload_cplane -M -d /run/openonload -s /usr/sbin/nologin \
-  -c "%{name} Control Plane" onload_cplane
-exit 0
-
 %post
 
 if [ `cat /proc/1/comm` == systemd ]
@@ -492,7 +485,6 @@ else
   cp /usr/share/onload/sysconfig_onload_modules /etc/sysconfig/modules/onload.modules
 fi
 
-/sbin/onload_tool add_cplane_user
 ldconfig -n %{_libdir}
 
 %preun

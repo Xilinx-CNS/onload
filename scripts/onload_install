@@ -319,7 +319,7 @@ install_ldconfig() {
 
 
 install_adduser() {
-  if [ -n "$i_prefix" ] || [ -f "$i_usr/lib/sysusers.d/" ]; then
+  if [ -n "$i_prefix" ] || [ -d "$i_usr/lib/sysusers.d/" ]; then
     install_f onload_misc/onload.sysusers "$i_usr/lib/sysusers.d/onload.conf"
   fi
 
