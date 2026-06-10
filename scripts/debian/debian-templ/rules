@@ -263,7 +263,7 @@ binary-arch: build install
 	pybuild --verbose --build
 	dh_testdir -a
 	dh_testroot -a
-	dh_installsysusers -a --name=onload || dh_sysuser -a onload_cplane home=/run/openonload
+	dh_installsysusers -a --name=onload
 #	dh_installdebconf -a
 	dh_installdocs -a
 	dh_installexamples -a

@@ -2,7 +2,7 @@ Source: #TYPE#
 Section: net
 Priority: extra
 Maintainer: AMD Solarflare NIC Support <support-nic@amd.com>
-Build-Depends: debhelper (>= 8.0.0), bzip2, gawk, libc6, dh-python, python3-all, python3-setuptools, libpcap-dev, libcap-dev, debhelper (>= 13.3) | dh-sysuser, pybuild-plugin-pyproject
+Build-Depends: debhelper (>= 8.0.0), bzip2, gawk, libc6, dh-python, python3-all, python3-setuptools, libpcap-dev, libcap-dev, debhelper (>= 13.3), pybuild-plugin-pyproject
 Standards-Version: 3.9.3
 Homepage: http://www.openonload.org
 
