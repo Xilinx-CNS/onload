@@ -16,7 +16,7 @@
 # This controls which users can make use of OpenOnload acceleration.
 
 ONLOAD_USER=root
-ONLOAD_GROUP=root
+ONLOAD_GROUP=onload_users
 ONLOAD_MODE=666
 
 
@@ -26,7 +26,7 @@ ONLOAD_MODE=666
 # This controls which users can make use of the ef_vi interface.
 
 SFC_CHAR_USER=root
-SFC_CHAR_GROUP=root
+SFC_CHAR_GROUP=onload_users
 SFC_CHAR_MODE=666
 
 
