@@ -136,6 +136,10 @@ BuildRequires:    libpcap-devel
 BuildRequires:    libcap-devel
 BuildRequires:    python%{python3_pkgversion}-devel
 BuildRequires:    python%{python3_pkgversion}-setuptools
+%if 0%{?rhel} >= 10
+BuildRequires:    python%{python3_pkgversion}-wheel
+BuildRequires:    pyproject-rpm-macros
+%endif
 %endif
 
 %description
