@@ -128,7 +128,7 @@ AutoReqProv:      no
 ExclusiveArch:    x86_64 ppc64
 Requires(pre):    shadow-utils
 
-%global base_build_requires gawk gcc sed make bash automake libtool autoconf
+%global base_build_requires gawk gcc sed make bash
 BuildRequires:    %{base_build_requires}
 
 %global user_build_requires libpcap-devel libcap-devel python%{python3_pkgversion}-devel python%{python3_pkgversion}-setuptools
