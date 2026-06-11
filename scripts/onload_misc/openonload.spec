@@ -131,9 +131,11 @@ Requires(pre):    shadow-utils
 %global base_build_requires gawk gcc sed make bash
 BuildRequires:    %{base_build_requires}
 
-%global user_build_requires libpcap-devel libcap-devel python%{python3_pkgversion}-devel python%{python3_pkgversion}-setuptools
 %if %{with user}
-BuildRequires:    %{user_build_requires}
+BuildRequires:    libpcap-devel
+BuildRequires:    libcap-devel
+BuildRequires:    python%{python3_pkgversion}-devel
+BuildRequires:    python%{python3_pkgversion}-setuptools
 %endif
 
 %description
@@ -228,7 +230,7 @@ fi
 %if %{with akmod}
 %package akmod
 Summary:          OpenOnload kernel modules as Akmod source
-Requires:         akmods %{base_build_requires} %{user_build_requires} %{?efct_build_requires:%efct_build_requires}
+Requires:         akmods %{base_build_requires} %{?efct_build_requires:%efct_build_requires}
 Conflicts:        kernel-module-sfc-RHEL%{maindist}
 Provides:         openonload-kmod = %{version}-%{release}
 Provides:         sfc-kmod-symvers = %{version}-%{release}
@@ -362,11 +364,12 @@ to build efsend_cplane.
 %setup -q -n %{name}-%{pkgversion}
 sed 's@py_modules@package_dir={"": "scripts"},py_modules@' < scripts/onload_misc/setup.py > setup.py
 
+%if %{with user}
 %if 0%{?rhel} >= 10
 %generate_buildrequires
 %pyproject_buildrequires
 %endif
-
+%endif
 
 %build
 %if %{with kmod}
