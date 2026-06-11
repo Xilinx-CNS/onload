@@ -114,6 +114,7 @@ typedef struct
   int epoll_fd;
   int controller_id;
   int dir_fd;
+  int log_dir_fd;
   shrub_if_config_t *server_config_head;
   struct oo_cplane_handle *cp;
   int oo_fd_handle;
@@ -388,12 +389,6 @@ fail_pd_alloc:
   return rc;
 }
 
-static int directory_exists(const char *path)
-{
-  struct stat path_stat;
-  return (stat(path, &path_stat) == 0 && S_ISDIR(path_stat.st_mode) ? 1 : 0);
-}
-
 static int create_directory(const char *path)
 {
   int rc = 0;
@@ -481,27 +476,47 @@ static void shrub_dump_to_fd(int fd, shrub_controller_config *config,
   shrub_dump_stats_to_fd(fd, config, buf, buflen);
 }
 
+static int log_open_dir(shrub_controller_config *config)
+{
+  bool created = mkdir(config->log_dir, 0755) == 0;
+
+  if( !created && errno != EEXIST ) {
+    int rc = -errno;
+    ci_log("Warning: creating log directory '%s' (will not log): %s", config->log_dir, strerror(-rc));
+    return rc;
+  }
+
+  if( (config->log_dir_fd = open(config->log_dir, O_RDONLY | O_DIRECTORY)) == -1) {
+    int rc = -errno;
+    ci_log("Warning: opening log directory '%s' (will not log): %s", config->log_dir, strerror(-rc));
+    return rc;
+  }
+
+  /* Only modify the log directory if we just created it. */
+  if( created ) {
+    uid_t uid = config->uid != NO_ID ? config->uid : geteuid();
+    gid_t gid = config->gid != NO_ID ? config->gid : getegid();
+    if( fchown(config->log_dir_fd, uid, gid) == -1 )
+      ci_log("Warning: could not change ownership of new log directory: %s", strerror(errno));
+  }
+  return 0;
+}
+
 #define LOGBUF_SIZE 256
 static int shrub_dump_to_file(shrub_controller_config *config,
                               const char *file_name)
 {
-  char file_path[EF_SHRUB_LOG_LEN];
   char logbuf[LOGBUF_SIZE];
   int rc = 0;
   int fd;
 
-  rc = snprintf(file_path, sizeof(file_path), "%s/%s", config->log_dir,
-                file_name);
-  if ( rc < 0 || rc >= sizeof(file_path) ) {
-    ci_log("Error: shrub_controller was unable "
-           "to set an appropriate log path!");
+  if( strchr(file_name, '/') != NULL ) {
+    ci_log("Error: non-leaf dump filename rejected: %s", file_name);
     return -EINVAL;
   }
 
-  if ( !directory_exists(config->log_dir) )
-    create_directory(config->log_dir);
-
-  fd = open(file_path, O_WRONLY | O_CREAT, S_IRUSR | S_IRGRP);
+  fd = openat(config->log_dir_fd, file_name,
+              O_WRONLY | O_CREAT, S_IRUSR | S_IRGRP);
   if ( fd < 0 ) {
     rc = -errno;
     ci_log("Error: shrub_controller was unable "
@@ -1324,6 +1339,7 @@ int main(int argc, char *argv[])
   ci_app_standard_opts = 0;
   shrub_controller_config config = {
     .dir_fd = NO_FD, .config_socket_fd = NO_FD,
+    .log_dir_fd = NO_FD,
     .uid = NO_ID, .gid = NO_ID,
   };
   config.interface_token = 1;
@@ -1384,6 +1400,9 @@ int main(int argc, char *argv[])
   if ( rc )
     goto fail_socket_lock_create;
 
+  /* Open log directory, but this is best-effort only */
+  log_open_dir(&config);
+
   rc = create_config_socket(&config);
   if ( rc )
     goto fail_create_config_socket;
@@ -1422,6 +1441,8 @@ fail_create_interrupt_state:
   cleanup_config_socket(&config);
 fail_create_config_socket:
   close(config.dir_fd);
+  if( config.log_dir_fd != NO_FD )
+    close(config.log_dir_fd);
 fail_socket_lock_create:
   rmdir(config.controller_dir);
 fail_early_init:
