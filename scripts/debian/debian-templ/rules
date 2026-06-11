@@ -263,6 +263,7 @@ binary-arch: build install
 	pybuild --verbose --build
 	dh_testdir -a
 	dh_testroot -a
+	cp scripts/onload_misc/onload.sysusers debian/$(userpackage).onload.sysusers
 	dh_installsysusers -a --name=onload
 #	dh_installdebconf -a
 	dh_installdocs -a

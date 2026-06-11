@@ -1,2 +1,0 @@
-u onload_cplane - "Onload Control Plane" /run/openonload
-u onload_shrub - "Onload Shared Reusable Buffer Controller" /run/onload
