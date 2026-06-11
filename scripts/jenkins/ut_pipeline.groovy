@@ -113,7 +113,9 @@ void doTests() {
           },
           "cplane system": {
             sh(script: "$path make -C build/gnu_x86_64/tests/onload/cplane_sysunit all")
-            sh(script: "$path make -C build/gnu_x86_64/tests/onload/cplane_sysunit test")
+            // FIXME: run these again when we have a dedicated unit-test
+            // machine new enough for building all components.
+            // sh(script: "$path make -C build/gnu_x86_64/tests/onload/cplane_sysunit test")
           }
         ])
       }
