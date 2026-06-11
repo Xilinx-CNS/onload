@@ -62,9 +62,7 @@ static inline uint32_t ef_shrub_buffer_sbseq(ef_shrub_buffer_id id)
 #define EF_SHRUB_FD_COUNT       3
 
 /* Shrub unix socket address information */
-#define EF_SHRUB_DUMP_LOG_SIZE 40
 #define EF_SHRUB_SOCK_DIR_PATH "/run/onload/"
-#define EF_SHRUB_DUMP_LOG_DIR "/var/log/"
 #define EF_SHRUB_CONTROLLER_PREFIX "controller-"
 #define EF_SHRUB_SHRUB_PREFIX "shrub-"
 #define EF_SHRUB_NEGOTIATION_SOCKET "shrub_config"
@@ -79,7 +77,6 @@ static inline uint32_t ef_shrub_buffer_sbseq(ef_shrub_buffer_id id)
  * Only used in other length calculations.
  */
 #define _SHRUB_SOCK_DIR_PATH_LEN (sizeof(EF_SHRUB_SOCK_DIR_PATH)-1)
-#define _SHRUB_DUMP_LOG_DIR_LEN (sizeof(EF_SHRUB_DUMP_LOG_DIR)-1)
 #define _SHRUB_CONTROLLER_PREFIX_LEN (sizeof(EF_SHRUB_CONTROLLER_PREFIX)-1)
 #define _SHRUB_SHRUB_PREFIX_LEN (sizeof(EF_SHRUB_SHRUB_PREFIX)-1)
 #define _SHRUB_NEGOTIATION_SOCKET_LEN (sizeof(EF_SHRUB_NEGOTIATION_SOCKET)-1)
@@ -97,15 +94,12 @@ static inline uint32_t ef_shrub_buffer_sbseq(ef_shrub_buffer_id id)
   (_SHRUB_SOCKET_DIR_LEN + _SHRUB_NEGOTIATION_SOCKET_LEN + 1)
 #define EF_SHRUB_SERVER_SOCKET_LEN                                             \
   (_SHRUB_SOCKET_DIR_LEN + _SHRUB_SHRUB_LEN + 1)
-#define EF_SHRUB_LOG_LEN                                                       \
-  (_SHRUB_DUMP_LOG_DIR_LEN + _SHRUB_CONTROLLER_LEN +                           \
-   EF_SHRUB_DUMP_LOG_SIZE + _SHRUB_PATH_SEP_LEN + 1)
 
 enum ef_shrub_controller_command {
   EF_SHRUB_CONTROLLER_DESTROY,
   EF_SHRUB_CONTROLLER_CREATE_HWPORT,
   EF_SHRUB_CONTROLLER_CREATE_IFINDEX,
-  EF_SHRUB_CONTROLLER_DUMP_TO_FILE,
+  EF_SHRUB_CONTROLLER_DEFUNCT_DUMP_TO_FILE, /* removed, do not reuse slot */
   EF_SHRUB_CONTROLLER_SHRUB_DUMP,
 };
 
@@ -215,14 +209,15 @@ struct ef_shrub_controller_request {
     struct {
       uint64_t shrub_token_id;
     } destroy; /* EF_SHRUB_CONTROLLER_DESTROY */
-    struct {
-      char file_name[EF_SHRUB_DUMP_LOG_SIZE];
-    } dump; /* EF_SHRUB_CONTROLLER_DUMP_TO_FILE */
+    char _pad[40]; /* Removed member (was dump) */
+    _Static_assert(EF_SHRUB_VERSION == 8, "proto version not advanced without "
+                   "removing legacy _pad element");
     struct {
       size_t logbuf_size;
     } shrub_dump; /* EF_SHRUB_CONTROLLER_SHRUB_DUMP */
   };
 };
+_Static_assert(sizeof(struct ef_shrub_controller_request) == 56, "pdu size");
 
 #define SHRUB_DUMP_SECTION_SEPARATOR \
   "---------------------------------------------------------"

@@ -28,10 +28,6 @@ int ef_shrub_adapter_send_ifname(ef_shrub_request_sender send_request_func,
                                  int controller_id, const char *ifname,
                                  uint32_t buffers);
 
-/* Dump the given state of the shrub controller */
-int ef_shrub_adapter_send_dump(ef_shrub_request_sender send_request_func,
-                               int controller_id, const char *filename);
-
 /* Programmatic API for killing a shrub server. */
 int ef_shrub_adapter_stop_server(ef_shrub_request_sender send_request_func,
                                  int controller_id, int shrub_token);

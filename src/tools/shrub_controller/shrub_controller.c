@@ -55,7 +55,6 @@ int (*ci_sys_ioctl)(int, long unsigned int, ...) =
 
 struct shrub_controller_vi;
 static volatile sig_atomic_t is_running = 1;
-static volatile sig_atomic_t call_shrub_dump = 0;
 
 #define DEFAULT_BUFFER_SIZE 1024 * 1024
 static const mode_t DEFAULT_CLIENT_MODE = 0666;
@@ -115,7 +114,6 @@ typedef struct
   int epoll_fd;
   int controller_id;
   int dir_fd;
-  int log_dir_fd;
   shrub_if_config_t *server_config_head;
   struct oo_cplane_handle *cp;
   int oo_fd_handle;
@@ -124,7 +122,6 @@ typedef struct
   bool daemonise;
   bool log_to_kern;
   char controller_dir[EF_SHRUB_SOCKET_DIR_LEN];
-  char log_dir[EF_SHRUB_LOG_LEN];
   struct shrub_controller_stats controller_stats;
   int auto_close_delay;
   bool had_any_clients;
@@ -483,60 +480,6 @@ static void shrub_dump_to_fd(int fd, shrub_controller_config *config,
   shrub_dump_stats_to_fd(fd, config, buf, buflen);
 }
 
-static int log_open_dir(shrub_controller_config *config)
-{
-  bool created = mkdir(config->log_dir, 0755) == 0;
-
-  if( !created && errno != EEXIST ) {
-    int rc = -errno;
-    ci_log("Warning: creating log directory '%s' (will not log): %s", config->log_dir, strerror(-rc));
-    return rc;
-  }
-
-  if( (config->log_dir_fd = open(config->log_dir, O_RDONLY | O_DIRECTORY)) == -1) {
-    int rc = -errno;
-    ci_log("Warning: opening log directory '%s' (will not log): %s", config->log_dir, strerror(-rc));
-    return rc;
-  }
-
-  /* Only modify the log directory if we just created it. */
-  if( created ) {
-    uid_t uid = config->uid != NO_ID ? config->uid : geteuid();
-    gid_t gid = config->gid != NO_ID ? config->gid : getegid();
-    if( fchown(config->log_dir_fd, uid, gid) == -1 )
-      ci_log("Warning: could not change ownership of new log directory: %s", strerror(errno));
-  }
-  return 0;
-}
-
-#define LOGBUF_SIZE 256
-static int shrub_dump_to_file(shrub_controller_config *config,
-                              const char *file_name)
-{
-  char logbuf[LOGBUF_SIZE];
-  int rc = 0;
-  int fd;
-
-  if( strchr(file_name, '/') != NULL ) {
-    ci_log("Error: non-leaf dump filename rejected: %s", file_name);
-    return -EINVAL;
-  }
-
-  fd = openat(config->log_dir_fd, file_name,
-              O_WRONLY | O_CREAT, S_IRUSR | S_IRGRP);
-  if ( fd < 0 ) {
-    rc = -errno;
-    ci_log("Error: shrub_controller was unable "
-           "to open a file for shrub dump!");
-    return rc;
-  }
-
-  shrub_dump_to_fd(fd, config, logbuf, LOGBUF_SIZE);
-
-  close(fd);
-  return rc;
-}
-
 static int shrub_dump(shrub_controller_config *config, int fd, size_t bufsize)
 {
   char *buf = malloc(bufsize);
@@ -718,18 +661,18 @@ static int poll_socket(shrub_controller_config *config)
               config, hw_port, ifindex, buffer_count, client_fd
             );
             break;
-          case EF_SHRUB_CONTROLLER_DUMP_TO_FILE:
-            shrub_dump_to_file(config, request.dump.file_name);
-            break;
           case EF_SHRUB_CONTROLLER_SHRUB_DUMP:
             shrub_dump(config, client_fd, request.shrub_dump.logbuf_size);
+            break;
+          case EF_SHRUB_CONTROLLER_DEFUNCT_DUMP_TO_FILE:
+            response_status = -EOPNOTSUPP;
             break;
           default:
             if ( config->debug_mode ) {
               ci_log("Info: shrub_controller: An unknown command was passed via "
                     "the config socket, command %" PRIu64, request.command);
             }
-            response_status = -1;
+            response_status = -EOPNOTSUPP;
             break;
           }
         }
@@ -873,14 +816,6 @@ static int poll_shrub_servers(shrub_controller_config *config)
   return n_events;
 }
 
-static void handle_controller_dump_requests(shrub_controller_config *config)
-{
-  if ( call_shrub_dump == 1 ) {
-    shrub_dump_to_file(config, "controller-signal.dump");
-    call_shrub_dump = 0;
-  }
-}
-
 static int timespec_difference_ms(struct timespec lhs, struct timespec rhs)
 {
   const int ms_per_sec = 1000;
@@ -944,7 +879,6 @@ static bool reactor_loop_step(shrub_controller_config *config)
   n_events += (rc > 0) ? rc : 0;
 
   /* We aren't too bothered by if any work was done by non-polling functions */
-  handle_controller_dump_requests(config);
   handle_controller_auto_close(config);
 
   return n_events > 0;
@@ -1159,9 +1093,7 @@ static int controller_servers_init(shrub_controller_config *config,
 
 void controller_signal_handler(int signal, siginfo_t* info, void* context)
 {
-  if ( signal == SIGUSR1 )
-    call_shrub_dump = 1;
-  else if ( signal == SIGTERM || signal == SIGINT || signal == SIGQUIT )
+  if ( signal == SIGTERM || signal == SIGINT || signal == SIGQUIT )
     is_running = 0;
 }
 
@@ -1183,11 +1115,6 @@ static void controller_init_signals(void)
     ci_log("Error: shrub_controller sigaction(SIGTERM) failed: %s",
            strerror(errno));
 
-  rc = sigaction(SIGUSR1, &act, NULL);
-  if ( rc < 0 )
-    ci_log("Error: shrub_controller sigaction(SIGUSR1) failed: %s",
-           strerror(errno));
-
   rc = sigaction(SIGQUIT, &act, NULL);
   if ( rc < 0 )
     ci_log("Error: shrub_controller sigaction(SIGQUIT) failed: %s",
@@ -1196,17 +1123,9 @@ static void controller_init_signals(void)
 
 static int controller_init_paths(shrub_controller_config *config)
 {
-  int rc;
-
-  rc = snprintf(config->log_dir, sizeof(config->log_dir),
-                EF_SHRUB_CONTROLLER_PATH_FORMAT, "/var/log/",
-                config->controller_id);
-  if ( rc < 0 || rc >= sizeof(config->log_dir) )
-    return -EINVAL;
-
-  rc = snprintf(config->controller_dir, sizeof(config->controller_dir),
-                EF_SHRUB_CONTROLLER_PATH_FORMAT, EF_SHRUB_SOCK_DIR_PATH,
-                config->controller_id);
+  int rc = snprintf(config->controller_dir, sizeof(config->controller_dir),
+                    EF_SHRUB_CONTROLLER_PATH_FORMAT, EF_SHRUB_SOCK_DIR_PATH,
+                    config->controller_id);
   if ( rc < 0 || rc >= sizeof(config->controller_dir) )
     return -EINVAL;
 
@@ -1367,7 +1286,6 @@ int main(int argc, char *argv[])
   ci_app_standard_opts = 0;
   shrub_controller_config config = {
     .dir_fd = NO_FD, .config_socket_fd = NO_FD,
-    .log_dir_fd = NO_FD,
     .uid = NO_ID, .gid = NO_ID,
     .client_gid = NO_ID,
     .client_mode = DEFAULT_CLIENT_MODE,
@@ -1431,9 +1349,6 @@ int main(int argc, char *argv[])
   if ( rc )
     goto fail_socket_lock_create;
 
-  /* Open log directory, but this is best-effort only */
-  log_open_dir(&config);
-
   /* Apply this umask for the next (rest-of-life) phase of the controller */
   umask(~config.client_mode & 0777);
   rc = create_config_socket(&config);
@@ -1478,8 +1393,6 @@ fail_create_interrupt_state:
   cleanup_config_socket(&config);
 fail_create_config_socket:
   close(config.dir_fd);
-  if( config.log_dir_fd != NO_FD )
-    close(config.log_dir_fd);
 fail_socket_lock_create:
   rmdir(config.controller_dir);
 fail_early_init:
