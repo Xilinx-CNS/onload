@@ -3985,6 +3985,65 @@ tcp_helper_alloc_list_to_aw_pool(tcp_helper_resource_t* rs,
 }
 #endif
 
+static int
+tcp_helper_alloc_tcp_explicit_wild_ports(tcp_helper_resource_t* rs,
+                                         ci_netif* ni)
+{
+  const int nr_ports = 65536;
+  tcp_helper_endpoint_t* ep;
+  unsigned long* bitmap;
+  citp_waitable_obj* wo;
+  uint16_t port;
+  int idx, rc;
+
+  bitmap = kvmalloc_array(BITS_TO_LONGS(nr_ports), sizeof(*bitmap), GFP_KERNEL);
+  if( !bitmap )
+    return -ENOMEM;
+
+  rc = bitmap_parselist(NI_OPTS(ni).tcp_explicit_wild_ports, bitmap, nr_ports);
+  if( rc )
+    goto err_free;
+
+  for_each_set_bit(idx, bitmap, nr_ports) {
+    /* This could potentially take a long time, allow user to terminate.
+     * For normal signals such as SIGINT, citp_signal_intercept would just
+     * restart the ioctl, so only handle fatal signals here */
+    if( fatal_signal_pending(current) ) {
+      rc = -EINTR;
+      goto err_free;
+    }
+
+    port = htons(idx);
+
+    wo = citp_waitable_obj_alloc(ni);
+    if( !wo ) {
+      rc = -ENOBUFS;
+      goto err_free;
+    }
+
+    ci_sock_cmn_init(ni, &wo->sock, 1);
+    wo->sock.b.state = CI_TCP_STATE_EXPLICIT_WILD;
+#if CI_CFG_IPV6
+    wo->sock.pkt.ether_type = CI_ETHERTYPE_IP6;
+#endif
+
+    sock_protocol(&wo->sock) = IPPROTO_TCP;
+    ci_sock_set_laddr_port(&wo->sock, addr_any, port);
+    ci_sock_set_raddr_port(&wo->sock, addr_any, 0);
+
+    ep = ci_trs_get_valid_ep(rs, W_SP(&wo->waitable));
+    rc = tcp_helper_endpoint_set_filters(ep, CI_IFID_BAD, OO_SP_NULL);
+    if( rc != 0 && rc != -EFILTERSSOME )
+      goto err_free;
+  }
+
+  kvfree(bitmap);
+  return 0;
+
+err_free:
+  kvfree(bitmap);
+  return rc;
+}
 
 /* These hashing functions are the same as for the per-stack active-wild table,
  * but there's no reason why they have to be, and so in the interests of
@@ -4896,6 +4955,31 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
       nic = efrm_client_get_nic(rs->nic[intf_i].thn_oo_nic->efrm_client);
       if( nic->flags & NIC_FLAG_LLCT )
         ci_atomic32_or(&nsn->nic_error_flags, CI_NETIF_NIC_ERROR_AWAITING_EFCT);
+    }
+  }
+
+  /* This is done before setting rs->thc so we can fail the stack creation on error.
+   * Clustering support is explicitly disabled */
+  if( NI_OPTS(ni).tcp_explicit_wild_ports[0] != '\0' ) {
+    if( thc ) {
+      OO_DEBUG_ERR(ci_log("%s: [%d] Cannot use explicit wilds with clustering.",
+                          __func__, NI_ID(ni)));
+      rc = -EINVAL;
+      goto fail13;
+    }
+
+    rc = tcp_helper_alloc_tcp_explicit_wild_ports(rs, ni);
+    if( rc != 0 ) {
+      OO_DEBUG_ERR(ci_log("%s: [%d] Failed to allocate explicit wild ports rc=%d.",
+                          __func__, NI_ID(ni), rc));
+
+      /* EEXIST specifically means stack name is in use, causing stack creation
+       * to be retried, so don't pass this error code along, rather use a generic
+       * error code instead.
+       */
+      if( rc == -EEXIST )
+        rc = -EPERM;
+      goto fail13;
     }
   }
 

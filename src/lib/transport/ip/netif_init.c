@@ -1364,6 +1364,9 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
 
   if( (s = getenv("EF_ENABLE_TX_ERROR_RECOVERY")) )
     opts->tx_error_recovery = atoi(s);
+
+  handle_str_opt(opts, "EF_TCP_EXPLICIT_WILD_PORTS", opts->tcp_explicit_wild_ports,
+                 sizeof(opts->tcp_explicit_wild_ports));
 }
 
 

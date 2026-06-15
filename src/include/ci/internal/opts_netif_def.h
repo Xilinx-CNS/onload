@@ -1844,3 +1844,15 @@ CI_CFG_STR_OPT("EF_ONLOAD_IRQ_CORES", onload_irq_cores, ci_string256,
 "of CPU ranges, similar to the format used by the kernel for CPU masks \n"
 "(e.g., \"0-3,8-11\" or \"0,2,4,6\").\n",
                ,  , "", none, none, )
+
+CI_CFG_STR_OPT("EF_TCP_EXPLICIT_WILD_PORTS", tcp_explicit_wild_ports, ci_string256,
+"Preallocate and hold filters rules for listening ports.\n"
+"Normally the filter is deleted when the listener and all connections to "
+"the port is closed, but this option allows the filter to be reused for "
+"the lifetime of this Onload stack. Doing this removes the filter installation "
+"from the bind/listen/close operations, which improves their performance.\n"
+"The format to this variable is a list of port ranges in the form of "
+"1,3-4,10-10. Onload clustering is not supported, and you must avoid outgoing "
+"connections to be randomly allocated ports from using one of these given ports "
+"by using sysctl net.ipv4.ip_local_port_range or net.ipv4.ip_local_reserved_ports.",
+               ,  , "", none, none, )
