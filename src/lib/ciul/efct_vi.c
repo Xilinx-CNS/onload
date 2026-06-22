@@ -1609,6 +1609,7 @@ static void efct_vi_initialise_ops(ef_vi* vi)
   vi->ops.transmitv_ctpio_fallback = efct_ef_vi_transmitv_ctpio_fallback;
   vi->internal_ops.post_filter_add = efct_post_filter_add;
   vi->ops.eventq_poll = efct_ef_eventq_poll;
+  vi->ops.future_eventq_poll = efct_vi_rx_future_poll;
 }
 
 void efct_vi_init(ef_vi* vi)

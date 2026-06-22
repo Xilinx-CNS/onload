@@ -1089,6 +1089,8 @@ typedef struct ef_vi {
                                    size_t len, ef_request_id dma_id);
     int (*transmitv_ctpio_fallback)(struct ef_vi* vi, const ef_iovec* dma_iov,
                                     int dma_iov_len, ef_request_id dma_id);
+    /** Poll an event queue to pick up a peeked future event */
+    int (*future_eventq_poll)(struct ef_vi*, ef_event*, int evs_len);
   } ops;  /**< Driver-dependent operations. */
   /* Doxygen comment above is documentation for the ops member of ef_vi */
 

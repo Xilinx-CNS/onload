@@ -140,6 +140,32 @@ int efct_vi_get_wakeup_params(ef_vi* vi, int qid, unsigned* sbseq,
 #endif
 
 
+/*! \brief Poll an event queue for future events
+**
+** \param evq     The event queue to poll.
+** \param evs     Array in which to return polled events.
+** \param evs_len Length of the evs array, must be >=
+**                EF_VI_EVENT_POLL_MIN_EVS.
+**
+** \return The number of events retrieved.
+**
+** This provides a generic polling method that can be used as an alternative
+** to the architecture specific future poll method, such as
+** efct_vi_rx_future_poll. On architectures without such a method it is
+** equivalent to ef_eventq_poll. On architectures with such a method the
+** same pre-conditions apply to this as for the architecture specific option.
+**
+** On different architectures the detection of incoming packets is
+** sufficiently different there is no generic future peek method. However, for
+** code that handles multiple architectures this poll method serves to
+** make the code common for the poll portion of the peek/poll sequence.
+**
+** This function returns immediately, even if there are no outstanding
+** events. The array might not be full on return.
+*/
+#define ef_future_eventq_poll(evq, evs, evs_len)               \
+  (evq)->ops.future_eventq_poll((evq), (evs), (evs_len))
+
 /* This returns the ID of the next RX buffer in the RXQ.  In the absence of
  * event merging and errors, this will be the same packet that will be returned
  * in the next RX event. */

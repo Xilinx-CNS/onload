@@ -860,6 +860,7 @@ static void ef10_vi_initialise_ops(ef_vi* vi)
     vi->ops.transmitv_ctpio_fallback =
                                  ef10_ef_vi_transmitv_ctpio_fallback_not_supp;
   }
+  vi->ops.future_eventq_poll     = ef10_ef_eventq_poll;
 }
 
 
