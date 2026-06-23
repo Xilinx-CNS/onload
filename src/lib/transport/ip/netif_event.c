@@ -2112,7 +2112,6 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
   struct ci_netif_poll_state ps;
   ci_ip_pkt_fmt* pkt;
   const uint8_t* dma;
-  int (*future_poll)(ef_vi* vi, ef_event* evs, int evs_len) = evq->ops.eventq_poll;
 
   /* Number of data bytes in the first cache line of efct packets */
   static const size_t efct_begin_len = CI_CACHE_LINE_SIZE -
@@ -2132,7 +2131,6 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
     if( pkt == NULL )
       return 0;
     memcpy(pkt->dma_start, dma, efct_begin_len);
-    future_poll = efct_vi_rx_future_poll;
   }
   else {
     pkt = ci_netif_intf_next_rx_pkt(ni, evq);
@@ -2175,7 +2173,7 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
    */
   max_spin = IPTIMER_STATE(ni)->khz / 100;
   ci_prefetch(pkt->dma_start + CI_CACHE_LINE_SIZE);
-  while( (rc = future_poll(evq, ev, EF_VI_EVENT_POLL_MIN_EVS)) == 0 ) {
+  while( (rc = ef_future_eventq_poll(evq, ev, EF_VI_EVENT_POLL_MIN_EVS)) == 0 ) {
     ci_frc64(&now_frc);
     if( now_frc - start_frc > max_spin ) {
       CITP_STATS_NETIF_INC(ni, rx_future_rollback_timeout);
