@@ -104,6 +104,7 @@ int main(int argc, char* argv[])
     bool valid; \
     CI_BUILD_ASSERT2(TYPE_TEST((v.field_name), ci_uint16)); \
     valid = strcmp(&(#field_name)[sizeof(#field_name) - 6], "_be16") == 0 || \
+            strcmp(&(#field_name)[sizeof(#field_name) - 6], "_port") == 0 || \
             strcmp(#field_name, "ether_type") == 0; \
     ok(valid, "check name %s.%s", struct_name, #field_name); \
     if (!valid) \
