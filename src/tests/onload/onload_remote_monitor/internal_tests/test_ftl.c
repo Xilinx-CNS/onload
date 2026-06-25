@@ -81,9 +81,13 @@ int main(int argc, char* argv[])
   CI_BUILD_ASSERT2(sizeof(v.field_name) != sizeof(char*));
 
 #define FTL_TFIELD_IPADDR(ctx, field_name, flags) \
-   ok(strcmp(#field_name, "nexthop") == 0 || strstr(#field_name, "addr"), \
-     "judging by name %s.%s looks like ip addr field", struct_name, #field_name); \
-   FTL_TFIELD_INTBE32(ctx, field_name, flags)
+  { \
+    bool valid = strcmp(#field_name, "nexthop") == 0 || strstr(#field_name, "addr"); \
+    ok(valid, "check name %s.%s", struct_name, #field_name); \
+    if (!valid) \
+      diag("judging by name %s.%s looks like ip addr field", struct_name, #field_name); \
+    FTL_TFIELD_INTBE32(ctx, field_name, flags); \
+  }
 
 #define FTL_TFIELD_IPXADDR(ctx, field_name, flags) \
   CI_BUILD_ASSERT2( TYPE_TEST(v.field_name, ci_addr_t) );
@@ -96,20 +100,30 @@ int main(int argc, char* argv[])
   FTL_TFIELD_INTBE16(ctx, field_name, flags)
 
 #define FTL_TFIELD_INTBE16(ctx, field_name, flags) \
-  CI_BUILD_ASSERT2(TYPE_TEST((v.field_name), ci_uint16)); \
-  ok(strcmp(&(#field_name)[sizeof(#field_name) - 6], "_be16") == 0 || \
-     strcmp(#field_name, "ether_type") == 0, \
-     "confirm that the field %s.%s 's name matches pattern or is valid. " \
-     "Add name exception if needed.", \
-     struct_name, #field_name);
+  { \
+    bool valid; \
+    CI_BUILD_ASSERT2(TYPE_TEST((v.field_name), ci_uint16)); \
+    valid = strcmp(&(#field_name)[sizeof(#field_name) - 6], "_be16") == 0 || \
+            strcmp(#field_name, "ether_type") == 0; \
+    ok(valid, "check name %s.%s", struct_name, #field_name); \
+    if (!valid) \
+      diag("confirm that the field %s.%s 's name matches pattern or is valid. " \
+           "Add name exception if needed.", \
+           struct_name, #field_name); \
+  }
 
 #define FTL_TFIELD_INTBE32(ctx, field_name, flags) \
-  CI_BUILD_ASSERT2(sizeof(v.field_name) == sizeof(ci_uint32)); \
-  ok(strcmp(&(#field_name)[sizeof(#field_name) - 6], "_be32") == 0 || \
-     strcmp(#field_name, "nexthop") == 0, \
-     "confirm that the field %s.%s 's name matches pattern or is valid. " \
-     "Add name exception if needed.", \
-     struct_name, #field_name);
+  { \
+    bool valid; \
+    CI_BUILD_ASSERT2(sizeof(v.field_name) == sizeof(ci_uint32)); \
+    valid = strcmp(&(#field_name)[sizeof(#field_name) - 6], "_be32") == 0 || \
+            strcmp(#field_name, "nexthop") == 0; \
+    ok(valid, "check name %s.%s", struct_name, #field_name); \
+    if (!valid) \
+      diag("confirm that the field %s.%s 's name matches pattern or is valid. " \
+           "Add name exception if needed.", \
+           struct_name, #field_name); \
+  }
 
 #define FTL_TFIELD_INT2(ctx, type, field_name, format_string, conversion_function, flag) \
   FTL_TFIELD_INT(ctx, type, field_name, flag)
