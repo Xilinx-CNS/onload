@@ -57,6 +57,11 @@ static inline void __iomem *efx_mem(struct efx_nic *efx, unsigned int addr)
 	return efx->membase + addr;
 }
 
+static inline void __iomem *efx_mc(struct efx_nic *efx, unsigned int addr)
+{
+	return efx->membase_mc + addr;
+}
+
 static inline u32 efx_reg(struct efx_nic *efx, unsigned int reg)
 {
 	return efx->reg_base + reg;
@@ -70,7 +75,7 @@ static inline void _efx_writeq(struct efx_nic *efx, __le64 value,
 }
 static inline __le64 _efx_readq(struct efx_nic *efx, unsigned int reg)
 {
-	return (__force __le64)__raw_readq(efx_mem(efx, reg));
+	return (__force __le64)__raw_readq(efx_mc(efx, reg));
 }
 #endif
 
@@ -81,7 +86,7 @@ static inline void _efx_writed(struct efx_nic *efx, __le32 value,
 }
 static inline __le32 _efx_readd(struct efx_nic *efx, unsigned int reg)
 {
-	return (__force __le32)__raw_readl(efx_mem(efx, reg));
+	return (__force __le32)__raw_readl(efx_mc(efx, reg));
 }
 
 /* Write a normal 128-bit CSR, locking as appropriate. */

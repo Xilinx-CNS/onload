@@ -511,20 +511,16 @@ static int efx_devlink_reporter_log(struct devlink_health_reporter *reporter,
 {
 	struct efx_devlink *devlink_private =
 		devlink_health_reporter_priv(reporter);
-	struct efx_nvlog_data *nvlog_data =
-		kzalloc(sizeof(*nvlog_data), GFP_KERNEL);
+	struct efx_nvlog_data data = {};
 	struct efx_nic *efx = devlink_private->efx;
-	int rc;
-
-	if (!nvlog_data)
-		return -ENOMEM;
+	int rc = -EINVAL;
 
 	if (flags & EFX_NVLOG_F_READ) {
-		rc = efx_nvlog_do(efx, nvlog_data, type, EFX_NVLOG_F_READ);
+		rc = efx_nvlog_do(efx, &data, type, EFX_NVLOG_F_READ);
 		if (rc)
 			goto out_free;
 
-		rc = efx_nvlog_to_devlink(nvlog_data, fmsg);
+		rc = efx_nvlog_to_devlink(&data, fmsg);
 		if (rc)
 			goto out_free;
 	}
@@ -533,23 +529,39 @@ static int efx_devlink_reporter_log(struct devlink_health_reporter *reporter,
 	 * to clear flash
 	 */
 	if (flags & EFX_NVLOG_F_CLEAR)
-		rc = efx_nvlog_do(efx, nvlog_data, type, EFX_NVLOG_F_CLEAR);
+		rc = efx_nvlog_do(efx, &data, type, EFX_NVLOG_F_CLEAR);
 
  out_free:
-	kfree(nvlog_data->nvlog);
-	kfree(nvlog_data);
+	kvfree(data.nvlog);
 
 	return rc;
 }
 #endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER)
-static int efx_devlink_reporter_nvlog_diagnose(struct devlink_health_reporter *reporter,
+static int efx_devlink_reporter_diagnose_use_dump(struct devlink_health_reporter *reporter,
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER_OPS_EXTACK)
-					       struct devlink_fmsg *fmsg,
-					       struct netlink_ext_ack *extack)
+						  struct devlink_fmsg *fmsg,
+						  struct netlink_ext_ack *extack)
 #else
-					       struct devlink_fmsg *fmsg)
+						  struct devlink_fmsg *fmsg)
+#endif
+{
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER_OPS_EXTACK)
+	NL_SET_ERR_MSG_MOD(extack,
+			   "Use 'devlink health dump clear/show' instead");
+#endif
+	return -EOPNOTSUPP;
+}
+
+static int efx_devlink_reporter_nvlog_dump(struct devlink_health_reporter *reporter,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER_OPS_EXTACK)
+					   struct devlink_fmsg *fmsg,
+					   void *priv_ctx,
+					   struct netlink_ext_ack *extack)
+#else
+					   struct devlink_fmsg *fmsg,
+					   void *priv_ctx)
 #endif
 {
 	return efx_devlink_reporter_log(reporter, fmsg,
@@ -559,15 +571,18 @@ static int efx_devlink_reporter_nvlog_diagnose(struct devlink_health_reporter *r
 
 static const struct devlink_health_reporter_ops sfc_devlink_nvlog_ops = {
 	.name		= "nvlog",
-	.diagnose	= efx_devlink_reporter_nvlog_diagnose,
+	.diagnose	= efx_devlink_reporter_diagnose_use_dump,
+	.dump		= efx_devlink_reporter_nvlog_dump,
 };
 
-static int efx_devlink_reporter_nvlog_clear_diagnose(struct devlink_health_reporter *reporter,
+static int efx_devlink_reporter_nvlog_clear_dump(struct devlink_health_reporter *reporter,
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER_OPS_EXTACK)
-						     struct devlink_fmsg *fmsg,
-						     struct netlink_ext_ack *extack)
+						 struct devlink_fmsg *fmsg,
+						 void *priv_ctx,
+						 struct netlink_ext_ack *extack)
 #else
-						     struct devlink_fmsg *fmsg)
+						 struct devlink_fmsg *fmsg,
+						 void *priv_ctx)
 #endif
 {
 	return efx_devlink_reporter_log(reporter, fmsg,
@@ -577,15 +592,18 @@ static int efx_devlink_reporter_nvlog_clear_diagnose(struct devlink_health_repor
 
 static const struct devlink_health_reporter_ops sfc_devlink_nvlog_clear_ops = {
 	.name		= "nvlog-clear",
-	.diagnose	= efx_devlink_reporter_nvlog_clear_diagnose,
+	.diagnose	= efx_devlink_reporter_diagnose_use_dump,
+	.dump		= efx_devlink_reporter_nvlog_clear_dump,
 };
 
-static int efx_devlink_reporter_ramlog_diagnose(struct devlink_health_reporter *reporter,
+static int efx_devlink_reporter_ramlog_dump(struct devlink_health_reporter *reporter,
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER_OPS_EXTACK)
-						struct devlink_fmsg *fmsg,
-						struct netlink_ext_ack *extack)
+					    struct devlink_fmsg *fmsg,
+					    void *priv_ctx,
+					    struct netlink_ext_ack *extack)
 #else
-						struct devlink_fmsg *fmsg)
+					    struct devlink_fmsg *fmsg,
+					    void *priv_ctx)
 #endif
 {
 	return efx_devlink_reporter_log(reporter, fmsg,
@@ -595,15 +613,18 @@ static int efx_devlink_reporter_ramlog_diagnose(struct devlink_health_reporter *
 
 static const struct devlink_health_reporter_ops sfc_devlink_ramlog_ops = {
 	.name		= "ramlog",
-	.diagnose	= efx_devlink_reporter_ramlog_diagnose,
+	.diagnose	= efx_devlink_reporter_diagnose_use_dump,
+	.dump		= efx_devlink_reporter_ramlog_dump,
 };
 
-static int efx_devlink_reporter_ramlog_clear_diagnose(struct devlink_health_reporter *reporter,
+static int efx_devlink_reporter_ramlog_clear_dump(struct devlink_health_reporter *reporter,
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER_OPS_EXTACK)
-						      struct devlink_fmsg *fmsg,
-						      struct netlink_ext_ack *extack)
+						  struct devlink_fmsg *fmsg,
+						  void *priv_ctx,
+						  struct netlink_ext_ack *extack)
 #else
-						      struct devlink_fmsg *fmsg)
+						  struct devlink_fmsg *fmsg,
+						  void *priv_ctx)
 #endif
 {
 	return efx_devlink_reporter_log(reporter, fmsg,
@@ -613,7 +634,8 @@ static int efx_devlink_reporter_ramlog_clear_diagnose(struct devlink_health_repo
 
 static const struct devlink_health_reporter_ops sfc_devlink_ramlog_clear_ops = {
 	.name		= "ramlog-clear",
-	.diagnose	= efx_devlink_reporter_ramlog_clear_diagnose,
+	.diagnose	= efx_devlink_reporter_diagnose_use_dump,
+	.dump		= efx_devlink_reporter_ramlog_clear_dump,
 };
 
 static int efx_devlink_reporter_cfg(struct devlink_health_reporter *reporter,
@@ -627,7 +649,7 @@ static int efx_devlink_reporter_cfg(struct devlink_health_reporter *reporter,
 	rc = efx_nvcfg_read(efx, &data, type);
 	if (!rc)
 		rc = efx_nvlog_to_devlink(&data, fmsg);
-	kfree(data.nvlog);
+	kvfree(data.nvlog);
 	return rc;
 }
 

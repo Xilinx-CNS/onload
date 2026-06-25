@@ -1214,6 +1214,16 @@ bool efx_x4_mcdi_phy_poll(struct efx_nic *efx)
 		efx_x4_mcdi_phy_decode_link(efx, &efx->link_state,
 					    port_data, fcntl);
 
+	if (EFX_WORKAROUND_5885(efx)) {
+		struct efx_link_state *lsp = &efx->link_state;
+
+		/* The model does not simulate link-up. Pretend it's up. */
+		lsp->fc = EFX_FC_AUTO | EFX_FC_TX | EFX_FC_RX;
+		lsp->speed = 25000;
+		lsp->fd = true;
+		lsp->up = true;
+	}
+
 	return !efx_link_state_equal(&efx->link_state, &old_state);
 }
 

@@ -1667,14 +1667,15 @@ void efx_pci_unmap_bar(struct efx_nic *efx, int bar,
 int efx_init_io(struct efx_nic *efx, int bar, dma_addr_t dma_mask, unsigned int mem_map_size)
 {
 	struct pci_dev *pci_dev = efx->pci_dev;
+	unsigned int mc_bar;
 	int rc;
-
-	pci_dbg(pci_dev, "initialising I/O bar=%d\n", bar);
 
 	rc = efx_pci_enable(efx, dma_mask);
 	if (rc)
 		goto fail1;
 	efx->mem_bar = UINT_MAX;
+
+	pci_dbg(pci_dev, "initialising NIC bar=%d\n", bar);
 
 	rc = efx_pci_map_bar(efx, bar, mem_map_size, &efx->membase_phys,
 			     &efx->membase);
@@ -1683,8 +1684,32 @@ int efx_init_io(struct efx_nic *efx, int bar, dma_addr_t dma_mask, unsigned int 
 
 	efx->mem_bar = bar;
 
+	efx->membase_phys_mc = efx->membase_phys;
+	efx->membase_mc = efx->membase;
+	efx->mem_bar_mc = efx->mem_bar;
+
+	mc_bar = efx->type->mc_bar ? efx->type->mc_bar(efx) : EFX_MC_BAR_NA;
+	if (mc_bar == EFX_MC_BAR_NA)
+		return 0;
+
+	pci_dbg(pci_dev, "initialising MC bar=%d\n", mc_bar);
+
+	rc = efx_pci_map_bar(efx, mc_bar, mem_map_size, &efx->membase_phys_mc,
+			     &efx->membase_mc);
+	if (rc)
+		goto fail3;
+
+	efx->mem_bar_mc = mc_bar;
 	return 0;
 
+fail3:
+	efx_pci_unmap_bar(efx, efx->mem_bar, efx->membase_phys, efx->membase);
+	efx->mem_bar_mc = UINT_MAX;
+	efx->membase_phys_mc = 0;
+	efx->mem_bar = UINT_MAX;
+	efx->membase_mc = NULL;
+	efx->membase_phys = 0;
+	efx->membase = NULL;
 fail2:
 	pci_disable_device(efx->pci_dev);
 fail1:
@@ -1695,12 +1720,21 @@ void efx_fini_io(struct efx_nic *efx)
 {
 	pci_dbg(efx->pci_dev, "shutting down I/O\n");
 
+	if (efx->mem_bar_mc != efx->mem_bar) {
+		efx_pci_unmap_bar(efx, efx->mem_bar_mc, efx->membase_phys_mc,
+				  efx->membase_mc);
+	}
+
 	efx_pci_unmap_bar(efx, efx->mem_bar, efx->membase_phys, efx->membase);
 	if (efx->membase_phys) {
 		/* Don't disable bus-mastering if VFs are assigned */
 		if (!pci_vfs_assigned(efx->pci_dev))
 			pci_disable_device(efx->pci_dev);
 	}
+
+	efx->mem_bar_mc = UINT_MAX;
+	efx->membase_phys_mc = 0;
+	efx->membase_mc = NULL;
 
 	efx->membase = NULL;
 	efx->membase_phys = 0;

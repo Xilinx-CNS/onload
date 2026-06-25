@@ -253,8 +253,14 @@ int efx_mcdi_init(struct efx_nic *efx)
 	 * fail with EPERM if we are not the primary PF. In this case the
 	 * caller should retry with variant "don't care".
 	 */
-	rc = efx_mcdi_drv_attach(efx, MC_CMD_FW_LOW_LATENCY,
-				 &efx->mcdi->fn_flags, false);
+	if (EFX_WORKAROUND_5884(efx)) {
+		/* X4ANA model fails to select datapath firmware variant. */
+		rc = -EPERM;
+	} else {
+		rc = efx_mcdi_drv_attach(efx, MC_CMD_FW_LOW_LATENCY,
+					 &efx->mcdi->fn_flags, false);
+	}
+
 	if (rc == -EPERM)
 		rc = efx_mcdi_drv_attach(efx, MC_CMD_FW_DONT_CARE,
 					 &efx->mcdi->fn_flags, false);

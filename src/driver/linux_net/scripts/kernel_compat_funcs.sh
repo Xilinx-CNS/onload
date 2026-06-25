@@ -402,6 +402,96 @@ function read_make_variables()
     return $rc
 }
 
+function read_config_variables()
+{
+    CONFIG_X86_32=$(sed -n 's/^CONFIG_X86_32=//p' "$1")
+    CONFIG_X86_64=$(sed -n 's/^CONFIG_X86_64=//p' "$1")
+    CONFIG_PTP_1588_CLOCK=$(sed -n 's/^CONFIG_PTP_1588_CLOCK=//p' "$1")
+}
+
+# Translate supported architecture to its canonical kernel SRCARCH directory
+function get_srcarch()
+{
+    case "$1" in
+	x86_64|i386|i486|i586|i686|amd64|x86)    echo x86 ;;
+	aarch64|arm64)                         echo arm64 ;;
+	armv8l|armv7l|armv7*|armv6l|armhf|arm) echo arm ;;
+	ppc|ppc64le|ppc64|powerpc)             echo powerpc ;;
+	s390x|s390)                            echo s390 ;;
+	riscv64|riscv32|riscv)              echo riscv ;;
+	*)                                  echo "$1" ;;
+    esac
+}
+
+# Determine primary ARCH from .config variables, falling back to uname -m
+function derive_arch_from_config()
+{
+    [ -n "${ARCH:-}" ] && return
+
+    if [ "${CONFIG_X86_64:-}" = "y" ] || [ "${CONFIG_X86_32:-}" = "y" ]; then
+	ARCH=x86
+    elif grep -q '^CONFIG_ARM64=y' "$1"; then
+	ARCH=arm64
+    elif grep -q '^CONFIG_ARM=y' "$1"; then
+	ARCH=arm
+    elif grep -q '^CONFIG_PPC64=y' "$1"; then
+	ARCH=powerpc
+    elif grep -q '^CONFIG_S390=y' "$1"; then
+	ARCH=s390
+    elif grep -q '^CONFIG_RISCV=y' "$1"; then
+	ARCH=riscv
+    else
+	ARCH=$(get_srcarch "$(uname -m)")
+    fi
+}
+
+# Reconcile and set SRCARCH, verifying Makefile presence
+function derive_srcarch_from_arch()
+{
+    # Verify consistency between ARCH and SRCARCH if both are set
+    if [ -n "${ARCH:-}" ]; then
+	local expected=$(get_srcarch "$ARCH")
+	if [ -n "${SRCARCH:-}" ] && [ "$SRCARCH" != "$expected" ]; then
+	    fail "Inconsistent ARCH '$ARCH' and SRCARCH '$SRCARCH'" \
+		 "configuration."
+	fi
+    fi
+
+    # Derive SRCARCH and validate that its Makefile exists in the source tree
+    SRCARCH=$(get_srcarch "${SRCARCH:-${ARCH:-}}")
+    local base_src="${KBUILD_SRC:-$KPATH}"
+    if [ ! -f "$base_src/arch/$SRCARCH/Makefile" ]; then
+	fail "$base_src doesn't directly build SRCARCH '$SRCARCH'"
+    fi
+}
+
+# detect_debian_split_headers matches wrapper Makefiles on Debian architectures
+# with split directories. If split, it extracts the common headers directory
+# (e.g., /usr/src/linux-headers-*-common) as $_debian_split_src.
+function detect_debian_split_headers()
+{
+    _debian_split_src=
+    if [ -d "$KPATH/include/linux" ] || [ ! -f "$KPATH/Makefile" ]; then
+	return
+    fi
+
+    # Extract the first matching Debian common headers include directory path
+    local pat='^[[:space:]]*-*include[[:space:]]\{1,\}'
+    pat="${pat}\(.*\/linux-headers-[^[:space:]]*-common\)/Makefile.*$"
+    _debian_split_src=$(sed -n "s|${pat}|\1|p" "$KPATH/Makefile" | head -n 1)
+    [ -n "$_debian_split_src" ] || return
+
+    case "$_debian_split_src" in
+	/*) ;;
+	*)  _debian_split_src="$KPATH/$_debian_split_src" ;;
+    esac
+    if [ -d "$_debian_split_src/include/linux" ]; then
+	KBUILD_SRC="$_debian_split_src"
+    else
+	_debian_split_src=
+    fi
+}
+
 function read_define()
 {
     local variable="$1"
@@ -539,17 +629,42 @@ vmsg "KPATH      := $KPATH"
 #  CONFIG_X86_{32,64}:    Work around ARCH = x86 madness
 #  CONFIG_PTP_1588_CLOCK: PTP clock support
 
+detect_debian_split_headers
+
+# Try to extract CONFIG values from .config without running make.
+# This avoids nested make calls that can deadlock with the parent
+# jobserver on Debian split kernel headers.
+_kconfig=
+for _cfgdir in "$KOUT" "$KPATH" "${KBUILD_SRC:-}"; do
+    [ -n "$_cfgdir" ] || continue
+    if [ -f "$_cfgdir/.config" ]; then
+	_kconfig="$_cfgdir/.config"
+	break
+    fi
+done
+
+if [ -n "$_debian_split_src" ]; then
+    [ -n "$_kconfig" ] || \
+	fail "Debian split kernel headers detected but no .config found" \
+	     "in $KOUT, $KPATH, or $KBUILD_SRC"
+    read_config_variables "$_kconfig"
+    derive_arch_from_config "$_kconfig"
+else
+    eval $(read_make_variables KBUILD_SRC ARCH SRCARCH CONFIG_X86_32 \
+				CONFIG_X86_64 CONFIG_PTP_1588_CLOCK \
+				abs_srctree)
+fi
 [ -n "$ARCH" ] && export ARCH
-eval $(read_make_variables KBUILD_SRC ARCH SRCARCH CONFIG_X86_32 CONFIG_X86_64 CONFIG_PTP_1588_CLOCK abs_srctree)
+# Drop probing temporaries so sourcing this script does not leak them.
+unset _debian_split_src _kconfig _cfgdir
 
 # Define:
 #     KBUILD_SRC:         Was renamed into abs_srctree in linux-5.3
 #     KBUILD_SRC:         If not already set, same as KPATH
-#     SRCARCH:            If not already set, same as ARCH
+#     SRCARCH:            Derived from ARCH (e.g., x86_64/i386 -> x86)
 #     WORDSUFFIX:         Suffix added to some filenames by the i386/amd64 merge
 [ -n "${KBUILD_SRC:-}" ] || KBUILD_SRC=${abs_srctree:-}
 [ -n "${KBUILD_SRC:-}" ] || KBUILD_SRC=$KPATH
-[ -n "${SRCARCH:-}" ] || SRCARCH=$ARCH
 if [ "$ARCH" = "i386" ] || [ "${CONFIG_X86_32:-}" = "y" ]; then
     WORDSUFFIX=_32
 elif [ "$ARCH" = "x86_64" ] || [ "${CONFIG_X86_64:-}" = "y" ]; then
@@ -557,7 +672,9 @@ elif [ "$ARCH" = "x86_64" ] || [ "${CONFIG_X86_64:-}" = "y" ]; then
 else
     WORDSUFFIX=
 fi
-[ -f "$KBUILD_SRC/arch/$SRCARCH/Makefile" ] || fail "$KBUILD_SRC doesn't directly build $SRCARCH"
+
+# Derive or validate SRCARCH from ARCH using unified platform validation.
+derive_srcarch_from_arch
 
 vmsg "KBUILD_SRC := $KBUILD_SRC"
 vmsg "SRCARCH    := $SRCARCH"
@@ -565,6 +682,8 @@ vmsg "WORDSUFFIX := $WORDSUFFIX"
 
 if [ -f "$KPATH/Module.symvers" ] ; then
     KBUILD_MODULE_SYMVERS=$KPATH/Module.symvers
+elif [ -f "$KOUT/Module.symvers" ] ; then
+    KBUILD_MODULE_SYMVERS=$KOUT/Module.symvers
 elif [ -n "${O:-}" -a -f "${O:-}/Module.symvers" ] ; then
     KBUILD_MODULE_SYMVERS="$O/Module.symvers"
 elif [ -f "$PWD/Module.symvers" ] ; then

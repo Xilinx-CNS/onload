@@ -953,6 +953,8 @@ static const struct pci_device_id efx_pci_table[] = {
 	 .class = PCI_CLASS_NETWORK_ETHERNET << 8,
 	 .class_mask =  0xffff00,
 	 .driver_data = (unsigned long)&efx_x4_vf_nic_type},
+	{PCI_DEVICE(PCI_VENDOR_ID_AMD, 0x1190), /* X4ANA */
+	 .driver_data = (unsigned long)&efx_x4ana_nic_type},
 	{0}			/* end of list */
 };
 
@@ -1002,6 +1004,8 @@ static const struct pci_device_id sfc_pci_table[] = {
 	 .class = PCI_CLASS_NETWORK_ETHERNET << 8,
 	 .class_mask =  0xffff00,
 	 .driver_data = (unsigned long) &efx_x4_vf_nic_type},
+	{PCI_DEVICE(PCI_VENDOR_ID_AMD, 0x1190), /* X4ANA */
+	 .driver_data = (unsigned long) &efx_x4ana_nic_type},
 	{0}			/* end of list */
 };
 
@@ -1042,6 +1046,10 @@ void efx_pci_remove_post_io(struct efx_nic *efx,
 	efx_ptp_remove_post_io(efx);
 #endif
 	efx->type->remove_port(efx);
+	/* Devlink must be torn down before MCDI is freed, since devlink
+	 * callbacks issue MCDI commands.
+	 */
+	efx_fini_devlink(efx);
 	nic_remove(efx);
 	efx_remove_common(efx);
 #ifdef CONFIG_DEBUG_FS
@@ -1096,6 +1104,11 @@ int efx_pci_probe_post_io(struct efx_nic *efx,
 	rc = nic_probe(efx);
 	if (rc)
 		return rc;
+
+	/* Devlink callbacks (e.g. info_get) issue MCDI commands, so
+	 * registration must wait until MCDI is fully initialised.
+	 */
+	(void)efx_probe_devlink(efx);
 
 #ifdef EFX_NOT_UPSTREAM
 	if (efx->mcdi->fn_flags &
