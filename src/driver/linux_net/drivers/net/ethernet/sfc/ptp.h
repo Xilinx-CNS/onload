@@ -99,7 +99,7 @@ static inline int efx_ptp_get_ts_config(struct efx_nic *efx, struct ifreq *ifr)
 	return -EOPNOTSUPP;
 }
 static inline int efx_ptp_get_ts_info(struct efx_nic *efx,
-				      struct ethtool_ts_info *ts_info)
+				      struct kernel_ethtool_ts_info *ts_info)
 {
 	return -EOPNOTSUPP;
 }

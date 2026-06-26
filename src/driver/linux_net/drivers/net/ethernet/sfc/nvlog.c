@@ -25,8 +25,8 @@ static int efx_nvlog_read(struct efx_nic *efx,
 	char *ptr;
 	int rc;
 
-	kfree(nvlog_data->nvlog);
-	nvlog_data->nvlog = kmalloc(size, GFP_KERNEL);
+	kvfree(nvlog_data->nvlog);
+	nvlog_data->nvlog = kvzalloc(size, GFP_KERNEL);
 	nvlog_data->nvlog_len = 0;
 	if (!nvlog_data->nvlog)
 		return -ENOMEM;
@@ -193,7 +193,7 @@ static int efx_nvlog_expand_timestamps(struct efx_nic *efx,
 	int rc = 0;
 
 	nvlog_data->nvlog_max_len += nvlog_data->nvlog_len;
-	nvlog_data->nvlog = kmalloc(nvlog_data->nvlog_max_len, GFP_KERNEL);
+	nvlog_data->nvlog = kvzalloc(nvlog_data->nvlog_max_len, GFP_KERNEL);
 	nvlog_data->nvlog_len = 0;
 	if (!nvlog_data->nvlog) {
 		rc = -ENOMEM;
@@ -237,7 +237,7 @@ static int efx_nvlog_expand_timestamps(struct efx_nic *efx,
 	rc = efx_nvlog_copy(nvlog_data, buffer, len);
 
 out:
-	kfree(old_buffer);
+	kvfree(old_buffer);
 	return rc;
 }
 

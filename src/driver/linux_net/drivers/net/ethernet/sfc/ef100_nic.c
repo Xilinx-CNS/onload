@@ -1897,6 +1897,8 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	 */
 	.mem_bar = NULL,
 	.mem_map_size = NULL,
+	.mc_bar = NULL,
+	.mc_sft_status = NULL,
 	.max_dma_mask = DMA_BIT_MASK(ESF_GZ_TX_SEND_ADDR_WIDTH),
 
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER) && !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER)
@@ -2025,6 +2027,8 @@ const struct efx_nic_type ef100_vf_nic_type = {
 
 	.mem_bar = NULL,
 	.mem_map_size = NULL,
+	.mc_bar = NULL,
+	.mc_sft_status = NULL,
 	.max_dma_mask = DMA_BIT_MASK(ESF_GZ_TX_SEND_ADDR_WIDTH),
 #ifdef EFX_NOT_UPSTREAM
 #if IS_MODULE(CONFIG_SFC_DRIVERLINK)

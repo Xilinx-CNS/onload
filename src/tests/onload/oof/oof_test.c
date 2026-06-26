@@ -134,5 +134,20 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "llct_sanity_ll") )
     test_llct_sanity_ll();
 
+  if( all || !strcmp(argv[1], "hidden_socket") )
+    test_hidden_socket();
+
+  if( all || !strcmp(argv[1], "del_sw") )
+    test_del_sw();
+
+  if( all || !strcmp(argv[1], "addr_lifecycle") )
+    test_addr_lifecycle();
+
+  if( all || !strcmp(argv[1], "filter_redirect") )
+    test_filter_redirect();
+
+  if( all || !strcmp(argv[1], "mcast_input_validation") )
+    test_mcast_input_validation();
+
   return 0;
 }

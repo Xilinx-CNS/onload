@@ -2,6 +2,8 @@
 /****************************************************************************
  * Driver for Solarflare network controllers and boards
  * Copyright 2009-2018 Solarflare Communications Inc.
+ * Copyright (C) 2019-2021, Xilinx, Inc.
+ * Copyright (C) 2022-2026, Advanced Micro Devices, Inc.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published
@@ -279,6 +281,8 @@
 #define          MC_CMD_ERR_EIO 0x5
 /* enum: Already exists */
 #define          MC_CMD_ERR_EEXIST 0x6
+/* enum: Argument list too long */
+#define          MC_CMD_ERR_E2BIG 0x7
 /* enum: Try again */
 #define          MC_CMD_ERR_EAGAIN 0xb
 /* enum: Out of memory */
@@ -3456,8 +3460,12 @@
  * what is maximum supported interval, this MCDI can be used to query these.
  */
 #define          MC_CMD_PTP_OP_GET_SYNC_TIMEOUT 0x1d
-/* enum: Enable HW PPS output. */
+/* enum: Enable HW PPS output. Deprecated, use
+ * MC_CMD_PTP_OP_SET_CONNECTOR_FUNCTION instead.
+ */
 #define          MC_CMD_PTP_OP_HW_PPS_OUT_ENABLE 0x1e
+/* enum: Set PTP connector function. */
+#define          MC_CMD_PTP_OP_SET_CONNECTOR_FUNCTION 0x1f
 
 /* MC_CMD_PTP_IN_ENABLE msgrequest */
 #define    MC_CMD_PTP_IN_ENABLE_LEN 16
@@ -3954,7 +3962,9 @@
 /*            MC_CMD_PTP_IN_PERIPH_ID_OFST 4 */
 /*            MC_CMD_PTP_IN_PERIPH_ID_LEN 4 */
 
-/* MC_CMD_PTP_IN_HW_PPS_OUT_ENABLE msgrequest */
+/* MC_CMD_PTP_IN_HW_PPS_OUT_ENABLE msgrequest: Deprecated, use
+ * MC_CMD_PTP_OP_SET_CONNECTOR_FUNCTION instead.
+ */
 #define    MC_CMD_PTP_IN_HW_PPS_OUT_ENABLE_LEN 12
 /*            MC_CMD_PTP_IN_CMD_OFST 0 */
 /*            MC_CMD_PTP_IN_CMD_LEN 4 */
@@ -3970,6 +3980,59 @@
  */
 #define       MC_CMD_PTP_IN_HW_PPS_OUT_ENABLE_CONNECTOR_IDX_OFST 8
 #define       MC_CMD_PTP_IN_HW_PPS_OUT_ENABLE_CONNECTOR_IDX_LEN 4
+
+/* MC_CMD_PTP_IN_SET_CONNECTOR_FUNCTION msgrequest: Set PPS connector(s)
+ * function.
+ *
+ * This sets the PPS connector function, including any possible mux settings.
+ * The setting follows "last one wins" semantics, and if the requested function
+ * is incompatible with a function on another connector then the firmware is
+ * responsible making the necessary adjustments to fulfil the request. If the
+ * requested contains multiple connectors and the combination is not possible
+ * the whole request is rejected and all connectors function are left
+ * unchanged.
+ *
+ * The following MC_CMD_PTP_OUT_GET_ATTRIBUTES fields describe how other
+ * connectors (not included in the request) functions may be adjusted:
+ *
+ * - PPS_DEPENDENT_SECONDARY_CONNECTOR, changing primary connector function may
+ * change secondary connector function
+ *
+ * - PPS_MUTEX_IO, changing any connector function may set other connector
+ * function to PPS_NONE
+ *
+ * Above fields can be combined together, e.g. it is possible to have both
+ * PPS_DEPENDENT_SECONDARY_CONNECTOR and PPS_MUTEX_IO set. It is the firmware's
+ * job to do the correct thing, and the driver can treat the capabilities bits
+ * informational.
+ *
+ * The response includes all connectors function regardless what was requested.
+ * This lets the driver determine if any other connector functions were
+ * modified, and also use empty request to retrieve current state.
+ *
+ * This supersedes MC_CMD_PTP_OP_HW_PPS_OUT_ENABLE.
+ */
+#define    MC_CMD_PTP_IN_SET_CONNECTOR_FUNCTION_LENMIN 4
+#define    MC_CMD_PTP_IN_SET_CONNECTOR_FUNCTION_LENMAX 252
+#define    MC_CMD_PTP_IN_SET_CONNECTOR_FUNCTION_LENMAX_MCDI2 1020
+#define    MC_CMD_PTP_IN_SET_CONNECTOR_FUNCTION_LEN(num) (4+8*(num))
+#define    MC_CMD_PTP_IN_SET_CONNECTOR_FUNCTION_FUNCTION_NUM(len) (((len)-4)/8)
+/*            MC_CMD_PTP_IN_CMD_OFST 0 */
+/*            MC_CMD_PTP_IN_CMD_LEN 4 */
+/* Connector function, see structure PPS_CONNECTOR_FUNCTION. */
+#define       MC_CMD_PTP_IN_SET_CONNECTOR_FUNCTION_FUNCTION_OFST 4
+#define       MC_CMD_PTP_IN_SET_CONNECTOR_FUNCTION_FUNCTION_LEN 8
+#define       MC_CMD_PTP_IN_SET_CONNECTOR_FUNCTION_FUNCTION_LO_OFST 4
+#define       MC_CMD_PTP_IN_SET_CONNECTOR_FUNCTION_FUNCTION_LO_LEN 4
+#define       MC_CMD_PTP_IN_SET_CONNECTOR_FUNCTION_FUNCTION_LO_LBN 32
+#define       MC_CMD_PTP_IN_SET_CONNECTOR_FUNCTION_FUNCTION_LO_WIDTH 32
+#define       MC_CMD_PTP_IN_SET_CONNECTOR_FUNCTION_FUNCTION_HI_OFST 8
+#define       MC_CMD_PTP_IN_SET_CONNECTOR_FUNCTION_FUNCTION_HI_LEN 4
+#define       MC_CMD_PTP_IN_SET_CONNECTOR_FUNCTION_FUNCTION_HI_LBN 64
+#define       MC_CMD_PTP_IN_SET_CONNECTOR_FUNCTION_FUNCTION_HI_WIDTH 32
+#define       MC_CMD_PTP_IN_SET_CONNECTOR_FUNCTION_FUNCTION_MINNUM 0
+#define       MC_CMD_PTP_IN_SET_CONNECTOR_FUNCTION_FUNCTION_MAXNUM 31
+#define       MC_CMD_PTP_IN_SET_CONNECTOR_FUNCTION_FUNCTION_MAXNUM_MCDI2 127
 
 /* MC_CMD_PTP_OUT msgresponse */
 #define    MC_CMD_PTP_OUT_LEN 0
@@ -4425,14 +4488,20 @@
 #define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V3_PPS_SYNTH_LBN 320
 #define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V3_PPS_SYNTH_WIDTH 1
 /* Set when the primary PPS connector on the board is shared between PPS_IN
- * (the default) and PPS_OUT controlled by MC_CMD_PTP_OP_HW_PPS_OUT_ENABLE,
- * with the secondary connector's mode following this configuration as NONE or
- * PPS_IN respectively.
+ * (the default) and PPS_OUT controlled by MC_CMD_PTP_OP_SET_CONNECTOR_FUNCTION
+ * or MC_CMD_PTP_OP_HW_PPS_OUT_ENABLE, with the secondary connector's mode
+ * following this configuration as NONE or PPS_IN respectively.
  */
 #define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V3_PPS_DEPENDENT_SECONDARY_CONNECTOR_LBN 321
 #define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V3_PPS_DEPENDENT_SECONDARY_CONNECTOR_WIDTH 1
-#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V3_RESERVED3_LBN 322
-#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V3_RESERVED3_WIDTH 6
+/* PPS_IN and PPS_OUT are mutually exclusive, and only one function can be
+ * active (set with MC_CMD_PTP_OP_SET_CONNECTOR_FUNCTION) at a time. If this
+ * bit is set, the last set function wins, e.g. if connector 0 function is
+ * PPS_OUT and connector 1 function is set to PPS_IN then connector 0 function
+ * will implicitly be set to NONE.
+ */
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V3_PPS_MUTEX_IO_LBN 322
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V3_PPS_MUTEX_IO_WIDTH 1
 /* Capabilities for each PPS connector. Structure is
  * PPS_CONNECTOR_CAPABILITIES.
  */
@@ -4496,6 +4565,27 @@
 #define       MC_CMD_PTP_OUT_GET_SYNC_TIMEOUT_MAXIMUM_OFST 4
 #define       MC_CMD_PTP_OUT_GET_SYNC_TIMEOUT_MAXIMUM_LEN 4
 
+/* MC_CMD_PTP_OUT_SET_CONNECTOR_FUNCTION msgresponse */
+#define    MC_CMD_PTP_OUT_SET_CONNECTOR_FUNCTION_LENMIN 0
+#define    MC_CMD_PTP_OUT_SET_CONNECTOR_FUNCTION_LENMAX 248
+#define    MC_CMD_PTP_OUT_SET_CONNECTOR_FUNCTION_LENMAX_MCDI2 1016
+#define    MC_CMD_PTP_OUT_SET_CONNECTOR_FUNCTION_LEN(num) (0+8*(num))
+#define    MC_CMD_PTP_OUT_SET_CONNECTOR_FUNCTION_FUNCTION_NUM(len) (((len)-0)/8)
+/* Connector function, see structure PPS_CONNECTOR_FUNCTION. */
+#define       MC_CMD_PTP_OUT_SET_CONNECTOR_FUNCTION_FUNCTION_OFST 0
+#define       MC_CMD_PTP_OUT_SET_CONNECTOR_FUNCTION_FUNCTION_LEN 8
+#define       MC_CMD_PTP_OUT_SET_CONNECTOR_FUNCTION_FUNCTION_LO_OFST 0
+#define       MC_CMD_PTP_OUT_SET_CONNECTOR_FUNCTION_FUNCTION_LO_LEN 4
+#define       MC_CMD_PTP_OUT_SET_CONNECTOR_FUNCTION_FUNCTION_LO_LBN 0
+#define       MC_CMD_PTP_OUT_SET_CONNECTOR_FUNCTION_FUNCTION_LO_WIDTH 32
+#define       MC_CMD_PTP_OUT_SET_CONNECTOR_FUNCTION_FUNCTION_HI_OFST 4
+#define       MC_CMD_PTP_OUT_SET_CONNECTOR_FUNCTION_FUNCTION_HI_LEN 4
+#define       MC_CMD_PTP_OUT_SET_CONNECTOR_FUNCTION_FUNCTION_HI_LBN 32
+#define       MC_CMD_PTP_OUT_SET_CONNECTOR_FUNCTION_FUNCTION_HI_WIDTH 32
+#define       MC_CMD_PTP_OUT_SET_CONNECTOR_FUNCTION_FUNCTION_MINNUM 0
+#define       MC_CMD_PTP_OUT_SET_CONNECTOR_FUNCTION_FUNCTION_MAXNUM 31
+#define       MC_CMD_PTP_OUT_SET_CONNECTOR_FUNCTION_FUNCTION_MAXNUM_MCDI2 127
+
 /* PPS_CONNECTOR_CAPABILITIES structuredef */
 #define    PPS_CONNECTOR_CAPABILITIES_LEN 1
 /* NONE (off) supported. */
@@ -4509,6 +4599,27 @@
 #define       PPS_CONNECTOR_CAPABILITIES_PPS_OUT_WIDTH 1
 #define       PPS_CONNECTOR_CAPABILITIES_RESERVED_LBN 3
 #define       PPS_CONNECTOR_CAPABILITIES_RESERVED_WIDTH 5
+
+/* PPS_CONNECTOR_FUNCTION structuredef: The structure for PPS connector
+ * function state
+ */
+#define    PPS_CONNECTOR_FUNCTION_LEN 8
+/* Connector index */
+#define       PPS_CONNECTOR_FUNCTION_IDX_OFST 0
+#define       PPS_CONNECTOR_FUNCTION_IDX_LEN 4
+#define       PPS_CONNECTOR_FUNCTION_IDX_LBN 0
+#define       PPS_CONNECTOR_FUNCTION_IDX_WIDTH 32
+/* Connector function */
+#define       PPS_CONNECTOR_FUNCTION_FUNCTION_OFST 4
+#define       PPS_CONNECTOR_FUNCTION_FUNCTION_LEN 4
+/* enum: Connector is disabled. */
+#define          PPS_CONNECTOR_FUNCTION_PPS_NONE 0x0
+/* enum: Connector PPS_IN function active. */
+#define          PPS_CONNECTOR_FUNCTION_PPS_IN 0x1
+/* enum: Connector PPS_OUT function active. */
+#define          PPS_CONNECTOR_FUNCTION_PPS_OUT 0x2
+#define       PPS_CONNECTOR_FUNCTION_FUNCTION_LBN 32
+#define       PPS_CONNECTOR_FUNCTION_FUNCTION_WIDTH 32
 
 
 /***********************************/
@@ -23276,7 +23387,7 @@
 #define          MC_CMD_PRIVILEGE_MASK_IN_GRP_ALL_MULTICAST 0x200 /* enum */
 #define          MC_CMD_PRIVILEGE_MASK_IN_GRP_PROMISCUOUS 0x400 /* enum */
 /* enum: Allows to set the TX packets' source MAC address to any arbitrary MAC
- * adress.
+ * address.
  */
 #define          MC_CMD_PRIVILEGE_MASK_IN_GRP_MAC_SPOOFING_TX 0x800
 /* enum: Privilege that allows a Function to change the MAC address configured
@@ -27879,6 +27990,44 @@
 #define       MC_CMD_READ_CONFIGURATION_OUT_DATA_MINNUM 0
 #define       MC_CMD_READ_CONFIGURATION_OUT_DATA_MAXNUM 244
 #define       MC_CMD_READ_CONFIGURATION_OUT_DATA_MAXNUM_MCDI2 1012
+
+
+/***********************************/
+/* MC_CMD_SET_DATAPATH_CXL_MODE
+ * Set the CXL mode used by the low-latency datapath. This is a global setting,
+ * not per-function, and the requested mode may not be supported on the host,
+ * so callers must check the SET_DATAPATH_CXL_MODE_OUT flags to know what it's
+ * actually set to. The mode cannot be changed if any low-latency queues
+ * currently exist on the device or another loaded driver has already set the
+ * mode. Note that merely querying the mode does not prevent another driver
+ * from changing it afterwards, so any driver which relies on the mode being
+ * fixed must set it.
+ */
+#define MC_CMD_SET_DATAPATH_CXL_MODE 0x237
+#undef MC_CMD_0x237_PRIVILEGE_CTG
+
+#define MC_CMD_0x237_PRIVILEGE_CTG SRIOV_CTG_GENERAL
+
+/* MC_CMD_SET_DATAPATH_CXL_MODE_IN msgrequest */
+#define    MC_CMD_SET_DATAPATH_CXL_MODE_IN_LEN 8
+/* new mode to set if UPDATE=1 */
+#define       MC_CMD_SET_DATAPATH_CXL_MODE_IN_REQUESTED_MODE_OFST 0
+#define       MC_CMD_SET_DATAPATH_CXL_MODE_IN_REQUESTED_MODE_LEN 4
+#define        MC_CMD_SET_DATAPATH_CXL_MODE_IN_WANT_CXL_MEM_LL_OFST 0
+#define        MC_CMD_SET_DATAPATH_CXL_MODE_IN_WANT_CXL_MEM_LL_LBN 0
+#define        MC_CMD_SET_DATAPATH_CXL_MODE_IN_WANT_CXL_MEM_LL_WIDTH 1
+#define        MC_CMD_SET_DATAPATH_CXL_MODE_IN_WANT_CXL_CACHE_LL_OFST 0
+#define        MC_CMD_SET_DATAPATH_CXL_MODE_IN_WANT_CXL_CACHE_LL_LBN 1
+#define        MC_CMD_SET_DATAPATH_CXL_MODE_IN_WANT_CXL_CACHE_LL_WIDTH 1
+/* 1 to set new mode, or 0 to just report the existing mode. */
+#define       MC_CMD_SET_DATAPATH_CXL_MODE_IN_UPDATE_OFST 4
+#define       MC_CMD_SET_DATAPATH_CXL_MODE_IN_UPDATE_LEN 4
+
+/* MC_CMD_SET_DATAPATH_CXL_MODE_OUT msgresponse */
+#define    MC_CMD_SET_DATAPATH_CXL_MODE_OUT_LEN 4
+/* Same layout as REQUESTED_MODE. The mode as it is after this MCDI call. */
+#define       MC_CMD_SET_DATAPATH_CXL_MODE_OUT_CURRENT_MODE_OFST 0
+#define       MC_CMD_SET_DATAPATH_CXL_MODE_OUT_CURRENT_MODE_LEN 4
 
 
 #endif /* MCDI_PCOL_H */

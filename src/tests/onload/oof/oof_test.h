@@ -69,5 +69,10 @@ extern int test_namespace_macvlan_move(void);
 extern int test_llct_sanity(void);
 extern int test_llct_sanity_ff(void);
 extern int test_llct_sanity_ll(void);
+extern int test_hidden_socket(void);
+extern int test_del_sw(void);
+extern int test_addr_lifecycle(void);
+extern int test_filter_redirect(void);
+extern int test_mcast_input_validation(void);
 
 #endif /* __OOF_TEST_H__ */

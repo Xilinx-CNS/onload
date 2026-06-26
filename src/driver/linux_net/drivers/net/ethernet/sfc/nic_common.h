@@ -23,6 +23,7 @@ enum {
 	EFX_REV_HUNT_A0 = 4,
 	EFX_REV_EF100 = 5,
 	EFX_REV_X4 = 6,
+	EFX_REV_X4ANA = 7,
 };
 
 static inline int efx_nic_rev(struct efx_nic *efx)

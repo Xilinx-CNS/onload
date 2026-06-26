@@ -92,7 +92,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.3.1.1000"
+#define EFX_DRIVER_VERSION	"6.4.0.1000"
 #endif
 
 #ifdef DEBUG
@@ -1506,7 +1506,9 @@ struct efx_nic {
 	 */
 	struct work_struct schedule_all_channels_work;
 #endif
+	resource_size_t membase_phys_mc;
 	resource_size_t membase_phys;
+	void __iomem *membase_mc;
 	void __iomem *membase;
 
 	unsigned int vi_stride;
@@ -1799,6 +1801,7 @@ struct efx_nic {
 	struct devlink_health_reporter *devlink_reporter_nvcfg_stored;
 #endif
 #endif
+	unsigned int mem_bar_mc;
 	unsigned int mem_bar;
 	u32 reg_base;
 	enum efx_buf_alloc_mode mcdi_buf_mode;
@@ -1975,11 +1978,15 @@ struct ef100_udp_tunnel {
 
 struct mae_mport_desc;
 
+#define EFX_MC_BAR_NA UINT_MAX
+
 /**
  * struct efx_nic_type - Efx device type definition
  * @is_vf: Tells whether the function is a VF or PF
  * @mem_bar: Get the memory BAR
  * @mem_map_size: Get memory BAR mapped size
+ * @mc_bar: Get MC BAR number or EFX_MC_BAR_NA when not present
+ * @mc_sft_status: address of the MC SFT STATUS register
  * @probe: Probe the controller
  * @dimension_resources: Dimension controller resources (buffer table,
  *	and VIs once the available interrupt resources are clear)
@@ -2195,6 +2202,8 @@ struct efx_nic_type {
 	bool is_vf;
 	unsigned int (*mem_bar)(struct efx_nic *efx);
 	unsigned int (*mem_map_size)(struct efx_nic *efx);
+	unsigned int (*mc_bar)(struct efx_nic *efx);
+	unsigned int (*mc_sft_status)(struct efx_nic *efx);
 	int (*probe)(struct efx_nic *efx);
 	int (*dimension_resources)(struct efx_nic *efx);
 	void (*free_resources)(struct efx_nic *efx);
