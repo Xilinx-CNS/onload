@@ -462,6 +462,7 @@ int efxdp_vi_init(ef_vi* vi)
     vi->ops.transmitv_ctpio_fallback =
                                  efxdp_ef_vi_transmitv_ctpio_fallback_not_supp;
   }
+  vi->ops.future_eventq_poll     = efxdp_ef_eventq_poll;
 
   vi->rx_buffer_len = 2048;
   vi->rx_prefix_len = 0;

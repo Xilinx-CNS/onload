@@ -149,5 +149,11 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "mcast_input_validation") )
     test_mcast_input_validation();
 
+  if( all || !strcmp(argv[1], "cluster_compat") )
+    test_cluster_compat();
+
+  if( all || !strcmp(argv[1], "threshold_sharing") )
+    test_threshold_sharing();
+
   return 0;
 }

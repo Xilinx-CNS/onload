@@ -1332,6 +1332,8 @@ typedef struct ef_vi {
     int32_t (*receive_get_filter_id)(struct ef_vi* vi,
                                      const ef_event* rx_event,
                                      const void* rx_packet);
+    /** Poll an event queue to pick up a peeked future event */
+    int (*future_eventq_poll)(struct ef_vi*, ef_event*, int evs_len);
   } ops;  /**< Driver-dependent operations. */
   /* Doxygen comment above is documentation for the ops member of ef_vi */
 

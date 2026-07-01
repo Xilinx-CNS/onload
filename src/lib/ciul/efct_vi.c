@@ -1960,6 +1960,7 @@ static void efct_vi_initialise_ops(ef_vi* vi)
   vi->ops.eventq_poll = efct_ef_eventq_poll;
   vi->ops.receive_poll = efct_ef_receive_poll;
   vi->ops.receive_get_filter_id = efct_ef_vi_receive_get_filter_id;
+  vi->ops.future_eventq_poll = efct_vi_rx_future_poll;
 }
 
 int efct_vi_init(ef_vi* vi)
