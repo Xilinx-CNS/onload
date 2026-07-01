@@ -119,6 +119,9 @@ extern void ooft_hw_filter_expect_remove_all(struct net* ns);
  */
 extern int ooft_default_cplane_init(struct net* ns);
 extern int ooft_cplane_init(struct net* net_ns, enum ooft_nic_type type);
+extern int ooft_cplane_add_nic(struct net* net_ns, enum ooft_nic_type type,
+                               unsigned char mac0[6], unsigned laddr0_be,
+                               unsigned char mac1[6], unsigned laddr1_be);
 
 extern struct ooft_hwport* ooft_alloc_hwport(struct ooft_cplane* cp,
                                              struct net* ns,
