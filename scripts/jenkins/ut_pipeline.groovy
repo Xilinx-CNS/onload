@@ -74,7 +74,10 @@ Map generateBuildTasks(String build_profile=null) {
             def cmd = ["./scripts/build-component", component]
             cmd += defines.collect { k, v -> "${k}=${v}" }
             sh(script: cmd.join(' '))
-            deleteDir()
+            retry(5) {
+              sleep(time: 5, unit: 'SECONDS')
+              deleteDir()
+            }
           }
         }
       }
