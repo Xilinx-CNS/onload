@@ -33,6 +33,7 @@ extern int oof_shared_keep_thresh;
 extern int oof_shared_steal_thresh;
 extern int oof_all_ports_required;
 extern int oof_use_all_local_ip_addresses;
+extern int oof_limit_filter_to_interface_ip;
 
 extern struct oof_manager*
 oof_manager_alloc(unsigned local_addr_max, void* owner_private);
