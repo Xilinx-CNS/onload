@@ -100,31 +100,10 @@ void doTests() {
       }
       stage("Run Tests") {
         utils.parallel([
-<<<<<<< HEAD
-          "cplane unit":  {
-            sh(script: "$path make -C build/gnu_x86_64/tests/onload/cplane_unit all")
-            sh(script: "$path make -C build/gnu_x86_64/tests/onload/cplane_unit test")
-          },
-          "OOF unit": {
-            // OOF is the only one that actually requires a separate "make all"
-            // step, but this has been copied in other places for consistency.
-            sh(script: "$path make -C build/gnu_x86_64/tests/onload/oof all")
-            sh(script: "$path make -C build/gnu_x86_64/tests/onload/oof tests")
-          },
-          "ORM unit": {
-            sh(script: "$path make -C build/gnu_x86_64/tests/onload/onload_remote_monitor/internal_tests all")
-            sh(script: "$path make -C build/gnu_x86_64/tests/onload/onload_remote_monitor/internal_tests test")
-          },
-          "cplane system": {
-            sh(script: "$path make -C build/gnu_x86_64/tests/onload/cplane_sysunit all")
-            sh(script: "$path make -C build/gnu_x86_64/tests/onload/cplane_sysunit test")
-          }
-=======
           "cplane unit":   testTask(path, 'cplane_unit', 'test'),
           "OOF unit":      testTask(path, 'oof', 'tests'),
           "ORM unit":      testTask(path, 'onload_remote_monitor/internal_tests', 'test'),
           "cplane system": testTask(path, 'cplane_sysunit', 'test')
->>>>>>> b51e522b5c (ON-17381: ut_pipeline enable parallelism and modern groovy)
         ])
       }
     }
