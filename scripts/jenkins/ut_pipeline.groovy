@@ -148,7 +148,7 @@ void doUnitTestsPipeline() {
   String[] build_profiles
 
   nm.slack_notify {
-    node('unit-test-onload9') {
+    node('unit-test-master') {
       stage('Checkout') {
         def scmVars = scmmanager.cloneGit(scm)
         long_revision = scmVars.GIT_COMMIT
