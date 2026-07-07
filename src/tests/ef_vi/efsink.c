@@ -719,6 +719,11 @@ int main(int argc, char* argv[])
          cfg_max_fill, ef_vi_receive_capacity(&res->vi));
     exit(1);
   }
+  if( cfg_max_fill > ef_eventq_capacity(&res->vi) ) {
+    LOGE("ERROR: max fill (%d) is bigger than evq capacity (%d)\n",
+         cfg_max_fill, ef_eventq_capacity(&res->vi));
+    exit(1);
+  }
 
   LOGI("rx_event_type: %s\n",
        use_rx_ref ? "EF_EVENT_TYPE_RX_REF" :
