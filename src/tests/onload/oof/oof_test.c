@@ -215,5 +215,8 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "mixed_unicast") )
     test_mixed_unicast();
 
+  if( all || !strcmp(argv[1], "mixed_multicast") )
+    test_mixed_multicast();
+
   return 0;
 }
