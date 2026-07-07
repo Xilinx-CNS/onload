@@ -205,7 +205,8 @@ HARNESS_TIME_OUT=240
 test: $(TARGETS)
 	sudo /usr/bin/timeout $(HARNESS_TIME_OUT) \
 	  env $(UNIT_TEST_ENV_VARS) \
-	  python3 -B $(shell which py.test) -p no:cacheprovider \
+	  python3 -B $(shell which py.test) -p no:cacheprovider --rootdir=. \
+	    -c /dev/null \
 	    $(PYTEST_SELECT_OPT) $(UNIT_TEST_REDIRECT); \
 	rc=$$?; \
 	sudo pkill -s 0 shim_cp_server || true; \
