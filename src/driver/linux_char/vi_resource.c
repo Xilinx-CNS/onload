@@ -151,6 +151,10 @@ vi_resource_alloc(struct efrm_vi_attr *attr,
 
   /* Size EVQ sensibly based on RX and TX Q sizes */
   if (evq_virs == NULL && evq_capacity < 0) {
+    /* Limit the size to the largest size that is both supported by the NIC
+     * and representable by `int`. */
+    int evq_max = 1 << ci_log2_le(nic->q_sizes[EFHW_EVQ] & INT_MAX);
+
     if (vi_flags & EFHW_VI_RX_PACKED_STREAM) {
       evq_capacity = 32 * 1024;
     }
@@ -173,6 +177,8 @@ vi_resource_alloc(struct efrm_vi_attr *attr,
     }
     if (evq_capacity == 0)
       evq_capacity = -1;
+    if (evq_capacity > evq_max)
+      evq_capacity = evq_max;
   }
 
   /* If the user requested a shared EVQ, but we don't support this, then exit
