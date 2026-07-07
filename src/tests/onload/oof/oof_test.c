@@ -218,5 +218,11 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "mixed_multicast") )
     test_mixed_multicast();
 
+  if( all || !strcmp(argv[1], "mixed_filter_redirect") )
+    test_mixed_filter_redirect();
+
+  if( all || !strcmp(argv[1], "mixed_filter_redirect_ff") )
+    test_mixed_filter_redirect_ff();
+
   return 0;
 }

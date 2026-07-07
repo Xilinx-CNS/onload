@@ -25,6 +25,7 @@ TEST_SRCS := tests/sanity.c tests/multicast_sanity.c tests/namespace_sanity.c \
 	tests/socket_replace.c tests/tproxy_global.c \
 	tests/tproxy_sanity.c tests/nat_table.c \
 	tests/mixed_unicast.c tests/mixed_multicast.c \
+	tests/mixed_filter_redirect.c tests/mixed_filter_redirect_ff.c \
 	tests/hw_filter_errors.c tests/llct_hw_fallback.c \
 	tests/mcast_filter_transfer.c tests/cluster_multi.c
 HDRS := cplane.h oof_impl.h stack_interface.h driverlink_interface.h  \
@@ -37,7 +38,7 @@ OBJS += $(patsubst %,%.o,$(TEST_SRCS))
 
 # Keep fix-dependent tests available for manual execution while their
 # corresponding production fixes are pending.
-DEFAULT_TEST_SRCS := $(filter-out tests/tproxy_sanity.c tests/hw_filter_errors.c,$(TEST_SRCS))
+DEFAULT_TEST_SRCS := $(filter-out tests/tproxy_sanity.c tests/hw_filter_errors.c tests/mixed_filter_redirect_ff.c,$(TEST_SRCS))
 TESTS := $(patsubst tests/%.c,"./oof_test %",$(DEFAULT_TEST_SRCS))
 TESTS += "./oof_test tproxy_global_refcount"
 TESTS += "./oof_test nat_socket"
