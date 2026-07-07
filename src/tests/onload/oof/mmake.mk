@@ -26,6 +26,7 @@ TEST_SRCS := tests/sanity.c tests/multicast_sanity.c tests/namespace_sanity.c \
 	tests/tproxy_sanity.c tests/nat_table.c \
 	tests/mixed_unicast.c tests/mixed_multicast.c \
 	tests/mixed_filter_redirect.c tests/mixed_filter_redirect_ff.c \
+	tests/mixed_threshold_sharing.c \
 	tests/hw_filter_errors.c tests/llct_hw_fallback.c \
 	tests/mcast_filter_transfer.c tests/cluster_multi.c
 HDRS := cplane.h oof_impl.h stack_interface.h driverlink_interface.h  \

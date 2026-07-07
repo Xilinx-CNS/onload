@@ -224,5 +224,8 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "mixed_filter_redirect_ff") )
     test_mixed_filter_redirect_ff();
 
+  if( all || !strcmp(argv[1], "mixed_threshold_sharing") )
+    test_mixed_threshold_sharing();
+
   return 0;
 }

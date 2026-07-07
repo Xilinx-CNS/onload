@@ -99,5 +99,6 @@ extern int test_mixed_unicast(void);
 extern int test_mixed_multicast(void);
 extern int test_mixed_filter_redirect(void);
 extern int test_mixed_filter_redirect_ff(void);
+extern int test_mixed_threshold_sharing(void);
 
 #endif /* __OOF_TEST_H__ */
