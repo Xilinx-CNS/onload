@@ -212,5 +212,8 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "cluster_multi") )
     test_cluster_multi();
 
+  if( all || !strcmp(argv[1], "mixed_unicast") )
+    test_mixed_unicast();
+
   return 0;
 }
