@@ -371,7 +371,8 @@ static int ef10_probe(struct auxiliary_device *auxdev,
     goto fail3;
   }
 
-  efrm_nic_add_sysfs(net_dev, &auxdev->dev);
+  efrm_nic_add_sysfs(net_dev, &auxdev->dev,
+		     EFRM_NIC_SYSFS_ENABLE | EFRM_NIC_SYSFS_CPU2RXQ);
 
   nic = &lnic->efrm_nic.efhw_nic;
   nic->mtu = net_dev->mtu + ETH_HLEN; /* ? + ETH_VLAN_HLEN */

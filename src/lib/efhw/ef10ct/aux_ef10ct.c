@@ -500,6 +500,8 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
   if( rc < 0 )
     goto fail4;
 
+  efrm_nic_add_sysfs(net_dev, &auxdev->dev, EFRM_NIC_SYSFS_ENABLE);
+
   /* Setting the nic here marks the device as ready for use. */
   ef10ct->nic = nic;
 
@@ -551,6 +553,7 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
   if( !nic )
     return;
 
+  efrm_nic_del_sysfs(&auxdev->dev);
   efhw_fini_debugfs_ef10ct(nic);
 
   lnic = linux_efhw_nic(nic);

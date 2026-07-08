@@ -263,29 +263,58 @@ static ssize_t cpu2rxq_show(struct device *dev,
 }
 
 
+/* sysfs device attributes that may be exposed, depending on architecture
+ * If adding more attributes, increment EFRM_NIC_MAX_SYSFS_ATTRS and
+ * update enum efrm_nic_sysfs_attr_flags */
 static DEVICE_ATTR_RW(enable);
 static DEVICE_ATTR_RW(cpu2rxq);
 
-static struct attribute *sfc_resource_attrs[] = {
-	&dev_attr_enable.attr,
-	&dev_attr_cpu2rxq.attr,
-	NULL,
-};
-static const struct attribute_group sfc_resource_group = {
-	.name = "sfc_resource",
-	.attrs = sfc_resource_attrs,
-};
+/* Maximum number of sysfs attributes we might expose */
+#define EFRM_NIC_MAX_SYSFS_ATTRS 2
+#define EFRM_NIC_SYSFS_GROUP_NAME "sfc_resource"
 
-void efrm_nic_add_sysfs(const struct net_device* net_dev, struct device *dev)
+void efrm_nic_add_sysfs(const struct net_device* net_dev, struct device *dev,
+			unsigned int attr_flags)
 {
-	int rc = sysfs_create_group(&dev->kobj, &sfc_resource_group);
+	struct attribute *attrs[EFRM_NIC_MAX_SYSFS_ATTRS + 1] = { NULL };
+	struct attribute_group attr_group = {
+		.name = EFRM_NIC_SYSFS_GROUP_NAME,
+		.attrs = attrs,
+	};
+	int attrs_i = 0;
+	int rc;
+
+	if (attr_flags & EFRM_NIC_SYSFS_ENABLE)
+		attrs[attrs_i++] = &dev_attr_enable.attr;
+	if (attr_flags & EFRM_NIC_SYSFS_CPU2RXQ)
+		attrs[attrs_i++] = &dev_attr_cpu2rxq.attr;
+
+	EFRM_ASSERT((attrs_i <= sizeof(attrs) / sizeof(attrs[0])) && attrs[attrs_i] == NULL);
+
+	/* We expect callers to include at least one attribute */
+	if (attrs_i == 0)
+		EFRM_WARN("%s: Adding sysfs group `%s` with no attributes intf=%s.",
+			  __func__, EFRM_NIC_SYSFS_GROUP_NAME, net_dev->name);
+	rc = sysfs_create_group(&dev->kobj, &attr_group);
 	if (!rc)
 		return;
-	EFRM_WARN("%s: Sysfs group `sfc_resource` creation failed intf=%s, rc=%d.",
-		  __func__, net_dev->name, rc);
+	EFRM_WARN("%s: Sysfs group `%s` creation failed intf=%s, rc=%d.",
+		  __func__, EFRM_NIC_SYSFS_GROUP_NAME, net_dev->name, rc);
 }
 
 void efrm_nic_del_sysfs(struct device *dev)
 {
+	/* Build the full attribute list for removal. We include all possible
+	 * attributes; the kernel handles removing only what exists. */
+	static struct attribute *attrs[] = {
+		&dev_attr_enable.attr,
+		&dev_attr_cpu2rxq.attr,
+		NULL,
+	};
+	static const struct attribute_group sfc_resource_group = {
+		.name = EFRM_NIC_SYSFS_GROUP_NAME,
+		.attrs = attrs,
+	};
+	EFRM_ASSERT((sizeof(attrs) / sizeof(attrs[0])) == (EFRM_NIC_MAX_SYSFS_ATTRS + 1));
 	sysfs_remove_group(&dev->kobj, &sfc_resource_group);
 }
