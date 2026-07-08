@@ -1189,17 +1189,19 @@ controller_config_socket_lock_create(shrub_controller_config *config)
   }
 
   if ( fcntl(fd, F_SETLK, &file_lock) < 0 ) {
-    if( errno == EACCES || errno == EAGAIN ) {
-      ci_log("Error: shrub_controller %s is already locked. "
-             "Is another shrub controller running?",
-             config->config_socket_lock);
-    } else {
-      ci_log("Error: shrub_controller failed to acquire config "
-             "socket lock %s: %s", config->config_socket_lock,
-             strerror(errno));
-    }
+    rc = errno;
     close(fd);
-    return -errno;
+    if( rc == EACCES || rc == EAGAIN || rc == EWOULDBLOCK ) {
+      if( config->debug_mode )
+        ci_log("A shrub controller is already serving under id %d, "
+               "we are not needed, so exiting.",
+               config->controller_id);
+      return -EWOULDBLOCK;
+    }
+    ci_log("Error: shrub_controller failed to acquire config "
+           "socket lock %s: %s", config->config_socket_lock,
+           strerror(rc));
+    return -rc;
   }
 
   /* Truncating the file does not set the file offset so if the file
@@ -1398,6 +1400,10 @@ fail_create_interrupt_state:
 fail_create_config_socket:
   controller_config_socket_lock_destroy(&config);
 fail_socket_lock_create:
+  /* If the lock is already taken, this is not an error because controllers
+   * are started eagerly; we simply aren't needed! */
+  if( rc == -EWOULDBLOCK )
+    rc = 0;
   rmdir(config.controller_dir);
 
   return rc;
