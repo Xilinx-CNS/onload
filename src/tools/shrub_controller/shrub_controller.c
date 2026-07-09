@@ -1398,7 +1398,7 @@ fail_socket_lock_create:
    * are started eagerly; we simply aren't needed! */
   if( rc == -EWOULDBLOCK )
     rc = 0;
-  rmdir(config.controller_dir);
+  /* Do not delete the runtime directory: this is racy and unnecessary */
 fail_early_init:
   free(cfg_opts);
 
