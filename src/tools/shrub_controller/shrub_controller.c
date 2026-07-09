@@ -1160,10 +1160,10 @@ controller_open_dir(shrub_controller_config *config)
   if( rc == -1 ) {
     rc = errno;
     if( rc == EWOULDBLOCK ) {
-      ci_log("Error: could not take shrub_controller lock at %s. "
-             "Another shrub controller with id %d is already running",
-             config->controller_dir,
-             config->controller_id);
+      if( config->debug_mode )
+        ci_log("Debug: A shrub controller is already serving under id %d, "
+               "we are not needed, so exiting.",
+               config->controller_id);
     } else {
       ci_log("Error: taking shrub_controller lock at %s: %s",
              config->controller_dir, strerror(rc));
@@ -1394,6 +1394,10 @@ fail_create_interrupt_state:
 fail_create_config_socket:
   close(config.dir_fd);
 fail_socket_lock_create:
+  /* If the lock is already taken, this is not an error because controllers
+   * are started eagerly; we simply aren't needed! */
+  if( rc == -EWOULDBLOCK )
+    rc = 0;
   rmdir(config.controller_dir);
 fail_early_init:
   free(cfg_opts);
