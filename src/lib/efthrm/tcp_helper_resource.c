@@ -1870,13 +1870,13 @@ static int initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
     if( rc < 0 )
       return rc;
   }
-  if( vi->efct_rxqs.active_qs ) {
+  if( (vm->rxq_size > 0) && vi->efct_rxqs.active_qs ) {
     rc = 0;
-    if( nic->devtype.arch == EFHW_ARCH_EFCT ) {
+    if( nic->flags & NIC_FLAG_RX_KERNEL_SHARED ) {
       rc = efct_kbufs_init_internal(vi, vi_rs->efct_shm, NULL);
       vi->efct_rxqs.ops->refresh = tcp_helper_superbuf_config_refresh;
-    } else if( NI_OPTS(ni).multiarch_rx_datapath != EF_MULTIARCH_DATAPATH_FF &&
-               nic->devtype.arch == EFHW_ARCH_EF10CT ) {
+    }
+    else if( nic->flags & NIC_FLAG_RX_SHARED ) {
       rc = efct_ubufs_init_internal(vi);
       vi->efct_rxqs.ops->post = tcp_helper_post_superbuf;
       vi->efct_rxqs.ops->refresh = tcp_helper_superbuf_config_refresh;
@@ -4894,13 +4894,11 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   }
 #endif
 
-  if( NI_OPTS(ni).multiarch_rx_datapath != EF_MULTIARCH_DATAPATH_FF ) {
-    OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-      ci_netif_state_nic_t* nsn = &ni->state->nic[intf_i];
-      nic = efrm_client_get_nic(rs->nic[intf_i].thn_oo_nic->efrm_client);
-      if( nic->flags & NIC_FLAG_LLCT )
-        ci_atomic32_or(&nsn->nic_error_flags, CI_NETIF_NIC_ERROR_AWAITING_EFCT);
-    }
+  OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
+    ci_netif_state_nic_t* nsn = &ni->state->nic[intf_i];
+    nic = efrm_client_get_nic(rs->nic[intf_i].thn_oo_nic->efrm_client);
+    if( (nic->flags & NIC_FLAG_LLCT) && nsn->vi_rxq_size > 0 )
+      ci_atomic32_or(&nsn->nic_error_flags, CI_NETIF_NIC_ERROR_AWAITING_EFCT);
   }
 
   /* We're about to expose this stack to other people.  so we should be
