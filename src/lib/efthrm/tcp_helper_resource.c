@@ -1405,8 +1405,11 @@ static int allocate_pd(ci_netif* ni, struct vi_allocate_info* info,
     info->vi_set = NULL;
   }
 
-  if( info->cluster == NULL || !(nic->flags & NIC_FLAG_SHARED_PD) ||
-      (nic->flags & NIC_FLAG_LLCT) ) {
+  /* Cluster construction allocates VI sets only for RSS-capable NICs. */
+  ci_assert(!info->vi_set || (nic->flags & NIC_FLAG_RX_RSS));
+
+  if( info->vi_set == NULL || !(nic->flags & NIC_FLAG_SHARED_PD) ||
+      !(nic->flags & NIC_FLAG_RX_RSS) ) {
     rc = efrm_pd_alloc(&info->pd, info->client,
         ((info->ef_vi_flags & EF_VI_RX_PHYS_ADDR) ?
             EFRM_PD_ALLOC_FLAG_PHYS_ADDR_MODE : 0) |
@@ -2013,9 +2016,10 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     if( rc < 0 )
       goto error_out;
 
-    /* Cannot configure RSS with the LLCT RX datapath. */
-    if( thc && oo_check_nic_llct(&oo_nics[hwport]) &&
-        NI_OPTS(ni).multiarch_rx_datapath != EF_MULTIARCH_DATAPATH_FF) {
+    /* Clustered RX requires a NIC that supports RSS and has a VI set. */
+    if( thc && want_rxq &&
+        (!(nic->flags & NIC_FLAG_RX_RSS) ||
+         thc->thc_vi_set[hwport] == NULL) ) {
       rc = -EOPNOTSUPP;
       goto error_out;
     }
