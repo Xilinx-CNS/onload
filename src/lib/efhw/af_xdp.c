@@ -914,6 +914,20 @@ unlock_out:
 	return rc;
 }
 
+static bool af_xdp_rss_context_supported(struct efhw_nic *nic)
+{
+	const struct ethtool_ops *ops = nic->net_dev->ethtool_ops;
+
+	if( nic->rss_indir_size == 0 || nic->rss_key_size != EFRM_RSS_KEY_LEN )
+		return false;
+
+#ifndef EFRM_HAVE_SET_RXFH_CONTEXT
+	return ops->set_rxfh != NULL;
+#else
+	return ops->set_rxfh_context != NULL;
+#endif
+}
+
 static void
 af_xdp_nic_tweak_hardware(struct efhw_nic *nic)
 {
@@ -1020,6 +1034,8 @@ has_map_and_bound_prog:
 #endif
 
 	rc = af_xdp_rss_get_support(nic);
+	if( rc == 0 && af_xdp_rss_context_supported(nic) )
+		nic->flags |= NIC_FLAG_RX_RSS;
 	return rc;
 
 fail:
