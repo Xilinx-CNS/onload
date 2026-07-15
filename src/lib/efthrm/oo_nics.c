@@ -68,14 +68,12 @@ static int oo_get_listed_hwports(tcp_helper_resource_t* trs, const char* list,
         listed_hwports |= hwport_mask;
       }
       else {
-        ci_log("%s: WARNING interface %s constains %s, which "
-               " is not identified as Solarflare interface",
-               __FUNCTION__, tag, token);
+        ci_log("%s: WARNING %s contains %s, which is not identified as a "
+               "Solarflare interface", __FUNCTION__, tag, token);
       }
     }
     else {
-      ci_log("%s: WARNING interface %s contains %s, which "
-             "is not known an interface",
+      ci_log("%s: WARNING %s contains %s, which is not known as an interface",
              __FUNCTION__, tag, token);
     }
   }
@@ -160,7 +158,7 @@ static cicp_hwport_mask_t oo_get_ff_hwports(cicp_hwport_mask_t hwport_mask,
   return ff_hwports;
 }
 
-/* This function is used to retrive the list of currently active SF
+/* This function is used to retrieve the list of currently active SF
  * interfaces.
  *
  * If ifindices_len > 0, the function is not implemented and returns
