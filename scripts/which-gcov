@@ -1,0 +1,15 @@
+#!/bin/sh
+# SPDX-License-Identifier: BSD-2-Clause
+# SPDX-FileCopyrightText: (c) Copyright 2026 Advanced Micro Devices, Inc.
+#
+# Determine which gcov to use based on the selected compiler.
+# Used by the pipeline to tell gcovr which gcov to use.
+
+cc="${CC:-cc}"
+
+gcov=$(dirname "$(command -v "$cc")")/gcov
+if [ ! -x "$gcov" ]; then
+  gcov=/usr/bin/gcov
+fi
+
+echo "$gcov"

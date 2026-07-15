@@ -34,7 +34,6 @@ semantic.cache
 Thumbs.db
 .reviewboardrc
 .gdb_history
-Gemfile.lock
 
 .#*
 /build

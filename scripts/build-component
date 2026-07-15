@@ -1,0 +1,79 @@
+#!/bin/sh
+# SPDX-License-Identifier: BSD-2-Clause
+# SPDX-FileCopyrightText: (c) Copyright 2026 Advanced Micro Devices, Inc.
+#
+# Build an Onload component.
+# Usage: build-component <component> [KEY=VALUE ...]
+#
+# Components: kernel_driver, userspace, kernel_driver_no_sfc, efct_driver
+
+set -e
+
+component="${1:-}"
+if [ -z "$component" ]; then
+  echo "Usage: $0 <kernel_driver|userspace|kernel_driver_no_sfc|efct_driver> [KEY=VALUE ...]" >&2
+  exit 2
+fi
+shift
+
+# Apply defines as environment variables
+for arg in "$@"; do
+  case "$arg" in
+    *=*) export "$arg" ;;
+    *)
+      echo "Invalid define (expected KEY=VALUE): $arg" >&2
+      exit 2
+      ;;
+  esac
+done
+
+script_dir=$(cd "$(dirname "$0")" && pwd)
+export PATH="$script_dir:$PATH"
+toppath=$(mmaketool --toppath)
+
+kernel_compiler_setup() {
+  unset CC GCOV
+}
+
+case "$component" in
+  kernel_driver)
+    mmakebuildtree --driver
+    builddir="$toppath/build/$(mmaketool --driverbuild)"
+    kernel_compiler_setup
+    make -C "$builddir"
+    ;;
+
+  userspace)
+    if [ "${COVERAGE:-}" = "1" ]; then
+      export GCOV=1
+    fi
+    mmakebuildtree --gnu
+    builddir="$toppath/build/$(mmaketool --userbuild)"
+    make -C "$builddir"
+    ;;
+
+  kernel_driver_no_sfc)
+    mmakebuildtree --driver
+    builddir="$toppath/build/$(mmaketool --driverbuild)"
+    kernel_compiler_setup
+    export HAVE_SFC=0
+    make -C "$builddir"
+    ;;
+
+  efct_driver)
+    mmakebuildtree --driver
+    builddir="$toppath/build/$(mmaketool --driverbuild)"
+    kernel_compiler_setup
+    if [ -d "$toppath/x3-net" ]; then
+      export X3_NET_PATH="$toppath/x3-net"
+      echo "Using X3 PATH $X3_NET_PATH"
+    fi
+    make -C "$builddir"
+    ;;
+
+  *)
+    echo "Unknown component: $component" >&2
+    echo "Usage: $0 <kernel_driver|userspace|kernel_driver_no_sfc|efct_driver> [KEY=VALUE ...]" >&2
+    exit 1
+    ;;
+esac
