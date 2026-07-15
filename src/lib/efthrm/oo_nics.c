@@ -267,9 +267,9 @@ int oo_get_nics(tcp_helper_resource_t* trs, int ifindices_len)
   ci_assert_impl(multiarch_hwport_mask, tx_hwport_mask != hwport_mask);
 
   /* Cannot end up with more hwports than discovered earlier. */
-  ci_assert_le(tx_hwport_mask, hwport_mask);
-  ci_assert_le(rx_hwport_mask, hwport_mask);
-  ci_assert_le(multiarch_hwport_mask, hwport_mask);
+  ci_assert_nflags(tx_hwport_mask, ~hwport_mask);
+  ci_assert_nflags(rx_hwport_mask, ~hwport_mask);
+  ci_assert_nflags(multiarch_hwport_mask, ~hwport_mask);
 
   /* This includes only hwports for datapaths that are in use.  We can find the
    * full set of hwports for NICs in use later with the multiarch_hwport_mask,
