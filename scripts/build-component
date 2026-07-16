@@ -68,6 +68,11 @@ case "$component" in
       export X3_NET_PATH="$toppath/x3-net"
       echo "Using X3 PATH $X3_NET_PATH"
     fi
+    if [ -d "$toppath/aux-bus" ]; then
+      export AUX_BUS_PATH="$toppath/aux-bus"
+      echo "Using AUX PATH $AUX_BUS_PATH"
+      make -C "$AUX_BUS_PATH"
+    fi
     make -C "$builddir"
     ;;
 

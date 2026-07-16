@@ -63,11 +63,14 @@ Map generateBuildTasks(String build_profile=null) {
       }
 
       tasks[thread_title] = {
-        node('unit-test-master') {
+        node('unit-test-onload-8') {
           ws("workspace/${env.JOB_NAME}/${env.BUILD_NUMBER}/${thread_title}") {
             if (component == 'efct_driver') {
               dir("x3-net") {
                 scmmanager.cloneGit([branch: 'dev'], 'ssh://git@github.com/Xilinx-CNS/x3-net-linux.git')
+              }
+              dir("aux-bus") {
+                scmmanager.cloneGit([branch: 'master'], 'ssh://git@github.com/Xilinx-CNS/cns-auxiliary-bus.git')
               }
             }
             unstash('onload-full')
@@ -94,7 +97,7 @@ Closure testTask(String path, String sub_dir, String target) {
 }
 
 void doTests() {
-  node("unit-test-master") {
+  node("unit-test-onload-8") {
     ws("workspace/${env.JOB_NAME}/${env.BUILD_NUMBER}/unit_tests") {
       def path = "PATH=\"\$PATH:\$PWD/scripts\""
       stage("Prepare test build") {
@@ -148,7 +151,7 @@ void doUnitTestsPipeline() {
   String[] build_profiles
 
   nm.slack_notify {
-    node('unit-test-master') {
+    node('unit-test-onload-8') {
       stage('Checkout') {
         def scmVars = scmmanager.cloneGit(scm)
         long_revision = scmVars.GIT_COMMIT
