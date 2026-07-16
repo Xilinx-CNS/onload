@@ -720,9 +720,8 @@ int main(int argc, char* argv[])
     exit(1);
   }
   if( cfg_max_fill > ef_eventq_capacity(&res->vi) ) {
-    LOGE("ERROR: max fill (%d) is bigger than evq capacity (%d)\n",
+    LOGW("WARNING: max fill (%d) is bigger than evq capacity (%d)\n",
          cfg_max_fill, ef_eventq_capacity(&res->vi));
-    exit(1);
   }
 
   LOGI("rx_event_type: %s\n",
