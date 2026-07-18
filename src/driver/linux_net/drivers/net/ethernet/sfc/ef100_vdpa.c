@@ -146,7 +146,7 @@ int ef100_vdpa_register_mgmtdev(struct efx_nic *efx)
 	u64 features;
 	int rc;
 
-	mgmt_dev = kzalloc(sizeof(*mgmt_dev), GFP_KERNEL);
+	mgmt_dev = kzalloc_obj(*mgmt_dev);
 	if (!mgmt_dev)
 		return -ENOMEM;
 

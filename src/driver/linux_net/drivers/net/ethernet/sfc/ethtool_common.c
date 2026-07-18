@@ -216,16 +216,14 @@ void efx_ethtool_self_test(struct net_device *net_dev,
 	bool already_up;
 	int rc = -ENOMEM;
 
-	efx_tests = kzalloc(sizeof(*efx_tests), GFP_KERNEL);
+	efx_tests = kzalloc_obj(*efx_tests);
 	if (!efx_tests)
 		goto fail;
 
-	efx_tests->eventq_dma = kcalloc(efx_channels(efx),
-					sizeof(*efx_tests->eventq_dma),
-					GFP_KERNEL);
-	efx_tests->eventq_int = kcalloc(efx_channels(efx),
-					sizeof(*efx_tests->eventq_int),
-					GFP_KERNEL);
+	efx_tests->eventq_dma = kzalloc_objs(*efx_tests->eventq_dma,
+					     efx_channels(efx));
+	efx_tests->eventq_int = kzalloc_objs(*efx_tests->eventq_int,
+					     efx_channels(efx));
 
 	if (!efx_tests->eventq_dma || !efx_tests->eventq_int) {
 		goto fail;
@@ -1732,6 +1730,13 @@ int efx_ethtool_set_rxnfc_wrapper(struct net_device *net_dev,
 	return efx_ethtool_set_rxnfc(net_dev, (struct efx_ethtool_rxnfc *)info);
 }
 #endif
+
+u32 efx_ethtool_get_rx_ring_count(struct net_device *net_dev)
+{
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
+
+	return efx->n_rss_channels;
+}
 
 u32 efx_ethtool_get_rxfh_indir_size(struct net_device *net_dev)
 {

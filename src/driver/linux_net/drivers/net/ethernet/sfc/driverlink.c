@@ -132,7 +132,7 @@ static void efx_dl_try_add_device(struct efx_dl_nic *nic,
 		return;
 	}
 
-	efx_handle = kzalloc(sizeof(*efx_handle), GFP_KERNEL);
+	efx_handle = kzalloc_obj(*efx_handle);
 	if (!efx_handle) {
 		rc = -ENOMEM;
 		goto fail;

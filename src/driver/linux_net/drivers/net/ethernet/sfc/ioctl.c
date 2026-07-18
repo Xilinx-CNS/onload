@@ -299,7 +299,7 @@ int efx_private_ioctl(struct efx_nic *efx, u16 cmd,
 		return -EOPNOTSUPP;
 	}
 
-	data = kmalloc(sizeof(*data), GFP_KERNEL);
+	data = kmalloc_obj(*data);
 	if (!data)
 		return -ENOMEM;
 

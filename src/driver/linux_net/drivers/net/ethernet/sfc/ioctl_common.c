@@ -154,7 +154,7 @@ static int efx_ioctl_do_mcdi(struct efx_nic *efx,
 	efx_dword_t *outbuf = NULL;
 	int rc;
 
-	req = kmalloc(sizeof(*req), GFP_KERNEL);
+	req = kmalloc_obj(*req);
 	if (!req)
 		return -ENOMEM;
 
@@ -326,8 +326,8 @@ int efx_ioctl_rxnfc(struct efx_nic *efx, void __user *useraddr)
 			/* No more than 1 MB of rule indices - way
 			 * more than we could possibly have! */
 			if (info.rule_cnt <= (1 << 18))
-				rule_buf = kcalloc(info.rule_cnt, sizeof(u32),
-						   GFP_USER);
+				rule_buf = kzalloc_objs(u32, info.rule_cnt,
+							GFP_USER);
 			if (!rule_buf)
 				return -ENOMEM;
 		}
@@ -465,7 +465,7 @@ int efx_private_ioctl_common(struct efx_nic *efx, u16 cmd,
 		return -EOPNOTSUPP;
 	}
 
-	data = kmalloc(sizeof(*data), GFP_KERNEL);
+	data = kmalloc_obj(*data);
 	if (!data)
 		return -ENOMEM;
 

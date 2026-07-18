@@ -179,8 +179,8 @@ static void efx_init_rx_recycle_ring(struct efx_rx_queue *rx_queue)
 
 	page_ring_size = roundup_pow_of_two(bufs_in_recycle_ring /
 					    efx->rx_bufs_per_page);
-	rx_queue->page_ring = kcalloc(page_ring_size,
-				      sizeof(*rx_queue->page_ring), GFP_KERNEL);
+	rx_queue->page_ring = kzalloc_objs(*rx_queue->page_ring,
+					   page_ring_size);
 	if (!rx_queue->page_ring)
 		rx_queue->page_ptr_mask = 0;
 	else
@@ -325,8 +325,7 @@ int efx_probe_rx_queue(struct efx_rx_queue *rx_queue)
 		  efx_rx_queue_index(rx_queue), entries, rx_queue->ptr_mask);
 
 	/* Allocate RX buffers */
-	rx_queue->buffer = kcalloc(entries, sizeof(*rx_queue->buffer),
-				   GFP_KERNEL);
+	rx_queue->buffer = kzalloc_objs(*rx_queue->buffer, entries);
 	if (!rx_queue->buffer)
 		return -ENOMEM;
 
@@ -1136,7 +1135,7 @@ struct efx_rss_context *efx_alloc_rss_context_entry(struct efx_nic *efx)
 	}
 
 	/* Create the new entry */
-	new = kzalloc(sizeof(struct efx_rss_context), GFP_KERNEL);
+	new = kzalloc_obj(struct efx_rss_context);
 	if (!new)
 		return NULL;
 	new->context_id = EFX_MCDI_RSS_CONTEXT_INVALID;
@@ -1312,7 +1311,7 @@ struct efx_arfs_rule *efx_rps_hash_add(struct efx_nic *efx,
 			return rule;
 		}
 	}
-	rule = kmalloc(sizeof(*rule), GFP_ATOMIC);
+	rule = kmalloc_obj(*rule, GFP_ATOMIC);
 	*new = true;
 	if (rule) {
 		memcpy(&rule->spec, spec, sizeof(rule->spec));
@@ -1429,7 +1428,7 @@ int efx_filter_ntuple_insert(struct efx_nic *efx, struct efx_filter_spec *spec)
 		return -ENOSPC;
 
 	/* Create the new entry */
-	new = kmalloc(sizeof(*new), GFP_KERNEL);
+	new = kmalloc_obj(*new);
 	if (!new)
 		return -ENOMEM;
 
@@ -1525,9 +1524,8 @@ int efx_init_filters(struct efx_nic *efx)
 
 		efx_for_each_channel(channel, efx) {
 			channel->rps_flow_id =
-				kcalloc(efx->type->max_rx_ip_filters,
-					sizeof(*channel->rps_flow_id),
-					GFP_KERNEL);
+				kzalloc_objs(*channel->rps_flow_id,
+					     efx->type->max_rx_ip_filters);
 			if (!channel->rps_flow_id)
 				success = 0;
 			else

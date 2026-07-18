@@ -392,7 +392,7 @@ int efx_ethtool_flash_device(struct net_device *net_dev,
 #endif
 
 const struct ethtool_ops efx_ethtool_ops = {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_CAP_RSS_CTX_SUPPORTED)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_CAP_RSS_CTX_SUPPORTED)
 	.cap_rss_ctx_supported	= true,
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_LINK_LANES)
@@ -440,6 +440,9 @@ const struct ethtool_ops efx_ethtool_ops = {
 #else
 	.get_rxnfc		= efx_ethtool_get_rxnfc_wrapper,
 	.set_rxnfc		= efx_ethtool_set_rxnfc_wrapper,
+#endif
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_GET_RX_RING_COUNT)
+	.get_rx_ring_count	= efx_ethtool_get_rx_ring_count,
 #endif
 	.get_rxfh_indir_size	= efx_ethtool_get_rxfh_indir_size,
 	.get_rxfh_key_size	= efx_ethtool_get_rxfh_key_size,

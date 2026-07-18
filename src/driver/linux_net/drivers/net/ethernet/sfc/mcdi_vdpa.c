@@ -40,7 +40,7 @@ struct efx_vring_ctx *efx_vdpa_vring_init(struct efx_nic *efx,  u32 vi,
 	struct efx_vring_ctx *vring_ctx;
 	u32 queue_cmd;
 
-	vring_ctx = kzalloc(sizeof(*vring_ctx), GFP_KERNEL);
+	vring_ctx = kzalloc_obj(*vring_ctx);
 	if (!vring_ctx)
 		return ERR_PTR(-ENOMEM);
 	if (vring_type == EF100_VDPA_VQ_TYPE_NET_RXQ) {

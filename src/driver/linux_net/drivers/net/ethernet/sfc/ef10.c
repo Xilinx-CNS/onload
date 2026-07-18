@@ -4695,7 +4695,7 @@ static int efx_ef10_mtd_probe(struct efx_nic *efx)
 	    MCDI_VAR_ARRAY_LEN(outlen, NVRAM_PARTITIONS_OUT_TYPE_ID))
 		return -EIO;
 
-	parts = kcalloc(n_parts_total, sizeof(*parts), GFP_KERNEL);
+	parts = kzalloc_objs(*parts, n_parts_total);
 	if (!parts)
 		return -ENOMEM;
 
@@ -5906,7 +5906,7 @@ static int efx_ef10_probe(struct efx_nic *efx)
 	if (WARN_ON(bar_size == 0))
 		return -EIO;
 
-	nic_data = kzalloc(sizeof(*nic_data), GFP_KERNEL);
+	nic_data = kzalloc_obj(*nic_data);
 	if (!nic_data)
 		return -ENOMEM;
 	efx->nic_data = nic_data;

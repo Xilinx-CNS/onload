@@ -215,7 +215,7 @@ int efx_mcdi_init(struct efx_nic *efx)
 	struct efx_mcdi_iface *mcdi;
 	int rc = -ENOMEM;
 
-	efx->mcdi = kzalloc(sizeof(*efx->mcdi), GFP_KERNEL);
+	efx->mcdi = kzalloc_obj(*efx->mcdi);
 	if (!efx->mcdi)
 		goto fail;
 
@@ -748,7 +748,7 @@ static void efx_mcdi_ev_cpl(struct efx_nic *efx, unsigned int seqno,
 	struct efx_mcdi_cmd *cmd;
 	LIST_HEAD(cleanup_list);
 	struct efx_mcdi_copy_buffer *copybuf =
-		kmalloc(sizeof(struct efx_mcdi_copy_buffer), GFP_ATOMIC);
+		kmalloc_obj(struct efx_mcdi_copy_buffer, GFP_ATOMIC);
 
 	spin_lock(&mcdi->iface_lock);
 	cmd = mcdi->seq_held_by[seqno];
@@ -897,7 +897,7 @@ static int efx_mcdi_rpc_async_internal(struct efx_nic *efx,
 	}
 
 	copybuf = immediate_poll ?
-		  kmalloc(sizeof(struct efx_mcdi_copy_buffer), GFP_KERNEL) :
+		  kmalloc_obj(struct efx_mcdi_copy_buffer) :
 		  NULL;
 
 	cmd->mcdi = mcdi;
@@ -1079,7 +1079,7 @@ static void efx_mcdi_cmd_work(struct work_struct *context)
 		container_of(context, struct efx_mcdi_cmd, work.work);
 	struct efx_mcdi_iface *mcdi = cmd->mcdi;
 	struct efx_mcdi_copy_buffer *copybuf =
-		kmalloc(sizeof(struct efx_mcdi_copy_buffer), GFP_KERNEL);
+		kmalloc_obj(struct efx_mcdi_copy_buffer);
 	LIST_HEAD(cleanup_list);
 
 	spin_lock_bh(&mcdi->iface_lock);
@@ -1414,11 +1414,11 @@ int efx_mcdi_rpc_client_sync(struct efx_nic *efx, u32 client_id,
 	if (outlen_actual)
 		*outlen_actual = 0;
 
-	wait_data = kmalloc(sizeof(*wait_data), GFP_KERNEL);
+	wait_data = kmalloc_obj(*wait_data);
 	if (!wait_data)
 		return -ENOMEM;
 
-	cmd_item = kmalloc(sizeof(*cmd_item), GFP_KERNEL);
+	cmd_item = kmalloc_obj(*cmd_item);
 	if (!cmd_item) {
 		kfree(wait_data);
 		return -ENOMEM;

@@ -277,13 +277,11 @@ static int efx_dump_alloc_buffer(struct efx_nic *efx)
 		  dump_data->total_pages, mli_depth);
 
 	/* Allocate all MLI pages */
-	dump_data->addr = kcalloc(dump_data->total_pages,
-				  sizeof(void *), GFP_KERNEL);
+	dump_data->addr = kzalloc_objs(void *, dump_data->total_pages);
 	if (!dump_data->addr) {
 		return -ENOMEM;
 	}
-	dump_data->dma_addr = kcalloc(dump_data->total_pages,
-				      sizeof(dma_addr_t), GFP_KERNEL);
+	dump_data->dma_addr = kzalloc_objs(dma_addr_t, dump_data->total_pages);
 	if (!dump_data->dma_addr) {
 		efx_dump_free_buffer(efx);
 		return -ENOMEM;
@@ -331,7 +329,7 @@ int efx_dump_init(struct efx_nic *efx)
 {
 	struct efx_dump_data *dump_data;
 
-	dump_data = kzalloc(sizeof(*dump_data), GFP_KERNEL);
+	dump_data = kzalloc_obj(*dump_data);
 	if (!dump_data)
 		return -ENOMEM;
 	efx->dump_data = dump_data;

@@ -1202,7 +1202,7 @@ struct efx_auxdev_irq *efx_auxbus_irq_alloc(struct efx_auxdev_client *handle)
 	if (!pd)
 		return ERR_PTR(-EINVAL);
 
-	irq = kzalloc(sizeof(*irq), GFP_KERNEL);
+	irq = kzalloc_obj(*irq);
 	if (!irq)
 		return ERR_PTR(-ENOMEM);
 
@@ -1411,7 +1411,7 @@ int efx_auxbus_add_dev(struct efx_client_type_data *client_type)
 	if (client_type->type_data)
 		return -EALREADY;
 
-	sdev = kzalloc(sizeof(*sdev), GFP_KERNEL);
+	sdev = kzalloc_obj(*sdev);
 	if (!sdev)
 		return -ENOMEM;
 	auxdev = &sdev->auxdev.auxdev;

@@ -241,13 +241,13 @@ static int efx_test_eventq_irq(struct efx_nic *efx,
 	int bitmap_size;
 	int rc;
 
-	read_ptr = kcalloc(efx_channels(efx), sizeof(*read_ptr), GFP_KERNEL);
+	read_ptr = kzalloc_objs(*read_ptr, efx_channels(efx));
 
 	bitmap_size = DIV_ROUND_UP(efx_channels(efx), BITS_PER_LONG);
 
-	napi_ran = kcalloc(bitmap_size, sizeof(unsigned long), GFP_KERNEL);
-	dma_pend = kcalloc(bitmap_size, sizeof(unsigned long), GFP_KERNEL);
-	int_pend = kcalloc(bitmap_size, sizeof(unsigned long), GFP_KERNEL);
+	napi_ran = kzalloc_objs(unsigned long, bitmap_size);
+	dma_pend = kzalloc_objs(unsigned long, bitmap_size);
+	int_pend = kzalloc_objs(unsigned long, bitmap_size);
 
 	if (!read_ptr || !napi_ran || !dma_pend || !int_pend) {
 		rc = -ENOMEM;
@@ -621,8 +621,7 @@ efx_test_loopback(struct efx_tx_queue *tx_queue,
 		/* Determine how many packets to send */
 		state->packet_count = efx->txq_entries / 3;
 		state->packet_count = min(1 << (i << 2), state->packet_count);
-		state->skbs = kcalloc(state->packet_count,
-				      sizeof(state->skbs[0]), GFP_KERNEL);
+		state->skbs = kzalloc_objs(state->skbs[0], state->packet_count);
 		if (!state->skbs)
 			return -ENOMEM;
 		state->flush = false;
@@ -708,7 +707,7 @@ static int efx_test_loopbacks(struct efx_nic *efx, struct efx_self_tests *tests,
 	/* Set the port loopback_selftest member. From this point on
 	 * all received packets will be dropped. Mark the state as
 	 * "flushing" so all inflight packets are dropped */
-	state = kzalloc(sizeof(*state), GFP_KERNEL);
+	state = kzalloc_obj(*state);
 	if (state == NULL)
 		return -ENOMEM;
 	BUG_ON(efx->loopback_selftest);

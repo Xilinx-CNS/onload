@@ -219,7 +219,7 @@ static int efx_alloc_irq_vectors(struct efx_probe_data *pd, unsigned int n_irqs)
 	unsigned int i;
 	int rc;
 
-	xentries = kmalloc_array(n_irqs, sizeof(*xentries), GFP_KERNEL);
+	xentries = kmalloc_objs(*xentries, n_irqs);
 	if (!xentries)
 		return -ENOMEM;
 	for (i = 0; i < n_irqs; i++)
@@ -319,7 +319,7 @@ struct efx_msi_context *efx_nic_alloc_irq(struct efx_probe_data *pd,
 	struct xa_limit irq_limit;
 	int rc, irq;
 
-	msi_context = kzalloc(sizeof(*msi_context), GFP_KERNEL);
+	msi_context = kzalloc_obj(*msi_context);
 	if (!msi_context)
 		return ERR_PTR(-ENOMEM);
 

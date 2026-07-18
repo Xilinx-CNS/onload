@@ -170,7 +170,7 @@ static int efx_bind_neigh(struct efx_nic *efx,
 		return -EOPNOTSUPP;
 	}
 
-	neigh = kzalloc(sizeof(*neigh), GFP_USER);
+	neigh = kzalloc_obj(*neigh, GFP_USER);
 	if (!neigh)
 		return -ENOMEM;
 	neigh->net = get_net(net);
@@ -662,7 +662,7 @@ struct efx_tc_encap_action *efx_tc_flower_create_encap_md(
 		EFX_TC_ERR_MSG(efx, extack, "Firmware reports no support for this tunnel type");
 		return ERR_PTR(rc);
 	}
-	encap = kzalloc(sizeof(*encap), GFP_USER);
+	encap = kzalloc_obj(*encap, GFP_USER);
 	if (!encap)
 		return ERR_PTR(-ENOMEM);
 	/* No support yet for Geneve options */
