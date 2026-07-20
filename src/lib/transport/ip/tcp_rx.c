@@ -4670,6 +4670,10 @@ static int ci_tcp_rx_deliver_to_listen(ci_sock_cmn* s, void* opaque_arg)
     rxp->pkt = NULL;
     return 1;
   }
+  else if( s->b.state == CI_TCP_STATE_EXPLICIT_WILD ) {
+    /* Explicit wilds are non-matching */
+    return 0;
+  }
 
   handle_rx_listen(rxp->ni, SOCK_TO_TCP_LISTEN(s), rxp, 0);
   rxp->pkt = NULL;
