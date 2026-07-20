@@ -58,9 +58,19 @@ void test_add_hwport(int hwport, int is_llct, struct net_device* net_dev)
   mock_efhw_nics[hwport].devtype.function = EFHW_FUNCTION_PF;
 
   mock_efrm_clients[hwport].nic = &mock_efhw_nics[hwport];
+  mock_efrm_clients[hwport].accel_allowed = 1;
 
   oo_nics[hwport].efrm_client = &mock_efrm_clients[hwport];
   oo_nics[hwport].oo_nic_flags = OO_NIC_UP;
+}
+
+void test_set_hwport_accel_allowed(int hwport, int allowed)
+{
+  ci_assert_ge(hwport, 0);
+  ci_assert_lt(hwport, CI_CFG_MAX_HWPORTS);
+  ci_assert(oo_nics[hwport].efrm_client != NULL);
+
+  mock_efrm_clients[hwport].accel_allowed = !!allowed;
 }
 
 void test_cleanup(void)
@@ -110,8 +120,7 @@ struct efhw_nic *efrm_client_get_nic(struct efrm_client *client)
 
 int efrm_client_accel_allowed(struct efrm_client *client)
 {
-  (void)client;
-  return 1;
+  return client->accel_allowed;
 }
 
 struct efhw_nic* efhw_nic_find_by_foo(nic_match_func match,

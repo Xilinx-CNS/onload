@@ -200,6 +200,31 @@ static void test_packed_stream_skipped(void)
   test_cleanup();
 }
 
+static void test_module_disabled_nic_skipped(void)
+{
+  tcp_helper_resource_t trs;
+  struct net_device netdev0 = { .ifindex = 1 };
+  struct net_device netdev1 = { .ifindex = 2 };
+  int rc;
+
+  memset(&trs, 0, sizeof(trs));
+  trs.netif.cplane = &mock_cplane;
+  test_set_cplane_hwports(cp_hwport_make_mask(0) | cp_hwport_make_mask(1));
+  test_add_hwport(0, 0, &netdev0);
+  test_add_hwport(1, 0, &netdev1);
+  test_set_hwport_accel_allowed(0, 0);
+
+  rc = oo_get_nics(&trs, -1);
+  ok(rc == 0, "module-disabled NIC: returns success");
+  ok(trs.netif.nic_n == 1, "module-disabled NIC: disabled NIC is skipped");
+  ok(trs.netif.hwport_to_intf_i[0] == -1,
+     "module-disabled NIC: disabled hwport is not mapped");
+  ok(trs.netif.hwport_to_intf_i[1] == 0,
+     "module-disabled NIC: enabled hwport is used");
+
+  test_cleanup();
+}
+
 static void test_unplugged_pf_not_skipped(void)
 {
   tcp_helper_resource_t trs;
@@ -222,7 +247,7 @@ static void test_unplugged_pf_not_skipped(void)
 
 int test_basic(void)
 {
-  plan(29);
+  plan(33);
 
   test_single_nic();
   test_multiple_nics();
@@ -233,6 +258,7 @@ int test_basic(void)
   test_ifindices_too_many();
   test_ifindices_positive();
   test_packed_stream_skipped();
+  test_module_disabled_nic_skipped();
   test_unplugged_pf_not_skipped();
 
   return exit_status();
