@@ -1274,13 +1274,15 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
   handle_str_opt(opts, "EF_ONLOAD_IRQ_CORES", opts->onload_irq_cores,
                  sizeof(opts->onload_irq_cores));
 
-  static const char* const multiarch_tx_opts[] = { "enterprise", "express", 0 };
+  static const char* const multiarch_tx_opts[] = { "enterprise", "express",
+                                                   "auto", 0 };
   opts->multiarch_tx_datapath =
-    parse_enum(opts, "EF_TX_DATAPATH", multiarch_tx_opts, "express");
+    parse_enum(opts, "EF_TX_DATAPATH", multiarch_tx_opts, "auto");
 
-  static const char* const multiarch_rx_opts[] = { "enterprise", "express", "both", 0 };
+  static const char* const multiarch_rx_opts[] = { "enterprise", "express",
+                                                   "auto", "both", 0 };
   opts->multiarch_rx_datapath =
-    parse_enum(opts, "EF_RX_DATAPATH", multiarch_rx_opts, "both");
+    parse_enum(opts, "EF_RX_DATAPATH", multiarch_rx_opts, "auto");
 
   if( (s = getenv("EF_KERNEL_PACKETS_BATCH_SIZE")) )
     opts->kernel_packets_batch_size = atoi(s);
