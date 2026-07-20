@@ -15,6 +15,11 @@ static struct efrm_client mock_efrm_clients[CI_CFG_MAX_HWPORTS];
 /* Cplane mock state */
 static cicp_hwport_mask_t mock_cplane_hwports;
 
+/* Module-level acceleration policy mock state. */
+static cicp_hwport_mask_t mock_module_whitelist;
+static cicp_hwport_mask_t mock_module_blacklist;
+static int mock_module_whitelist_enabled;
+
 /* Interface name table for dev_get_by_name */
 #define MAX_MOCK_INTERFACES 16
 static struct {
@@ -73,6 +78,23 @@ void test_set_hwport_accel_allowed(int hwport, int allowed)
   mock_efrm_clients[hwport].accel_allowed = !!allowed;
 }
 
+void test_set_module_whitelist(cicp_hwport_mask_t hwports)
+{
+  mock_module_whitelist = hwports;
+  mock_module_whitelist_enabled = 1;
+}
+
+void test_clear_module_whitelist(void)
+{
+  mock_module_whitelist = 0;
+  mock_module_whitelist_enabled = 0;
+}
+
+void test_set_module_blacklist(cicp_hwport_mask_t hwports)
+{
+  mock_module_blacklist = hwports;
+}
+
 void test_cleanup(void)
 {
   memset(oo_nics, 0, sizeof(oo_nics));
@@ -81,6 +103,9 @@ void test_cleanup(void)
   memset(mock_interfaces, 0, sizeof(mock_interfaces));
   memset(mock_net_devices, 0, sizeof(mock_net_devices));
   mock_cplane_hwports = 0;
+  mock_module_whitelist = 0;
+  mock_module_blacklist = 0;
+  mock_module_whitelist_enabled = 0;
   mock_interface_count = 0;
 }
 
@@ -120,7 +145,12 @@ struct efhw_nic *efrm_client_get_nic(struct efrm_client *client)
 
 int efrm_client_accel_allowed(struct efrm_client *client)
 {
-  return client->accel_allowed;
+  cicp_hwport_mask_t hwport_mask = cp_hwport_make_mask(client->nic->index);
+
+  return client->accel_allowed &&
+         (!mock_module_whitelist_enabled ||
+          (mock_module_whitelist & hwport_mask) != 0) &&
+         (mock_module_blacklist & hwport_mask) == 0;
 }
 
 struct efhw_nic* efhw_nic_find_by_foo(nic_match_func match,
@@ -174,4 +204,3 @@ struct net_device* dev_get_by_name(struct net* ns, const char* name)
   }
   return NULL;
 }
-

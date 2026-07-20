@@ -19,6 +19,9 @@ extern void test_add_interface(const char* name, int ifindex,
 extern void test_add_hwport(int hwport, int is_llct,
                             struct net_device* net_dev);
 extern void test_set_hwport_accel_allowed(int hwport, int allowed);
+extern void test_set_module_whitelist(cicp_hwport_mask_t hwports);
+extern void test_clear_module_whitelist(void);
+extern void test_set_module_blacklist(cicp_hwport_mask_t hwports);
 extern void test_cleanup(void);
 
 #endif /* __OO_NICS_TEST_STUBS_H__ */
