@@ -97,13 +97,12 @@ static cicp_hwport_mask_t oo_get_llct_hwports(cicp_hwport_mask_t hwport_mask)
   return llct_hwports;
 }
 
-/* Find FF hwports of the multiarch NICs within the given hwports mask.
+/* Identify the FF datapath of a multiarch NIC.
  *
- * This is a bit fiddly at the moment because the regular/plain SFC
- * NICs look similar to the FF datapaths of the multiarch NICs.
- *
- * To distinguish, we use the net_device object which is shared
- * between the FF and LL datapaths of the same multiarch NIC.
+ * This is a bit fiddly because the regular/plain SFC NICs look similar to the
+ * FF datapaths of the multiarch NICs.  To distinguish, we use the net_device
+ * object which is shared between the FF and LL datapaths of the same multiarch
+ * NIC.
  */
 static bool oo_ff_hwport_match(const struct efhw_nic *nic,
                                const void *opaque_data)
@@ -112,10 +111,21 @@ static bool oo_ff_hwport_match(const struct efhw_nic *nic,
   return nic->net_dev == net_dev && ! (nic->flags & NIC_FLAG_LLCT);
 }
 
-static cicp_hwport_mask_t oo_get_ff_hwports(cicp_hwport_mask_t hwport_mask,
-                                            cicp_hwport_mask_t llct_hwports)
+/* Find the genuine multiarch pairs within the given hwport mask.
+ *
+ * A multiarch pair is an FF hwport and an LLCT hwport that share a net_device
+ * and where *both* hwports are present in hwport_mask (i.e. both survived
+ * whitelist/blacklist/suitability filtering).  An LLCT hwport whose FF partner
+ * is absent (never existed, or was filtered out) is not part of a pair here: it
+ * behaves as an LLCT-only interface.  The reverse holds for a lone FF hwport.
+ */
+static void oo_get_multiarch_pairs(cicp_hwport_mask_t hwport_mask,
+                                   cicp_hwport_mask_t llct_hwports,
+                                   cicp_hwport_mask_t* paired_ff_out,
+                                   cicp_hwport_mask_t* paired_llct_out)
 {
-  cicp_hwport_mask_t ff_hwports = 0;
+  cicp_hwport_mask_t paired_ff = 0;
+  cicp_hwport_mask_t paired_llct = 0;
 
   /* Protect against the oo_nics changes. */
   rtnl_lock();
@@ -125,6 +135,7 @@ static cicp_hwport_mask_t oo_get_ff_hwports(cicp_hwport_mask_t hwport_mask,
     ci_hwport_id_t hwport = cp_hwport_mask_first(llct_hwports);
     struct efhw_nic* nic;
     struct oo_nic* onic;
+    cicp_hwport_mask_t ff_mask;
 
     if( ! oo_nics[hwport].efrm_client )
       continue;
@@ -134,11 +145,8 @@ static cicp_hwport_mask_t oo_get_ff_hwports(cicp_hwport_mask_t hwport_mask,
 
     /* Then find the matching FF efhw_nic. */
     nic = efhw_nic_find_by_foo(oo_ff_hwport_match, nic->net_dev);
-    if( ! nic ) {
-      ci_log("%s: WARNING: Unable to find FF port matching LL port id=%d",
-             __FUNCTION__, hwport);
-      continue;
-    }
+    if( ! nic )
+      continue;    /* No FF partner: this is an LLCT-only interface. */
 
     /* Finally, find the matching oo_nic */
     onic = oo_nic_find(nic);
@@ -148,14 +156,70 @@ static cicp_hwport_mask_t oo_get_ff_hwports(cicp_hwport_mask_t hwport_mask,
       continue;
     }
 
-    ff_hwports |= cp_hwport_make_mask(onic - oo_nics);
+    /* Only a genuine pair if the FF partner also survived filtering. */
+    ff_mask = cp_hwport_make_mask(onic - oo_nics);
+    if( ! (ff_mask & hwport_mask) )
+      continue;
+
+    paired_ff |= ff_mask;
+    paired_llct |= cp_hwport_make_mask(hwport);
   }
 
-  /* Mask out possibly previously unselected hwports. */
-  ff_hwports &= hwport_mask;
+  rtnl_unlock();
+
+  *paired_ff_out = paired_ff;
+  *paired_llct_out = paired_llct;
+}
+
+/* Test whether a single hwport is usable by Onload: it must be registered,
+ * pass the module-level acceleration policy (white/blacklist and other
+ * suitability checks), and not be a ghost VI on a VF (bug56347 workaround). */
+static bool oo_hwport_usable(ci_hwport_id_t hwport)
+{
+  struct oo_nic* onic = &oo_nics[hwport];
+
+  if( onic->efrm_client == NULL )
+    return false;
+  /* VIs are created whether the interface is up, down or unplugged.  The latter
+   * results in "ghost VIs".  As a temporary workaround for bug56347, we avoid
+   * creating ghost VIs on VFs. */
+  if( (onic->oo_nic_flags & OO_NIC_UNPLUGGED) && oo_nic_is_vf(onic) )
+    return false;
+  return oo_check_nic_suitable_for_onload(onic);
+}
+
+/* Remove from hwport_mask any hwport that Onload cannot use.  Applying this up
+ * front (alongside the interface white/blacklist) means the datapath selection
+ * below operates only on hwports that will actually be used. */
+static cicp_hwport_mask_t oo_filter_usable_hwports(cicp_hwport_mask_t hwport_mask)
+{
+  cicp_hwport_mask_t usable = 0;
+  cicp_hwport_mask_t m;
+
+  /* Protect against the oo_nics changes. */
+  rtnl_lock();
+
+  for( m = hwport_mask; m != 0; m &= (m - 1) ) {
+    ci_hwport_id_t hwport = cp_hwport_mask_first(m);
+    if( oo_hwport_usable(hwport) )
+      usable |= cp_hwport_make_mask(hwport);
+  }
 
   rtnl_unlock();
-  return ff_hwports;
+  return usable;
+}
+
+/* User-facing name of a datapath selection, as accepted by
+ * EF_TX_DATAPATH/EF_RX_DATAPATH. */
+static const char* oo_datapath_name(ci_uint32 datapath)
+{
+  switch( datapath ) {
+  case EF_MULTIARCH_DATAPATH_FF:   return "enterprise";
+  case EF_MULTIARCH_DATAPATH_LLCT: return "express";
+  case EF_MULTIARCH_DATAPATH_BOTH: return "both";
+  case EF_MULTIARCH_DATAPATH_AUTO: return "auto";
+  default:                         return "unknown";
+  }
 }
 
 /* This function is used to retrieve the list of currently active SF
@@ -180,6 +244,7 @@ int oo_get_nics(tcp_helper_resource_t* trs, int ifindices_len)
   cicp_hwport_mask_t hwport_mask, whitelist_mask, llct_hwports;
   cicp_hwport_mask_t multiarch_hwport_mask = 0;
   cicp_hwport_mask_t tx_hwport_mask, rx_hwport_mask;
+  bool datapath_unsatisfiable = false;
 
   efrm_nic_set_clear(&ni->nic_set);
   trs->netif.nic_n = 0;
@@ -220,60 +285,89 @@ int oo_get_nics(tcp_helper_resource_t* trs, int ifindices_len)
     hwport_mask &= ~whitelist_mask;
   }
 
-  /* Enable all hwports for everything by default. */
-  tx_hwport_mask = hwport_mask;
-  rx_hwport_mask = hwport_mask;
+  /* Drop any hwport that Onload cannot use (module-level black/whitelist and
+   * other suitability checks).  Applying this here, alongside the interface
+   * white/blacklist above, means the datapath selection below sees only the
+   * hwports that will actually be used. */
+  hwport_mask = oo_filter_usable_hwports(hwport_mask);
 
-  /* If there are LLCT hwports (and therefore multiarch NICs), the TX and RX
-   * hwports in this stack might be different.  We need to recompute them
-   * depending on the user-supplied configuration. */
+  /* Classify the surviving hwports.  An hwport is either FF or LLCT.  An
+   * interface (net_device) is one or two hwports: ff-only, llct-only, or a
+   * genuine multiarch pair {FF, LLCT}.  A pair only counts as multiarch if
+   * *both* of its hwports survived the filtering above; if only one half
+   * survives it behaves as a single-datapath interface. */
   llct_hwports = oo_get_llct_hwports(hwport_mask);
-  if( llct_hwports ) {
-    cicp_hwport_mask_t ff_hwports = oo_get_ff_hwports(hwport_mask,
-                                                      llct_hwports);
-    cicp_hwport_mask_t non_multiarch_hwports;
+  {
+    cicp_hwport_mask_t ff_hwports = hwport_mask & ~llct_hwports;
+    cicp_hwport_mask_t paired_ff, paired_llct;
+    cicp_hwport_mask_t singleton_ff, singleton_llct;
+    bool tx_ok = true, rx_ok = true;
 
-    multiarch_hwport_mask = llct_hwports | ff_hwports;
-    non_multiarch_hwports = hwport_mask & ~multiarch_hwport_mask;
+    oo_get_multiarch_pairs(hwport_mask, llct_hwports, &paired_ff, &paired_llct);
+    multiarch_hwport_mask = paired_ff | paired_llct;
 
-    /* Recompute TX hwports. */
-    if( NI_OPTS(ni).multiarch_tx_datapath == EF_MULTIARCH_DATAPATH_FF )
-      tx_hwport_mask = non_multiarch_hwports | ff_hwports;
-    else
-      tx_hwport_mask = non_multiarch_hwports | llct_hwports;
+    /* Single-datapath interfaces: ff-only / llct-only, plus any pair reduced to
+     * one surviving hwport.  These cannot serve the other datapath. */
+    singleton_ff = ff_hwports & ~paired_ff;
+    singleton_llct = llct_hwports & ~paired_llct;
 
-    /* Recompute RX hwports. */
-    switch( NI_OPTS(ni).multiarch_rx_datapath) {
+    /* TX selection.  A present interface must be able to serve the requested
+     * non-auto datapath, else we fail (tx_ok = false).  Multiarch pairs can
+     * serve either; auto prefers LLCT and falls back to FF. */
+    switch( NI_OPTS(ni).multiarch_tx_datapath ) {
     case EF_MULTIARCH_DATAPATH_FF:
-      rx_hwport_mask = non_multiarch_hwports | ff_hwports;
+      tx_hwport_mask = ff_hwports;
+      tx_ok = (singleton_llct == 0);
       break;
     case EF_MULTIARCH_DATAPATH_LLCT:
-      rx_hwport_mask = non_multiarch_hwports | llct_hwports;
+      tx_hwport_mask = llct_hwports;
+      tx_ok = (singleton_ff == 0);
       break;
-    default:
-      rx_hwport_mask = non_multiarch_hwports | ff_hwports | llct_hwports;
+    default: /* auto: prefer LLCT on pairs, singletons use whatever they have */
+      tx_hwport_mask = llct_hwports | singleton_ff;
       break;
     }
+
+    /* RX selection, as for TX but with the additional "both" option, which
+     * requires an interface to provide both datapaths (i.e. be a pair). */
+    switch( NI_OPTS(ni).multiarch_rx_datapath ) {
+    case EF_MULTIARCH_DATAPATH_FF:
+      rx_hwport_mask = ff_hwports;
+      rx_ok = (singleton_llct == 0);
+      break;
+    case EF_MULTIARCH_DATAPATH_LLCT:
+      rx_hwport_mask = llct_hwports;
+      rx_ok = (singleton_ff == 0);
+      break;
+    case EF_MULTIARCH_DATAPATH_BOTH:
+      rx_hwport_mask = multiarch_hwport_mask;
+      rx_ok = (singleton_ff == 0 && singleton_llct == 0);
+      break;
+    default: /* auto: pairs use both, singletons use whatever they have */
+      rx_hwport_mask = hwport_mask;
+      break;
+    }
+
+    /* A requested datapath that a present interface cannot serve means we cannot
+     * honour the configuration.  An empty selection with no such conflict simply
+     * means there are no interfaces, which is reported separately below. */
+    if( ! tx_ok || ! rx_ok )
+      datapath_unsatisfiable = true;
   }
 
   /* There are no multiarch hwports if there are no LLCT hwports. */
   ci_assert_impl(!llct_hwports, !multiarch_hwport_mask);
-
-  /* There is no fine-grained hwport control without multiarch NICs. */
-  ci_assert_impl(!multiarch_hwport_mask, (tx_hwport_mask == hwport_mask) &&
-                                         (rx_hwport_mask == hwport_mask));
-
-  /* The user cannot select all datapaths for TX in multiarch NICs. */
-  ci_assert_impl(multiarch_hwport_mask, tx_hwport_mask != hwport_mask);
 
   /* Cannot end up with more hwports than discovered earlier. */
   ci_assert_nflags(tx_hwport_mask, ~hwport_mask);
   ci_assert_nflags(rx_hwport_mask, ~hwport_mask);
   ci_assert_nflags(multiarch_hwport_mask, ~hwport_mask);
 
-  /* This includes only hwports for datapaths that are in use.  We can find the
-   * full set of hwports for NICs in use later with the multiarch_hwport_mask,
-   * which also includes the unused datapath hwports. */
+  /* The stored masks reflect the selected datapaths regardless of the return
+   * code below.  Discovery walks the union of the two directions. */
+  ni->tx_hwport_mask = tx_hwport_mask;
+  ni->rx_hwport_mask = rx_hwport_mask;
+  ni->multiarch_hwport_mask = multiarch_hwport_mask;
   hwport_mask = tx_hwport_mask | rx_hwport_mask;
 
   if( ifindices_len < 0 ) {
@@ -285,13 +379,11 @@ int oo_get_nics(tcp_helper_resource_t* trs, int ifindices_len)
       for( ; hwport < CI_CFG_MAX_HWPORTS; ++hwport ) {
         if( ~hwport_mask & cp_hwport_make_mask(hwport) )
           continue;
+        /* Suitability, the ghost-VI/VF workaround and the module black/white
+         * list have already been applied to hwport_mask above, so any selected
+         * hwport with a client is usable. */
         onic = &oo_nics[hwport];
-        if( onic->efrm_client != NULL &&
-            /* VIs are created whether the interface is up, down or unplugged.
-             * The latter results in "ghost VIs".  As a temporary workaround
-             * for bug56347, we avoid creating ghost VIs on VFs. */
-            ! (onic->oo_nic_flags & OO_NIC_UNPLUGGED && oo_nic_is_vf(onic)) &&
-            oo_check_nic_suitable_for_onload(onic) )
+        if( onic->efrm_client != NULL )
           break;
       }
       if( hwport >= CI_CFG_MAX_HWPORTS )
@@ -319,16 +411,23 @@ int oo_get_nics(tcp_helper_resource_t* trs, int ifindices_len)
     goto fail;
   }
 
-  if( trs->netif.nic_n == 0 && ifindices_len != 0 ) {
-    ci_log("%s: ERROR: No Solarflare network interfaces are active/UP,\n"
-           "or they are configured with packed stream firmware, disabled,\n"
-           "or unlicensed for Onload. Please check your configuration.",
-           __FUNCTION__);
-    return -ENODEV;
+  if( ifindices_len != 0 ) {
+    if( datapath_unsatisfiable ) {
+      ci_log("%s: ERROR: The requested TX datapath '%s' and RX datapath '%s' "
+             "cannot be provided on all interfaces.  Please check your "
+             "configuration.", __FUNCTION__,
+             oo_datapath_name(NI_OPTS(ni).multiarch_tx_datapath),
+             oo_datapath_name(NI_OPTS(ni).multiarch_rx_datapath));
+      return -ENODEV;
+    }
+    if( trs->netif.nic_n == 0 ) {
+      ci_log("%s: ERROR: No Solarflare network interfaces are active/UP,\n"
+             "or they are configured with packed stream firmware, disabled,\n"
+             "or unlicensed for Onload. Please check your configuration.",
+             __FUNCTION__);
+      return -ENODEV;
+    }
   }
-  ni->tx_hwport_mask = tx_hwport_mask;
-  ni->rx_hwport_mask = rx_hwport_mask;
-  ni->multiarch_hwport_mask = multiarch_hwport_mask;
   return 0;
 
  fail:
