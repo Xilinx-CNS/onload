@@ -169,6 +169,7 @@ EFX_HAVE_TCF_EXTACK			member	struct_tc_cls_common_offload	extack	include/net/pkt
 EFX_HAVE_TC_CAN_EXTACK			symbol	tc_can_offload_extack	include/net/pkt_cls.h
 EFX_HAVE_NETIF_IS_VXLAN			symbol	netif_is_vxlan	include/net/vxlan.h
 EFX_HAVE_NETIF_IS_GENEVE		symbol	netif_is_geneve	include/net/geneve.h
+EFX_NEED_NETIF_CARRIER_EVENT		nsymbol	netif_carrier_event	include/linux/netdevice.h
 EFX_NEED_IDA_ALLOC_RANGE		nsymbol	ida_alloc_range		include/linux/idr.h
 EFX_HAVE_IPV6_STUBS_DST_LOOKUP_FLOW	custom
 EFX_HAVE_SKB__LIST			member	struct_sk_buff	list	include/linux/skbuff.h

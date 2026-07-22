@@ -1124,6 +1124,13 @@ int efx_x4_mcdi_fixed_port_props(struct efx_nic *efx,
 	u8 *caps;
 	int rc;
 
+	if (efx->type->is_vf) {
+		port_data->fixed_port.max_frame_len =
+			efx->type->default_max_mtu
+			+ ETH_HLEN + VLAN_HLEN + ETH_FCS_LEN;
+		return 0;
+	}
+
 	MCDI_SET_DWORD(inbuf, GET_FIXED_PORT_PROPERTIES_IN_PORT_HANDLE,
 		       efx->port_handle);
 
@@ -1166,6 +1173,9 @@ int efx_x4_mcdi_transceiver_props(struct efx_nic *efx,
 	size_t outlen;
 	u8 *caps;
 	int rc;
+
+	if (efx->type->is_vf)
+		return 0; /* Not supported on VFs */
 
 	BUILD_BUG_ON(bitmap_size(MC_CMD_ETH_TECH_TECH_WIDTH) !=
 		     MC_CMD_GET_TRANSCEIVER_PROPERTIES_OUT_TECH_ABILITIES_MASK_LEN);
@@ -1702,6 +1712,9 @@ int efx_x4_mcdi_nway_reset(struct efx_nic *efx)
 int efx_x4_mcdi_enable_netport_events(struct efx_nic *efx)
 {
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_SET_NETPORT_EVENTS_MASK_IN_LEN);
+
+	if (efx->type->is_vf)
+		return 0; /* Not supported on VFs */
 
 	BUILD_BUG_ON(MC_CMD_SET_NETPORT_EVENTS_MASK_OUT_LEN != 0);
 

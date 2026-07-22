@@ -1033,6 +1033,12 @@ static inline bool efx_napi_complete_done(struct napi_struct *napi,
 #define napi_complete_done efx_napi_complete_done
 #endif
 
+#ifdef EFX_NEED_NETIF_CARRIER_EVENT
+static inline void netif_carrier_event(struct net_device *dev __always_unused)
+{
+}
+#endif
+
 #if defined(EFX_NEED_HWMON_DEVICE_REGISTER_WITH_INFO)
 struct hwmon_chip_info;
 struct attribute_group;

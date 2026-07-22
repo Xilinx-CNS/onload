@@ -6457,6 +6457,7 @@ const struct efx_nic_type efx_x4_vf_nic_type = {
 	.map_reset_reason = efx_ef10_map_reset_reason,
 	.map_reset_flags = efx_ef10_map_reset_flags,
 	.reset = efx_ef10_reset,
+	.port_handle_supported = efx_ef10_port_handle_supported,
 	.probe_port = efx_x4_mcdi_port_probe,
 	.remove_port = efx_x4_mcdi_port_remove,
 	.fini_dmaq = efx_ef10_fini_dmaq,

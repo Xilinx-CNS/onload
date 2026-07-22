@@ -68,10 +68,10 @@ static const struct efx_mcdi_hwmon_info efx_mcdi_sensor_type[] = {
 	SENSOR(CONTROLLER_TEMP,		"Controller board temp.",   temp, -1),
 	SENSOR(PHY_COMMON_TEMP,		"PHY temp.",		    temp, -1),
 	SENSOR(CONTROLLER_COOLING,	"Controller heat sink",	    fan,  -1),
-	SENSOR(PHY0_TEMP,		"PHY temp.",		    temp,  0),
-	SENSOR(PHY0_COOLING,		"PHY heat sink",	    fan,   0),
-	SENSOR(PHY1_TEMP,		"PHY temp.",		    temp,  1),
-	SENSOR(PHY1_COOLING,		"PHY heat sink",	    fan,   1),
+	SENSOR(PHY0_TEMP,		"PHY 0 temp.",		    temp,  0),
+	SENSOR(PHY0_COOLING,		"PHY 0 heat sink",	    fan,   0),
+	SENSOR(PHY1_TEMP,		"PHY 1 temp.",		    temp,  1),
+	SENSOR(PHY1_COOLING,		"PHY 1 heat sink",	    fan,   1),
 	SENSOR(IN_1V0,			"1.0V supply",		    in,   -1),
 	SENSOR(IN_1V2,			"1.2V supply",		    in,   -1),
 	SENSOR(IN_1V8,			"1.8V supply",		    in,   -1),
@@ -115,8 +115,8 @@ static const struct efx_mcdi_hwmon_info efx_mcdi_sensor_type[] = {
 	SENSOR(VDD08D_VSS08D_CSR,	"0.9V die (int. ADC)",	    in,   -1),
 	SENSOR(VDD08D_VSS08D_CSR_EXTADC, "0.9V die (ext. ADC)",	    in,   -1),
 	SENSOR(HOTPOINT_TEMP,  "Controller board temp. (hotpoint)", temp, -1),
-	SENSOR(PHY_POWER_PORT0,		"PHY overcurrent",	    fan,   0),
-	SENSOR(PHY_POWER_PORT1,		"PHY overcurrent",	    fan,   1),
+	SENSOR(PHY_POWER_PORT0,		"PHY 0 overcurrent",	    fan,   0),
+	SENSOR(PHY_POWER_PORT1,		"PHY 1 overcurrent",	    fan,   1),
 	SENSOR(MUM_VCC,			"MUM Vcc",		    in,   -1),
 	SENSOR(IN_0V9_A,		"0.9V phase A supply",	    in,   -1),
 	SENSOR(IN_I0V9_A,
@@ -1088,21 +1088,53 @@ efx_mcdi_mon_get_limit(struct efx_mcdi_mon_attribute *mon_attr)
 	return value;
 }
 
-static int efx_mcdi_mon_get_state(struct device *dev, unsigned int index,
-				  unsigned int *state)
+static int efx_mcdi_mon_get_alarm(struct device *dev, unsigned int index,
+				  int *alarming)
 {
 	struct efx_nic *efx = dev_get_drvdata(dev);
+	unsigned int state = 0;
 	efx_dword_t entry;
 	int rc;
 
 	if (efx_nic_has_dynamic_sensors(efx)) {
-		rc = efx_mcdi_mon_get_dynamic_reading(dev, index, state, NULL);
+		rc = efx_mcdi_mon_get_dynamic_reading(dev, index, &state, NULL);
+		if (rc)
+			return rc;
+
+		switch (state) {
+		case MC_CMD_DYNAMIC_SENSORS_READING_WARNING:
+		case MC_CMD_DYNAMIC_SENSORS_READING_CRITICAL:
+		case MC_CMD_DYNAMIC_SENSORS_READING_FATAL:
+		case MC_CMD_DYNAMIC_SENSORS_READING_BROKEN:
+		case MC_CMD_DYNAMIC_SENSORS_READING_INIT_FAILED:
+			*alarming = 1;
+			break;
+		case MC_CMD_DYNAMIC_SENSORS_READING_OK:
+		case MC_CMD_DYNAMIC_SENSORS_READING_NO_READING:
+		default:
+			*alarming = 0;
+			break;
+		}
 	} else {
 		rc = efx_mcdi_mon_get_entry(dev, index, &entry);
 		if (rc)
 			return rc;
-		*state = EFX_DWORD_FIELD(entry,
-					 MC_CMD_SENSOR_VALUE_ENTRY_TYPEDEF_STATE);
+		state = EFX_DWORD_FIELD(entry,
+					MC_CMD_SENSOR_VALUE_ENTRY_TYPEDEF_STATE);
+
+		switch (state) {
+		case MC_CMD_SENSOR_STATE_WARNING:
+		case MC_CMD_SENSOR_STATE_FATAL:
+		case MC_CMD_SENSOR_STATE_BROKEN:
+		case MC_CMD_SENSOR_STATE_INIT_FAILED:
+			*alarming = 1;
+			break;
+		case MC_CMD_SENSOR_STATE_OK:
+		case MC_CMD_SENSOR_STATE_NO_READING:
+		default:
+			*alarming = 0;
+			break;
+		}
 	}
 	return rc;
 }
@@ -1148,14 +1180,14 @@ static ssize_t efx_mcdi_mon_show_alarm(struct device *dev,
 {
 	struct efx_mcdi_mon_attribute *mon_attr =
 		container_of(attr, struct efx_mcdi_mon_attribute, dev_attr);
-	int state = 0;
+	int alarming = 0;
 	int rc;
 
-	rc = efx_mcdi_mon_get_state(dev, mon_attr->index, &state);
+	rc = efx_mcdi_mon_get_alarm(dev, mon_attr->index, &alarming);
 	if (rc)
 		return rc;
 
-	return scnprintf(buf, PAGE_SIZE, "%d\n", state != MC_CMD_SENSOR_STATE_OK);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", alarming);
 }
 
 static ssize_t efx_mcdi_mon_show_label(struct device *dev,
@@ -1360,10 +1392,9 @@ static int efx_hwmon_read(struct device *dev,
 		value = efx_mcdi_mon_get_limit(mon_attr);
 		break;
 	case EFX_HWMON_ALARM:
-		rc = efx_mcdi_mon_get_state(dev, mon_attr->index, &value);
+		rc = efx_mcdi_mon_get_alarm(dev, mon_attr->index, &value);
 		if (rc)
 			return rc;
-		value = (value != MC_CMD_SENSOR_STATE_OK);
 		break;
 	default:
 		WARN_ONCE(1, "Unhandled HW sensor read\n");
