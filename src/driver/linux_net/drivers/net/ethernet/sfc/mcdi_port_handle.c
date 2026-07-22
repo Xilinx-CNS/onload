@@ -1236,7 +1236,7 @@ int efx_x4_mcdi_phy_probe(struct efx_nic *efx)
 	int rc;
 
 	/* Initialise and populate port_data */
-	port_data = kzalloc(sizeof(*port_data), GFP_KERNEL);
+	port_data = kzalloc_obj(*port_data);
 	if (!port_data)
 		return -ENOMEM;
 
@@ -1701,7 +1701,7 @@ int efx_x4_mcdi_nway_reset(struct efx_nic *efx)
 
 int efx_x4_mcdi_enable_netport_events(struct efx_nic *efx)
 {
-	MCDI_DECLARE_BUF(inbuf, MC_CMD_SET_NETPORT_EVENTS_MASK);
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_SET_NETPORT_EVENTS_MASK_IN_LEN);
 
 	BUILD_BUG_ON(MC_CMD_SET_NETPORT_EVENTS_MASK_OUT_LEN != 0);
 

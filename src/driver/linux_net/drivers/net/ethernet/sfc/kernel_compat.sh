@@ -132,6 +132,7 @@ EFX_HAVE_ETHTOOL_FECSTATS_HIST	memtype	struct_ethtool_ops	get_fec_stats	include/
 EFX_HAVE_ETHTOOL_FECPARAM	member	struct_ethtool_ops	get_fecparam	include/linux/ethtool.h
 EFX_HAVE_ETHTOOL_RXFH_CONTEXT	member	struct_ethtool_ops	get_rxfh_context	include/linux/ethtool.h
 EFX_HAVE_ETHTOOL_RXNFC_CONTEXT	member	struct_ethtool_rxnfc	rss_context	include/linux/ethtool.h
+EFX_HAVE_ETHTOOL_GET_RX_RING_COUNT	member	struct_ethtool_ops	get_rx_ring_count	include/linux/ethtool.h
 EFX_HAVE_XDP_FRAME_API		symbol	xdp_frame	include/net/xdp.h
 EFX_HAVE_XDP_COVERT_XDP_BUFF_FRAME_API	symbol	xdp_convert_buff_to_frame include/net/xdp.h
 EFX_HAVE_XDP_DATA_META		member	struct_xdp_buff	data_meta	include/linux/filter.h
@@ -239,7 +240,9 @@ EFX_HAVE_NDO_SIOCDEVPRIVATE		member	struct_net_device_ops	ndo_siocdevprivate	inc
 EFX_HAVE_NDO_ETH_IOCTL			member	struct_net_device_ops	ndo_eth_ioctl		include/linux/netdevice.h
 EFX_NEED_NETDEV_HOLD			nsymbol	netdev_hold		include/linux/netdevice.h
 EFX_HAVE_DEV_HOLD_TRACK			symbol	dev_hold_track		include/linux/netdevice.h
+EFX_NEED_SIZE_MUL			nsymbol	size_mul		include/linux/overflow.h
 EFX_NEED_KREALLOC_ARRAY			nsymbol	krealloc_array		include/linux/slab.h
+EFX_NEED_KMALLOC_OBJ			nsymbol	kmalloc_obj		include/linux/slab.h
 EFX_HAVE_VDPA_MGMT_INTERFACE		symbol	vdpa_mgmtdev_register	include/linux/vdpa.h
 EFX_HAVE_IOMMU_CAPABLE			symbol	iommu_capable		include/linux/iommu.h
 EFX_NEED_DEVICE_IOMMU_CAPABLE		nsymbol	device_iommu_capable	include/linux/iommu.h

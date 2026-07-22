@@ -133,7 +133,7 @@ static struct efx_tc_mac_pedit_action *efx_tc_flower_get_mac(
 	struct efx_tc_mac_pedit_action *ped, *old;
 	int rc;
 
-	ped = kzalloc(sizeof(*ped), GFP_USER);
+	ped = kzalloc_obj(*ped, GFP_USER);
 	if (!ped)
 		return ERR_PTR(-ENOMEM);
 	memcpy(ped->h_addr, h_addr, ETH_ALEN);
@@ -299,7 +299,7 @@ static struct efx_tc_recirc_id *efx_tc_get_recirc_id(struct efx_nic *efx,
 	struct efx_tc_recirc_id *rid, *old;
 	int rc;
 
-	rid = kzalloc(sizeof(*rid), GFP_USER);
+	rid = kzalloc_obj(*rid, GFP_USER);
 	if (!rid)
 		return ERR_PTR(-ENOMEM);
 	rid->chain_index = chain_index;
@@ -360,10 +360,10 @@ int efx_init_struct_tc(struct efx_nic *efx)
 	if (efx->type->is_vf || efx->tc)
 		return 0;
 
-	efx->tc = kzalloc(sizeof(*efx->tc), GFP_KERNEL);
+	efx->tc = kzalloc_obj(*efx->tc);
 	if (!efx->tc)
 		return -ENOMEM;
-	efx->tc->caps = kzalloc(sizeof(struct mae_caps), GFP_KERNEL);
+	efx->tc->caps = kzalloc_obj(struct mae_caps);
 	if (!efx->tc->caps) {
 		rc = -ENOMEM;
 		goto fail_alloc_caps;
@@ -885,7 +885,7 @@ static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 		goto fail_pseudo;
 	}
 
-	encap = kzalloc(sizeof(*encap), GFP_USER);
+	encap = kzalloc_obj(*encap, GFP_USER);
 	if (!encap) {
 		rc = -ENOMEM;
 		goto fail_pseudo;
@@ -1429,7 +1429,7 @@ static int efx_tc_flower_replace_foreign_lhs_ar(struct efx_nic *efx,
 	if (rc)
 		goto release_encap_match;
 
-	rule = kzalloc(sizeof(*rule), GFP_USER);
+	rule = kzalloc_obj(*rule, GFP_USER);
 	if (!rule) {
 		rc = -ENOMEM;
 		goto release_encap_match;
@@ -1552,7 +1552,7 @@ static int efx_tc_flower_replace_foreign_lhs(struct efx_nic *efx,
 	if (rc)
 		goto release_encap_match;
 
-	rule = kzalloc(sizeof(*rule), GFP_USER);
+	rule = kzalloc_obj(*rule, GFP_USER);
 	if (!rule) {
 		rc = -ENOMEM;
 		goto release_encap_match;
@@ -1760,7 +1760,7 @@ static int efx_tc_flower_replace_foreign(struct efx_nic *efx,
 		goto release;
 	}
 
-	rule = kzalloc(sizeof(*rule), GFP_USER);
+	rule = kzalloc_obj(*rule, GFP_USER);
 	if (!rule) {
 		rc = -ENOMEM;
 		goto release;
@@ -1779,7 +1779,7 @@ static int efx_tc_flower_replace_foreign(struct efx_nic *efx,
 	}
 
 	/* Parse actions */
-	act = kzalloc(sizeof(*act), GFP_USER);
+	act = kzalloc_obj(*act, GFP_USER);
 	if (!act) {
 		rc = -ENOMEM;
 		goto release;
@@ -1863,7 +1863,7 @@ static int efx_tc_flower_replace_foreign(struct efx_nic *efx,
 			if (fa->id == FLOW_ACTION_REDIRECT)
 				break; /* end of the line */
 			/* Mirror, so continue on with saved act */
-			act = kzalloc(sizeof(*act), GFP_USER);
+			act = kzalloc_obj(*act, GFP_USER);
 			if (!act) {
 				rc = -ENOMEM;
 				goto release;
@@ -1986,7 +1986,7 @@ static int efx_tc_flower_replace_lhs(struct efx_nic *efx,
 	if (rc)
 		return rc;
 
-	rule = kzalloc(sizeof(*rule), GFP_USER);
+	rule = kzalloc_obj(*rule, GFP_USER);
 	if (!rule)
 		return -ENOMEM;
 	rule->cookie = tc->cookie;
@@ -2479,7 +2479,7 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 	if (rc)
 		goto release;
 
-	rule = kzalloc(sizeof(*rule), GFP_USER);
+	rule = kzalloc_obj(*rule, GFP_USER);
 	if (!rule) {
 		rc = -ENOMEM;
 		goto release;
@@ -2498,7 +2498,7 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 	}
 
 	/* Parse actions */
-	act = kzalloc(sizeof(*act), GFP_USER);
+	act = kzalloc_obj(*act, GFP_USER);
 	if (!act) {
 		rc = -ENOMEM;
 		goto release;
@@ -2635,7 +2635,7 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 					break; /* end of the line */
 				/* Mirror, so continue on with saved act */
 				save.count = NULL;
-				act = kzalloc(sizeof(*act), GFP_USER);
+				act = kzalloc_obj(*act, GFP_USER);
 				if (!act) {
 					rc = -ENOMEM;
 					goto release;
@@ -2674,7 +2674,7 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 				break; /* end of the line */
 			/* Mirror, so continue on with saved act */
 			save.count = NULL;
-			act = kzalloc(sizeof(*act), GFP_USER);
+			act = kzalloc_obj(*act, GFP_USER);
 			if (!act) {
 				rc = -ENOMEM;
 				goto release;
@@ -3177,7 +3177,7 @@ static int efx_tc_configure_default_rule(struct efx_nic *efx, u32 ing_port,
 
 	match->value.ingress_port = ing_port;
 	match->mask.ingress_port = ~0;
-	act = kzalloc(sizeof(*act), GFP_KERNEL);
+	act = kzalloc_obj(*act);
 	if (!act)
 		return -ENOMEM;
 	act->deliver = 1;
@@ -3250,7 +3250,7 @@ static int efx_tc_configure_fallback_acts(struct efx_nic *efx, u32 eg_port,
 	struct efx_tc_action_set *act;
 	int rc;
 
-	act = kzalloc(sizeof(*act), GFP_KERNEL);
+	act = kzalloc_obj(*act);
 	if (!act)
 		return -ENOMEM;
 	act->deliver = 1;
@@ -3502,7 +3502,7 @@ static int efx_tc_configure_default_rule(struct efx_nic *efx, u32 ing_port,
 
 	match->value.ingress_port = ing_port;
 	match->mask.ingress_port = ~0;
-	act = kzalloc(sizeof(*act), GFP_KERNEL);
+	act = kzalloc_obj(*act);
 	if (!act)
 		return -ENOMEM;
 	act->deliver = 1;
@@ -3624,10 +3624,10 @@ int efx_init_struct_tc(struct efx_nic *efx)
 	if (efx->type->is_vf)
 		return 0;
 
-	efx->tc = kzalloc(sizeof(*efx->tc), GFP_KERNEL);
+	efx->tc = kzalloc_obj(*efx->tc);
 	if (!efx->tc)
 		return -ENOMEM;
-	efx->tc->caps = kzalloc(sizeof(struct mae_caps), GFP_KERNEL);
+	efx->tc->caps = kzalloc_obj(struct mae_caps);
 	if (!efx->tc->caps) {
 		rc = -ENOMEM;
 		goto fail1;

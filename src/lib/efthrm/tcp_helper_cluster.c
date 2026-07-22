@@ -17,6 +17,7 @@
 #include <onload/oof_interface.h>
 
 #include <ci/efrm/pd.h>
+#include <ci/efrm/efrm_client.h>
 #include <ci/efrm/vi_set.h>
 #include <onload/nic.h>
 #include <onload/drv/dump_to_user.h>
@@ -261,15 +262,16 @@ static int thc_alloc(const char* cluster_name, int protocol, int port_be16,
   rtnl_lock();
 
   for( i = 0; i < CI_CFG_MAX_HWPORTS; ++i ) {
+    struct efhw_nic* nic;
+
     if( oo_nics[i].efrm_client == NULL ||
         ! oo_check_nic_suitable_for_onload(&(oo_nics[i])) )
       continue;
 
-    /* We know upfront that the LLCT datapath does not support RSS.  Thus,
-     * avoid trying to preallocate VI sets and letting the workflow to decide
-     * later whether it is acceptable for the given stack configuration.
-     */
-    if( oo_check_nic_llct(&oo_nics[i]) )
+    /* If we know upfront that this NIC does not support RSS we can avoid
+     * any VI set preallocation. */
+    nic = efrm_client_get_nic(oo_nics[i].efrm_client);
+    if( ! (nic->flags & NIC_FLAG_RX_RSS) )
       continue;
 
     rc = efrm_pd_alloc(&pd, oo_nics[i].efrm_client, pd_flags);

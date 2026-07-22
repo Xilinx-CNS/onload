@@ -1650,20 +1650,33 @@ CI_CFG_STR_OPT("EF_INTERFACE_BLACKLIST", iface_blacklist, ci_string256,
 
 #define EF_MULTIARCH_DATAPATH_FF 0
 #define EF_MULTIARCH_DATAPATH_LLCT 1
-#define EF_MULTIARCH_DATAPATH_BOTH 2
+#define EF_MULTIARCH_DATAPATH_AUTO 2
+#define EF_MULTIARCH_DATAPATH_BOTH 3
 
 CI_CFG_OPT("EF_TX_DATAPATH", multiarch_tx_datapath, ci_uint32,
-           "Select TX datapath on all multiarch NICs:"
-           "  enterprise (fully featured)\n"
-           "  express (lowest latency)\n",
-           1, , 1, 0, 1, oneof:enterprise;express)
+           "Select the TX datapath on all selected interfaces:\n"
+           "  enterprise: use the fully featured datapath\n"
+           "  express: use the lowest-latency datapath\n"
+           "  auto: prefer express, otherwise use enterprise\n"
+           "Stack creation fails if an explicitly requested datapath is not "
+           "available on every selected interface.\n"
+           "Interfaces that have been blacklisted or do not support onload "
+           "are not considered when applying this option.",
+           2, , 2, 0, 2, oneof:enterprise;express;auto)
 
 CI_CFG_OPT("EF_RX_DATAPATH", multiarch_rx_datapath, ci_uint32,
-           "Select RX datapaths on all multiarch NICs:"
-           "  enterprise (fully featured)\n"
-           "  express (lowest latency)\n"
-           "  both (prefer express, fallback to enterprise)\n",
-           2, , 2, 0, 2, oneof:enterprise;express;both)
+           "Select the RX datapath on all selected interfaces:\n"
+           "  enterprise: use the fully featured datapath\n"
+           "  express: use the lowest-latency datapath\n"
+           "  auto: use both datapaths where available, otherwise use the "
+           "available datapath\n"
+           "  both: require both datapaths, preferring express filters and "
+           "falling back to enterprise\n"
+           "Stack creation fails if an explicitly requested datapath "
+           "configuration is not available on every selected interface.\n"
+           "Interfaces that have been blacklisted or do not support onload "
+           "are not considered when applying this option.",
+           2, , 2, 0, 3, oneof:enterprise;express;auto;both)
 
 CI_CFG_OPT("EF_KERNEL_PACKETS_BATCH_SIZE", kernel_packets_batch_size, ci_uint32,
 "In some cases (for example, when using scalable filters), packets that "

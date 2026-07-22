@@ -270,6 +270,7 @@ struct efx_pps_dev_attr {
  * @initial_mc_stats: Firmware statistics.
  * @timeset: Last set of synchronisation statistics.
  * @xmit_skb: Transmit SKB function.
+ * @pps_connector_caps: Capabilities for each PPS connector.
  */
 struct efx_ptp_data {
 	struct efx_nic *efx;
@@ -1555,7 +1556,7 @@ int efx_ef10_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings)
 	static const unsigned int PTP_START_TIMEOUT = PTP_SYNC_TIMEOUT * 4;
 	unsigned long started;
 
-	mcdi_data = kmalloc(sizeof(*mcdi_data), GFP_KERNEL);
+	mcdi_data = kmalloc_obj(*mcdi_data);
 	if (!mcdi_data)
 		return -ENOMEM;
 
@@ -1698,9 +1699,7 @@ int efx_x4_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings)
 	ngood = last_good = diff_avg = diff_total = 0;
 	diff_min = LONG_MAX;
 
-	timeset = kmalloc_array(num_readings,
-				sizeof(struct efx_x4_ptp_timeset),
-				GFP_KERNEL);
+	timeset = kmalloc_objs(struct efx_x4_ptp_timeset, num_readings);
 	if (!timeset)
 		return -ENOMEM;
 
@@ -1943,7 +1942,7 @@ static int efx_ptp_insert_filter(struct efx_nic *efx,
 		goto out;
 	}
 
-	rxfilter = kzalloc(sizeof(*rxfilter), GFP_KERNEL);
+	rxfilter = kzalloc_obj(*rxfilter);
 	if (!rxfilter) {
 		rc = -ENOMEM;
 		goto out;
@@ -2680,7 +2679,7 @@ static int efx_ptp_create_pps(struct efx_ptp_data *ptp)
 {
 	struct efx_pps_data *pps;
 
-	pps = kzalloc(sizeof(*pps), GFP_ATOMIC);
+	pps = kzalloc_obj(*pps, GFP_ATOMIC);
 	if (!pps)
 		return -ENOMEM;
 
@@ -3123,7 +3122,7 @@ static int efx_ptp_probe_post_io(struct efx_nic *efx)
 #endif
 	int rc = 0;
 
-	ptp = kzalloc(sizeof(struct efx_ptp_data), GFP_KERNEL);
+	ptp = kzalloc_obj(struct efx_ptp_data);
 	if (!ptp)
 		return -ENOMEM;
 

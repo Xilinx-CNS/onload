@@ -33,7 +33,7 @@ MODULE_PARM_DESC(efx_allow_nvconfig_writes,
 
 int efx_mtd_init(struct efx_nic *efx)
 {
-	efx->mtd_struct = kzalloc(sizeof(*efx->mtd_struct), GFP_KERNEL);
+	efx->mtd_struct = kzalloc_obj(*efx->mtd_struct);
 	if (!efx->mtd_struct)
 		return -ENOMEM;
 

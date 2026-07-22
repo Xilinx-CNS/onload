@@ -1,3 +1,16 @@
+Onload-9.2.1
+============
+
+
+X4 datapath configuration
+-------------------------
+
+The EF_RX_DATAPATH and EF_TX_DATAPATH environment variables are now
+enforced, such that if a requested datapath is not available on all
+interfaces stack creation will fail. For NICs with mixed port
+capabilities the new "auto" mode can be used which will select the best
+available datapath combination for each interface. This is the default.
+
 Onload-9.2.0.43
 ===============
 

@@ -803,7 +803,7 @@ int efx_mcdi_phy_probe(struct efx_nic *efx)
 	int rc;
 
 	/* Initialise and populate phy_data */
-	phy_data = kzalloc(sizeof(*phy_data), GFP_KERNEL);
+	phy_data = kzalloc_obj(*phy_data);
 	if (phy_data == NULL)
 		return -ENOMEM;
 
@@ -1610,8 +1610,15 @@ void efx_mcdi_process_link_change_v2(struct efx_nic *efx, efx_qword_t *ev)
 	}
 
 	speed = EFX_QWORD_FIELD(*ev, MCDI_EVENT_LINKCHANGE_V2_SPEED);
-	EFX_WARN_ON_PARANOID(speed >= ARRAY_SIZE(efx_mcdi_event_link_speed));
-	speed = efx_mcdi_event_link_speed[speed];
+	if (speed < ARRAY_SIZE(efx_mcdi_event_link_speed)) {
+		speed = efx_mcdi_event_link_speed[speed];
+	} else {
+		if (net_ratelimit())
+			netif_warn(efx, hw, efx->net_dev,
+				   "Invalid speed enum %d in link change event\n",
+				   speed);
+		speed = 0;
+	}
 
 	link_up = EFX_QWORD_FIELD(*ev, MCDI_EVENT_LINKCHANGE_V2_FLAGS_LINK_UP);
 	fcntl = EFX_QWORD_FIELD(*ev, MCDI_EVENT_LINKCHANGE_V2_FCNTL);

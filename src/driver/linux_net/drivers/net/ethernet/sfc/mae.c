@@ -376,7 +376,7 @@ int efx_mae_enumerate_mports(struct efx_nic *efx)
 		for (i = 0; i < count; i++) {
 			struct mae_mport_desc *d;
 
-			d = kzalloc(sizeof(*d), GFP_KERNEL);
+			d = kzalloc_obj(*d);
 			if (!d) {
 				rc = -ENOMEM;
 				goto fail;
@@ -468,14 +468,12 @@ more:
 		if (desc->scheme)
 			goto fail;
 		rc = -ENOMEM;
-		desc->keys = kcalloc(desc->n_keys,
-				     sizeof(struct efx_tc_table_field_fmt),
-				     GFP_KERNEL);
+		desc->keys = kzalloc_objs(struct efx_tc_table_field_fmt,
+					  desc->n_keys);
 		if (!desc->keys)
 			goto fail;
-		desc->resps = kcalloc(desc->n_resps,
-				      sizeof(struct efx_tc_table_field_fmt),
-				      GFP_KERNEL);
+		desc->resps = kzalloc_objs(struct efx_tc_table_field_fmt,
+					   desc->n_resps);
 		if (!desc->resps)
 			goto fail;
 	}
@@ -2018,10 +2016,10 @@ int efx_mae_insert_ct(struct efx_nic *efx, struct efx_tc_ct_entry *conn)
 	if (!inbuf)
 		return -ENOMEM;
 
-	key = kcalloc(kw, sizeof(__le32), GFP_KERNEL);
+	key = kzalloc_objs(__le32, kw);
 	if (!key)
 		goto out_free;
-	resp = kcalloc(rw, sizeof(__le32), GFP_KERNEL);
+	resp = kzalloc_objs(__le32, rw);
 	if (!resp)
 		goto out_free;
 
@@ -2089,7 +2087,7 @@ int efx_mae_remove_ct(struct efx_nic *efx, struct efx_tc_ct_entry *conn)
 	if (!inbuf)
 		return -ENOMEM;
 
-	key = kcalloc(kw, sizeof(__le32), GFP_KERNEL);
+	key = kzalloc_objs(__le32, kw);
 	if (!key)
 		goto out_free;
 
@@ -2357,7 +2355,7 @@ int efx_mae_delete_rule(struct efx_nic *efx, u32 id)
 
 int efx_init_mae(struct efx_nic *efx)
 {
-	struct efx_mae *mae = kmalloc(sizeof(*mae), GFP_KERNEL);
+	struct efx_mae *mae = kmalloc_obj(*mae);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
 	int rc;
 #endif

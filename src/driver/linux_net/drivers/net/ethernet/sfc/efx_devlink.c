@@ -830,7 +830,7 @@ int efx_probe_devlink_port(struct efx_nic *efx)
 	if (!efx->devlink)
 		return -ENODEV;
 
-	efx->devlink_port = kzalloc(sizeof(*efx->devlink_port), GFP_KERNEL);
+	efx->devlink_port = kzalloc_obj(*efx->devlink_port);
 	if (!efx->devlink_port)
 		return -ENOMEM;
 

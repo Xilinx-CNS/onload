@@ -186,7 +186,7 @@ int efx_ll_init(struct efx_nic *efx)
 	/* Map up to the design params so they may be used at probe time. */
 	uc_mem_map_size = PAGE_SIZE;
 
-	efx_ll = kzalloc(sizeof(*efx_ll), GFP_KERNEL);
+	efx_ll = kzalloc_obj(*efx_ll);
 	if (!efx_ll)
 		return -ENOMEM;
 

@@ -1274,13 +1274,15 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
   handle_str_opt(opts, "EF_ONLOAD_IRQ_CORES", opts->onload_irq_cores,
                  sizeof(opts->onload_irq_cores));
 
-  static const char* const multiarch_tx_opts[] = { "enterprise", "express", 0 };
+  static const char* const multiarch_tx_opts[] = { "enterprise", "express",
+                                                   "auto", 0 };
   opts->multiarch_tx_datapath =
-    parse_enum(opts, "EF_TX_DATAPATH", multiarch_tx_opts, "express");
+    parse_enum(opts, "EF_TX_DATAPATH", multiarch_tx_opts, "auto");
 
-  static const char* const multiarch_rx_opts[] = { "enterprise", "express", "both", 0 };
+  static const char* const multiarch_rx_opts[] = { "enterprise", "express",
+                                                   "auto", "both", 0 };
   opts->multiarch_rx_datapath =
-    parse_enum(opts, "EF_RX_DATAPATH", multiarch_rx_opts, "both");
+    parse_enum(opts, "EF_RX_DATAPATH", multiarch_rx_opts, "auto");
 
   if( (s = getenv("EF_KERNEL_PACKETS_BATCH_SIZE")) )
     opts->kernel_packets_batch_size = atoi(s);
@@ -2302,16 +2304,16 @@ static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
     if( rc < 0 )
       return rc;
   }
-  if( vi->efct_rxqs.active_qs ) {
+  if( (nsn->vi_rxq_size > 0) && vi->efct_rxqs.active_qs ) {
     rc = 0;
-    if( nsn->vi_arch == EFHW_ARCH_EFCT ) {
+    if( nsn->oo_vi_flags & OO_VI_FLAGS_RX_KERNEL_SHARED ) {
       rc = efct_kbufs_init_internal(vi,
                         (void*)((char*)ni->efct_shm_ptr + vi_efct_shm_offset),
                         NULL);
       vi->efct_rxqs.ops->refresh = oo_efct_superbuf_config_refresh;
       vi->efct_rxqs.ops->user_data = nic_i;
-    } else if( NI_OPTS(ni).multiarch_rx_datapath != EF_MULTIARCH_DATAPATH_FF &&
-               nsn->vi_arch == EFHW_ARCH_EF10CT ) {
+    }
+    else if( nsn->oo_vi_flags & OO_VI_FLAGS_RX_SHARED ) {
       rc = efct_ubufs_init_internal(vi);
       if( rc < 0 )
         return rc;
@@ -2641,12 +2643,15 @@ fail1:
 
 #ifndef __KERNEL__
 
-static bool want_user_efct_resources(ci_netif* ni, int intf_i)
+static bool want_user_efct_rx_resources(ci_netif* ni, int intf_i)
 {
-  uint32_t shared_rx_mask = OO_VI_FLAGS_RX_SHARED | OO_VI_FLAGS_RX_KERNEL_SHARED;
-  bool user_rx = (ni->state->nic[intf_i].oo_vi_flags & shared_rx_mask) ==
+  ci_netif_state_nic_t* nsn = &ni->state->nic[intf_i];
+  uint32_t shared_rx_mask = OO_VI_FLAGS_RX_SHARED |
+                            OO_VI_FLAGS_RX_KERNEL_SHARED;
+  bool user_rx = (nsn->oo_vi_flags & shared_rx_mask) ==
                  OO_VI_FLAGS_RX_SHARED;
-  return (NI_OPTS(ni).multiarch_rx_datapath != EF_MULTIARCH_DATAPATH_FF) && user_rx;
+
+  return (nsn->vi_rxq_size > 0) && user_rx;
 }
 
 static int restore_efct_resources(ci_netif* ni)
@@ -2656,7 +2661,7 @@ static int restore_efct_resources(ci_netif* ni)
   OO_STACK_FOR_EACH_INTF_I(ni, nic_i) {
     ef_vi* vi = ci_netif_vi(ni, nic_i);
 
-    if( want_user_efct_resources(ni, nic_i) ) {
+    if( want_user_efct_rx_resources(ni, nic_i) ) {
       rc = efct_superbuf_config_refresh_all(vi);
       if( rc < 0 )
         return rc;
@@ -2779,7 +2784,7 @@ static int alloc_efct_resources(ci_netif* ni)
   OO_STACK_FOR_EACH_INTF_I(ni, nic_i) {
     ef_vi* vi = ci_netif_vi(ni, nic_i);
 
-    if( want_user_efct_resources(ni, nic_i) ) {
+    if( want_user_efct_rx_resources(ni, nic_i) ) {
 
       if( ! NI_OPTS(ni).shrub_unicast ) {
         rc = alloc_efct_exclusive_rxq(ni, nic_i);

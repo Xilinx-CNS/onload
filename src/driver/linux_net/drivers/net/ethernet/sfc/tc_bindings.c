@@ -72,7 +72,7 @@ static struct efx_tc_block_binding *efx_tc_create_binding(
 			struct efx_nic *efx, struct efx_rep *efv,
 			struct net_device *otherdev, struct flow_block *block)
 {
-	struct efx_tc_block_binding *binding = kmalloc(sizeof(*binding), GFP_KERNEL);
+	struct efx_tc_block_binding *binding = kmalloc_obj(*binding);
 
 	if (!binding)
 		return ERR_PTR(-ENOMEM);
@@ -163,7 +163,7 @@ int efx_tc_setup_block(struct net_device *net_dev, struct efx_nic *efx,
 
 	switch (tcb->command) {
 	case TC_BLOCK_BIND:
-		binding = kmalloc(sizeof(*binding), GFP_KERNEL);
+		binding = kmalloc_obj(*binding);
 		if (!binding)
 			return -ENOMEM;
 		binding->efx = efx;

@@ -167,5 +167,17 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "mcast_interface_update") )
     test_mcast_interface_update();
 
+  if( all || !strcmp(argv[1], "hwport_lifecycle") )
+    test_hwport_lifecycle();
+
+  if( all || !strcmp(argv[1], "addr_reactivate") )
+    test_addr_reactivate();
+
+  if( all || !strcmp(argv[1], "mcast_install") )
+    test_mcast_install();
+
+  if( all || !strcmp(argv[1], "udp_connect") )
+    test_udp_connect();
+
   return 0;
 }

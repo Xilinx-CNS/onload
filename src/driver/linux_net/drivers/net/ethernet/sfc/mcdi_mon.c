@@ -437,7 +437,7 @@ void efx_mcdi_dynamic_sensor_event(struct efx_nic *efx, efx_qword_t *ev)
 		return;
 	case MCDI_EVENT_CODE_DYNAMIC_SENSORS_CHANGE:
 		netif_info(efx, drv, efx->net_dev,
-			   "CODE_DYNAMIC_SENSORS_CHANGE even unsupported\n");
+			   "CODE_DYNAMIC_SENSORS_CHANGE event unsupported\n");
 	}
 }
 
@@ -638,8 +638,7 @@ static int efx_mcdi_read_dynamic_sensor_list(struct efx_nic *efx)
 		return -EINVAL;
 	}
 
-	new_sensor_list = kcalloc(n_sensors, sizeof(struct efx_dynamic_sensor),
-				  GFP_KERNEL);
+	new_sensor_list = kzalloc_objs(struct efx_dynamic_sensor, n_sensors);
 	if (!new_sensor_list)
 		return -ENOMEM;
 
@@ -1591,7 +1590,7 @@ static int efx_mcdi_hwmon_probe(struct efx_nic *efx, unsigned int n_sensors,
 	 * value, min, max, crit, alarm and label for each sensor.
 	 */
 	n_attrs = 1 + 6 * n_sensors;
-	hwmon->attrs = kcalloc(n_attrs, sizeof(*hwmon->attrs), GFP_KERNEL);
+	hwmon->attrs = kzalloc_objs(*hwmon->attrs, n_attrs);
 	if (!hwmon->attrs)
 		return -ENOMEM;
 

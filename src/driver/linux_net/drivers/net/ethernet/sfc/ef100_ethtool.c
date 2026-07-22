@@ -125,7 +125,7 @@ static void ef100_ethtool_get_drvinfo(struct net_device *net_dev,
 /*	Ethtool options available
  */
 const struct ethtool_ops ef100_ethtool_ops = {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_CAP_RSS_CTX_SUPPORTED)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_CAP_RSS_CTX_SUPPORTED)
 	.cap_rss_ctx_supported	= true,
 #endif
 	.get_drvinfo		= ef100_ethtool_get_drvinfo,
@@ -166,6 +166,9 @@ const struct ethtool_ops ef100_ethtool_ops = {
 	.flash_device		= efx_ethtool_flash_device,
 #endif
 	.reset                  = efx_ethtool_reset,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_GET_RX_RING_COUNT)
+	.get_rx_ring_count	= efx_ethtool_get_rx_ring_count,
+#endif
 	.get_rxfh_indir_size	= efx_ethtool_get_rxfh_indir_size,
 	.get_rxfh_key_size	= efx_ethtool_get_rxfh_key_size,
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_CONFIGURABLE_RSS_HASH)

@@ -28,11 +28,13 @@ EFTHRM_SRCS	:= eplock_resource_manager.c \
 		tcp_filters.c oof_filters.c oof_onload.c oof_nat.c \
 		driverlink_filter.c ip_protocols.c \
 		onload_nic.c id_pool.c dump_to_user.c \
-		tcp_helper_cluster.c oof_interface.c tcp_helper_stats_dump.c
+		tcp_helper_cluster.c oof_interface.c tcp_helper_stats_dump.c \
+		oo_nics.c
 
 EFTHRM_HDRS	:= oo_hw_filter.h oof_impl.h tcp_filters_internal.h \
 		tcp_helper_resource.h tcp_filters_deps.h oof_tproxy_ipproto.h \
-		oof_onload_types.h tcp_helper_stats_dump.h oof_filters_deps.h
+		oof_onload_types.h tcp_helper_stats_dump.h oof_filters_deps.h \
+		oo_nics.h oo_nics_deps.h
 
 ifeq ($(LINUX),1)
 EFTHRM_SRCS	+= tcp_helper_linux.c

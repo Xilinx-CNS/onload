@@ -80,5 +80,9 @@ extern int test_mcast_hw_errors(void);
 extern int test_mcast_del(void);
 extern int test_mcast_del_sw(void);
 extern int test_mcast_interface_update(void);
+extern int test_hwport_lifecycle(void);
+extern int test_addr_reactivate(void);
+extern int test_mcast_install(void);
+extern int test_udp_connect(void);
 
 #endif /* __OOF_TEST_H__ */

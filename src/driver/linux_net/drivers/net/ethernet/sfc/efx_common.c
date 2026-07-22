@@ -281,6 +281,12 @@ void efx_link_status_changed(struct efx_nic *efx)
 			netif_carrier_on(efx->net_dev);
 		else
 			netif_carrier_off(efx->net_dev);
+	} else if (link_state->up) {
+		/* Link state unchanged since the last time link state
+		 * change events were processed. Notify the net core of
+		 * the link state update, even though it is still up.
+		 */
+		netif_carrier_event(efx->net_dev);
 	}
 
 	/* Status message for kernel log */
@@ -289,12 +295,13 @@ void efx_link_status_changed(struct efx_nic *efx)
 
 	if (link_state->up) {
 		netif_info(efx, link, efx->net_dev,
-			   "link up at %uMbps %s-duplex (MTU %d)%s%s%s\n",
+			   "link up at %uMbps %s-duplex (MTU %d)%s%s%s%s\n",
 			   link_state->speed, link_state->fd ? "full" : "half",
 			   efx->net_dev->mtu,
 			   (efx->loopback_mode ? " [" : ""),
 			   (efx->loopback_mode ? LOOPBACK_MODE(efx) : ""),
-			   (efx->loopback_mode ? " LOOPBACK]" : ""));
+			   (efx->loopback_mode ? " LOOPBACK]" : ""),
+			   kernel_link_up ? " (was transiently down)" : "");
 
 		if ((efx->wanted_fc & EFX_FC_AUTO) &&
 		    (efx->wanted_fc & EFX_FC_TX) &&
@@ -1523,8 +1530,8 @@ static int efx_init_struct(struct efx_nic *efx, struct pci_dev *pci_dev)
 	mutex_init(&efx->rps_mutex);
 	spin_lock_init(&efx->rps_hash_lock);
 	/* Failure to allocate is not fatal, but may degrade ARFS performance */
-	efx->rps_hash_table = kcalloc(EFX_ARFS_HASH_TABLE_SIZE,
-				      sizeof(*efx->rps_hash_table), GFP_KERNEL);
+	efx->rps_hash_table = kzalloc_objs(*efx->rps_hash_table,
+					   EFX_ARFS_HASH_TABLE_SIZE);
 #endif
 	INIT_WORK(&efx->mac_work, efx_mac_work);
 	init_waitqueue_head(&efx->flush_wq);
@@ -1749,7 +1756,7 @@ int efx_init_probe_data(struct pci_dev *pci_dev,
 	struct efx_nic *efx;
 
 	/* Allocate probe data and struct efx_nic */
-	probe_data = kzalloc(sizeof(*probe_data), GFP_KERNEL);
+	probe_data = kzalloc_obj(*probe_data);
 	if (!probe_data)
 		return -ENOMEM;
 
@@ -1997,7 +2004,7 @@ struct efx_vport *efx_alloc_vport_entry(struct efx_nic *efx)
 	}
 
 	/* Create the new entry */
-	new = kzalloc(sizeof(struct efx_vport), GFP_KERNEL);
+	new = kzalloc_obj(struct efx_vport);
 	if (!new)
 		return NULL;
 

@@ -643,12 +643,10 @@ int efx_ssr_init(struct efx_rx_queue *rx_queue, struct efx_nic *efx)
 	st->conns_mask = lro_table_size - 1;
 
 	st->efx = efx;
-	st->conns = kmalloc_array((st->conns_mask + 1),
-				  sizeof(st->conns[0]), GFP_KERNEL);
+	st->conns = kmalloc_objs(st->conns[0], (st->conns_mask + 1));
 	if (st->conns == NULL)
 		return -ENOMEM;
-	st->conns_n = kmalloc_array((st->conns_mask + 1),
-				    sizeof(st->conns_n[0]), GFP_KERNEL);
+	st->conns_n = kmalloc_objs(st->conns_n[0], (st->conns_mask + 1));
 	if (st->conns_n == NULL) {
 		kfree(st->conns);
 		st->conns = NULL;
@@ -1030,7 +1028,7 @@ static void efx_ssr_new_conn(struct efx_ssr_state *st, u32 conn_hash,
 		c = list_entry(st->free_conns.next, struct efx_ssr_conn, link);
 		list_del(&c->link);
 	} else {
-		c = kmalloc(sizeof(*c), GFP_ATOMIC);
+		c = kmalloc_obj(*c, GFP_ATOMIC);
 		if (c == NULL)
 			return;
 		c->skb = NULL;

@@ -74,7 +74,7 @@ struct efx_client *efx_client_add(struct efx_probe_data *pd,
 	if (!client_type)
 		return NULL;
 
-	new = kzalloc(sizeof(*new), GFP_KERNEL);
+	new = kzalloc_obj(*new);
 	if (!new)
 		return ERR_PTR(-ENOMEM);
 	new->client_type = client_type;
@@ -138,7 +138,7 @@ static void efx_client_add_type(struct efx_probe_data *pd,
 	if (!efx_nic_client_supported(&pd->efx, type))
 		return;
 
-	new = kzalloc(sizeof(struct efx_client_type_data), GFP_KERNEL);
+	new = kzalloc_obj(struct efx_client_type_data);
 	if (!new)
 		return;
 	new->type = type;

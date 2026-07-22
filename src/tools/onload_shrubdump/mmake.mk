@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-2-Clause
-/* SPDX-FileCopyrightText: (c) Copyright 2025 Advanced Micro Devices, Inc. */
+# SPDX-FileCopyrightText: (c) Copyright 2025 Advanced Micro Devices, Inc.
 
 APPS := onload_shrubdump
 

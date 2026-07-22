@@ -34,8 +34,7 @@ static int efx_ef100_pci_sriov_enable(struct efx_nic *efx, int num_vfs)
 		 */
 		return 0;
 
-	nic_data->vf_rep = kcalloc(num_vfs, sizeof(struct net_device *),
-				GFP_KERNEL);
+	nic_data->vf_rep = kzalloc_objs(struct net_device *, num_vfs);
 	if (!nic_data->vf_rep) {
 		rc = -ENOMEM;
 		goto fail1;

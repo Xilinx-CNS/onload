@@ -19,7 +19,9 @@ TEST_SRCS := tests/sanity.c tests/multicast_sanity.c tests/namespace_sanity.c \
 	tests/mcast_input_validation.c tests/cluster_compat.c \
 	tests/threshold_sharing.c tests/mcast_hw_errors.c \
 	tests/mcast_del.c tests/mcast_del_sw.c \
-	tests/mcast_interface_update.c
+	tests/mcast_interface_update.c tests/hwport_lifecycle.c \
+	tests/addr_reactivate.c tests/mcast_install.c \
+	tests/udp_connect.c
 HDRS := cplane.h oof_impl.h stack_interface.h driverlink_interface.h  \
 	oof_test.h tcp_filters_deps.h efrm_interface.h oo_hw_filter.h \
 	tcp_filters_internal.h onload_kernel_compat.h stack.h utils.h \

@@ -94,6 +94,7 @@ static inline void ip6_fill_mask(__be32 *mask)
 	mask[0] = mask[1] = mask[2] = mask[3] = ~(__be32)0;
 }
 
+u32 efx_ethtool_get_rx_ring_count(struct net_device *net_dev);
 u32 efx_ethtool_get_rxfh_indir_size(struct net_device *net_dev);
 u32 efx_ethtool_get_rxfh_key_size(struct net_device *net_dev);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_RXFH_PARAM)

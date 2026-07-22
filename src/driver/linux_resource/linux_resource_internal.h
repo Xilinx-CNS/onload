@@ -78,8 +78,15 @@ efrm_nic_del_device(struct net_device *);
 extern int efrm_install_proc_entries(void);
 extern void efrm_uninstall_proc_entries(void);
 
+/* Flags for efrm_nic_add_sysfs() to control which attributes to expose */
+enum efrm_nic_sysfs_attr_flags {
+	EFRM_NIC_SYSFS_ENABLE  = (1 << 0),  /* Include enable attribute */
+	EFRM_NIC_SYSFS_CPU2RXQ = (1 << 1),  /* Include cpu2rxq attribute */
+};
+
 extern void efrm_nic_add_sysfs(const struct net_device* net_dev,
-			       struct device *dev);
+			       struct device *dev,
+			       unsigned int attr_flags);
 extern void efrm_nic_del_sysfs(struct device *dev);
 
 #ifdef EFHW_HAS_AF_XDP

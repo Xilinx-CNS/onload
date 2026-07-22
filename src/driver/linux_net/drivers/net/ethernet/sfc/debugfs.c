@@ -273,7 +273,7 @@ efx_init_debugfs_files(struct dentry *parent,
 		if ((1ULL << pos) & ignore)
 			continue;
 
-		binding = kmalloc(sizeof(*binding), GFP_KERNEL);
+		binding = kmalloc_obj(*binding);
 		if (!binding)
 			goto err;
 		binding->param = &params[pos];
