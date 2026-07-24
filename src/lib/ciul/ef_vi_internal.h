@@ -320,7 +320,9 @@ extern enum ef_pd_flags ef_pd_flags_from_env(enum ef_pd_flags flags,
                                              int ifindex);
 
 typedef uint64_t efct_tx_aperture_t;
-ci_inline uint64_t efct_tx_scale_offset_bytes(uint64_t offset_bytes)
+
+ci_inline __attribute__((always_inline))
+uint64_t efct_tx_scale_offset_bytes(uint64_t offset_bytes)
 {
   /* When transmitting with efct, we track the offset in the aperture as the
    * number of writes performed to the aperture multiplied by the size of the
