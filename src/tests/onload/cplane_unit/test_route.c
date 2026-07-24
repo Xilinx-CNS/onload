@@ -444,6 +444,48 @@ void test_user_retrieve(void)
 }
 
 
+static void test_multiarch_single_datapath_route(void)
+{
+  struct cp_session s;
+  struct oo_sock_cplane sock_cp;
+  ci_ip_cached_hdrs ipcache;
+  ci_netif ni;
+  ci_hwport_id_t ff_hwport = cp_hwport_mask_first(ETHO1_FF_HWPORT);
+  int hwport;
+
+  init_session(&s, NULL);
+  cp_unit_netif_mock(&ni, &s, NULL);
+  insert_test_routes(&s);
+  insert_test_resolutions(&s);
+
+  /* Model a stack where only the FF datapath is usable, but retain both
+   * physical siblings for route classification.  The control-plane route
+   * continues to contain ETHO1_HWPORTS. */
+  ni.state->tx_hwport_mask = ETHO1_FF_HWPORT;
+  ni.state->rx_hwport_mask = ETHO1_FF_HWPORT;
+  ni.state->multiarch_hwport_mask = ETHO1_HWPORTS;
+  for( hwport = 0; hwport < CI_CFG_MAX_HWPORTS; ++hwport )
+    ni.state->hwport_to_intf_i[hwport] = -1;
+  ni.state->hwport_to_intf_i[ff_hwport] = 0;
+
+  ci_ip_cache_invalidate(&ipcache);
+  ipcache.ether_type = CI_ETHERTYPE_IP;
+  ci_ipcache_set_daddr(&ipcache, CI_ADDR_FROM_IP4(A("1.1.1.1")));
+  oo_sock_cplane_init(&sock_cp);
+
+  cicp_user_retrieve(&ni, &ipcache, &sock_cp);
+
+  cmp_ok(ipcache.status, "==", retrrc_nomac,
+         "route with both siblings is acceleratable by an FF-only stack");
+  cmp_ok(ipcache.hwport, "==", ff_hwport,
+         "route with both siblings selects the usable FF hwport");
+  cmp_ok(ipcache.intf_i, "==", 0,
+         "route with both siblings maps to the FF stack interface");
+
+  cp_unit_netif_mock_destroy(&ni);
+}
+
+
 /* The routes in the local namespace include one route over a veth
  * interface.  This function inserts the routes that we are pretending are
  * configured in the main namespace. */
@@ -683,6 +725,7 @@ int main(void)
 
 #ifdef CAN_TEST_ONLOAD_CPLANE_CALLS
   test_user_retrieve();
+  test_multiarch_single_datapath_route();
   test_cross_namespace_routing();
   test_nic_acceleratable();
   test_bond_acceleratable();
