@@ -1,6 +1,6 @@
 #!/bin/bash -u
 # SPDX-License-Identifier: BSD-2-Clause
-# X-SPDX-Copyright-Text: (c) Copyright 2007-2023 Xilinx, Inc.
+# X-SPDX-Copyright-Text: (c) Copyright 2007-2026 Advanced Micro Devices, Inc.
 ##############################################################################
 # Copy only portions of source tree needed for onload, apply copyright
 # messages and pre-process to strip platforms we're not releasing.
@@ -168,6 +168,7 @@ docopy src/include/ci         driver efch efhw efrm internal net
 docopy scripts                mmaketool mmakebuildtree mmake
 docopy scripts                onload_build onload_install
 docopy scripts                onload onload_apps onload_profiles onload_misc
+docopy scripts/debian         debian-templ
 docopy scripts                onload_tool onload_tcpdump
 docopy scripts                onload_iptables
 docopy scripts                onload_rpmtest

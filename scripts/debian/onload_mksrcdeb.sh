@@ -1,7 +1,7 @@
 #!/bin/sh
 #
 # SPDX-License-Identifier: BSD-2-Clause
-# X-SPDX-Copyright-Text: (c) Copyright 2015-2023 Xilinx, Inc.
+# X-SPDX-Copyright-Text: (c) Copyright 2015-2026 Advanced Micro Devices, Inc.
 
 set -u
 
@@ -60,42 +60,16 @@ fi
 basename=$(basename "$tarball" .tgz)
 onloadtype=$(echo "$basename" | try sed -e 's/\([^-]*\)\(-\)\(.*\)/\1/')
 onloadver=$(echo "$basename" | try sed -e 's/\([^-]*\)\(-\)\(.*\)/\3/')
-soversion=$(awk '/^ONLOAD_EXT_VERSION_MAJOR/{print $3}' "$TOP"/../mk/site/libs.mk)
 package="${onloadtype}_${onloadver}"
 onloaddir="$onloadtype-$onloadver"
 tempfile=$(mktemp -d)
 
-if [ "$onloadtype" != "enterpriseonload" ] && \
-   [ "$onloadtype" != "openonload" ] && \
-   [ "$onloadtype" != "cloudonload" ] && \
-   [ "$onloadtype" != "onload" ]; then
-  echo "Couldn't determine valid onload type from tarball name. Name should be"
-  echo "in the format enterpriseonload-version.tgz, openonload-version.tgz,"
-  echo "cloudonload-version.tgz or onload-version.tgz."
-  exit
-fi
+[ "$onloadtype" = "${onloadtype%%onload}onload" ] || \
+  fail "onload tarball name sanity check (*onload-*.tgz) failed"
 
 echo "Creating package $package in $tempfile"
 
 try cp "$tarball" "$tempfile/$package.orig.tar.gz"
-try mkdir -p "$tempfile/$onloaddir/debian"
-
-# Make any necessary replacements for the onload release we're doing in the
-# control files
-for i in $(find "$TOP"/debian/debian-templ/* -type f); do
-  ni="${tempfile}/${onloaddir}/debian/$(basename "$i")"
-  try sed -e "s/#VERSION#/$onloadver/g" -e "s/#TYPE#/$onloadtype/g" -e "s/#SOVERSION#/${soversion}/g" < "$i" > "$ni";
-done
-
-for i in $(find "${tempfile}"/"${onloaddir}"/debian/type-* -type f); do
-  ni=$(basename "$i" | sed -e "s/type/${onloadtype}/g")
-  try mv "$i" "${tempfile}/${onloaddir}/debian/$ni"
-done
-
-# Format is in a separate directory and can't have replacements, just copy it
-# separately
-try cp -r "$TOP/debian/debian-templ/source" "$tempfile/$onloaddir/debian/"
-
 try cd "$tempfile"
 try tar xf "$package.orig.tar.gz"
 try cd "$onloaddir/debian"
