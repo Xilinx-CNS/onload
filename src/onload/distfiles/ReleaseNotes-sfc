@@ -1,6 +1,6 @@
 Solarflare 6.X Linux network driver
 ===================================
-Version:  v6_3_1_1000
+Version:  v6_4_0_1003
 
 
 Overview
@@ -57,7 +57,7 @@ kernel
 Installation of the driver can be confirmed by typing:
    modinfo sfc | grep version
 and checking for the line:
-   version: v6_3_1_1000
+   version: v6_4_0_1003
 
 All network interfaces available on the system can be found with:
   ifconfig -a
@@ -68,8 +68,8 @@ Linux distribution support for Solarflare Adapters
 
 This driver package is supported on:
  - RedHat Enterprise Linux                        8.6, 8.7, 8.8, 8.9, 8.10
- - RedHat Enterprise Linux                        9.3, 9.4, 9.5, 9.6, 9.7
- - RedHat Enterprise Linux                        10.0, 10.1
+ - RedHat Enterprise Linux                        9.3, 9.4, 9.5, 9.6, 9.7, 9.8
+ - RedHat Enterprise Linux                        10.0, 10.1, 10.2
  - Canonical Ubuntu Server LTS                    22.04, 24.04, 26.04
  - Debian Linux                                   12.0, 13.0
  - Kernel.org linux kernels                       5.1 to 7.0
@@ -91,6 +91,25 @@ Please contact your local AMD support representative or email
 
 Changelog
 ---------
+### v6_4_0_1003
+SWNETLINUX-5916
+~ Avoid reporting a link up-to-up transition when multiple link change
+  events are received in quick succession.
+
+SWNETLINUX-5908
+~ Fix an out-of-bounds write in adapter statistics handling that could
+  occur if the firmware reports a different number of statistics after a
+  reset.
+
+SWNETLINUX-5910
+~ Add the 'kernel-modules' capability to the RPM package so that the
+  installer can create a Driver Update Disk (DUD) for RHEL installations.
+
+### v6_3_1_1002
+SWNETLINUX-5790
+~ Support reading longer logs from adapters by using 'devlink health dump'
+  (instead of 'diagnose').
+
 ### v6_3_1_1000
 SWNETLINUX-5886
 ~ Fix memory leak when bad (e.g. bad CRC) packets are received; this was a
@@ -3045,9 +3064,6 @@ SWNETLINUX-5731:
 ~ Attempts to use ethtool -X <intf> context feature for managing RSS contexts
   will fail in kernels 6.17 and later. There are no issues using RSS with
   default context configuration.
-
-X4-7594:
-~ VFs on X4 adapters should be configured with an MTU of 1500 or less.
 
 X4-7148:
 ~ For X4 adapters, the statistics counters rx_eth_crc_err and rx_frm_trunc
