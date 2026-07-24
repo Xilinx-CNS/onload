@@ -214,6 +214,7 @@ static int hwport_count(cicp_hwport_mask_t hwports)
 struct expected_selection {
   cicp_hwport_mask_t tx_mask;
   cicp_hwport_mask_t rx_mask;
+  cicp_hwport_mask_t multiarch_mask;
   cicp_hwport_mask_t discovered;
   int nic_n;
   int rc;
@@ -230,6 +231,16 @@ compute_expected(cicp_hwport_mask_t blacklist, ci_uint32 tx, ci_uint32 rx)
   cicp_hwport_mask_t singleton_ff, singleton_llct;
   struct expected_selection e;
   int tx_ok = 1, rx_ok = 1;
+
+  e.multiarch_mask = 0;
+  if( surviving &
+      (TEST_NIC_PORT0_FF_HWPORTS | TEST_NIC_PORT0_LLCT_HWPORTS) )
+    e.multiarch_mask |=
+      TEST_NIC_PORT0_FF_HWPORTS | TEST_NIC_PORT0_LLCT_HWPORTS;
+  if( surviving &
+      (TEST_NIC_PORT1_FF_HWPORTS | TEST_NIC_PORT1_LLCT_HWPORTS) )
+    e.multiarch_mask |=
+      TEST_NIC_PORT1_FF_HWPORTS | TEST_NIC_PORT1_LLCT_HWPORTS;
 
   if( (surviving & (TEST_NIC_PORT0_FF_HWPORTS | TEST_NIC_PORT0_LLCT_HWPORTS)) ==
       (TEST_NIC_PORT0_FF_HWPORTS | TEST_NIC_PORT0_LLCT_HWPORTS) ) {
@@ -394,6 +405,11 @@ static void test_module_blacklist_datapath_matrix(void)
            "blacklist=%#x: tx=%s rx=%s selects RX hwports %#x",
            (unsigned) blacklist, datapath_name(tx_datapaths[tx_i]),
            datapath_name(rx_datapaths[rx_i]), (unsigned) e.rx_mask);
+        ok(trs.netif.multiarch_hwport_mask == e.multiarch_mask,
+           "blacklist=%#x: tx=%s rx=%s identifies multiarch hwports %#x",
+           (unsigned) blacklist, datapath_name(tx_datapaths[tx_i]),
+           datapath_name(rx_datapaths[rx_i]),
+           (unsigned) e.multiarch_mask);
         ok(discovered_hwports(&trs) == e.discovered,
            "blacklist=%#x: tx=%s rx=%s discovers hwports %#x",
            (unsigned) blacklist, datapath_name(tx_datapaths[tx_i]),
@@ -436,6 +452,8 @@ static void test_module_whitelist(void)
       .whitelist = TEST_NIC_PORT0_FF_HWPORTS,
       .tx_mask = TEST_NIC_PORT0_FF_HWPORTS,
       .rx_mask = TEST_NIC_PORT0_FF_HWPORTS,
+      .multiarch_mask = TEST_NIC_PORT0_FF_HWPORTS |
+                        TEST_NIC_PORT0_LLCT_HWPORTS,
       .rc = 0,
     },
     {
@@ -443,6 +461,8 @@ static void test_module_whitelist(void)
       .whitelist = TEST_NIC_PORT0_LLCT_HWPORTS,
       .tx_mask = TEST_NIC_PORT0_LLCT_HWPORTS,
       .rx_mask = TEST_NIC_PORT0_LLCT_HWPORTS,
+      .multiarch_mask = TEST_NIC_PORT0_FF_HWPORTS |
+                        TEST_NIC_PORT0_LLCT_HWPORTS,
       .rc = 0,
     },
     {
@@ -488,6 +508,44 @@ static void test_module_whitelist(void)
 
     test_cleanup();
   }
+}
+
+static void test_admin_disabled_llct_falls_back_to_ff(void)
+{
+  const cicp_hwport_mask_t expected_tx =
+    TEST_NIC_PORT0_FF_HWPORTS | TEST_NIC_PORT1_LLCT_HWPORTS;
+  const cicp_hwport_mask_t expected_rx =
+    TEST_NIC_PORT0_FF_HWPORTS |
+    TEST_NIC_PORT1_FF_HWPORTS | TEST_NIC_PORT1_LLCT_HWPORTS;
+  tcp_helper_resource_t trs;
+  int rc;
+
+  setup_one_two_port_nic(&trs);
+  test_set_hwport_accel_allowed(HWPORT_TEST_NIC_PORT0_LLCT, 0);
+  NI_OPTS(&trs.netif).multiarch_tx_datapath =
+    EF_MULTIARCH_DATAPATH_AUTO;
+  NI_OPTS(&trs.netif).multiarch_rx_datapath =
+    EF_MULTIARCH_DATAPATH_AUTO;
+
+  diag("one two-port multiarch NIC: port 0 LLCT administratively disabled");
+  rc = oo_get_nics(&trs, -1);
+  ok(rc == 0, "disabled LLCT: auto selection succeeds");
+  ok(trs.netif.tx_hwport_mask == expected_tx,
+     "disabled LLCT: TX falls back to FF on the affected interface");
+  ok(trs.netif.rx_hwport_mask == expected_rx,
+     "disabled LLCT: RX uses FF only on the affected interface");
+  ok(trs.netif.multiarch_hwport_mask == TEST_NIC_HWPORTS,
+     "disabled LLCT: route classification retains all physical siblings");
+  ok(discovered_hwports(&trs) == expected_rx,
+     "disabled LLCT: only usable hwports are discovered");
+  ok(trs.netif.nic_n == hwport_count(expected_rx),
+     "disabled LLCT: creates VIs only for usable hwports");
+  ok(trs.netif.hwport_to_intf_i[HWPORT_TEST_NIC_PORT0_LLCT] == -1,
+     "disabled LLCT: disabled hwport has no VI mapping");
+  ok(trs.netif.hwport_to_intf_i[HWPORT_TEST_NIC_PORT0_FF] >= 0,
+     "disabled LLCT: paired FF hwport has a VI mapping");
+
+  test_cleanup();
 }
 
 static void test_auto_all_interfaces(void)
@@ -551,13 +609,15 @@ int test_multiarch_datapath(void)
 {
   /* Three port combinations, three TX settings, four RX settings, and
    * return-code/TX-mask/RX-mask checks for every combination.  The
-   * module blacklist matrix adds five checks for every mask and TX/RX pair,
-   * and the four module whitelist cases add six checks each. */
-  plan(3 * 3 * 4 * 3 + 3 + 3 + (1 << 4) * 3 * 4 * 5 + 4 * 6);
+   * module blacklist matrix adds six checks for every mask and TX/RX pair,
+   * the four module whitelist cases add six checks each, and the
+   * admin-disabled LLCT case adds eight checks. */
+  plan(3 * 3 * 4 * 3 + 3 + 3 + (1 << 4) * 3 * 4 * 6 + 4 * 6 + 8);
 
   test_datapath_matrix();
   test_module_blacklist_datapath_matrix();
   test_module_whitelist();
+  test_admin_disabled_llct_falls_back_to_ff();
   test_auto_all_interfaces();
   test_auto_respects_blacklist();
 
