@@ -110,7 +110,7 @@ if [ -z "$version" ]; then
   elif [ -n "$src_rev" ]; then
     version="$src_rev"
   else
-    version=$(cd "$TOP" && "$git" rev-parse --short=7 HEAD)
+    version="0~$(cd "$TOP" && "$git" rev-parse --short=7 HEAD)"
     [ -z "$version" ] && fail "ERROR: Could not find HEAD revision"
   fi
 fi
