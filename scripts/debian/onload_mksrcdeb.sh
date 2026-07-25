@@ -69,10 +69,16 @@ tempfile=$(mktemp -d)
 
 echo "Creating package $package in $tempfile"
 
+# Unpack what we need
 try cp "$tarball" "$tempfile/$package.orig.tar.gz"
 try cd "$tempfile"
 try tar xf "$package.orig.tar.gz"
-try cd "$onloaddir/debian"
+try cd "$onloaddir"
+
+# Stamp changelog with release-ready status
+try dch --maintmaint --release ''
+
+# Build the source package
 try debuild -S -i -uc -us -d
 try cd "$tempfile"
 
