@@ -631,6 +631,7 @@ struct efhw_nic {
 # define NIC_RESETTING_FLAG_RESET       0x00000001
 # define NIC_RESETTING_FLAG_UNPLUGGED   0x00000002
 # define NIC_RESETTING_FLAG_VANISHED    0x00000004
+# define NIC_RESETTING_FLAG_UNKNOWN_CXL 0x00000008
 
 	unsigned mtu;		/*!< MAC MTU (includes MAC hdr) */
 	unsigned max_tx_mtu;	/*!< limit imposed by NIC, zero if no limit */

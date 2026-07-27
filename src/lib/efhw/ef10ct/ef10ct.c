@@ -144,6 +144,49 @@ ef10ct_nic_supported_filter_flags(struct efhw_nic *nic)
 }
 
 
+static int ef10ct_check_cxl_enablement(struct efhw_nic *nic)
+{
+  union efx_auxiliary_param_value val;
+  struct efx_auxdev_client* cli;
+  struct efx_auxdev* edev;
+  struct device *dev;
+  int rc;
+
+  /* Clear the CXL enablement flags in case they had been set previously. */
+  nic->flags &= ~(NIC_FLAG_CXL_MEM_ENABLED | NIC_FLAG_CXL_CACHE_ENABLED);
+
+  AUX_PRE_ALLOW_RESET(dev, edev, cli, nic, rc);
+  rc = edev->llct_ops->base_ops->get_param(cli, EFX_PARAM_CXL_MEM_ENABLED,
+                                           &val);
+  AUX_POST(dev, edev, cli, nic, rc);
+  if( rc < 0 )
+    return rc;
+  else if( val.b )
+    nic->flags |= NIC_FLAG_CXL_MEM_ENABLED;
+
+  AUX_PRE_ALLOW_RESET(dev, edev, cli, nic, rc);
+  rc = edev->llct_ops->base_ops->get_param(cli, EFX_PARAM_CXL_CACHE_ENABLED,
+                                           &val);
+  AUX_POST(dev, edev, cli, nic, rc);
+  if( rc < 0 )
+    return rc;
+  else if( val.b )
+    nic->flags |= NIC_FLAG_CXL_CACHE_ENABLED;
+
+  /* ef10ct_nic_init_hardware can be called in a loop in case there is some
+   * hardware issue we hope might be resolved. We should let users know if
+   * we previously gave them a scary message about needing to reload the
+   * driver - ideally we wouldn't scare them in the first place but I think
+   * this is a decent second best. */
+  if( nic->resetting & NIC_RESETTING_FLAG_UNKNOWN_CXL ) {
+    ci_atomic32_and(&nic->resetting, ~NIC_RESETTING_FLAG_UNKNOWN_CXL);
+    EFHW_ERR("%s: discovered CXL enablement after retrying", __FUNCTION__);
+  }
+
+  return 0;
+}
+
+
 static int
 ef10ct_nic_init_hardware(struct efhw_nic *nic,
                          struct efhw_ev_handler *ev_handlers,
@@ -152,6 +195,8 @@ ef10ct_nic_init_hardware(struct efhw_nic *nic,
   /* These are reported incorrectly, so need blatting out */
   uint64_t unsupported_filter_flags = NIC_FILTER_FLAG_RX_TYPE_UCAST_MISMATCH |
                                       NIC_FILTER_FLAG_RX_TYPE_MCAST_MISMATCH;
+  int rc;
+
   memcpy(nic->mac_addr, mac_addr, ETH_ALEN);
   nic->ev_handlers = ev_handlers;
   nic->flags |= NIC_FLAG_TX_CTPIO | NIC_FLAG_CTPIO_ONLY
@@ -169,6 +214,14 @@ ef10ct_nic_init_hardware(struct efhw_nic *nic,
              ;
   nic->filter_flags |= ef10ct_nic_supported_filter_flags(nic);
   nic->filter_flags &= ~unsupported_filter_flags;
+
+  rc = ef10ct_check_cxl_enablement(nic);
+  if( rc < 0 ) {
+    ci_atomic32_or(&nic->resetting, NIC_RESETTING_FLAG_UNKNOWN_CXL);
+    EFHW_ERR("%s: inability to determine CXL enablement is fatal, a driver reload is necessary to rectify this",
+             __FUNCTION__);
+    return rc;
+  }
 
   nic->sw_bts = kzalloc(EFHW_MAX_SW_BTS * sizeof(struct efhw_sw_bt),
                         GFP_KERNEL);
