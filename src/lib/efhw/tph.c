@@ -61,14 +61,14 @@ efhw_populate_set_vi_tlp_processing_mcdi_cmd(ci_dword_t *buf,
 
 int
 efhw_set_tph_steering(struct efhw_nic *nic, uint instance, int set,
-                      int tag_mode, uint16_t *tag_used)
+                      int *tag_mode, uint16_t *tag_used)
 {
 #if CI_HAVE_SDCI
   int rc;
 
   *tag_used = 0;
 
-  if( tag_mode != 0 ) {
+  if( *tag_mode != 0 ) {
     struct pci_dev *nic_pci_dev = efhw_nic_get_pci_dev(nic);
 
     if( nic_pci_dev ) {
@@ -80,9 +80,11 @@ efhw_set_tph_steering(struct efhw_nic *nic, uint instance, int set,
       rc = -ENODEV;
     }
 
-    if( rc != 0 )
+    if( rc != 0 ) {
+      *tag_mode = 0;
       EFHW_WARN_LIMITED("Failed to read steering tag (error %d), continuing without it",
                         rc);
+    }
   }
 
   rc = efhw_nic_set_vi_tlp_processing(nic, instance, set, *tag_used);

@@ -1404,14 +1404,16 @@ ef10ct_set_tph_steering(struct efhw_nic *nic, int rxq_handle, int rxq_num,
   uint16_t tag_used;
   int rc;
   rc = efhw_set_tph_steering(nic, rxq_handle, flag_enable_tph,
-                             flag_tph_tag_mode, &tag_used);
+                             &flag_tph_tag_mode, &tag_used);
  /* Store tag (or EFHW_STEERING_TAG_TURNED_OFF if no tag set, or error if 
   * problem) for debugfs */
   if (rc < 0) {
     ef10ct->rxq[rxq_num].steering_tag = (int32_t)rc;
   } else {
-    if (flag_enable_tph)
+    if (flag_enable_tph && flag_tph_tag_mode)
       ef10ct->rxq[rxq_num].steering_tag = (int32_t)tag_used;
+    else if (flag_enable_tph)
+      ef10ct->rxq[rxq_num].steering_tag = EFHW_TPH_STEERING_TAG_NO_TAG;
     else 
       ef10ct->rxq[rxq_num].steering_tag = EFHW_TPH_STEERING_TAG_TURNED_OFF;
   }

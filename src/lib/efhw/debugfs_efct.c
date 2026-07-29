@@ -154,11 +154,11 @@ efct_debugfs_read_ef10ct_rxq_state(struct seq_file *file,
   else if ( rxq->steering_tag == EFHW_TPH_STEERING_TAG_TURNED_OFF ) {
     seq_printf(file, "  steering_tag: TPH steering turned off\n");
   }
+  else if ( rxq->steering_tag == EFHW_TPH_STEERING_TAG_NO_TAG ) {
+    seq_printf(file, "  steering_tag: No-ST mode\n");
+  }
   else if ( rxq->steering_tag < 0 ) {
     seq_printf(file, "  steering_tag: Error %d\n", rxq->steering_tag);
-  }
-  else if ( rxq->steering_tag == 0 ) {
-    seq_printf(file, "  steering_tag: No-ST mode\n");  
   } else {
     seq_printf(file, "  steering_tag: %d\n", rxq->steering_tag);
   }

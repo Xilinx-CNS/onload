@@ -1703,7 +1703,8 @@ ef10_dmaq_rx_q_init(struct efhw_nic *nic, struct efhw_dmaq_params *params)
    * previous state. */
   if( rc == 0 ) {
     uint16_t tag_used;
-    efhw_set_tph_steering(nic, params->evq, flag_enable_tph, flag_tph_tag_mode, &tag_used);
+    efhw_set_tph_steering(nic, params->evq, flag_enable_tph,
+                          &flag_tph_tag_mode, &tag_used);
   }
 
   if( rc == 0 )
