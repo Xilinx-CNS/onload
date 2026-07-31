@@ -176,6 +176,14 @@ static void efxdp_ef_vi_transmitv_ctpio_copy(ef_vi* vi, size_t frame_len,
   // TODO copy to fallback
 }
 
+static void efxdp_ef_vi_transmitv_ctpio_zc(ef_vi* vi, size_t frame_len,
+                                           char* tx_prefix,
+                                           const struct iovec* iov,
+                                           int iovcnt, unsigned threshold)
+{
+  /* CTPIO is unsupported so do nothing. Fallback will send the packet. */
+}
+
 static int efxdp_ef_vi_transmit_ctpio_fallback(ef_vi* vi, ef_addr dma_addr,
                                                size_t len, ef_request_id dma_id)
 {
@@ -434,6 +442,7 @@ int efxdp_vi_init(ef_vi* vi)
   vi->ops.stop_transmit_warm    = efxdp_ef_vi_stop_transmit_warm;
   vi->ops.transmitv_ctpio        = efxdp_ef_vi_transmitv_ctpio;
   vi->ops.transmitv_ctpio_copy   = efxdp_ef_vi_transmitv_ctpio_copy;
+  vi->ops.transmitv_ctpio_zc     = efxdp_ef_vi_transmitv_ctpio_zc;
   vi->ops.transmit_alt_select    = efxdp_ef_vi_transmit_alt_select;
   vi->ops.transmit_alt_select_default = efxdp_ef_vi_transmit_alt_select_normal;
   vi->ops.transmit_alt_stop      = efxdp_ef_vi_transmit_alt_stop;

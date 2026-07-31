@@ -1285,6 +1285,13 @@ typedef struct ef_vi {
                                  const struct iovec* iov,
                                  int iov_len, unsigned threshold,
                                  void* fallback);
+    /** Transmit a vector of packet buffers using CTPIO. This variant transmits
+     * directly from the user buffer without potential copies of data to any
+     * temporary buffers by imposing stricter requirements on callers. */
+    void (*transmitv_ctpio_zc)(struct ef_vi*, size_t frame_len,
+                               char* tx_prefix,
+                               const struct iovec* iov,
+                               int iov_len, unsigned threshold);
     /** Select a TX alternative as the destination for future sends */
     int (*transmit_alt_select)(struct ef_vi*, unsigned alt_id);
     /** Select the "normal" data path as the destination for future sends */
@@ -2687,6 +2694,67 @@ extern void ef_vi_set_tx_push_threshold(ef_vi* vi, unsigned threshold);
   (vi)->ops.transmitv_ctpio_copy((vi), (frame_len), (frame_iov),     \
                                  (frame_iov_len), (ct_threshold),    \
                                  (fallback))
+
+/*! \brief Transmit a packet using CTPIO from an array of buffers (zero copy)
+**
+** \param vi            The virtual interface on which to transmit.
+** \param frame_len     Frame length in bytes.
+** \param tx_prefix     Writable location before the packet.
+** \param frame_iov     Buffers containing the frame to transmit.
+** \param frame_iov_len Length of frame_iov.
+** \param ct_threshold  Number of bytes of the packet to buffer before
+**                      starting to cut-through to the wire.
+**
+** Transmit a packet using CTPIO. This function holds all the same advisories
+** as ef_vi_transmitv_ctpio, except with the added benefit that a temporary
+** buffer is never used before writing the packet data to the NIC. To allow
+** this behaviour, the following requirements are imposed on callers:
+**
+** - All frame_iov[i].iov_len % EF_VI_ZC_TRANSMIT_MAX_CHUNK_SIZE == 0, except
+**   for the final iov (which may or may not be).
+** - frame_iov[frame_iov_len - 1].iov_base must point to a region in memory
+**   which has at least frame_iov[frame_iov_len - 1].iov_len, rounded up to
+**   the next EF_VI_ZC_TRANSMIT_MAX_CHUNK_SIZE boundary, readable bytes.
+** - The value of frame_iov[0].iov_base must equal tx_prefix and be writable,
+**   frame_iov[0].iov_len must also include the length of the TX prefix.
+** - The value of tx_prefix must be 8-byte aligned.
+** - Packet data must start at frame_iov[0].iov_base plus the TX prefix size
+**   returned by ef_vi_zc_transmit_prefix_size(vi).
+**
+** An example of the intended usage of this function is shown below.
+**
+** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~{.c}
+** buf_offset = i * BUF_SIZE;
+** buf = (char*)buffers + buf_offset;
+** prefix = ef_vi_zc_transmit_prefix_size(vi);
+** pkt = (char*)buf + prefix;
+** dma_buf = ef_memreg_dma_addr(memreg, buf_offset + prefix);
+** len = init_pkt_data(pkt);
+** struct iovec iov = { .iov_base = buf, .iov_len = len + prefix };
+** ef_vi_transmitv_ctpio_zc(vi, len, buf, &iov, 1, ct_threshold);
+** rc = ef_vi_transmit_ctpio_fallback(vi, dma_buf, len, dma_id);
+** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+*/
+#define ef_vi_transmitv_ctpio_zc(vi, frame_len, tx_prefix, frame_iov, \
+                                 frame_iov_len, ct_threshold)         \
+  (vi)->ops.transmitv_ctpio_zc((vi), (frame_len), (tx_prefix),        \
+                               (frame_iov), (frame_iov_len),          \
+                               (ct_threshold))
+
+/*! \brief Get the prefix size required for ef_vi_transmitv_ctpio_zc()
+**
+** \param vi The virtual interface which will be used to transmit.
+**
+** Get the prefix size required for ef_vi_trasmitv_ctpio_zc(). This value is
+** constant per VI, so may be stored and reused to avoid retrieving it every
+** time the transmit function must be called.
+*/
+#define ef_vi_zc_transmit_prefix_size(vi) \
+  (((vi)->nic_type.arch == EF_VI_ARCH_EF10CT || \
+    (vi)->nic_type.arch == EF_VI_ARCH_EFCT) ? sizeof(uint64_t) : 0)
+
+/*! \brief Maximum chunk size used by ef_vi_transmitv_ctpio_zc() */
+#define EF_VI_ZC_TRANSMIT_MAX_CHUNK_SIZE 64
 
 /*! \brief Transmit a packet using CTPIO
 **

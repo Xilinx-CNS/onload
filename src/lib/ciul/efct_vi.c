@@ -1667,6 +1667,17 @@ efct_tx_get_dma_id(ef_vi* vi)
   return tx_warm_active(vi) ? EF_REQUEST_ID_MASK : EFCT_TX_POSTED_ID;
 }
 
+static inline size_t count_iovec_lens(const struct iovec* iov, int iovlen)
+{
+  size_t len = 0;
+  int i;
+
+  for( i = 0; i < iovlen; i++ )
+    len += iov[i].iov_len;
+
+  return len;
+}
+
 /* Produce definitions for EFCT transmit functions which write 8-bytes at a
  * time to the CTPIO aperture. */
 ci_inline __attribute__((always_inline)) void

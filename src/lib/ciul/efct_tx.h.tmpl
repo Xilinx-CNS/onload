@@ -65,6 +65,18 @@ struct EFCT_TX_TOKEN(efct_tx_state)
 #endif
 };
 
+/* This is the same as EFCT_TX_TOKEN(efct_tx_state), except without the tail
+ * buffer as we disallow copies. */
+struct EFCT_TX_TOKEN(efct_tx_state_zc)
+{
+  /* base address of the aperture */
+  volatile efct_tx_aperture_t* aperture;
+  /* number of 64-bit words from start of aperture */
+  uint64_t offset;
+  /* mask to keep offset within the aperture range */
+  uint64_t mask;
+};
+
 /* initialise state for a transmit operation */
 ci_inline EFCT_TX_FUNCTION_ATTRS __attribute__((always_inline)) void
 EFCT_TX_TOKEN(efct_tx_init)(ef_vi* vi, struct EFCT_TX_TOKEN(efct_tx_state)* tx)
@@ -76,6 +88,13 @@ EFCT_TX_TOKEN(efct_tx_init)(ef_vi* vi, struct EFCT_TX_TOKEN(efct_tx_state)* tx)
   tx->tail_len = 0;
   for( i = 0; i < EFCT_TX_TAIL_SIZE; i++)
     tx->tail[i] = 0;
+}
+
+ci_inline EFCT_TX_FUNCTION_ATTRS __attribute__((always_inline)) void
+EFCT_TX_TOKEN(efct_tx_zc_init)(ef_vi* vi,
+                               struct EFCT_TX_TOKEN(efct_tx_state_zc)* tx)
+{
+  efct_tx_populate_state(vi, &tx->aperture, &tx->offset, &tx->mask);
 }
 
 /* store a left-over byte from the start or end of a block */
@@ -163,6 +182,17 @@ EFCT_TX_TOKEN(efct_tx_block)(struct EFCT_TX_TOKEN(efct_tx_state)* __restrict__ t
 }
 
 ci_inline EFCT_TX_FUNCTION_ATTRS __attribute__((always_inline)) void
+EFCT_TX_TOKEN(efct_tx_block_zc)(struct EFCT_TX_TOKEN(efct_tx_state_zc)* __restrict__ tx,
+                                char* base, int len)
+{
+  while( len > 0 ) {
+    EFCT_TX_TOKEN(efct_tx_chunk)(tx->aperture, &tx->offset, tx->mask, base);
+    base += EFCT_TX_CHUNK_SIZE;
+    len -= EFCT_TX_CHUNK_SIZE;
+  }
+}
+
+ci_inline EFCT_TX_FUNCTION_ATTRS __attribute__((always_inline)) void
 EFCT_TX_TOKEN(efct_tx_complete_tail)(struct EFCT_TX_TOKEN(efct_tx_state)* tx)
 {
   if( tx->tail_len != 0 ) {
@@ -218,6 +248,15 @@ EFCT_TX_TOKEN(efct_tx_complete)(ef_vi* vi,
                                 uint32_t dma_id, int len)
 {
   EFCT_TX_TOKEN(efct_tx_complete_tail)(tx);
+  EFCT_TX_TOKEN(efct_tx_complete_pad)(tx->aperture, &tx->offset, tx->mask);
+  EFCT_TX_TOKEN(efct_tx_complete_queue_state)(vi, dma_id, len);
+}
+
+ci_inline EFCT_TX_FUNCTION_ATTRS __attribute__((always_inline)) void
+EFCT_TX_TOKEN(efct_tx_complete_zc)(ef_vi* vi,
+                                   struct EFCT_TX_TOKEN(efct_tx_state_zc)* tx,
+                                   uint32_t dma_id, int len)
+{
   EFCT_TX_TOKEN(efct_tx_complete_pad)(tx->aperture, &tx->offset, tx->mask);
   EFCT_TX_TOKEN(efct_tx_complete_queue_state)(vi, dma_id, len);
 }
@@ -347,12 +386,62 @@ EFCT_TX_TOKEN(efct_ef_vi_transmitv_ctpio_fallback)(ef_vi* vi,
 }
 
 static EFCT_TX_FUNCTION_ATTRS void
+EFCT_TX_TOKEN(efct_ef_vi_transmitv_ctpio_zc)(ef_vi* vi, size_t len,
+                                             char* tx_prefix,
+                                             const struct iovec* iov,
+                                             int iovcnt, unsigned threshold)
+{
+  struct EFCT_TX_TOKEN(efct_tx_state_zc) tx;
+  uint64_t header;
+  uint32_t dma_id;
+  int i;
+
+  /* The TX prefix must be at the start of what we transmit. */
+  EF_VI_ASSERT(iovcnt > 0);
+  EF_VI_ASSERT(iov[0].iov_base == tx_prefix);
+  EF_VI_ASSERT(iov[0].iov_len >= sizeof(uint64_t));
+
+  /* The TX prefix must be 8-byte aligned. */
+  EF_VI_ASSERT(!((uintptr_t)tx_prefix & ((uintptr_t)((uint64_t*)0 + 1) - 1)));
+
+  /* Each iov must be a multiple of EF_VI_ZC_TRANSMIT_MAX_CHUNK_SIZE except
+   * the final iov. */
+  for( i = 0; i < iovcnt - 1; ++i )
+    EF_VI_ASSERT(iov[i].iov_len % EF_VI_ZC_TRANSMIT_MAX_CHUNK_SIZE == 0);
+
+  /* The iovs must sum up to len plus the prefix size (as it's included in the
+   * first iov. */
+  EF_VI_ASSERT(count_iovec_lens(iov, iovcnt) == len + sizeof(uint64_t));
+
+  /* If we didn't have space then we must report this in _fallback and have
+   * another go */
+  vi->last_ctpio_failed = ! efct_tx_check(vi, len) ||
+                          ! ef_vi_consume_evq_slots(vi, 1);
+  if(unlikely( vi->last_ctpio_failed ))
+    return;
+
+  EFCT_TX_TOKEN(efct_tx_zc_init)(vi, &tx);
+
+  threshold = efct_tx_get_ct_threshold(vi, threshold);
+  header = efct_tx_pkt_header(vi, len, threshold);
+
+  *(uint64_t*)tx_prefix = header;
+  for( i = 0; i < iovcnt; ++i )
+    EFCT_TX_TOKEN(efct_tx_block_zc)(&tx, iov[i].iov_base, iov[i].iov_len);
+
+  dma_id = efct_tx_get_dma_id(vi);
+  EFCT_TX_TOKEN(efct_tx_complete_zc)(vi, &tx, dma_id, len);
+}
+
+
+static EFCT_TX_FUNCTION_ATTRS void
 EFCT_TX_TOKEN(efct_vi_set_tx_ops)(ef_vi* vi)
 {
   vi->ops.transmit = EFCT_TX_TOKEN(efct_ef_vi_transmit);
   vi->ops.transmitv = EFCT_TX_TOKEN(efct_ef_vi_transmitv);
   vi->ops.transmitv_init = EFCT_TX_TOKEN(efct_ef_vi_transmitv);
   vi->ops.transmitv_ctpio = EFCT_TX_TOKEN(efct_ef_vi_transmitv_ctpio);
+  vi->ops.transmitv_ctpio_zc = EFCT_TX_TOKEN(efct_ef_vi_transmitv_ctpio_zc);
   vi->ops.transmitv_ctpio_copy =
     EFCT_TX_TOKEN(efct_ef_vi_transmitv_ctpio_copy);
   vi->ops.transmit_ctpio_fallback =

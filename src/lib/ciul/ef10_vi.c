@@ -539,6 +539,17 @@ static void
                              0, 0, 1, fallback);
 }
 
+static void
+  ef10_ef_vi_transmitv_ctpio_fast_zc(ef_vi* vi, size_t frame_len,
+                                     char* tx_prefix,
+                                     const struct iovec* iov, int iovcnt,
+                                     unsigned threshold)
+{
+  (void)tx_prefix;
+  ef10_ef_vi_transmitv_ctpio(vi, frame_len, iov, iovcnt, threshold,
+                             0, 0, 0, NULL);
+}
+
 /* Emit write-combined writes with gaps in between -- seems to keep them in
  * order most of the time, and is faster than using barriers.
  */
@@ -560,6 +571,17 @@ static void
                              0, vi->vi_ctpio_wb_ticks, 1, fallback);
 }
 
+static void
+  ef10_ef_vi_transmitv_ctpio_paced_zc(ef_vi* vi, size_t frame_len,
+                                      char* tx_prefix,
+                                      const struct iovec* iov, int iovcnt,
+                                      unsigned threshold)
+{
+  (void)tx_prefix;
+  ef10_ef_vi_transmitv_ctpio(vi, frame_len, iov, iovcnt, threshold,
+                             0, vi->vi_ctpio_wb_ticks, 0, NULL);
+}
+
 /* Emit write-combined writes with barriers in between.  This achieves
  * correct order in almost always, but has poor throughput.  (Throughput is
  * too low to support cut-through at 10G on systems tested to far).
@@ -579,6 +601,18 @@ static void
 {
   ef10_ef_vi_transmitv_ctpio(vi, frame_len, iov, iovcnt, threshold,
                              1, 0, 1, fallback);
+}
+
+
+static void
+  ef10_ef_vi_transmitv_ctpio_in_order_zc(ef_vi* vi, size_t frame_len,
+                                         char* tx_prefix,
+                                         const struct iovec* iov,
+                                         int iovcnt, unsigned threshold)
+{
+  (void)tx_prefix;
+  ef10_ef_vi_transmitv_ctpio(vi, frame_len, iov, iovcnt, threshold,
+                             1, 0, 0, NULL);
 }
 
 static int ef10_ef_vi_transmit_ctpio_fallback(ef_vi* vi, ef_addr dma_addr,
@@ -824,14 +858,17 @@ static void select_ctpio_method(ef_vi* vi)
     if( ! strcmp(s, "fast") ) {
       vi->ops.transmitv_ctpio      = ef10_ef_vi_transmitv_ctpio_fast;
       vi->ops.transmitv_ctpio_copy = ef10_ef_vi_transmitv_ctpio_copy_fast;
+      vi->ops.transmitv_ctpio_zc   = ef10_ef_vi_transmitv_ctpio_fast_zc;
     }
     else if( ! strcmp(s, "paced") ) {
       vi->ops.transmitv_ctpio      = ef10_ef_vi_transmitv_ctpio_paced;
       vi->ops.transmitv_ctpio_copy = ef10_ef_vi_transmitv_ctpio_copy_paced;
+      vi->ops.transmitv_ctpio_zc   = ef10_ef_vi_transmitv_ctpio_paced_zc;
     }
     else if( ! strcmp(s, "in_order") ) {
       vi->ops.transmitv_ctpio      = ef10_ef_vi_transmitv_ctpio_in_order;
       vi->ops.transmitv_ctpio_copy = ef10_ef_vi_transmitv_ctpio_copy_in_order;
+      vi->ops.transmitv_ctpio_zc   = ef10_ef_vi_transmitv_ctpio_in_order_zc;
     }
     else {
       ef_log("ef_vi: ERROR: bad EF_VI_CTPIO_MODE='%s'", s);
@@ -842,10 +879,13 @@ static void select_ctpio_method(ef_vi* vi)
 #endif
   vi->ops.transmitv_ctpio      = ef10_ef_vi_transmitv_ctpio_paced;
   vi->ops.transmitv_ctpio_copy = ef10_ef_vi_transmitv_ctpio_copy_paced;
+  vi->ops.transmitv_ctpio_zc   = ef10_ef_vi_transmitv_ctpio_paced_zc;
   (void) ef10_ef_vi_transmitv_ctpio_fast;
   (void) ef10_ef_vi_transmitv_ctpio_copy_fast;
+  (void) ef10_ef_vi_transmitv_ctpio_fast_zc;
   (void) ef10_ef_vi_transmitv_ctpio_in_order;
   (void) ef10_ef_vi_transmitv_ctpio_copy_in_order;
+  (void) ef10_ef_vi_transmitv_ctpio_in_order_zc;
 }
 
 static int ef10_ef_receive_poll_not_supp(ef_vi* vi, ef_event* evs, int evs_len)
