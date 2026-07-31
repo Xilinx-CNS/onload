@@ -207,9 +207,16 @@ ci_inline EFCT_TX_FUNCTION_ATTRS __attribute__((always_inline)) void
 EFCT_TX_TOKEN(efct_tx_complete_pad)(volatile efct_tx_aperture_t* aperture,
                                     uint64_t* offset, uint64_t mask)
 {
+  /* Writes to the CTPIO aperture must be padded to the next alignment boundary,
+   * but if our chunk size already ends up at the appropriate boundary then we
+   * don't need to do any extra padding. However, this function indicates the
+   * final write to the aperture, so we must still add the fence afterwards
+   * even in this case. */
+#if EFCT_TX_CHUNK_SIZE % EFCT_TX_ALIGNMENT != 0
   const uint8_t zero[EFCT_TX_CHUNK_SIZE] EF_VI_ALIGN(EF_VI_DMA_ALIGN) = {0};
   while( *offset % efct_tx_scale_offset_bytes(EFCT_TX_ALIGNMENT) != 0 )
     EFCT_TX_TOKEN(efct_tx_chunk)(aperture, offset, mask, zero);
+#endif
 
   /* Force the write-combined traffic to be flushed to PCIe, to limit the
    * maximum possible reordering the NIC will see to one packet. Benchmarks
