@@ -1631,6 +1631,27 @@ efct_tx_populate_state(ef_vi* vi, volatile efct_tx_aperture_t** aperture,
   *mask = vi->vi_txq.efct_aperture_mask;
 }
 
+ci_inline __attribute__((always_inline)) unsigned
+efct_tx_get_ct_threshold(ef_vi* vi, unsigned threshold)
+{
+  unsigned threshold_extra;
+
+  /* ef_vi interface takes threshold in bytes, but the efct hardware interface
+   * takes multiples of 64 (rounded up), and includes the 8-byte header in the
+   * count. Anything too big to fit in the field is equivalent to disabling
+   * cut-through; test that first to avoid arithmetic overflow.
+   */
+  threshold_extra = EFCT_TX_HEADER_BYTES + EFCT_TX_ALIGNMENT - 1;
+  if( threshold > EFCT_TX_CT_DISABLE * EFCT_TX_ALIGNMENT - threshold_extra )
+    threshold = EFCT_TX_CT_DISABLE;
+  else
+    threshold = (threshold + threshold_extra) / EFCT_TX_ALIGNMENT;
+
+  threshold = CI_MAX((unsigned)vi->vi_txq.ct_thresh_min, threshold);
+
+  return threshold;
+}
+
 /* Produce definitions for EFCT transmit functions which write 8-bytes at a
  * time to the CTPIO aperture. */
 ci_inline __attribute__((always_inline)) void
