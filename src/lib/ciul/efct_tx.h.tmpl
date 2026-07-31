@@ -162,25 +162,24 @@ EFCT_TX_TOKEN(efct_tx_block)(struct EFCT_TX_TOKEN(efct_tx_state)* __restrict__ t
   }
 }
 
-/* complete a tx operation, writing leftover bytes and padding as needed */
 ci_inline EFCT_TX_FUNCTION_ATTRS __attribute__((always_inline)) void
-EFCT_TX_TOKEN(efct_tx_complete)(ef_vi* vi,
-                                struct EFCT_TX_TOKEN(efct_tx_state)* tx,
-                                uint32_t dma_id, int len)
+EFCT_TX_TOKEN(efct_tx_complete_tail)(struct EFCT_TX_TOKEN(efct_tx_state)* tx)
 {
-  ef_vi_txq* q = &vi->vi_txq;
-  ef_vi_txq_state* qs = &vi->ep_state->txq;
-  struct efct_tx_descriptor* desc = q->descriptors;
-  int i = qs->added & q->mask;
-
   if( tx->tail_len != 0 ) {
     const int idx = tx->tail_len / sizeof(tx->tail[0]);
     const int offset = tx->tail_len % sizeof(tx->tail[0]);
     tx->tail[idx] <<= (sizeof(tx->tail[0]) - offset) * 8;
     EFCT_TX_TOKEN(efct_tx_tail)(tx);
   }
-  while( tx->offset % efct_tx_scale_offset_bytes(EFCT_TX_ALIGNMENT) != 0 )
-    EFCT_TX_TOKEN(efct_tx_chunk)(aperture, offset, mask, tx->tail);
+}
+
+ci_inline EFCT_TX_FUNCTION_ATTRS __attribute__((always_inline)) void
+EFCT_TX_TOKEN(efct_tx_complete_pad)(volatile efct_tx_aperture_t* aperture,
+                                    uint64_t* offset, uint64_t mask)
+{
+  const uint8_t zero[EFCT_TX_CHUNK_SIZE] EF_VI_ALIGN(EF_VI_DMA_ALIGN) = {0};
+  while( *offset % efct_tx_scale_offset_bytes(EFCT_TX_ALIGNMENT) != 0 )
+    EFCT_TX_TOKEN(efct_tx_chunk)(aperture, offset, mask, zero);
 
   /* Force the write-combined traffic to be flushed to PCIe, to limit the
    * maximum possible reordering the NIC will see to one packet. Benchmarks
@@ -194,12 +193,33 @@ EFCT_TX_TOKEN(efct_tx_complete)(ef_vi* vi,
 #else
   ci_wmb();
 #endif
+}
+
+ci_inline EFCT_TX_FUNCTION_ATTRS __attribute__((always_inline)) void
+EFCT_TX_TOKEN(efct_tx_complete_queue_state)(ef_vi* vi,
+                                            uint32_t dma_id, int len)
+{
+  ef_vi_txq* q = &vi->vi_txq;
+  ef_vi_txq_state* qs = &vi->ep_state->txq;
+  struct efct_tx_descriptor* desc = q->descriptors;
+  int i = qs->added & q->mask;
 
   len = CI_ROUND_UP(len + EFCT_TX_HEADER_BYTES, EFCT_TX_ALIGNMENT);
   desc[i].len = len;
   q->ids[i] = dma_id;
   qs->ct_added += len;
   qs->added += 1;
+}
+
+/* complete a tx operation, writing leftover bytes and padding as needed */
+ci_inline EFCT_TX_FUNCTION_ATTRS __attribute__((always_inline)) void
+EFCT_TX_TOKEN(efct_tx_complete)(ef_vi* vi,
+                                struct EFCT_TX_TOKEN(efct_tx_state)* tx,
+                                uint32_t dma_id, int len)
+{
+  EFCT_TX_TOKEN(efct_tx_complete_tail)(tx);
+  EFCT_TX_TOKEN(efct_tx_complete_pad)(tx->aperture, &tx->offset, tx->mask);
+  EFCT_TX_TOKEN(efct_tx_complete_queue_state)(vi, dma_id, len);
 }
 
 static EFCT_TX_FUNCTION_ATTRS int
