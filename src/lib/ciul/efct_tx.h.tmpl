@@ -295,16 +295,7 @@ EFCT_TX_TOKEN(efct_ef_vi_transmitv_ctpio)(ef_vi* vi, size_t len,
   for( i = 0; i < iovcnt; ++i )
     EFCT_TX_TOKEN(efct_tx_block)(&tx, iov[i].iov_base, iov[i].iov_len);
 
-  /* Use a valid but bogus dma_id rather than invalid EF_REQUEST_ID_MASK to
-   * support tcpdirect, which relies on the correct return value from
-   * ef_vi_transmit_unbundle to free its otherwise unused transmit buffers.
-   *
-   * For compat with existing ef_vi apps which will post a fallback and may
-   * want to use the dma_id we'll replace this value with the real one then.
-   *
-   * For transmit warmup, use an invalid dma_id so that it is ignored.
-   */
-  dma_id = tx_warm_active(vi) ? EF_REQUEST_ID_MASK : EFCT_TX_POSTED_ID;
+  dma_id = efct_tx_get_dma_id(vi);
   EFCT_TX_TOKEN(efct_tx_complete)(vi, &tx, dma_id, len);
 }
 

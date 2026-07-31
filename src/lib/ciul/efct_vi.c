@@ -1652,6 +1652,21 @@ efct_tx_get_ct_threshold(ef_vi* vi, unsigned threshold)
   return threshold;
 }
 
+ci_inline __attribute__((always_inline)) uint32_t
+efct_tx_get_dma_id(ef_vi* vi)
+{
+  /* Use a valid but bogus dma_id rather than invalid EF_REQUEST_ID_MASK to
+   * support tcpdirect, which relies on the correct return value from
+   * ef_vi_transmit_unbundle to free its otherwise unused transmit buffers.
+   *
+   * For compat with existing ef_vi apps which will post a fallback and may
+   * want to use the dma_id we'll replace this value with the real one then.
+   *
+   * For transmit warmup, use an invalid dma_id so that it is ignored.
+   */
+  return tx_warm_active(vi) ? EF_REQUEST_ID_MASK : EFCT_TX_POSTED_ID;
+}
+
 /* Produce definitions for EFCT transmit functions which write 8-bytes at a
  * time to the CTPIO aperture. */
 ci_inline __attribute__((always_inline)) void
