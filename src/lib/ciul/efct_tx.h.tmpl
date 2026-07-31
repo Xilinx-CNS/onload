@@ -95,23 +95,24 @@ EFCT_TX_TOKEN(efct_tx_tail_byte)(struct EFCT_TX_TOKEN(efct_tx_state)* tx,
 
 /* write a chunk to the CTPIO aperture */
 ci_inline EFCT_TX_FUNCTION_ATTRS __attribute__((always_inline)) void
-EFCT_TX_TOKEN(efct_tx_chunk)(struct EFCT_TX_TOKEN(efct_tx_state)* tx,
+EFCT_TX_TOKEN(efct_tx_chunk)(volatile efct_tx_aperture_t* aperture,
+                             uint64_t* offset, uint64_t mask,
                              const void* src)
 {
-  void* dst = (void*)&tx->aperture[tx->offset & tx->mask];
+  void* dst = (void*)&aperture[*offset & mask];
   const uint64_t tx_offset_inc =
     efct_tx_scale_offset_bytes(EFCT_TX_CHUNK_SIZE);
   /* The aperture offset increases by the same amount every time, and we must
    * be certain that we can't end up writing past the end of our aperture. As
    * such, it must be true that the aperture is divisible by the amount we
    * increase the offset by for each write with no remainder. */
-  BUG_ON((tx->mask + 1) % tx_offset_inc != 0);
+  BUG_ON((mask + 1) % tx_offset_inc != 0);
   BUG_ON(EF_VI_CACHE_LINE_SIZE != 64);
 
   /* Call the externally defined write implementation. */
   EFCT_TX_TOKEN(efct_tx_write)(dst, src);
 
-  tx->offset += tx_offset_inc;
+  *offset += tx_offset_inc;
 }
 
 /* write the tail to the CTPIO aperture */
@@ -123,7 +124,7 @@ EFCT_TX_TOKEN(efct_tx_tail)(struct EFCT_TX_TOKEN(efct_tx_state)* tx)
   for( i = 0; i < EFCT_TX_TAIL_SIZE; i++ )
     tx->tail[i] = CI_BSWAP_BE64(tx->tail[i]);
 
-  EFCT_TX_TOKEN(efct_tx_chunk)(tx, tx->tail);
+  EFCT_TX_TOKEN(efct_tx_chunk)(tx->aperture, &tx->offset, tx->mask, tx->tail);
 
   for( i = 0; i < EFCT_TX_TAIL_SIZE; i++ )
     tx->tail[i] = 0;
@@ -149,7 +150,7 @@ EFCT_TX_TOKEN(efct_tx_block)(struct EFCT_TX_TOKEN(efct_tx_state)* __restrict__ t
   }
 
   while( len >= EFCT_TX_CHUNK_SIZE ) {
-    EFCT_TX_TOKEN(efct_tx_chunk)(tx, base);
+    EFCT_TX_TOKEN(efct_tx_chunk)(tx->aperture, &tx->offset, tx->mask, base);
     base += EFCT_TX_CHUNK_SIZE;
     len -= EFCT_TX_CHUNK_SIZE;
   }
@@ -179,7 +180,7 @@ EFCT_TX_TOKEN(efct_tx_complete)(ef_vi* vi,
     EFCT_TX_TOKEN(efct_tx_tail)(tx);
   }
   while( tx->offset % efct_tx_scale_offset_bytes(EFCT_TX_ALIGNMENT) != 0 )
-    EFCT_TX_TOKEN(efct_tx_chunk)(tx, tx->tail);
+    EFCT_TX_TOKEN(efct_tx_chunk)(aperture, offset, mask, tx->tail);
 
   /* Force the write-combined traffic to be flushed to PCIe, to limit the
    * maximum possible reordering the NIC will see to one packet. Benchmarks
