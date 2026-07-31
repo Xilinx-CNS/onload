@@ -69,13 +69,11 @@ struct EFCT_TX_TOKEN(efct_tx_state)
 ci_inline EFCT_TX_FUNCTION_ATTRS __attribute__((always_inline)) void
 EFCT_TX_TOKEN(efct_tx_init)(ef_vi* vi, struct EFCT_TX_TOKEN(efct_tx_state)* tx)
 {
-  unsigned offset = vi->ep_state->txq.ct_added;
   int i;
-  BUG_ON(offset % EFCT_TX_ALIGNMENT != 0);
-  tx->aperture = (void*) vi->vi_ctpio_mmap_ptr;
+
+  efct_tx_populate_state(vi, &tx->aperture, &tx->offset, &tx->mask);
+
   tx->tail_len = 0;
-  tx->offset = efct_tx_scale_offset_bytes(offset);
-  tx->mask = vi->vi_txq.efct_aperture_mask;
   for( i = 0; i < EFCT_TX_TAIL_SIZE; i++)
     tx->tail[i] = 0;
 }

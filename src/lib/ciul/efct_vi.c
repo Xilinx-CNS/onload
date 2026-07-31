@@ -1620,6 +1620,17 @@ void efct_superbufs_cleanup(ef_vi* vi)
 #endif
 }
 
+ci_inline __attribute__((always_inline)) void
+efct_tx_populate_state(ef_vi* vi, volatile efct_tx_aperture_t** aperture,
+                       uint64_t* offset, uint64_t* mask)
+{
+  unsigned offset_bytes = vi->ep_state->txq.ct_added;
+  BUG_ON(offset_bytes % EFCT_TX_ALIGNMENT != 0);
+  *aperture = (void*) vi->vi_ctpio_mmap_ptr;
+  *offset = efct_tx_scale_offset_bytes(offset_bytes);
+  *mask = vi->vi_txq.efct_aperture_mask;
+}
+
 /* Produce definitions for EFCT transmit functions which write 8-bytes at a
  * time to the CTPIO aperture. */
 ci_inline __attribute__((always_inline)) void
