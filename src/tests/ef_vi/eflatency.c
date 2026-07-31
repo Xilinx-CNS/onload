@@ -106,7 +106,8 @@ enum mode {
   MODE_PIO = 2,
   MODE_ALT = 4,
   MODE_CTPIO = 8,
-  MODE_DEFAULT = MODE_CTPIO | MODE_ALT | MODE_PIO | MODE_DMA
+  MODE_CTPIO_ZC = 16,
+  MODE_DEFAULT = MODE_CTPIO_ZC | MODE_CTPIO | MODE_ALT | MODE_PIO | MODE_DMA
 };
 static unsigned         cfg_mode = MODE_DEFAULT;
 static enum ef_vi_flags cfg_vi_flags = EF_VI_FLAGS_DEFAULT;
@@ -572,6 +573,40 @@ static const test_t ctpio_test = {
   .cleanup = NULL,
 };
 
+
+
+/*
+ * CTPIO (zero copy)
+ */
+
+static inline void ctpio_zc_send(struct eflatency_vi* vi)
+{
+  struct pkt_buf* pb = pkt_bufs[FIRST_TX_BUF];
+  const int prefix = ef_vi_zc_transmit_prefix_size(&vi->vi);
+  struct iovec iov = {
+    .iov_base = pb->dma_buf,
+    .iov_len = tx_frame_len + prefix
+  };
+
+  ef_vi_transmitv_ctpio_zc(&vi->vi, tx_frame_len, (char*)iov.iov_base,
+                           &iov, 1, cfg_ctpio_thresh);
+  for( ; ; ) {
+    int rc = ef_vi_transmit_ctpio_fallback(&vi->vi, pb->dma_buf_addr + prefix,
+                                           tx_frame_len, 0);
+    if( rc != -EAGAIN ) {
+      TRY(rc);
+      break;
+    }
+    generic_desc_check(vi, vi, 0);
+  }
+}
+
+static const test_t ctpio_zc_test = {
+  .name = "CTPIO (zero copy)",
+  .send = ctpio_zc_send,
+  .cleanup = NULL,
+};
+
 /**********************************************************************/
 
 /* Poll for events. Will always return as soon as RX event found,
@@ -718,6 +753,15 @@ static inline void rx_wait_poll_evq(struct eflatency_vi* vi,
 
 /**********************************************************************/
 
+static void init_tx_buf(ef_vi* vi, const test_t* t)
+{
+  int pkt_start_offset = t == &ctpio_zc_test ? ef_vi_zc_transmit_prefix_size(vi)
+                                             : 0;
+  init_udp_pkt((char*)pkt_bufs[FIRST_TX_BUF]->dma_buf + pkt_start_offset,
+               cfg_payload_len);
+  tx_frame_len = cfg_payload_len + HEADER_SIZE;
+}
+
 static const test_t* do_init(int mode, struct eflatency_vi* latency_vi,
                              void* pkt_mem, size_t pkt_mem_bytes)
 {
@@ -732,7 +776,7 @@ static const test_t* do_init(int mode, struct eflatency_vi* latency_vi,
     vi_flags |= EF_VI_TX_CTPIO_NO_POISON;
 
   /* Try with CTPIO first. */
-  if( mode & MODE_CTPIO &&
+  if( (mode & MODE_CTPIO || mode & MODE_CTPIO_ZC) &&
       ef_pd_capabilities_get(driver_handle, &latency_vi->pd, driver_handle,
                              EF_VI_CAP_CTPIO, &capability_val) == 0 &&
                              capability_val ) {
@@ -790,12 +834,6 @@ static const test_t* do_init(int mode, struct eflatency_vi* latency_vi,
                       driver_handle, pkt_mem,
                       ROUND_UP(pkt_mem_bytes, 4096)));
 
-  /* Build the UDP packet inside the DMA buffer.  As well as being used for
-   * straightforward DMA sends, it will also be used to fill alternatives, and
-   * as a source buffer to populate the PIO region. */
-  init_udp_pkt(pkt_bufs[FIRST_TX_BUF]->dma_buf, cfg_payload_len);
-  tx_frame_len = cfg_payload_len + HEADER_SIZE;
-
   /* Some NICs only support CTPIO, if so, check we've selected it */
   if( ef_pd_capabilities_get(driver_handle, &latency_vi->pd, driver_handle,
                              EF_VI_CAP_CTPIO_ONLY, &capability_val) == 0 &&
@@ -805,11 +843,11 @@ static const test_t* do_init(int mode, struct eflatency_vi* latency_vi,
                       "supported TX mode\n");
       TEST(0);
     }
-    t = &ctpio_test;
+    t = (mode & MODE_CTPIO_ZC) ? &ctpio_zc_test : &ctpio_test;
   }
   /* Otherwise, try CTPIO first. */
   else if ( vi_flags & EF_VI_TX_CTPIO ) {
-    t = &ctpio_test;
+    t = (mode & MODE_CTPIO_ZC) ? &ctpio_zc_test : &ctpio_test;
   }
   /* Next, try to allocate alternatives. */
   else if( vi_flags & EF_VI_TX_ALT ) {
@@ -830,6 +868,12 @@ static const test_t* do_init(int mode, struct eflatency_vi* latency_vi,
     fprintf(stderr, "No compatible mode found\n");
     exit(1);
   }
+
+  /* Build the UDP packet inside the DMA buffer.  As well as being used for
+   * straightforward DMA sends, it will also be used to fill alternatives, and
+   * as a source buffer to populate the PIO region. */
+  init_tx_buf(vi, t);
+
   return t;
 }
 
@@ -898,7 +942,8 @@ static __attribute__((noreturn)) void usage(const char* fmt, ...)
   fprintf(stderr, "  -c <cut-through>    - CTPIO cut-through threshold\n");
   fprintf(stderr, "  -p                  - CTPIO no-poison mode\n");
   fprintf(stderr, "  -m <modes>          - allow mode of the set: [c]tpio, \n");
-  fprintf(stderr, "                        [p]io, [a]lternatives, [d]ma\n");
+  fprintf(stderr, "                        [p]io, [a]lternatives, [d]ma,\n");
+  fprintf(stderr, "                        [z]ero copy ctpio\n");
   fprintf(stderr, "  -t <modes>          - set TX_PUSH: [a]lways, [d]isable\n");
   fprintf(stderr, "  -d <modes>          - act on data in addition to event, one or both of:\n");
   fprintf(stderr, "                      - [r]ead data on packet arrival,\n");
@@ -1009,6 +1054,7 @@ int main(int argc, char* argv[])
       cfg_mode = 0;
       for( i = 0; i < strlen(optarg); ++i ) {
         switch( optarg[i] ) {
+        case 'z': cfg_mode |= MODE_CTPIO_ZC; break;
         case 'c': cfg_mode |= MODE_CTPIO; break;
         case 'a': cfg_mode |= MODE_ALT; break;
         case 'p': cfg_mode |= MODE_PIO; break;
@@ -1254,8 +1300,7 @@ int main(int argc, char* argv[])
       else if( cfg_payload_len >= cfg_payload_end )
         break;
     }
-    init_udp_pkt(pkt_bufs[FIRST_TX_BUF]->dma_buf, cfg_payload_len);
-    tx_frame_len = cfg_payload_len + HEADER_SIZE;
+    init_tx_buf(&tx_vi_ptr->vi, t);
   }
   if( ping && iters_run == 1 )
     printf("mean round-trip time: %.3lf usec\n", last_mean_latency_usec);
