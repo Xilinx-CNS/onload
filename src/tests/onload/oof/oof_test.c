@@ -221,6 +221,9 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "mixed_multicast_modes") )
     test_mixed_multicast_modes();
 
+  if( all || !strcmp(argv[1], "mixed_interface_add") )
+    test_mixed_interface_add();
+
   if( all || !strcmp(argv[1], "mixed_filter_redirect") )
     test_mixed_filter_redirect();
 
