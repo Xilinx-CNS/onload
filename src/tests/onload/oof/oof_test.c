@@ -233,6 +233,9 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "mixed_filter_redirect_ll") )
     test_mixed_filter_redirect_ll();
 
+  if( all || !strcmp(argv[1], "mixed_filter_redirect_errors") )
+    test_mixed_filter_redirect_errors();
+
   if( all || !strcmp(argv[1], "mixed_threshold_sharing") )
     test_mixed_threshold_sharing();
 
