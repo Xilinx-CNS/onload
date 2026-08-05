@@ -224,6 +224,9 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "mixed_interface_add") )
     test_mixed_interface_add();
 
+  if( all || !strcmp(argv[1], "mixed_interface_remove") )
+    test_mixed_interface_remove();
+
   if( all || !strcmp(argv[1], "mixed_filter_redirect") )
     test_mixed_filter_redirect();
 

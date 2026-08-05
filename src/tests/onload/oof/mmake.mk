@@ -25,7 +25,8 @@ TEST_SRCS := tests/sanity.c tests/multicast_sanity.c tests/namespace_sanity.c \
 	tests/socket_replace.c tests/tproxy_global.c \
 	tests/tproxy_sanity.c tests/nat_table.c \
 	tests/mixed_unicast.c tests/mixed_multicast.c \
-	tests/mixed_multicast_modes.c tests/mixed_interface_add.c \
+	tests/mixed_multicast_modes.c \
+	tests/mixed_interface_add.c tests/mixed_interface_remove.c \
 	tests/mixed_filter_redirect.c tests/mixed_filter_redirect_ff.c \
 	tests/mixed_filter_redirect_ll.c tests/mixed_filter_redirect_errors.c \
 	tests/mixed_threshold_sharing.c \
