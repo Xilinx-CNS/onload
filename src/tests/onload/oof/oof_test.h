@@ -84,5 +84,10 @@ extern int test_hwport_lifecycle(void);
 extern int test_addr_reactivate(void);
 extern int test_mcast_install(void);
 extern int test_udp_connect(void);
+extern int test_mcast_connected(void);
+extern int test_socket_replace(void);
+extern int test_tproxy_global_refcount(void);
+extern int test_tproxy_global(void);
+extern int test_tproxy_sanity(void);
 
 #endif /* __OOF_TEST_H__ */

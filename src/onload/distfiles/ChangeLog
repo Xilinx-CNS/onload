@@ -5,12 +5,12 @@ Update sfc net driver to v6.4.0
 
 Fixes:
 
-ON-16872: X4: allow auto-sized event queue up to 32k
-ON-17320: X4: treat existing shrub controller as benign
+ON-16872: X4: allow auto-sized ef_vi event queue up to 32k
+ON-17320: X4: avoid error noise when clients race to start same shrub controller
 ON-17341: X4: clean up queue state on attach failure
 ON-17401: express build dependency on pyproject for RHEL 10
 ON-17442: gate RSS, clustering and datapath support on NIC capabilities
-ON-17463: X4: add sysfs enable file for ef10ct devices
+ON-17463: X4: enable or disable express path at runtime via sysfs enable file
 ON-17515: fix invalid comment characters in makefile (tolerated in most envs)
 
 

@@ -179,5 +179,20 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "udp_connect") )
     test_udp_connect();
 
+  if( all || !strcmp(argv[1], "mcast_connected") )
+    test_mcast_connected();
+
+  if( all || !strcmp(argv[1], "socket_replace") )
+    test_socket_replace();
+
+  if( all || !strcmp(argv[1], "tproxy_global") )
+    test_tproxy_global();
+
+  if( all || !strcmp(argv[1], "tproxy_global_refcount") )
+    test_tproxy_global_refcount();
+
+  if( all || !strcmp(argv[1], "tproxy_sanity") )
+    test_tproxy_sanity();
+
   return 0;
 }

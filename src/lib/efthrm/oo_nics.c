@@ -111,31 +111,47 @@ static bool oo_ff_hwport_match(const struct efhw_nic *nic,
   return nic->net_dev == net_dev && ! (nic->flags & NIC_FLAG_LLCT);
 }
 
-/* Find the genuine multiarch pairs within the given hwport mask.
+/* Classify the multiarch pairs visible to this stack.
  *
  * A multiarch pair is an FF hwport and an LLCT hwport that share a net_device
- * and where *both* hwports are present in hwport_mask (i.e. both survived
- * whitelist/blacklist/suitability filtering).  An LLCT hwport whose FF partner
- * is absent (never existed, or was filtered out) is not part of a pair here: it
- * behaves as an LLCT-only interface.  The reverse holds for a lone FF hwport.
+ * and where both hwports are present in candidate_hwports.  usable_hwports is
+ * the subset that survived module-level acceleration policy and suitability
+ * filtering.
+ *
+ * paired_ff_out and paired_llct_out contain pairs where both datapaths remain
+ * usable.  These masks are used to decide whether a requested datapath can be
+ * provided.
+ *
+ * multiarch_out contains both physical siblings for every pair where at least
+ * one datapath remains usable.  The control plane continues to describe the
+ * Linux interface using both siblings even when one datapath is disabled, so
+ * this full mask is needed to distinguish such routes from bonds.  Actual VI
+ * allocation and TX/RX selection still use only usable_hwports.
  */
-static void oo_get_multiarch_pairs(cicp_hwport_mask_t hwport_mask,
-                                   cicp_hwport_mask_t llct_hwports,
-                                   cicp_hwport_mask_t* paired_ff_out,
-                                   cicp_hwport_mask_t* paired_llct_out)
+static void
+oo_classify_multiarch_hwports(cicp_hwport_mask_t candidate_hwports,
+                              cicp_hwport_mask_t usable_hwports,
+                              cicp_hwport_mask_t candidate_llct_hwports,
+                              cicp_hwport_mask_t* paired_ff_out,
+                              cicp_hwport_mask_t* paired_llct_out,
+                              cicp_hwport_mask_t* multiarch_out)
 {
   cicp_hwport_mask_t paired_ff = 0;
   cicp_hwport_mask_t paired_llct = 0;
+  cicp_hwport_mask_t multiarch = 0;
 
   /* Protect against the oo_nics changes. */
   rtnl_lock();
 
   /* Iterate over LL hwports and find FF hwports with the same net_device. */
-  for( ; llct_hwports != 0; llct_hwports &= (llct_hwports - 1) ) {
-    ci_hwport_id_t hwport = cp_hwport_mask_first(llct_hwports);
+  for( ; candidate_llct_hwports != 0;
+       candidate_llct_hwports &= (candidate_llct_hwports - 1) ) {
+    ci_hwport_id_t hwport = cp_hwport_mask_first(candidate_llct_hwports);
     struct efhw_nic* nic;
     struct oo_nic* onic;
     cicp_hwport_mask_t ff_mask;
+    cicp_hwport_mask_t llct_mask = cp_hwport_make_mask(hwport);
+    cicp_hwport_mask_t pair_mask;
 
     if( ! oo_nics[hwport].efrm_client )
       continue;
@@ -156,19 +172,32 @@ static void oo_get_multiarch_pairs(cicp_hwport_mask_t hwport_mask,
       continue;
     }
 
-    /* Only a genuine pair if the FF partner also survived filtering. */
     ff_mask = cp_hwport_make_mask(onic - oo_nics);
-    if( ! (ff_mask & hwport_mask) )
+    pair_mask = ff_mask | llct_mask;
+
+    /* Both siblings must be visible before module-level filtering.  Otherwise
+     * this is an LLCT-only interface from this stack's point of view. */
+    if( (pair_mask & candidate_hwports) != pair_mask )
       continue;
 
-    paired_ff |= ff_mask;
-    paired_llct |= cp_hwport_make_mask(hwport);
+    /* Keep the physical pair for route classification if either datapath is
+     * selected.  If neither is usable, the interface is not in this stack. */
+    if( pair_mask & usable_hwports )
+      multiarch |= pair_mask;
+
+    /* Datapath selection can treat this as a pair only if both halves remain
+     * usable.  Otherwise the surviving half behaves as a singleton. */
+    if( (pair_mask & usable_hwports) == pair_mask ) {
+      paired_ff |= ff_mask;
+      paired_llct |= llct_mask;
+    }
   }
 
   rtnl_unlock();
 
   *paired_ff_out = paired_ff;
   *paired_llct_out = paired_llct;
+  *multiarch_out = multiarch;
 }
 
 /* Test whether a single hwport is usable by Onload: it must be registered,
@@ -241,7 +270,8 @@ int oo_get_nics(tcp_helper_resource_t* trs, int ifindices_len)
   struct oo_nic* onic;
   int rc, i, intf_i;
   ci_hwport_id_t hwport;
-  cicp_hwport_mask_t hwport_mask, whitelist_mask, llct_hwports;
+  cicp_hwport_mask_t hwport_mask, candidate_hwport_mask, whitelist_mask;
+  cicp_hwport_mask_t candidate_llct_hwports, llct_hwports;
   cicp_hwport_mask_t multiarch_hwport_mask = 0;
   cicp_hwport_mask_t tx_hwport_mask, rx_hwport_mask;
   bool datapath_unsatisfiable = false;
@@ -285,26 +315,34 @@ int oo_get_nics(tcp_helper_resource_t* trs, int ifindices_len)
     hwport_mask &= ~whitelist_mask;
   }
 
+  /* Preserve the interfaces selected by the stack-level white/blacklist.
+   * Module-level policy below may remove one datapath from a multiarch pair,
+   * but the control plane will continue to identify the interface by both
+   * physical siblings. */
+  candidate_hwport_mask = hwport_mask;
+  candidate_llct_hwports = oo_get_llct_hwports(candidate_hwport_mask);
+
   /* Drop any hwport that Onload cannot use (module-level black/whitelist and
    * other suitability checks).  Applying this here, alongside the interface
    * white/blacklist above, means the datapath selection below sees only the
    * hwports that will actually be used. */
   hwport_mask = oo_filter_usable_hwports(hwport_mask);
 
-  /* Classify the surviving hwports.  An hwport is either FF or LLCT.  An
-   * interface (net_device) is one or two hwports: ff-only, llct-only, or a
-   * genuine multiarch pair {FF, LLCT}.  A pair only counts as multiarch if
-   * *both* of its hwports survived the filtering above; if only one half
-   * survives it behaves as a single-datapath interface. */
-  llct_hwports = oo_get_llct_hwports(hwport_mask);
+  /* Classify the surviving hwports for datapath selection, while retaining
+   * the complete physical sibling mask for route classification. */
+  llct_hwports = candidate_llct_hwports & hwport_mask;
   {
     cicp_hwport_mask_t ff_hwports = hwport_mask & ~llct_hwports;
     cicp_hwport_mask_t paired_ff, paired_llct;
+    cicp_hwport_mask_t paired_hwport_mask;
     cicp_hwport_mask_t singleton_ff, singleton_llct;
     bool tx_ok = true, rx_ok = true;
 
-    oo_get_multiarch_pairs(hwport_mask, llct_hwports, &paired_ff, &paired_llct);
-    multiarch_hwport_mask = paired_ff | paired_llct;
+    oo_classify_multiarch_hwports(candidate_hwport_mask, hwport_mask,
+                                  candidate_llct_hwports,
+                                  &paired_ff, &paired_llct,
+                                  &multiarch_hwport_mask);
+    paired_hwport_mask = paired_ff | paired_llct;
 
     /* Single-datapath interfaces: ff-only / llct-only, plus any pair reduced to
      * one surviving hwport.  These cannot serve the other datapath. */
@@ -340,7 +378,7 @@ int oo_get_nics(tcp_helper_resource_t* trs, int ifindices_len)
       rx_ok = (singleton_ff == 0);
       break;
     case EF_MULTIARCH_DATAPATH_BOTH:
-      rx_hwport_mask = multiarch_hwport_mask;
+      rx_hwport_mask = paired_hwport_mask;
       rx_ok = (singleton_ff == 0 && singleton_llct == 0);
       break;
     default: /* auto: pairs use both, singletons use whatever they have */
@@ -355,16 +393,20 @@ int oo_get_nics(tcp_helper_resource_t* trs, int ifindices_len)
       datapath_unsatisfiable = true;
   }
 
-  /* There are no multiarch hwports if there are no LLCT hwports. */
-  ci_assert_impl(!llct_hwports, !multiarch_hwport_mask);
+  /* There are no multiarch hwports if no LLCT hwport was visible before
+   * module-level filtering. */
+  ci_assert_impl(!candidate_llct_hwports, !multiarch_hwport_mask);
 
-  /* Cannot end up with more hwports than discovered earlier. */
+  /* TX and RX contain only usable hwports.  The multiarch mask may additionally
+   * contain their disabled physical siblings, but nothing outside the
+   * stack-level interface selection. */
   ci_assert_nflags(tx_hwport_mask, ~hwport_mask);
   ci_assert_nflags(rx_hwport_mask, ~hwport_mask);
-  ci_assert_nflags(multiarch_hwport_mask, ~hwport_mask);
+  ci_assert_nflags(multiarch_hwport_mask, ~candidate_hwport_mask);
 
-  /* The stored masks reflect the selected datapaths regardless of the return
-   * code below.  Discovery walks the union of the two directions. */
+  /* Store the selected datapaths and the physical sibling mask regardless of
+   * the return code below.  VI discovery walks only the TX/RX union, so an
+   * unusable sibling retained for route classification gets no resources. */
   ni->tx_hwport_mask = tx_hwport_mask;
   ni->rx_hwport_mask = rx_hwport_mask;
   ni->multiarch_hwport_mask = multiarch_hwport_mask;
