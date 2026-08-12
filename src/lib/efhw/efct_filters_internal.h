@@ -140,10 +140,10 @@ struct efct_hw_filter {
   uint16_t local_port;
   uint32_t local_ip;
   uint8_t loc_mac[ETH_ALEN];
-  /* Although the VLAN field is 16 bits, we use an int32_t so we can use -1
-   * mean unset. We use this for comparisons with the vlan field in
-   * efct_filter_node, so keeping the types aligned avoids unpleasant
-   * size/signedness shenanigans in those cases. */
+  /* Effective VLAN matched by the installed hardware rule.  The low 16 bits
+   * contain the VLAN TCI in network byte order; -1 means OUTER_VLAN is not a
+   * hardware match criterion.  This may differ from efct_filter_node::vlan,
+   * which records the requested software match. */
   int32_t outer_vlan;
   uint16_t remote_port;
   uint32_t remote_ip;
