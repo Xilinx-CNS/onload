@@ -729,9 +729,15 @@ void ci_netif_rx_post(ci_netif* netif, int intf_i)
   int ask_for_more_packets = 0;
   ci_netif_state_nic_t* nsn = &netif->state->nic[intf_i];
 
-  /* Don't post RX buffers if we're using RX_REF events */
-  if( nsn->oo_vi_flags & OO_VI_FLAGS_RX_REF )
+  /* Don't post RX buffers if we're using RX_REF events, but still reap
+   * consumed packets to avoid exhausting n_rx_pkts. */
+  if( nsn->oo_vi_flags & OO_VI_FLAGS_RX_REF ) {
+#if OO_DO_STACK_POLL
+    if( netif->state->n_rx_pkts >= NI_OPTS(netif).max_rx_packets )
+      ci_netif_try_to_reap(netif, 100);
+#endif
     return;
+  }
 
   ci_assert(ci_netif_is_locked(netif));
 
