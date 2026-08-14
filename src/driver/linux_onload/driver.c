@@ -120,6 +120,13 @@ MODULE_PARM_DESC(oof_use_all_local_ip_addresses,
                  "of the network interface type.\n"
                  "See also cplane_use_prefsrc_as_local module option.");
 
+module_param(oof_limit_filter_to_interface_ip, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(oof_limit_filter_to_interface_ip,
+                 "By default Onload installs filters for each local IP address "
+                 "to every Onloadable network interface. This option limits "
+                 "Onload such that only filters for local IP addresses on each "
+                 "interface is installed to the corresponding interface.");
+
 #ifdef EFRM_DO_USER_NS
 /* The code in this function and below are based on the kernel's
  * STANDARD_PARAM_DEF macros, but modified to add in the extra translation
