@@ -31,8 +31,6 @@ int citp_netif_init_ctor(void)
 {
   Log_S(ci_log("%s()", __FUNCTION__));
 
-  citp_set_log_level(CITP_OPTS.log_level);
-
   citp_cmn_netif_init_ctor(CITP_OPTS.netif_dtor);
 
   return 0;
