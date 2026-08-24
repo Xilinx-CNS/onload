@@ -194,5 +194,11 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "tproxy_sanity") )
     test_tproxy_sanity();
 
+  if( all || !strcmp(argv[1], "nat_table") )
+    test_nat_table();
+
+  if( all || !strcmp(argv[1], "nat_socket") )
+    test_nat_socket();
+
   return 0;
 }

@@ -1648,7 +1648,8 @@ oof_manager_dnat_add(struct oof_manager* fm, int af, ci_uint16 lp_protocol,
     else {
       nat_filter->orig_addr = orig_addr;
       nat_filter->orig_port = orig_port;
-      rc = __oof_socket_add_wild(fm, skf, af, &nat_filter->natf_hwfilter,
+      rc = __oof_socket_add_wild(fm, skf, OO_AF_FAMILY2SPACE(af),
+                                 &nat_filter->natf_hwfilter,
                                  nat_filter->orig_addr, nat_filter->orig_port,
                                  lp->lp_protocol, 0);
       if( rc == 0 )
