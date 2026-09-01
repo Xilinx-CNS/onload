@@ -3,9 +3,9 @@
 
 Please see ./README for a description of the #TYPE# software.
 
-The Debian #TYPE# source package provides two packages,
+The Debian #TYPE# source package provides multiple packages,
 
- 1) #TYPE#-user, which the provides the 32 bit and 64 bit userspace library
+ 1) #TYPE#-user, which the provides the userspace library
  2) #TYPE#-source, which provides the source for the kernel modules
  3) #TYPE#-dev, which provides header files for development with onload
  4) #TYPE#-examples, which provides onload and ef_vi sample applications
