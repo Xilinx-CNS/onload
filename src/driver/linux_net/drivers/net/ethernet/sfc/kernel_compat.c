@@ -72,45 +72,6 @@ struct timespec ns_to_timespec(const s64 nsec)
 #endif /* EFX_HAVE_TIMESPEC64 */
 #endif /* EFX_NEED_NS_TO_TIMESPEC */
 
-#ifdef EFX_HAVE_PARAM_BOOL_INT
-
-int efx_param_set_bool(const char *val, struct kernel_param *kp)
-{
-	bool v;
-
-	if (!val) {
-		/* No equals means "set"... */
-		v = true;
-	} else {
-		/* One of =[yYnN01] */
-		switch (val[0]) {
-		case 'y':
-		case 'Y':
-		case '1':
-			v = true;
-			break;
-		case 'n':
-		case 'N':
-		case '0':
-			v = false;
-			break;
-		default:
-			return -EINVAL;
-		}
-	}
-
-	*(bool *)kp->arg = v;
-	return 0;
-}
-
-int efx_param_get_bool(char *buffer, struct kernel_param *kp)
-{
-	/* Y and N chosen as being relatively non-coder friendly */
-	return sprintf(buffer, "%c", *(bool *)kp->arg ? 'Y' : 'N');
-}
-
-#endif /* EFX_HAVE_PARAM_BOOL_INT */
-
 #ifdef EFX_HAVE_MSIX_CAP
 #ifdef EFX_NEED_PCI_MSIX_VEC_COUNT
 #ifndef msix_table_size
@@ -528,3 +489,12 @@ int devlink_info_version_running_put(struct devlink_info_req *req,
 }
 
 #endif	/* !EFX_USE_DEVLINK */
+
+/* Even if kernel has it, we must define it ourselves as it's not exported */
+unsigned long mutex_get_owner(struct mutex *lock)
+{
+	unsigned long owner = atomic_long_read(&lock->owner);
+
+	/* MUTEX_FLAGS may not be visible in headers, hardcode it */
+	return owner & ~0x07;
+}

@@ -1082,6 +1082,19 @@ int efx_x4_mcdi_link_state(struct efx_nic *efx)
 		port_data->advertised.pause = port_data->fixed_port.pause;
 	}
 
+	if (EFX_WORKAROUND_5885(efx)) {
+		/* Model does not currently support autonegotiation.
+		 * Force it to NONE to negotiate link manually. */
+		port_data->link.supported_autoneg = MC_CMD_AN_NONE;
+
+		if (port_data->link.tech == MC_CMD_ETH_TECH_NONE) {
+			port_data->link.tech =
+				efx_x4_link_tech(port_data,
+						 port_data->supported.tech_mask,
+						 false);
+		}
+	}
+
 	return 0;
 }
 
@@ -1223,16 +1236,6 @@ bool efx_x4_mcdi_phy_poll(struct efx_nic *efx)
 	else
 		efx_x4_mcdi_phy_decode_link(efx, &efx->link_state,
 					    port_data, fcntl);
-
-	if (EFX_WORKAROUND_5885(efx)) {
-		struct efx_link_state *lsp = &efx->link_state;
-
-		/* The model does not simulate link-up. Pretend it's up. */
-		lsp->fc = EFX_FC_AUTO | EFX_FC_TX | EFX_FC_RX;
-		lsp->speed = 25000;
-		lsp->fd = true;
-		lsp->up = true;
-	}
 
 	return !efx_link_state_equal(&efx->link_state, &old_state);
 }

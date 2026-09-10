@@ -122,7 +122,7 @@ static inline int efx_mcdi_filter_del_vid(struct efx_nic *efx,
 
 void efx_mcdi_rx_free_indir_table(struct efx_nic *efx);
 int efx_mcdi_rx_push_rss_context_config(struct efx_nic *efx,
-				 	struct efx_rss_context *ctx,
+					struct efx_rss_context_priv *priv,
 					const u32 *rx_indir_table,
 					const u8 *key);
 int efx_mcdi_rx_push_rss_config(struct efx_nic *efx, bool user,
@@ -132,14 +132,15 @@ int efx_mcdi_rx_push_shared_rss_config(struct efx_nic *efx,
 				       unsigned int *context_size);
 int efx_mcdi_push_default_indir_table(struct efx_nic *efx,
 				      unsigned int rss_spread);
-int efx_mcdi_rx_pull_rss_config(struct efx_nic *efx);
+int efx_mcdi_rx_pull_rss_config(struct efx_nic *efx, u32 *indir, u8 *key);
 int efx_mcdi_rx_pull_rss_context_config(struct efx_nic *efx,
-					struct efx_rss_context *ctx);
+					struct efx_rss_context_priv *priv,
+					u32 *indir, u8 *key);
 u32 efx_mcdi_get_default_rss_flags(struct efx_nic *efx);
 int efx_mcdi_get_rss_context_flags(struct efx_nic *efx,
-				   struct efx_rss_context *ctx);
+				   struct efx_rss_context_priv *priv);
 int efx_mcdi_set_rss_context_flags(struct efx_nic *efx,
-				   struct efx_rss_context *ctx, u32 flags);
+				   struct efx_rss_context_priv *priv, u32 flags);
 void efx_mcdi_rx_restore_rss_contexts(struct efx_nic *efx);
 
 bool efx_mcdi_filter_rfs_expire_one(struct efx_nic *efx, u32 flow_id,

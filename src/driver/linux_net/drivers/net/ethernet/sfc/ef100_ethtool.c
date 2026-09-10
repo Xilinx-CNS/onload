@@ -125,6 +125,12 @@ static void ef100_ethtool_get_drvinfo(struct net_device *net_dev,
 /*	Ethtool options available
  */
 const struct ethtool_ops ef100_ethtool_ops = {
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_CREATE_RXFH_CONTEXT)
+	.rxfh_priv_size		= sizeof(struct efx_rss_context_priv),
+#ifdef EFX_NOT_UPSTREAM
+	.rxfh_max_num_contexts	= EFX_ONLOAD_RSS_CONTEXT_OFFSET,
+#endif
+#endif
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_CAP_RSS_CTX_SUPPORTED)
 	.cap_rss_ctx_supported	= true,
 #endif

@@ -63,7 +63,16 @@
 /* X4ANA model fails to select datapath firmware variant. */
 #define EFX_WORKAROUND_5884(efx) EFX_WORKAROUND_X4ANA(efx)
 
-/* X4ANA model does not seem to simulate link status yet. */
+/* X4ANA development FW/model are built without ANLT, so an autoneg
+ * LINK_CTRL never resolves a link technology and the port stays down.
+ */
 #define EFX_WORKAROUND_5885(efx) EFX_WORKAROUND_X4ANA(efx)
+
+/* HW cannot access the final 4k NIC buffer table page in the advertised
+ * 48-bit DMA range
+ */
+#define EFX_WORKAROUND_7785(efx) (EFX_WORKAROUND_EF10(efx) ||	\
+				  EFX_WORKAROUND_X4(efx) ||	\
+				  EFX_WORKAROUND_X4ANA(efx))
 
 #endif /* EFX_WORKAROUNDS_H */

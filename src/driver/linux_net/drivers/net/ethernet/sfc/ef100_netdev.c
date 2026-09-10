@@ -845,6 +845,7 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 	struct efx_probe_data **probe_ptr;
 	struct net_device *net_dev;
 	int rc, max_irqs;
+	u8 *rss_key;
 
 #if !defined(EFX_USE_KCOMPAT) || !defined(EFX_TC_OFFLOAD)
 	if (efx->mcdi->fn_flags &
@@ -929,8 +930,8 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 	if (rc)
 		goto fail;
 
-	netdev_rss_key_fill(efx->rss_context.rx_hash_key,
-			    sizeof(efx->rss_context.rx_hash_key));
+	rss_key = ethtool_rxfh_context_key(efx->rss_context);
+	netdev_rss_key_fill(rss_key, EFX_RX_KEY_LEN);
 
 	/* Don't fail init if RSS setup doesn't work. */
 	efx_mcdi_push_default_indir_table(efx, efx->n_rss_channels);

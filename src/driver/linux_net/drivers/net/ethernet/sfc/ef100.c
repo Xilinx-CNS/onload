@@ -147,7 +147,7 @@ static int ef100_pci_parse_continue_entry(struct efx_nic *efx, int entry_locatio
 		}
 
 		/* Temporarily map new BAR. */
-		rc = efx_init_io(efx, bar, efx->type->max_dma_mask,
+		rc = efx_init_io(efx, bar,
 				 pci_resource_len(efx->pci_dev, bar));
 		if (rc) {
 			pci_err(efx->pci_dev,
@@ -164,7 +164,7 @@ static int ef100_pci_parse_continue_entry(struct efx_nic *efx, int entry_locatio
 		efx_fini_io(efx);
 
 		/* Put old BAR back. */
-		rc = efx_init_io(efx, previous_bar, efx->type->max_dma_mask,
+		rc = efx_init_io(efx, previous_bar,
 				 pci_resource_len(efx->pci_dev, previous_bar));
 		if (rc) {
 			pci_err(efx->pci_dev,
@@ -340,8 +340,7 @@ static int ef100_pci_parse_xilinx_cap(struct efx_nic *efx, int vndr_cap,
 	}
 
 	/* Temporarily map BAR. */
-	rc = efx_init_io(efx, bar, efx->type->max_dma_mask,
-			 pci_resource_len(efx->pci_dev, bar));
+	rc = efx_init_io(efx, bar, pci_resource_len(efx->pci_dev, bar));
 	if (rc) {
 		pci_err(efx->pci_dev, "efx_init_io failed, rc=%d\n", rc);
 		return rc;
@@ -537,7 +536,7 @@ static int ef100_pci_probe(struct pci_dev *pci_dev,
 	}
 
 	/* Set up basic I/O (BAR mappings etc) */
-	rc = efx_init_io(efx, fcw.bar, efx->type->max_dma_mask,
+	rc = efx_init_io(efx, fcw.bar,
 			 pci_resource_len(efx->pci_dev, fcw.bar));
 	if (rc)
 		goto fail;
@@ -590,9 +589,7 @@ static int ef100_pci_sriov_configure(struct pci_dev *dev, int num_vfs)
 		return -ENOSYS;
 }
 
-/* PCI device ID table.
- * On changes make sure to update sfc_pci_table in efx.c
- */
+/* PCI device ID table. */
 static const struct pci_device_id ef100_pci_table[] = {
 	{PCI_DEVICE(PCI_VENDOR_ID_XILINX, 0x0100),  /* Riverhead PF */
 		.driver_data = (unsigned long) &ef100_pf_nic_type },
@@ -611,3 +608,5 @@ struct pci_driver ef100_pci_driver = {
 	.err_handler    = &efx_err_handlers,
 	.sriov_configure = ef100_pci_sriov_configure,
 };
+
+MODULE_DEVICE_TABLE(pci, ef100_pci_table);

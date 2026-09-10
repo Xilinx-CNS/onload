@@ -3,9 +3,12 @@
  * Copyright 2023 Advanced Micro Devices Inc.
  */
 
+#include "net_driver.h"
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_DEVLINK)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER)
+#include <net/devlink.h>
 #include "nvlog.h"
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER)
 #include "mcdi.h"
 #include <net/genetlink.h>
 
@@ -339,3 +342,5 @@ out:
 	return rc;
 }
 #endif /* EFX_HAVE_DEVLINK_HEALTH_REPORTER */
+#endif /* EFX_USE_DEVLINK */
+

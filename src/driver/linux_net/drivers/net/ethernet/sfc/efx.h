@@ -311,12 +311,81 @@ static inline void efx_filter_rfs_expire(struct work_struct *data) {}
 #endif
 
 /* RSS contexts */
-struct efx_rss_context *efx_alloc_rss_context_entry(struct efx_nic *efx);
-struct efx_rss_context *efx_find_rss_context_entry(struct efx_nic *efx, u32 id);
-void efx_free_rss_context_entry(struct efx_rss_context *ctx);
-static inline bool efx_rss_active(struct efx_rss_context *ctx)
+#ifdef EFX_NOT_UPSTREAM
+/* There are three types of RSS context:
+ * - default (id 0).  Always exists, thus safe for both Onload and ethtool
+ *   ntuple to use in their filters.
+ * - ethtool-created (0 < id < EFX_ONLOAD_RSS_CONTEXT_OFFSET).  Since ethtool
+ *   expects to be able to delete a context at any time if there are no
+ *   ethtool ntuple filters currently using it, Onload must not use these.
+ * - Onload-created (EFX_ONLOAD_RSS_CONTEXT_OFFSET <= id).  Onload can use
+ *   these, whereas ethtool ntuple must not.
+ */
+#define EFX_ONLOAD_RSS_CONTEXT_OFFSET	0x1000
+
+/* Returns true iff filter does not use Kernel custom RSS contexts. */
+static inline bool efx_filter_allow_onload_rss(const struct efx_filter_spec *spec)
 {
-	return ctx->context_id != EFX_MCDI_RSS_CONTEXT_INVALID;
+	if (!(spec->flags & EFX_FILTER_FLAG_RX_RSS))
+		return true; /* no RSS - safe */
+	if (!spec->rss_context)
+		return true; /* default RSS context - safe */
+	return spec->rss_context >= EFX_ONLOAD_RSS_CONTEXT_OFFSET;
+}
+/* Same but for rss_context parameter to filter_redirect */
+static inline bool efx_filter_redirect_allow_onload_rss(const u32 *rss_context)
+{
+	if (!rss_context)
+		return true;
+	if (!*rss_context)
+		return true;
+	return *rss_context >= EFX_ONLOAD_RSS_CONTEXT_OFFSET;
+}
+#endif
+struct ethtool_rxfh_context *efx_rxfh_ctx_alloc(u32 indir_size, u32 key_size);
+#if defined(EFX_NOT_UPSTREAM) || (defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_CREATE_RXFH_CONTEXT))
+struct ethtool_rxfh_context *efx_alloc_rss_context_entry(struct efx_nic *efx,
+#ifdef EFX_NOT_UPSTREAM
+							 bool onload,
+#endif
+							 u32 *user_id);
+#endif
+struct ethtool_rxfh_context *efx_find_rss_context_entry(struct efx_nic *efx, u32 id);
+#if defined(EFX_NOT_UPSTREAM) || (defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_CREATE_RXFH_CONTEXT))
+void efx_free_rss_context_entry(struct efx_nic *efx, u32 id);
+void efx_update_rss_context_entry(struct ethtool_rxfh_context *ctx,
+				  const u32 *indir, const u8 *key);
+#endif
+static inline bool efx_rss_active(struct ethtool_rxfh_context *ctx)
+{
+	struct efx_rss_context_priv *priv = ethtool_rxfh_context_priv(ctx);
+
+	return priv->context_id != EFX_MCDI_RSS_CONTEXT_INVALID;
+}
+/* Wrappers to make kcompat less painful */
+static inline void efx_lock_rss(struct efx_nic *efx)
+{
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_CREATE_RXFH_CONTEXT)
+	mutex_lock(&efx->net_dev->ethtool->rss_lock);
+#else
+	mutex_lock(&efx->rss_lock);
+#endif
+}
+static inline void efx_unlock_rss(struct efx_nic *efx)
+{
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_CREATE_RXFH_CONTEXT)
+	mutex_unlock(&efx->net_dev->ethtool->rss_lock);
+#else
+	mutex_unlock(&efx->rss_lock);
+#endif
+}
+static inline bool efx_rss_is_locked(struct efx_nic *efx)
+{
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_CREATE_RXFH_CONTEXT)
+	return mutex_is_locked(&efx->net_dev->ethtool->rss_lock);
+#else
+	return mutex_is_locked(&efx->rss_lock);
+#endif
 }
 
 /* Ethtool support */

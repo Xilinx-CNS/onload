@@ -1111,74 +1111,138 @@ efx_rx_packet_gro(struct efx_rx_queue *rx_queue, struct efx_rx_buffer *rx_buf,
 
 #endif /* EFX_USE_GRO */
 
-/* RSS contexts.  We're using linked lists and crappy O(n) algorithms, because
- * (a) this is an infrequent control-plane operation and (b) n is small (max 64)
- */
-struct efx_rss_context *efx_alloc_rss_context_entry(struct efx_nic *efx)
+/* RSS contexts */
+struct ethtool_rxfh_context *efx_rxfh_ctx_alloc(u32 indir_size, u32 key_size)
 {
-	struct list_head *head = &efx->rss_context.list;
-	struct efx_rss_context *ctx, *new;
-	u32 id = 1; /* Don't use zero, that refers to the master RSS context */
+	size_t priv_size = sizeof(struct efx_rss_context_priv);
+	size_t indir_bytes, flex_len, key_off, size;
+	struct ethtool_rxfh_context *ctx;
+	u32 priv_bytes;
 
-	WARN_ON(!mutex_is_locked(&efx->rss_lock));
+	priv_bytes = ALIGN(priv_size, sizeof(u32));
+	indir_bytes = array_size(indir_size, sizeof(u32));
 
-	/* Search for first gap in the numbering */
-	list_for_each_entry(ctx, head, list) {
-		if (ctx->user_id != id)
-			break;
-		id++;
-		/* Check for wrap.  If this happens, we have nearly 2^32
-		 * allocated RSS contexts, which seems unlikely.
-		 */
-		if (WARN_ON_ONCE(!id))
-			return NULL;
-	}
+	key_off = size_add(priv_bytes, indir_bytes);
+	flex_len = size_add(key_off, key_size);
+	size = struct_size_t(struct ethtool_rxfh_context, data, flex_len);
+
+	ctx = kzalloc(size, GFP_KERNEL_ACCOUNT);
+	if (!ctx)
+		return NULL;
+
+	ctx->indir_size = indir_size;
+	ctx->key_size = key_size;
+	ctx->key_off = key_off;
+	ctx->priv_size = priv_size;
+
+	return ctx;
+}
+#if defined(EFX_NOT_UPSTREAM) || (defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_CREATE_RXFH_CONTEXT))
+struct ethtool_rxfh_context *efx_alloc_rss_context_entry(struct efx_nic *efx,
+#ifdef EFX_NOT_UPSTREAM
+							 bool onload,
+#endif
+							 u32 *user_id)
+{
+	struct efx_rss_context_priv *priv;
+	struct ethtool_rxfh_context *ctx;
+	struct xa_limit limit;
+	int rc;
+
+	WARN_ON(!efx_rss_is_locked(efx));
 
 	/* Create the new entry */
-	new = kzalloc_obj(struct efx_rss_context);
-	if (!new)
+	ctx = efx_rxfh_ctx_alloc(EFX_RX_INDIR_LEN, EFX_RX_KEY_LEN);
+	if (!ctx)
 		return NULL;
-	new->context_id = EFX_MCDI_RSS_CONTEXT_INVALID;
-	new->flags = RSS_CONTEXT_FLAGS_DEFAULT;
+	priv = ethtool_rxfh_context_priv(ctx);
+	priv->context_id = EFX_MCDI_RSS_CONTEXT_INVALID;
+	priv->flags = RSS_CONTEXT_FLAGS_DEFAULT;
 #ifdef EFX_NOT_UPSTREAM
-	new->num_queues = 0;
+	priv->num_queues = 0;
+#endif
+	/* Insert the new entry into the XArray */
+#ifdef EFX_NOT_UPSTREAM
+	if (onload)
+		limit = XA_LIMIT(EFX_ONLOAD_RSS_CONTEXT_OFFSET, U32_MAX);
+	else
+		limit = XA_LIMIT(1, EFX_ONLOAD_RSS_CONTEXT_OFFSET - 1);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_CREATE_RXFH_CONTEXT)
+	/* ethtool create/modify/delete API does not give us the user_id,
+	 * only the ctx, so we have to record a flag in priv so that we can
+	 * detect whether this ctx is >= EFX_ONLOAD_RSS_CONTEXT_OFFSET and
+	 * if so refuse to act on it through ethtool
+	 */
+	priv->onload = onload;
+#endif
+#else
+	limit = XA_LIMIT(1, U32_MAX);
+#endif
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_CREATE_RXFH_CONTEXT)
+	rc = xa_alloc(&efx->net_dev->ethtool->rss_ctx, user_id, ctx, limit,
+		      GFP_KERNEL_ACCOUNT);
+#else
+	rc = xa_alloc(&efx->rss_contexts, user_id, ctx, limit,
+		      GFP_KERNEL_ACCOUNT);
+#endif
+	if (rc < 0) {
+		kfree(ctx);
+		return ERR_PTR(-rc);
+	}
+	return ctx;
+}
 #endif
 
-	/* Insert the new entry into the gap */
-	new->user_id = id;
-	list_add_tail(&new->list, &ctx->list);
-	return new;
+struct ethtool_rxfh_context *efx_find_rss_context_entry(struct efx_nic *efx,
+							u32 id)
+{
+	WARN_ON(!efx_rss_is_locked(efx));
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_CREATE_RXFH_CONTEXT)
+	return xa_load(&efx->net_dev->ethtool->rss_ctx, id);
+#else
+	return xa_load(&efx->rss_contexts, id);
+#endif
 }
 
-struct efx_rss_context *efx_find_rss_context_entry(struct efx_nic *efx, u32 id)
+#if defined(EFX_NOT_UPSTREAM) || (defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_CREATE_RXFH_CONTEXT))
+void efx_free_rss_context_entry(struct efx_nic *efx, u32 id)
 {
-	struct list_head *head = &efx->rss_context.list;
-	struct efx_rss_context *ctx;
+	struct ethtool_rxfh_context *ctx;
 
-	WARN_ON(!mutex_is_locked(&efx->rss_lock));
-
-	list_for_each_entry(ctx, head, list)
-		if (ctx->user_id == id)
-			return ctx;
-	return NULL;
-}
-
-void efx_free_rss_context_entry(struct efx_rss_context *ctx)
-{
-	list_del(&ctx->list);
+	WARN_ON(!efx_rss_is_locked(efx));
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_CREATE_RXFH_CONTEXT)
+	ctx = xa_erase(&efx->net_dev->ethtool->rss_ctx, id);
+#else
+	ctx = xa_erase(&efx->rss_contexts, id);
+#endif
+	if (!ctx)
+		return;
 	kfree(ctx);
 }
 
-void efx_set_default_rx_indir_table(struct efx_rss_context *ctx, u32 spread)
+/* Update the indir and key stored in a ctx.  Under the new context API,
+ * the kernel does this for us, but we still need it for Onload contexts.
+ */
+void efx_update_rss_context_entry(struct ethtool_rxfh_context *ctx,
+				  const u32 *indir, const u8 *key)
 {
+	memcpy(ethtool_rxfh_context_indir(ctx), indir,
+	       array_size(ctx->indir_size, sizeof(u32)));
+	memcpy(ethtool_rxfh_context_key(ctx), key, ctx->key_size);
+}
+#endif
+
+void efx_set_default_rx_indir_table(struct ethtool_rxfh_context *ctx, u32 spread)
+{
+	u32 *indir = ethtool_rxfh_context_indir(ctx);
 	size_t i;
 
 	if (spread <= 1)
 		return;
 
-	for (i = 0; i < ARRAY_SIZE(ctx->rx_indir_table); i++)
-		ctx->rx_indir_table[i] =
-			ethtool_rxfh_indir_default(i, spread);
+	for (i = 0; i < ctx->indir_size; i++)
+		indir[i] = ethtool_rxfh_indir_default(i, spread);
 }
 
 /**

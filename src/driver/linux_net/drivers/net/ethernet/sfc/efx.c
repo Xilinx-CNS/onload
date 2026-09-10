@@ -71,6 +71,7 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/sfc.h>
 #endif
+#include "efx_cxl.h"
 
 #ifdef EFX_NOT_UPSTREAM
 /* Allocate resources for XDP transmit and redirect functionality.
@@ -913,9 +914,7 @@ static void efx_unregister_netdev(struct efx_nic *efx)
  *
  **************************************************************************/
 
-/* PCI device ID table.
- * On changes make sure to update sfc_pci_table, below
- */
+/* PCI device ID table. */
 static const struct pci_device_id efx_pci_table[] = {
 	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0903),  /* SFC9120 PF */
 	 .driver_data = (unsigned long) &efx_hunt_a0_nic_type},
@@ -953,59 +952,20 @@ static const struct pci_device_id efx_pci_table[] = {
 	 .class = PCI_CLASS_NETWORK_ETHERNET << 8,
 	 .class_mask =  0xffff00,
 	 .driver_data = (unsigned long)&efx_x4_vf_nic_type},
-	{PCI_DEVICE(PCI_VENDOR_ID_AMD, 0x1190), /* X4ANA */
+	{PCI_DEVICE(PCI_VENDOR_ID_AMD, 0x1190), 	/* X4A PF */
 	 .driver_data = (unsigned long)&efx_x4ana_nic_type},
-	{0}			/* end of list */
-};
-
-/* Module device ID table - efx_pci_table + ef100_pci_table */
-static const struct pci_device_id sfc_pci_table[] = {
-	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0903),  /* SFC9120 PF */
-	 .driver_data = (unsigned long) &efx_hunt_a0_nic_type},
-	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x1903),  /* SFC9120 VF */
+	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x8c03),  /* X4D PF (FF/LL) */
+	 .driver_data = (unsigned long)&efx_x4_nic_type},
+	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x9c03),  /* X4D VF (FF/LL) */
 	 .class = PCI_CLASS_NETWORK_ETHERNET << 8,
 	 .class_mask =  0xffff00,
-	 .driver_data = (unsigned long) &efx_hunt_a0_vf_nic_type},
-	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0923),  /* SFC9140 PF */
-	 .driver_data = (unsigned long) &efx_hunt_a0_nic_type},
-	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x1923),  /* SFC9140 VF */
+	 .driver_data = (unsigned long)&efx_x4_vf_nic_type},
+	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0xac03),  /* X4D PF (FF only) */
+	 .driver_data = (unsigned long)&efx_x4_nic_type},
+	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0xbc03),  /* X4D VF (FF only) */
 	 .class = PCI_CLASS_NETWORK_ETHERNET << 8,
 	 .class_mask =  0xffff00,
-	 .driver_data = (unsigned long) &efx_hunt_a0_vf_nic_type},
-	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0a03),  /* SFC9220 PF */
-	 .driver_data = (unsigned long) &efx_hunt_a0_nic_type},
-	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x1a03),  /* SFC9220 VF */
-	 .class = PCI_CLASS_NETWORK_ETHERNET << 8,
-	 .class_mask =  0xffff00,
-	 .driver_data = (unsigned long) &efx_hunt_a0_vf_nic_type},
-	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0b03),  /* SFC9250 PF */
-	 .driver_data = (unsigned long) &efx_hunt_a0_nic_type},
-	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x1b03),  /* SFC9250 VF */
-	 .class = PCI_CLASS_NETWORK_ETHERNET << 8,
-	 .class_mask =  0xffff00,
-	 .driver_data = (unsigned long) &efx_hunt_a0_vf_nic_type},
-#if IS_ENABLED(CONFIG_SFC_EF100)
-	{PCI_DEVICE(PCI_VENDOR_ID_XILINX, 0x0100),  /* Riverhead PF */
-	 .driver_data = (unsigned long) &ef100_pf_nic_type },
-	{PCI_DEVICE(PCI_VENDOR_ID_XILINX, 0x1100),  /* Riverhead VF */
-	 .class = PCI_CLASS_NETWORK_ETHERNET << 8,
-	 .class_mask =  0xffff00,
-	 .driver_data = (unsigned long) &ef100_vf_nic_type },
-#endif
-	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0c03),  /* X4 PF (FF/LL) */
-	 .driver_data = (unsigned long) &efx_x4_nic_type},
-	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x1c03),  /* X4 VF (FF/LL) */
-	 .class = PCI_CLASS_NETWORK_ETHERNET << 8,
-	 .class_mask =  0xffff00,
-	 .driver_data = (unsigned long) &efx_x4_vf_nic_type},
-	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x2c03),  /* X4 PF (FF only) */
-	 .driver_data = (unsigned long) &efx_x4_nic_type},
-	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x3c03),  /* X4 VF (FF only) */
-	 .class = PCI_CLASS_NETWORK_ETHERNET << 8,
-	 .class_mask =  0xffff00,
-	 .driver_data = (unsigned long) &efx_x4_vf_nic_type},
-	{PCI_DEVICE(PCI_VENDOR_ID_AMD, 0x1190), /* X4ANA */
-	 .driver_data = (unsigned long) &efx_x4ana_nic_type},
+	 .driver_data = (unsigned long)&efx_x4_vf_nic_type},
 	{0}			/* end of list */
 };
 
@@ -1252,11 +1212,13 @@ static void efx_pci_remove(struct pci_dev *pci_dev)
 	efx_fini_io(efx);
 	pci_dbg(efx->pci_dev, "shutdown successful\n");
 
+	probe_data = efx_nic_to_probe_data(efx);
+	efx_cxl_exit(probe_data);
+
 	free_netdev(efx->net_dev);
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_PCI_ENABLE_PCIE_ERROR_REPORTING)
 	pci_disable_pcie_error_reporting(pci_dev);
 #endif
-	probe_data = efx_nic_to_probe_data(efx);
 	efx_fini_probe_data(probe_data);
 };
 
@@ -1312,10 +1274,12 @@ static int efx_pci_probe(struct pci_dev *pci_dev,
 #endif
 
 	/* Set up basic I/O (BAR mappings etc) */
-	rc = efx_init_io(efx, efx->type->mem_bar(efx), efx->type->max_dma_mask,
+	rc = efx_init_io(efx, efx->type->mem_bar(efx),
 			 efx->type->mem_map_size(efx));
 	if (rc)
 		goto fail;
+
+	efx_cxl_init(probe_data);
 
 	efx->netdev_notifier.notifier_call = efx_netdev_event;
 	rc = register_netdevice_notifier(&efx->netdev_notifier);
@@ -1784,7 +1748,7 @@ MODULE_AUTHOR("Solarflare Communications and "
 	      "Michael Brown <mbrown@fensystems.co.uk>");
 MODULE_DESCRIPTION("Solarflare network driver");
 MODULE_LICENSE("GPL");
-MODULE_DEVICE_TABLE(pci, sfc_pci_table);
+MODULE_DEVICE_TABLE(pci, efx_pci_table);
 #ifdef EFX_NOT_UPSTREAM
 MODULE_VERSION(EFX_DRIVER_VERSION);
 #endif

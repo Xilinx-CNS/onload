@@ -250,7 +250,6 @@ struct efx_pps_dev_attr {
  * @phc_clock_info: Registration structure for phc device
  * @pps_work: pps work task for handling pps events
  * @pps_workwq: pps work queue
- * @pin_config: Function of the EXTTS pin.
  * @usr_evt_enabled: Flag indicating how NIC generated TS events are handled
  * @sw_stats: Driver level statistics.
  * @sw_stats.good_syncs: Number of successful synchronisations.
@@ -2420,6 +2419,8 @@ static int efx_ptp_set_connector_funcs(struct efx_nic *efx)
 	size_t inlen;
 	int func;
 
+	BUILD_BUG_ON(MC_CMD_PTP_OUT_SET_CONNECTOR_FUNCTION_LENMIN != 0);
+
 	inlen = MC_CMD_PTP_IN_SET_CONNECTOR_FUNCTION_LEN(0);
 	inbuf = kzalloc(inlen, GFP_KERNEL);
 	if (!inbuf)
@@ -2436,10 +2437,6 @@ static int efx_ptp_set_connector_funcs(struct efx_nic *efx)
 			  outbuf, outlen, &outlen_actual);
 	if (rc)
 		goto free_outbuf;
-	if (outlen_actual < MC_CMD_PTP_OUT_SET_CONNECTOR_FUNCTION_LENMIN) {
-		rc = -EIO;
-		goto free_outbuf;
-	}
 
 	pins = MC_CMD_PTP_OUT_SET_CONNECTOR_FUNCTION_FUNCTION_NUM(outlen_actual);
 	if (!clock_info->pin_config) {
@@ -2499,6 +2496,8 @@ static int efx_ptp_set_single_connector_func(struct efx_nic *efx,
 	int *new_funcs;
 	int func;
 
+	BUILD_BUG_ON(MC_CMD_PTP_OUT_SET_CONNECTOR_FUNCTION_LENMIN != 0);
+
 	inlen = MC_CMD_PTP_IN_SET_CONNECTOR_FUNCTION_LEN(1);
 	inbuf = kzalloc(inlen, GFP_KERNEL);
 	if (!inbuf)
@@ -2521,10 +2520,6 @@ static int efx_ptp_set_single_connector_func(struct efx_nic *efx,
 			  outbuf, outlen, &outlen_actual);
 	if (rc)
 		goto free_outbuf;
-	if (outlen_actual < MC_CMD_PTP_OUT_SET_CONNECTOR_FUNCTION_LENMIN) {
-		rc = -EIO;
-		goto free_outbuf;
-	}
 
 	pins = MC_CMD_PTP_OUT_SET_CONNECTOR_FUNCTION_FUNCTION_NUM(outlen_actual);
 
