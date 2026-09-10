@@ -23,7 +23,9 @@ TEST_SRCS := tests/sanity.c tests/multicast_sanity.c tests/namespace_sanity.c \
 	tests/addr_reactivate.c tests/mcast_install.c \
 	tests/udp_connect.c tests/mcast_connected.c \
 	tests/socket_replace.c tests/tproxy_global.c \
-	tests/tproxy_sanity.c tests/nat_table.c
+	tests/tproxy_sanity.c tests/nat_table.c \
+	tests/hw_filter_errors.c tests/llct_hw_fallback.c \
+	tests/mcast_filter_transfer.c tests/cluster_multi.c
 HDRS := cplane.h oof_impl.h stack_interface.h driverlink_interface.h  \
 	oof_test.h tcp_filters_deps.h efrm_interface.h oo_hw_filter.h \
 	tcp_filters_internal.h onload_kernel_compat.h stack.h utils.h \
@@ -32,8 +34,9 @@ HDRS := cplane.h oof_impl.h stack_interface.h driverlink_interface.h  \
 OBJS := $(patsubst %,%.o,$(SRCS))
 OBJS += $(patsubst %,%.o,$(TEST_SRCS))
 
-# Keep tproxy_sanity available for manual execution while ON-17563 is open.
-DEFAULT_TEST_SRCS := $(filter-out tests/tproxy_sanity.c,$(TEST_SRCS))
+# Keep fix-dependent tests available for manual execution while their
+# corresponding production fixes are pending.
+DEFAULT_TEST_SRCS := $(filter-out tests/tproxy_sanity.c tests/hw_filter_errors.c,$(TEST_SRCS))
 TESTS := $(patsubst tests/%.c,"./oof_test %",$(DEFAULT_TEST_SRCS))
 TESTS += "./oof_test tproxy_global_refcount"
 TESTS += "./oof_test nat_socket"

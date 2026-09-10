@@ -200,5 +200,17 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "nat_socket") )
     test_nat_socket();
 
+  if( all || !strcmp(argv[1], "hw_filter_errors") )
+    test_hw_filter_errors();
+
+  if( all || !strcmp(argv[1], "llct_hw_fallback") )
+    test_llct_hw_fallback();
+
+  if( all || !strcmp(argv[1], "mcast_filter_transfer") )
+    test_mcast_filter_transfer();
+
+  if( all || !strcmp(argv[1], "cluster_multi") )
+    test_cluster_multi();
+
   return 0;
 }
