@@ -17,6 +17,7 @@
 #define __CI_DRIVER_EFAB_TCP_DRIVER_H__
 
 #include <ci/driver/internal.h>
+#include <onload/driverlink_filter.h>
 #include <onload/ipid.h>
 #include <onload/id_pool.h>
 #include <onload/tcp_helper.h>
@@ -75,7 +76,7 @@ typedef struct efab_tcp_driver_s {
   int sendpage_pinpages_max;
 
 #if CI_CFG_HANDLE_ICMP
-  struct efx_dlfilt_cb_s* dlfilter;
+  efx_dlfilter_cb_t dlfilter;
 #endif
 
   /* Dynamic stack list update: flag and wait queue.  Used by tcpdump */

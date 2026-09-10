@@ -5902,12 +5902,10 @@ efab_tcp_driver_ctor(void)
 
 #if CI_CFG_HANDLE_ICMP
   /* Create driverlink filter. */
-  efab_tcp_driver.dlfilter =
-      efx_dlfilter_ctor(&efab_tcp_driver, efab_is_onloaded);
-  if( efab_tcp_driver.dlfilter == NULL ) {
-    rc = -ENOMEM;
+  rc = efx_dlfilter_ctor(&efab_tcp_driver.dlfilter, &efab_tcp_driver,
+                         efab_is_onloaded);
+  if( rc < 0 )
     goto fail_dlf;
-  }
 #endif
 
   efab_tcp_driver.timesync_page = alloc_page(GFP_KERNEL);
@@ -5942,7 +5940,7 @@ fail_timesync:
   __free_page(efab_tcp_driver.timesync_page);
 fail_timesync_alloc:
 #if CI_CFG_HANDLE_ICMP
-  efx_dlfilter_dtor(efab_tcp_driver.dlfilter);
+  efx_dlfilter_dtor(&efab_tcp_driver.dlfilter);
 fail_dlf:
 #endif
   oo_filter_ns_manager_dtor(&efab_tcp_driver);
@@ -5990,7 +5988,7 @@ efab_tcp_driver_dtor(void)
 
   destroy_workqueue(CI_GLOBAL_WORKQUEUE);
 #if CI_CFG_HANDLE_ICMP
-  efx_dlfilter_dtor(efab_tcp_driver.dlfilter);
+  efx_dlfilter_dtor(&efab_tcp_driver.dlfilter);
 #endif
   oo_filter_ns_manager_dtor(&efab_tcp_driver);
 

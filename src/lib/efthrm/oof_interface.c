@@ -269,8 +269,8 @@ oof_dl_filter_set(struct oo_hw_filter* filter, int stack_id, int protocol,
 {
 #if CI_CFG_HANDLE_ICMP
   if( filter->dlfilter_handle != EFX_DLFILTER_HANDLE_BAD )
-    efx_dlfilter_remove(efab_tcp_driver.dlfilter, filter->dlfilter_handle);
-  efx_dlfilter_add(efab_tcp_driver.dlfilter, protocol,
+    efx_dlfilter_remove(&efab_tcp_driver.dlfilter, filter->dlfilter_handle);
+  efx_dlfilter_add(&efab_tcp_driver.dlfilter, protocol,
                    daddr, dport, saddr, sport,
                    stack_id, &filter->dlfilter_handle);
 #endif
@@ -282,7 +282,7 @@ oof_dl_filter_del(struct oo_hw_filter* filter)
 {
 #if CI_CFG_HANDLE_ICMP
   if( filter->dlfilter_handle != EFX_DLFILTER_HANDLE_BAD ) {
-    efx_dlfilter_remove(efab_tcp_driver.dlfilter, filter->dlfilter_handle);
+    efx_dlfilter_remove(&efab_tcp_driver.dlfilter, filter->dlfilter_handle);
     filter->dlfilter_handle = EFX_DLFILTER_HANDLE_BAD;
   }
 #endif

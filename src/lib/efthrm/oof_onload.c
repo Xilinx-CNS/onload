@@ -2,6 +2,7 @@
 /* X-SPDX-Copyright-Text: (c) Copyright 2009-2019 Xilinx, Inc. */
 /* Stuff that connects the oof module and the rest of onload. */
 
+#include <onload/oof_interface.h>
 #include <onload/tcp_driver.h>
 #include <onload/oof_onload.h>
 #include <onload/oof_nat.h>
