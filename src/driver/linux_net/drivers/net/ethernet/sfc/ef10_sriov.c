@@ -607,14 +607,29 @@ static int efx_ef10_sriov_close(struct efx_nic *efx)
 	return efx_ef10_vadaptor_free(efx, EVB_PORT_ID_ASSIGNED);
 }
 
-static int efx_ef10_sriov_reopen(struct efx_nic *efx)
+static int efx_ef10_sriov_reopen(struct efx_nic *efx,
+				 enum nic_state state_on_close)
 {
-	int rc;
+	int rc = 0;
 
-	rc = efx_net_open(efx->net_dev);
+	if (state_on_close == STATE_NET_UP)
+		rc = efx_net_open(efx->net_dev);
+
 #ifdef EFX_NOT_UPSTREAM
-	efx_client_attach(efx_nic_to_probe_data(efx),
-			  !rc && efx->state != STATE_DISABLED);
+	/* An out-of-tree client can keep network resources allocated
+	 * while the netdev is down. Restore the allocation without
+	 * administratively opening the netdev.
+	 */
+	if (state_on_close == STATE_NET_ALLOCATED) {
+		rc = efx_net_alloc(efx);
+		if (rc)
+			efx_net_dealloc(efx);
+	}
+
+	if (!efx->reset_pending)
+		efx_client_attach(efx_nic_to_probe_data(efx),
+				  !rc && efx_net_active(state_on_close) &&
+				  efx->state != STATE_DISABLED);
 #endif
 	return rc;
 }
@@ -622,7 +637,7 @@ static int efx_ef10_sriov_reopen(struct efx_nic *efx)
 int efx_ef10_sriov_set_vf_mac(struct efx_nic *efx, int vf_i, const u8 *mac,
 			      bool *reset)
 {
-	enum nic_state old_state = STATE_UNINIT;
+	enum nic_state state_on_close = STATE_UNINIT;
 	struct ef10_vf *vf;
 	int rc, rc2 = 0;
 
@@ -640,7 +655,7 @@ int efx_ef10_sriov_set_vf_mac(struct efx_nic *efx, int vf_i, const u8 *mac,
 	 * without VF datapath reset triggered by VPORT_RECONFIGURE.
 	 */
 	if (vf->efx) {
-		old_state = vf->efx->state;
+		state_on_close = vf->efx->state;
 		rc = efx_ef10_sriov_close(vf->efx);
 		if (rc)
 			goto reopen;
@@ -706,11 +721,9 @@ restore_vadaptor:
 	}
 reopen:
 	if (vf->efx) {
-		if (old_state == STATE_NET_UP) {
-			rc2 = efx_ef10_sriov_reopen(vf->efx);
-			if (rc2)
-				goto reset_nic;
-		}
+		rc2 = efx_ef10_sriov_reopen(vf->efx, state_on_close);
+		if (rc2)
+			goto reset_nic;
 		efx_device_attach_if_not_resetting(vf->efx);
 	}
 
@@ -735,7 +748,7 @@ reset_nic:
 int efx_ef10_sriov_set_vf_vlan(struct efx_nic *efx, int vf_i, u16 vlan,
 			       u8 qos)
 {
-	enum nic_state old_state = STATE_UNINIT;
+	enum nic_state state_on_close = STATE_UNINIT;
 	struct ef10_vf *vf;
 	u16 new_vlan;
 	int rc = 0, rc2 = 0;
@@ -752,7 +765,7 @@ int efx_ef10_sriov_set_vf_vlan(struct efx_nic *efx, int vf_i, u16 vlan,
 	 * without VF datapath reset triggered by VPORT_RECONFIGURE.
 	 */
 	if (vf->efx) {
-		old_state = vf->efx->state;
+		state_on_close = vf->efx->state;
 		rc = efx_ef10_sriov_close(vf->efx);
 		if (rc)
 			goto reopen;
@@ -838,11 +851,9 @@ restore_vadaptor:
 
 reopen:
 	if (vf->efx) {
-		if (old_state == STATE_NET_UP) {
-			rc2 = efx_ef10_sriov_reopen(vf->efx);
-			if (rc2)
-				goto reset_nic;
-		}
+		rc2 = efx_ef10_sriov_reopen(vf->efx, state_on_close);
+		if (rc2)
+			goto reset_nic;
 		efx_device_attach_if_not_resetting(vf->efx);
 	}
 

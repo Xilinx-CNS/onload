@@ -8,13 +8,16 @@
 
 #include "net_driver.h"
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER)
+struct devlink_fmsg;
+
 struct efx_nvlog_data {
 	char *nvlog;
 	size_t nvlog_len;
 	size_t nvlog_max_len;
 };
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_DEVLINK)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_HEALTH_REPORTER)
 int efx_nvlog_to_devlink(struct efx_nvlog_data *nvlog_data,
 			 struct devlink_fmsg *fmsg);
 
@@ -23,9 +26,6 @@ int efx_nvlog_to_devlink(struct efx_nvlog_data *nvlog_data,
 int efx_nvlog_do(struct efx_nic *efx, struct efx_nvlog_data *nvlog_data,
 		 u32 type, unsigned int flags);
 #else
-struct devlink_fmsg;
-struct efx_nvlog_data;
-
 static inline int efx_nvlog_to_devlink(struct efx_nic *efx,
 				       struct devlink_fmsg *fmsg)
 {
@@ -38,6 +38,7 @@ static inline int efx_nvlog_do(struct efx_nic *efx,
 {
 	return -EOPNOTSUPP;
 }
-#endif
+#endif /* EFX_HAVE_DEVLINK_HEALTH_REPORTER */
+#endif /* EFX_USE_DEVLINK */
 
 #endif /* EFX_NVLOG_H */

@@ -1561,7 +1561,8 @@ static int efx_ef10_init_nic(struct efx_nic *efx)
 	 * passing up.
 	 */
 	rc = efx->type->rx_push_rss_config(efx, false,
-					   efx->rss_context.rx_indir_table, NULL);
+					   ethtool_rxfh_context_indir(efx->rss_context),
+					   NULL);
 	if (rc == -EAGAIN)
 		return rc;
 
@@ -1614,12 +1615,14 @@ static int efx_ef10_init_nic(struct efx_nic *efx)
 static void efx_ef10_reset_mc_allocations(struct efx_nic *efx)
 {
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+	struct efx_rss_context_priv *priv;
 #ifdef CONFIG_SFC_SRIOV
 	unsigned int i;
 #endif
 
 	efx_mcdi_filter_table_reset_mc_allocations(efx);
-	efx->rss_context.context_id = EFX_MCDI_RSS_CONTEXT_INVALID;
+	priv = ethtool_rxfh_context_priv(efx->rss_context);
+	priv->context_id = EFX_MCDI_RSS_CONTEXT_INVALID;
 	efx_ef10_forget_old_piobufs(efx);
 
 
@@ -2463,13 +2466,10 @@ static void efx_ef10_pull_stats_vf(struct efx_nic *efx)
 		if (rc)
 			goto out;
 
-		efx_x4_get_stat_mask(efx, mask);
 	} else {
 		rc = efx_mcdi_ef10_vf_stats(efx, &stats_buf);
 		if (rc)
 			goto out;
-
-		efx_ef10_get_stat_mask(efx, mask);
 	}
 
 	generation_end = dma_stats[efx->num_mac_stats - 1];
@@ -2488,8 +2488,17 @@ static void efx_ef10_pull_stats_vf(struct efx_nic *efx)
 	/* Acquire lock back since stats should be updated under lock */
 	spin_lock_bh(&efx->stats_lock);
 
-	efx_nic_update_stats(efx_ef10_stat_desc, EF10_STAT_COUNT, mask,
-			     stats, efx->mc_initial_stats, dma_stats);
+	if (efx_nic_port_handle_supported(efx)) {
+		efx_x4_get_stat_mask(efx, mask);
+		efx_nic_update_stats(nic_data->x4_stat_desc,
+				     EF10_STAT_COUNT, mask, stats,
+				     efx->mc_initial_stats, dma_stats);
+	} else {
+		efx_ef10_get_stat_mask(efx, mask);
+		efx_nic_update_stats(efx_ef10_stat_desc,
+				     EF10_STAT_COUNT, mask, stats,
+				     efx->mc_initial_stats, dma_stats);
+	}
 	rmb();
 	generation_start = dma_stats[MC_CMD_MAC_GENERATION_START];
 	if (generation_end != generation_start)
@@ -3312,12 +3321,12 @@ static int efx_ef10_probe_multicast_chaining(struct efx_nic *efx)
 	nic_data->workaround_26807 =
 		!!(enabled & MC_CMD_GET_WORKAROUNDS_OUT_BUG26807);
 
-	if (want_workaround_26807 && !nic_data->workaround_26807) {
+	if (want_workaround_26807 ^ nic_data->workaround_26807) {
 		unsigned int flags;
 
 		rc = efx_mcdi_set_workaround(efx,
 					     MC_CMD_WORKAROUND_BUG26807,
-					     true, &flags);
+					     want_workaround_26807, &flags);
 		if (!rc) {
 			if (flags &
 			    1 << MC_CMD_WORKAROUND_EXT_OUT_FLR_DONE_LBN) {
@@ -3337,7 +3346,7 @@ static int efx_ef10_probe_multicast_chaining(struct efx_nic *efx)
 					rc = 0;
 				}
 			}
-			nic_data->workaround_26807 = true;
+			nic_data->workaround_26807 = want_workaround_26807;
 		} else if (rc == -EPERM) {
 			rc = 0;
 		}
@@ -3415,6 +3424,7 @@ static int efx_ef10_vf_rx_push_rss_config(struct efx_nic *efx, bool user,
 					  const u8 *key)
 {
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+	struct efx_rss_context_priv *priv;
 
 	if (efx_ef10_has_cap(nic_data->datapath_caps, RX_RSS_LIMITED))
 		return -EOPNOTSUPP;
@@ -3424,7 +3434,8 @@ static int efx_ef10_vf_rx_push_rss_config(struct efx_nic *efx, bool user,
 	 */
 	if (user)
 		return -EOPNOTSUPP;
-	if (efx->rss_context.context_id != EFX_MCDI_RSS_CONTEXT_INVALID)
+	priv = ethtool_rxfh_context_priv(efx->rss_context);
+	if (priv->context_id != EFX_MCDI_RSS_CONTEXT_INVALID)
 		return 0;
 
 	return efx_mcdi_rx_push_shared_rss_config(efx, NULL);
@@ -5901,6 +5912,7 @@ static int efx_ef10_probe(struct efx_nic *efx)
 {
 	struct efx_ef10_nic_data *nic_data;
 	unsigned int bar_size = efx_ef10_bar_size(efx);
+	u8 *rss_key;
 	int i, rc;
 
 	if (WARN_ON(bar_size == 0))
@@ -6002,16 +6014,14 @@ static int efx_ef10_probe(struct efx_nic *efx)
 		return 0;
 #endif
 
+	rss_key = ethtool_rxfh_context_key(efx->rss_context);
 #ifdef EFX_NOT_UPSTREAM
 	if (efx_rss_use_fixed_key) {
-		BUILD_BUG_ON(sizeof(efx_rss_fixed_key) <
-			     sizeof(efx->rss_context.rx_hash_key));
-		memcpy(&efx->rss_context.rx_hash_key, efx_rss_fixed_key,
-		       sizeof(efx->rss_context.rx_hash_key));
+		BUILD_BUG_ON(sizeof(efx_rss_fixed_key) < EFX_RX_KEY_LEN);
+		memcpy(rss_key, efx_rss_fixed_key, EFX_RX_KEY_LEN);
 	} else
 #endif
-	netdev_rss_key_fill(efx->rss_context.rx_hash_key,
-			    sizeof(efx->rss_context.rx_hash_key));
+	netdev_rss_key_fill(rss_key, EFX_RX_KEY_LEN);
 
 	/* Don't fail init if RSS setup doesn't work. */
 	efx_mcdi_push_default_indir_table(efx, efx->n_rss_channels);

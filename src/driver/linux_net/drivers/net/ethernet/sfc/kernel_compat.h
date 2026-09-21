@@ -632,11 +632,32 @@ static inline void rhashtable_walk_enter(struct rhashtable *ht,
 })
 #endif
 
+#ifndef check_add_overflow
+#define check_add_overflow(a, b, d) ({		\
+	typeof(a) __a = (a);			\
+	typeof(b) __b = (b);			\
+	typeof(d) __d = (d);			\
+	(void) (&__a == &__b);			\
+	(void) (&__a == __d);			\
+	__builtin_add_overflow(__a, __b, __d);	\
+})
+#endif
+
 static inline size_t __must_check size_mul(size_t factor1, size_t factor2)
 {
 	size_t bytes;
 
 	if (check_mul_overflow(factor1, factor2, &bytes))
+		return SIZE_MAX;
+
+	return bytes;
+}
+
+static inline size_t __must_check size_add(size_t addend1, size_t addend2)
+{
+	size_t bytes;
+
+	if (check_add_overflow(addend1, addend2, &bytes))
 		return SIZE_MAX;
 
 	return bytes;
@@ -1873,6 +1894,47 @@ static inline struct dentry *try_lookup_noperm(struct qstr *name, struct dentry 
 {
 	return d_hash_and_lookup(base, name);
 }
+#endif
+
+#if defined(EFX_HAVE_CXL_H) && defined(EFX_HAVE_CXL_SET_CAPACITY) && defined(CONFIG_SFC_CXL)
+/* Support for CXL Type2 device is available */
+#define EFX_USE_CXL
+#endif
+
+#ifndef EFX_HAVE_ETHTOOL_CREATE_RXFH_CONTEXT
+struct ethtool_rxfh_context {
+	u32 indir_size;
+	u32 key_size;
+	u16 priv_size;
+	u8 hfunc;
+	u8 input_xfrm;
+	u8 indir_configured:1;
+	u8 key_configured:1;
+	/* private: driver private data, indirection table, and hash key are
+	 * stored sequentially in @data area.  Use below helpers to access.
+	 */
+	u32 key_off;
+	u8 data[] __aligned(sizeof(void *));
+};
+
+static inline void *ethtool_rxfh_context_priv(struct ethtool_rxfh_context *ctx)
+{
+	return ctx->data;
+}
+
+static inline u32 *ethtool_rxfh_context_indir(struct ethtool_rxfh_context *ctx)
+{
+	return (u32 *)(ctx->data + ALIGN(ctx->priv_size, sizeof(u32)));
+}
+
+static inline u8 *ethtool_rxfh_context_key(struct ethtool_rxfh_context *ctx)
+{
+	return &ctx->data[ctx->key_off];
+}
+#endif
+
+#ifndef EFX_HAVE_MUTEX_GET_OWNER
+extern unsigned long mutex_get_owner(struct mutex *lock);
 #endif
 
 #endif /* EFX_KERNEL_COMPAT_H */

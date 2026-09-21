@@ -37,6 +37,7 @@ export CONFIG_SFC_BUSYPOLL := n
 export CONFIG_SFC_EF100 := n
 export CONFIG_SFC_VDPA := n
 export CONFIG_SFC_TPH := y
+export CONFIG_SFC_CXL := y
 
 ifndef CONFIG_SFC_SIENA
 export CONFIG_SFC_SIENA :=
@@ -82,6 +83,13 @@ ifndef CONFIG_PCI_IOV
 $(warning Kernel does not support PCI_IOV)
 override CONFIG_SFC_SRIOV :=
 $(warning => SR-IOV functionality will be disabled)
+endif
+endif
+ifdef CONFIG_SFC_CXL
+ifndef CONFIG_CXL_BUS
+$(warning Kernel does not support CXL)
+override CONFIG_SFC_CXL :=
+$(warning => CXL functionality will be disabled)
 endif
 endif
 ifdef CONFIG_SFC_TRACING
@@ -155,6 +163,7 @@ sfc-y			:= efx.o efx_common.o efx_channels.o nic.o ef10.o \
 
 sfc_driverlink-y	:= driverlink.o
 
+sfc-$(CONFIG_SFC_CXL)	+= efx_cxl.o
 sfc-$(CONFIG_SFC_SRIOV)	+= sriov.o
 sfc-$(CONFIG_SFC_MCDI_MON) += mcdi_mon.o
 sfc-$(CONFIG_SFC_PTP)	+= ptp.o
@@ -235,7 +244,7 @@ endef
 $(obj)/config.h: $(src)/Makefile FORCE
 	$(call filechk,config.h)
 
-$(addprefix $(obj)/,$(sfc-y) $(sfc_driverlink-y)): \
+$(addprefix $(obj)/,$(sfc-y) $(sfc-m) $(sfc_driverlink-y)): \
 	$(obj)/.kpath $(obj)/autocompat.h $(obj)/config.h
 
 # Select the right warnings - complicated by working out which options work
@@ -341,20 +350,20 @@ endif # EFX_NOT_EXPORTED
 
 # Export into kernel tree
 export:
-	$(EXPORT_CMD) $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) debugfs.c
+	$(EXPORT_CMD) $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) debugfs.c efx_cxl.c
 	$(MAKE) -C siena $@
 
 export-resolve-kcompat:
-	$(EXPORT_CMD) -k -kk $(KDIR) $(sfc-y:%.o=%.c) debugfs.c
+	$(EXPORT_CMD) -k -kk $(KDIR) $(sfc-y:%.o=%.c) debugfs.c efx_cxl.c
 
 # Export into a Xen kernel tree
 export-xen:
-	$(EXPORT_CMD) -k -kk --suffix=xen $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) debugfs.c
+	$(EXPORT_CMD) -k -kk --suffix=xen $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) debugfs.c efx_cxl.c
 
 # Export for SRPM
 export-srpm:
 	mkdir -p $(KDIR)/mtd
-	$(EXPORT_CMD) -o $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) mtd/mtd-abi.h trace/events/sfc.h kernel_compat.sh $(TOPDIR)/scripts/kernel_compat_funcs.sh efx_auxbus.c debugfs.c
+	$(EXPORT_CMD) -o $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) mtd/mtd-abi.h trace/events/sfc.h kernel_compat.sh $(TOPDIR)/scripts/kernel_compat_funcs.sh efx_auxbus.c debugfs.c efx_cxl.c
 
 .PHONY : intranet doc clean_doc util clean_util export export-xen export-srpm
 

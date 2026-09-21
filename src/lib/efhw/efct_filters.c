@@ -130,11 +130,35 @@ void efct_filter_state_reserve_rxq(struct efct_filter_state *state, int rxq)
 }
 
 
+static int32_t
+hw_filter_outer_vlan(const struct ethtool_rx_flow_spec *filter)
+{
+  if( !(filter->flow_type & FLOW_EXT) || !filter->m_ext.vlan_tci )
+    return -1;
+
+  return filter->h_ext.vlan_tci & filter->m_ext.vlan_tci;
+}
+
+
 static bool
 hw_filters_are_equal(const struct efct_filter_node *node,
                      const struct efct_hw_filter *hw_filter,
-                     int clas, uint64_t efhw_flags)
+                     int clas, uint64_t efhw_flags, int32_t outer_vlan)
 {
+  /* Dummy entries reserve an RXQ but do not describe a hardware match, so none
+   * of their zero-initialised match fields are meaningful. */
+  if( hw_filter->drv_id == EFCT_HW_FILTER_DRV_ID_DUMMY )
+    return false;
+
+  /* Compare the VLAN in the effective hardware request, rather than the
+   * original filter spec. X3 removes VLAN matching from IP hardware filters
+   * and discriminates in software, whereas X4 retains it for firmware. Every
+   * real filter slot is assigned this field: filter types without a hardware
+   * VLAN match use -1 on both sides, so this comparison is safe for them too.
+   */
+  if( hw_filter->outer_vlan != outer_vlan )
+    return false;
+
   switch (clas) {
   case FILTER_CLASS_full_match:
   case FILTER_CLASS_semi_wild: {
@@ -162,11 +186,8 @@ hw_filters_are_equal(const struct efct_filter_node *node,
     break;
   case FILTER_CLASS_mac:
   case FILTER_CLASS_mac_vlan:
-  /* The vlan id is checked for every filter, including MAC filters without a
-   * specified vlan, as otherwise we could get false positives between vlans.
-   */
     if (!memcmp(&hw_filter->loc_mac, &node->loc_mac,
-        sizeof(node->loc_mac)) && hw_filter->outer_vlan == node->vlan)
+                sizeof(node->loc_mac)))
       return true;
     break;
   case FILTER_CLASS_ethertype:
@@ -423,6 +444,7 @@ efct_filter_insert(struct efct_filter_state *state,
   unsigned no_vlan_flags = spec->match_flags & ~EFX_FILTER_MATCH_OUTER_VID;
   int *rxq = params->rxq;
   unsigned flags = params->flags;
+  int32_t outer_vlan = hw_filter_outer_vlan(hw_filter);
 
   if( *rxq >= 0 )
     hw_filter->ring_cookie = *rxq;
@@ -537,7 +559,8 @@ efct_filter_insert(struct efct_filter_state *state,
       if( ! state->hw_filters[i].refcount )
         avail = i;
       else {
-        if( hw_filters_are_equal(&node, &state->hw_filters[i], clas, flags) ) {
+        if( hw_filters_are_equal(&node, &state->hw_filters[i], clas, flags,
+                                 outer_vlan) ) {
 
           if( ! (flags & (EFHW_FILTER_F_ANY_RXQ | EFHW_FILTER_F_PREF_RXQ) ) &&
               *rxq >= 0 && *rxq != state->hw_filters[i].rxq ) {
@@ -567,7 +590,7 @@ efct_filter_insert(struct efct_filter_state *state,
         state->hw_filters[avail].local_port = node.lport;
         memcpy(&state->hw_filters[avail].loc_mac, &node.loc_mac,
                 sizeof(node.loc_mac));
-        state->hw_filters[avail].outer_vlan = node.vlan;
+        state->hw_filters[avail].outer_vlan = outer_vlan;
         if( flags & EFHW_FILTER_F_3TUPLE_ONLY ) {
           state->hw_filters[avail].remote_ip = 0;
           state->hw_filters[avail].remote_port = 0;

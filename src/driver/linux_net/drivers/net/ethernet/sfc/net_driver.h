@@ -92,7 +92,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.4.0.1003"
+#define EFX_DRIVER_VERSION	"6.4.0.1007"
 #endif
 
 #ifdef DEBUG
@@ -761,24 +761,19 @@ enum efx_sync_events_state {
 };
 #endif
 
+#define EFX_RX_INDIR_LEN	128
 #define EFX_RX_KEY_LEN	40
 /* The reserved RSS context value */
 #define EFX_MCDI_RSS_CONTEXT_INVALID	0xffffffff
 /**
- * struct efx_rss_context - A user-defined RSS context for filtering
- * @list: node of linked list on which this struct is stored
+ * struct efx_rss_context_priv - driver private data for an RSS context
  * @context_id: the RSS_CONTEXT_ID returned by MC firmware, or
  *	%EFX_MCDI_RSS_CONTEXT_INVALID if this context is not present on the NIC.
  *	For Siena, 0 if RSS is active, else %EFX_MCDI_RSS_CONTEXT_INVALID.
- * @user_id: the rss_context ID exposed to userspace over ethtool.
  * @flags: Hashing flags for this RSS context
- * @rx_hash_key: Toeplitz hash key for this RSS context
- * @rx_indir_table: Indirection table for this RSS context
  */
-struct efx_rss_context {
-	struct list_head list;
+struct efx_rss_context_priv {
 	u32 context_id;
-	u32 user_id;
 	u32 flags;
 #ifdef EFX_NOT_UPSTREAM
 	/**
@@ -786,9 +781,14 @@ struct efx_rss_context {
 	 *	(set at alloc time).
 	 */
 	u8 num_queues;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_CREATE_RXFH_CONTEXT)
+	/**
+	 * @onload: context was created for an auxbus/driverlink client,
+	 *	not by ethtool, and thus isn't writable by ethtool.
+	 */
+	bool onload;
 #endif
-	u8 rx_hash_key[EFX_RX_KEY_LEN];
-	u32 rx_indir_table[128];
+#endif
 };
 
 /**
@@ -1368,9 +1368,7 @@ struct efx_mae;
  * @rx_packet_ts_offset: Offset of timestamp from start of packet data
  *	(valid only if channel->sync_timestamps_enabled; always negative)
  * @rx_scatter: Scatter mode enabled for receives
- * @rss_context: Main RSS context.  Its @list member is the head of the list of
- *	RSS contexts created by user requests
- * @rss_lock: Protects custom RSS context software state in @rss_context.list
+ * @rss_context: Main RSS context
  * @vport: Main virtual port.  Its @list member is the head of a list of vports.
  * @vport_lock: Protects extra virtual port state in @vport.list
  * @select_tx_queue: select appropriate TX queue for packet
@@ -1624,8 +1622,13 @@ struct efx_nic {
 	int rx_packet_len_offset;
 	int rx_packet_ts_offset;
 	bool rx_scatter;
-	struct efx_rss_context rss_context;
+	struct ethtool_rxfh_context *rss_context;
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_CREATE_RXFH_CONTEXT)
+	/** @rss_contexts: XArray of custom RSS contexts */
+	struct xarray rss_contexts;
+	/** @rss_lock: Protects custom RSS context software state in @rss_contexts */
 	struct mutex rss_lock;
+#endif
 
 	struct efx_vport vport;
 	struct mutex vport_lock;
@@ -1833,6 +1836,8 @@ struct efx_nic {
 struct efx_ll;
 #endif
 
+struct efx_cxl;
+
 /**
  * struct efx_probe_data - State after hardware probe
  * @efx: Efx NIC details
@@ -1844,6 +1849,7 @@ struct efx_ll;
 struct efx_probe_data {
 	struct efx_nic efx;
 	struct pci_dev *pci_dev;
+	struct efx_cxl *cxl;
 	struct xarray irq_pool;
 	unsigned int max_irqs;
 	unsigned int irqs_left;
@@ -2283,18 +2289,20 @@ struct efx_nic_type {
 	unsigned int (*tx_max_skb_descs)(struct efx_nic *efx);
 	int (*rx_push_rss_config)(struct efx_nic *efx, bool user,
 				  const u32 *rx_indir_table, const u8 *key);
-	int (*rx_pull_rss_config)(struct efx_nic *efx);
+	int (*rx_pull_rss_config)(struct efx_nic *efx, u32 *indir, u8 *key);
 	int (*rx_push_rss_context_config)(struct efx_nic *efx,
-					  struct efx_rss_context *ctx,
+					  struct efx_rss_context_priv *priv,
 					  const u32 *rx_indir_table,
 					  const u8 *key);
 	int (*rx_pull_rss_context_config)(struct efx_nic *efx,
-					  struct efx_rss_context *ctx);
+					  struct efx_rss_context_priv *priv,
+					  u32 *rx_indir_table, u8 *key);
 	void (*rx_restore_rss_contexts)(struct efx_nic *efx);
 	u32 (*rx_get_default_rss_flags)(struct efx_nic *efx);
-	int (*rx_set_rss_flags)(struct efx_nic *efx, struct efx_rss_context *ctx,
-				u32 flags);
-	int (*rx_get_rss_flags)(struct efx_nic *efx, struct efx_rss_context *ctx);
+	int (*rx_set_rss_flags)(struct efx_nic *efx,
+				struct efx_rss_context_priv *priv, u32 flags);
+	int (*rx_get_rss_flags)(struct efx_nic *efx,
+				struct efx_rss_context_priv *priv);
 	int (*rx_probe)(struct efx_rx_queue *rx_queue);
 	int (*rx_init)(struct efx_rx_queue *rx_queue);
 	void (*rx_remove)(struct efx_rx_queue *rx_queue);

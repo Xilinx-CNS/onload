@@ -133,6 +133,12 @@ EFX_HAVE_ETHTOOL_FECPARAM	member	struct_ethtool_ops	get_fecparam	include/linux/e
 EFX_HAVE_ETHTOOL_RXFH_CONTEXT	member	struct_ethtool_ops	get_rxfh_context	include/linux/ethtool.h
 EFX_HAVE_ETHTOOL_RXNFC_CONTEXT	member	struct_ethtool_rxnfc	rss_context	include/linux/ethtool.h
 EFX_HAVE_ETHTOOL_GET_RX_RING_COUNT	member	struct_ethtool_ops	get_rx_ring_count	include/linux/ethtool.h
+EFX_HAVE_ETHTOOL_CREATE_RXFH_CONTEXT	member	struct_ethtool_ops	create_rxfh_context	include/linux/ethtool.h
+EFX_HAVE_ETHTOOL_CAP_RXFH_PER_CTX_FIELDS	bitfield	struct_ethtool_ops	rxfh_per_ctx_fields	include/linux/ethtool.h
+EFX_HAVE_ETHTOOL_CAP_RXFH_PER_CTX_KEY	bitfield	struct_ethtool_ops	rxfh_per_ctx_key	include/linux/ethtool.h
+EFX_HAVE_ETHTOOL_CAP_RSS_RXNFC_ADDS	bitfield	struct_ethtool_ops	cap_rss_rxnfc_adds	include/linux/ethtool.h
+EFX_HAVE_ETHTOOL_GET_RXFH_FIELDS	member	struct_ethtool_ops	get_rxfh_fields	include/linux/ethtool.h
+EFX_HAVE_MUTEX_GET_OWNER	symbol	mutex_get_owner	include/linux/mutex.h
 EFX_HAVE_XDP_FRAME_API		symbol	xdp_frame	include/net/xdp.h
 EFX_HAVE_XDP_COVERT_XDP_BUFF_FRAME_API	symbol	xdp_convert_buff_to_frame include/net/xdp.h
 EFX_HAVE_XDP_DATA_META		member	struct_xdp_buff	data_meta	include/linux/filter.h
@@ -262,6 +268,8 @@ EFX_HAVE_IP_TUNNEL_FLAGS_TO_BE16	symbol	ip_tunnel_flags_to_be16	include/net/ip_t
 EFX_NEED_TIME64_TO_TM			nsymbol	time64_to_tm		include/linux/time.h
 EFX_HAVE_ASSIGN_STR_NO_SRC_ARG      custom
 EFX_NEED_TRY_LOOKUP_NOPERM	nsymbol	try_lookup_noperm	include/linux/namei.h
+EFX_HAVE_CXL_H				file				include/cxl/cxl.h
+EFX_HAVE_CXL_SET_CAPACITY		symbol	cxl_set_capacity	include/cxl/cxl.h
 " | grep -E -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
 

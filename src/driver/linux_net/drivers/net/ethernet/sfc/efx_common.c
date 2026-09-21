@@ -946,7 +946,7 @@ void efx_reset_down(struct efx_nic *efx, enum reset_type method)
 
 	mutex_lock(&efx->mac_lock);
 	down_write(&efx->filter_sem);
-	mutex_lock(&efx->rss_lock);
+	efx_lock_rss(efx);
 	if (efx->type->fini)
 		efx->type->fini(efx);
 }
@@ -1041,7 +1041,7 @@ int efx_reset_up(struct efx_nic *efx, enum reset_type method, bool ok)
 
 	if (efx->type->rx_restore_rss_contexts)
 		efx->type->rx_restore_rss_contexts(efx);
-	mutex_unlock(&efx->rss_lock);
+	efx_unlock_rss(efx);
 	if (efx->state == STATE_NET_UP)
 		efx->type->filter_table_restore(efx);
 	up_write(&efx->filter_sem);
@@ -1071,7 +1071,7 @@ int efx_reset_up(struct efx_nic *efx, enum reset_type method, bool ok)
 fail:
 	efx->port_initialized = false;
 
-	mutex_unlock(&efx->rss_lock);
+	efx_unlock_rss(efx);
 	up_write(&efx->filter_sem);
 	mutex_unlock(&efx->mac_lock);
 
@@ -1387,6 +1387,17 @@ void efx_port_dummy_op_void(struct efx_nic *efx) {}
  **************************************************************************/
 static void efx_fini_struct(struct efx_nic *efx)
 {
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_CREATE_RXFH_CONTEXT)
+	struct ethtool_rxfh_context *ctx;
+	unsigned long index;
+#endif
+
+	kfree(efx->rss_context);
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_CREATE_RXFH_CONTEXT)
+	xa_for_each(&efx->rss_contexts, index, ctx)
+		kfree(ctx);
+	xa_destroy(&efx->rss_contexts);
+#endif
 	efx_filter_clear_ntuple(efx);
 #ifdef CONFIG_RFS_ACCEL
 	kfree(efx->rps_hash_table);
@@ -1479,6 +1490,8 @@ efx_next_guaranteed_ringsize(struct efx_nic *efx, unsigned long entries,
  */
 static int efx_init_struct(struct efx_nic *efx, struct pci_dev *pci_dev)
 {
+	struct efx_rss_context_priv *priv;
+
 	/* Initialise common structures */
 	spin_lock_init(&efx->biu_lock);
 	INIT_WORK(&efx->reset_work, efx_reset_work);
@@ -1511,8 +1524,18 @@ static int efx_init_struct(struct efx_nic *efx, struct pci_dev *pci_dev)
 		efx->type->rx_hash_offset - efx->type->rx_prefix_size;
 	efx->rx_packet_ts_offset =
 		efx->type->rx_ts_offset - efx->type->rx_prefix_size;
-	INIT_LIST_HEAD(&efx->rss_context.list);
+	efx->rss_context = efx_rxfh_ctx_alloc(EFX_RX_INDIR_LEN, EFX_RX_KEY_LEN);
+	if (!efx->rss_context)
+		/* Many codepaths assume efx->rss_context exists, so even
+		 * though RSS support isn't critical, bail if we fail to
+		 * allocate.  That shouldn't ever happen anyway, as it's a
+		 * small allocation.
+		 */
+		return -ENOMEM;
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_CREATE_RXFH_CONTEXT)
+	xa_init_flags(&efx->rss_contexts, XA_FLAGS_ALLOC1);
 	mutex_init(&efx->rss_lock);
+#endif
 	INIT_LIST_HEAD(&efx->vport.list);
 	mutex_init(&efx->vport_lock);
 	efx->vport.vport_id = EVB_PORT_ID_ASSIGNED;
@@ -1550,7 +1573,8 @@ static int efx_init_struct(struct efx_nic *efx, struct pci_dev *pci_dev)
 	efx->rxq_entries = EFX_DEFAULT_RX_DMAQ_SIZE;
 	efx->txq_entries = EFX_DEFAULT_TX_DMAQ_SIZE;
 
-	efx->rss_context.context_id = EFX_MCDI_RSS_CONTEXT_INVALID;
+	priv = ethtool_rxfh_context_priv(efx->rss_context);
+	priv->context_id = EFX_MCDI_RSS_CONTEXT_INVALID;
 	efx->vport.vport_id = EVB_PORT_ID_ASSIGNED;
 
 	efx->mem_bar = UINT_MAX;
@@ -1564,9 +1588,24 @@ static int efx_init_struct(struct efx_nic *efx, struct pci_dev *pci_dev)
 	return 0;
 }
 
-static int efx_pci_enable(struct efx_nic *efx, dma_addr_t dma_mask)
+static u64 efx_effective_dma_mask(struct efx_nic *efx)
+{
+	u64 dma_mask = efx->type->max_dma_mask;
+
+	/* NICs affected by this workaround cannot access the final 4K
+	 * NIC buffer table page in the advertised range, so reduce its
+	 * width by one bit.
+	 */
+	if (EFX_WORKAROUND_7785(efx))
+		dma_mask >>= 1;
+
+	return dma_mask;
+}
+
+static int efx_pci_enable(struct efx_nic *efx)
 {
 	struct pci_dev *pci_dev = efx->pci_dev;
+	u64 dma_mask = efx_effective_dma_mask(efx);
 	int rc;
 
 	rc = pci_enable_device(pci_dev);
@@ -1671,13 +1710,13 @@ void efx_pci_unmap_bar(struct efx_nic *efx, int bar,
 }
 
 /* This configures the PCI device to enable I/O and DMA. */
-int efx_init_io(struct efx_nic *efx, int bar, dma_addr_t dma_mask, unsigned int mem_map_size)
+int efx_init_io(struct efx_nic *efx, int bar, unsigned int mem_map_size)
 {
 	struct pci_dev *pci_dev = efx->pci_dev;
 	unsigned int mc_bar;
 	int rc;
 
-	rc = efx_pci_enable(efx, dma_mask);
+	rc = efx_pci_enable(efx);
 	if (rc)
 		goto fail1;
 	efx->mem_bar = UINT_MAX;
@@ -2470,7 +2509,8 @@ static int __efx_dl_rss_context_new(struct efx_dl_device *efx_dev,
 				    u8 num_queues, u32 *rss_context)
 {
 	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
-	struct efx_rss_context *ctx;
+	struct efx_rss_context_priv *priv;
+	struct ethtool_rxfh_context *ctx;
 	int rc;
 
 	/* num_queues=0 is used internally by the driver to represent
@@ -2485,38 +2525,39 @@ static int __efx_dl_rss_context_new(struct efx_dl_device *efx_dev,
 	if (!efx->type->rx_set_rss_flags)
 		return -EOPNOTSUPP;
 
-	mutex_lock(&efx->rss_lock);
-	ctx = efx_alloc_rss_context_entry(efx);
+	efx_lock_rss(efx);
+	ctx = efx_alloc_rss_context_entry(efx, true, rss_context);
 	if (!ctx) {
 		rc = -ENOMEM;
 		goto out_unlock;
 	}
 	if (!indir) {
 		efx_set_default_rx_indir_table(ctx, efx->rss_spread);
-		indir = ctx->rx_indir_table;
+		indir = ethtool_rxfh_context_indir(ctx);
 	}
 	if (!key) {
-		netdev_rss_key_fill(ctx->rx_hash_key, sizeof(ctx->rx_hash_key));
-		key = ctx->rx_hash_key;
+		key = ethtool_rxfh_context_key(ctx);
+		netdev_rss_key_fill(key, ctx->key_size);
 	}
-	ctx->num_queues = num_queues;
-	rc = efx->type->rx_push_rss_context_config(efx, ctx, indir, key);
+	priv = ethtool_rxfh_context_priv(ctx);
+	priv->num_queues = num_queues;
+	rc = efx->type->rx_push_rss_context_config(efx, priv, indir, key);
 	if (rc)
 		goto out_free;
-	*rss_context = ctx->user_id;
-	rc = efx->type->rx_set_rss_flags(efx, ctx, flags);
+	efx_update_rss_context_entry(ctx, indir, key);
+	rc = efx->type->rx_set_rss_flags(efx, priv, flags);
 	if (rc)
 		goto out_delete;
 	ctx->flags = flags;
 
 out_unlock:
-	mutex_unlock(&efx->rss_lock);
+	efx_unlock_rss(efx);
 	return rc;
 
 out_delete:
-	efx->type->rx_push_rss_context_config(efx, ctx, NULL, NULL);
+	efx->type->rx_push_rss_context_config(efx, priv, NULL, NULL);
 out_free:
-	efx_free_rss_context_entry(ctx);
+	efx_free_rss_context_entry(efx, *rss_context);
 	goto out_unlock;
 }
 
@@ -2525,14 +2566,18 @@ static int __efx_dl_rss_context_set(struct efx_dl_device *efx_dev,
 				    u32 flags, u32 rss_context)
 {
 	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
-	struct efx_rss_context *ctx;
+	struct efx_rss_context_priv *priv;
+	struct ethtool_rxfh_context *ctx;
 	u32 old_flags;
 	int rc;
 
 	if (!efx->type->rx_push_rss_context_config)
 		return -EOPNOTSUPP;
+	/* Only driverlink-created contexts can be modified through this API */
+	if (rss_context < EFX_ONLOAD_RSS_CONTEXT_OFFSET)
+		return -ENOENT;
 
-	mutex_lock(&efx->rss_lock);
+	efx_lock_rss(efx);
 	ctx = efx_find_rss_context_entry(efx, rss_context);
 	if (!ctx) {
 		rc = -ENOENT;
@@ -2540,16 +2585,19 @@ static int __efx_dl_rss_context_set(struct efx_dl_device *efx_dev,
 	}
 
 	if (!indir) /* no change */
-		indir = ctx->rx_indir_table;
+		indir = ethtool_rxfh_context_indir(ctx);
 	if (!key) /* no change */
-		key = ctx->rx_hash_key;
-	old_flags = ctx->flags;
-	ctx->flags = flags;
-	rc = efx->type->rx_push_rss_context_config(efx, ctx, indir, key);
+		key = ethtool_rxfh_context_key(ctx);
+	priv = ethtool_rxfh_context_priv(ctx);
+	old_flags = priv->flags;
+	priv->flags = flags;
+	rc = efx->type->rx_push_rss_context_config(efx, priv, indir, key);
 	if (rc) /* restore old RSS flags on failure */
-		ctx->flags = old_flags;
+		priv->flags = old_flags;
+	else
+		efx_update_rss_context_entry(ctx, indir, key);
 out_unlock:
-	mutex_unlock(&efx->rss_lock);
+	efx_unlock_rss(efx);
 	return rc;
 }
 
@@ -2557,24 +2605,29 @@ static int __efx_dl_rss_context_free(struct efx_dl_device *efx_dev,
 				     u32 rss_context)
 {
 	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
-	struct efx_rss_context *ctx;
+	struct efx_rss_context_priv *priv;
+	struct ethtool_rxfh_context *ctx;
 	int rc;
 
 	if (!efx->type->rx_push_rss_context_config)
 		return -EOPNOTSUPP;
+	/* Only driverlink-created contexts can be removed through this API */
+	if (rss_context < EFX_ONLOAD_RSS_CONTEXT_OFFSET)
+		return -ENOENT;
 
-	mutex_lock(&efx->rss_lock);
+	efx_lock_rss(efx);
 	ctx = efx_find_rss_context_entry(efx, rss_context);
 	if (!ctx) {
 		rc = -ENOENT;
 		goto out_unlock;
 	}
 
-	rc = efx->type->rx_push_rss_context_config(efx, ctx, NULL, NULL);
+	priv = ethtool_rxfh_context_priv(ctx);
+	rc = efx->type->rx_push_rss_context_config(efx, priv, NULL, NULL);
 	if (!rc)
-		efx_free_rss_context_entry(ctx);
+		efx_free_rss_context_entry(efx, rss_context);
 out_unlock:
-	mutex_unlock(&efx->rss_lock);
+	efx_unlock_rss(efx);
 	return rc;
 }
 
@@ -2583,8 +2636,11 @@ static int __efx_dl_filter_insert(struct efx_dl_device *efx_dev,
 				  bool replace_equal)
 {
 	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
-	s32 filter_id = efx_filter_insert_filter(efx,
-						 spec, replace_equal);
+	s32 filter_id;
+
+	if (!efx_filter_allow_onload_rss(!spec))
+		return -EINVAL;
+	filter_id = efx_filter_insert_filter(efx, spec, replace_equal);
 	if (filter_id >= 0) {
 		EFX_WARN_ON_PARANOID(filter_id & ~EFX_FILTER_ID_MASK);
 		filter_id |= spec->priority << EFX_FILTER_PRI_SHIFT;
@@ -2610,6 +2666,8 @@ static int __efx_dl_filter_redirect(struct efx_dl_device *efx_dev,
 	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
 
 	if (WARN_ON(filter_id < 0))
+		return -EINVAL;
+	if (!efx_filter_redirect_allow_onload_rss(rss_context))
 		return -EINVAL;
 	return efx->type->filter_redirect(efx, filter_id & EFX_FILTER_ID_MASK,
 			rss_context, rxq_i, stack_id);

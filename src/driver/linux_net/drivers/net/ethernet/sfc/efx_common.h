@@ -21,7 +21,7 @@ efx_best_guaranteed_ringsize(struct efx_nic *efx, unsigned long entries,
 unsigned long
 efx_next_guaranteed_ringsize(struct efx_nic *efx, unsigned long entries,
 			     bool fallback_to_supported);
-int efx_init_io(struct efx_nic *efx, int bar, dma_addr_t dma_mask, unsigned int mem_map_size);
+int efx_init_io(struct efx_nic *efx, int bar, unsigned int mem_map_size);
 void efx_fini_io(struct efx_nic *efx);
 int efx_pci_map_bar(struct efx_nic *efx, int bar, unsigned int mem_map_size,
 		    resource_size_t *membase_phys_out,
@@ -177,4 +177,3 @@ int efx_check_design_params(struct efx_nic *efx,
 			    efx_readd_fn *readd);
 
 #endif
-

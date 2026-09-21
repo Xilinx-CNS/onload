@@ -1739,6 +1739,7 @@ void efx_mcdi_mon_remove(struct efx_nic *efx)
 					    NULL,
 					    NULL);
 #endif
+	mutex_destroy(&hwmon->update_lock);
 }
 
 #endif /* CONFIG_SFC_MCDI_MON */
