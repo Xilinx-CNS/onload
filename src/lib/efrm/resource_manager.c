@@ -52,6 +52,7 @@
 #include <ci/efrm/vi_set.h>
 #include <ci/efrm/pd.h>
 #include <ci/efrm/pio.h>
+#include <ci/efrm/cxl_cache_spm_resource.h>
 
 
 /**********************************************************************
@@ -187,6 +188,9 @@ void efrm_resource_release(struct efrm_resource *rs)
 		break;
 	case EFRM_RESOURCE_PIO:
 		efrm_pio_free(efrm_pio_from_resource(rs), true);
+		break;
+	case EFRM_RESOURCE_CXL_CACHE_SPM:
+		efrm_cxl_cache_spm_resource_destroy(cxl_cache_spm_from_resource(rs));
 		break;
 	default:
 		EFRM_ASSERT(0);

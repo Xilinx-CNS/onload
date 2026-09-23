@@ -3,6 +3,11 @@
 
 #include <ci/driver/resource/cxl_cache_spm_manager.h>
 #include <ci/efrm/private.h>
+#include <efrm_internal.h>
+
+struct efrm_cxl_cache_spm_resource {
+  struct efrm_resource rs;
+};
 
 struct efrm_cxl_cache_spm_resource_manager {
   struct efrm_resource_manager rm;
@@ -48,3 +53,50 @@ fail:
   kfree(rm);
   return rc;
 }
+
+int
+efrm_cxl_cache_spm_resource_create(struct efrm_cxl_cache_spm_resource** out)
+{
+  struct efrm_cxl_cache_spm_resource* spm_rs;
+  unsigned instance;
+
+  if( ! spm_rm )
+    return -EINVAL;
+
+  spm_rs = kzalloc(sizeof(*spm_rs), GFP_KERNEL);
+  if( ! spm_rs )
+    return -ENOMEM;
+
+  spin_lock_bh(&spm_rm->rm.rm_lock);
+  instance = spm_rm->next_instance++;
+  spin_unlock_bh(&spm_rm->rm.rm_lock);
+
+  efrm_resource_init(&spm_rs->rs, EFRM_RESOURCE_CXL_CACHE_SPM, instance);
+  efrm_resource_manager_add_resource(&spm_rs->rs);
+
+  *out = spm_rs;
+
+  return 0;
+}
+EXPORT_SYMBOL(efrm_cxl_cache_spm_resource_create);
+
+void
+efrm_cxl_cache_spm_resource_destroy(struct efrm_cxl_cache_spm_resource* spm_rs)
+{
+  kfree(spm_rs);
+}
+EXPORT_SYMBOL(efrm_cxl_cache_spm_resource_destroy);
+
+struct efrm_resource*
+cxl_cache_spm_to_resource(struct efrm_cxl_cache_spm_resource* spm_rs)
+{
+  return &spm_rs->rs;
+}
+EXPORT_SYMBOL(cxl_cache_spm_to_resource);
+
+struct efrm_cxl_cache_spm_resource*
+cxl_cache_spm_from_resource(struct efrm_resource* rs)
+{
+  return container_of(rs, struct efrm_cxl_cache_spm_resource, rs);
+}
+EXPORT_SYMBOL(cxl_cache_spm_from_resource);
