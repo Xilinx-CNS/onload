@@ -59,7 +59,7 @@ efch_resource_ops *efch_ops_table[] = {
   &efch_pio_ops,
   NULL,
   &efch_efct_rxq_ops,
-  NULL,
+  &efch_cxl_cache_spm_ops,
 };
 
 
