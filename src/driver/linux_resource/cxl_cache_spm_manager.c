@@ -2,19 +2,26 @@
 /* SPDX-FileCopyrightText: (c) Copyright 2026 Advanced Micro Devices, Inc. */
 
 #include <cxl_cache_spm_manager_priv.h>
+#include <ci/driver/resource/cxl_cache_spm_manager.h>
 #include <ci/efhw/sysdep.h>
 #include <ci/compat.h>
 #include <ci/efrm/debug_linux.h>
 
+#include <linux/genalloc.h>
 #include <linux/memremap.h>
 #include <linux/acpi.h>
 #include <linux/types.h>
+
+/* This SPM is used in cases where 2MB hugepages would have been expected, so
+ * we choose to have the granularity of the allocator be 2MB to match. */
+#define ALLOC_MIN_SIZE (2 * 1024 * 1024)
 
 struct efrm_cxl_cache_region {
   phys_addr_t membase;
   u64 size;
   u32 numa_node;
   void *vaddr;
+  struct gen_pool *allocator;
   struct dev_pagemap pgmap;
 };
 
@@ -186,8 +193,28 @@ static int efrm_cxl_cache_region_register(struct efrm_cxl_cache_region *region)
     goto fail_memremap_pages;
   }
 
+  region->allocator = gen_pool_create(fls(ALLOC_MIN_SIZE) - 1,
+                                      region->numa_node);
+  if( ! region->allocator ) {
+    EFRM_ERR("%s: failed to create allocator", __FUNCTION__);
+    rc = -ENOMEM;
+    goto fail_create_allocator;
+  }
+
+  rc = gen_pool_add(region->allocator, region->membase, region->size,
+                    region->numa_node);
+  if( rc < 0 ) {
+    EFRM_ERR("%s: failed to add memory region to allocator, rc=%d",
+             __FUNCTION__, rc);
+    goto fail_allocator_add;
+  }
+
   return rc;
 
+fail_allocator_add:
+  gen_pool_destroy(region->allocator);
+fail_create_allocator:
+  memunmap_pages(&region->pgmap);
 fail_memremap_pages:
   release_mem_region(region->membase, region->size);
 fail_out:
@@ -197,6 +224,7 @@ fail_out:
 static void efrm_cxl_cache_region_release(struct efrm_cxl_cache_region *region)
 {
   if( region->size ) {
+    gen_pool_destroy(region->allocator);
     memunmap_pages(&region->pgmap);
     release_mem_region(region->membase, region->size);
   }
@@ -282,3 +310,88 @@ void efrm_cxl_cache_spm_free(void)
 out:
   mutex_unlock(&global_cxl_cache_spm_lock);
 }
+
+int efrm_cxl_cache_spm_pages_allocate(int *numa_node, unsigned long n_pages,
+                                      unsigned long *first_pfn_out)
+{
+  struct efrm_cxl_cache_spm *spm;
+  unsigned long addr;
+  int rc = 0;
+
+  mutex_lock(&global_cxl_cache_spm_lock);
+
+  spm = global_cxl_cache_spm;
+
+  if( ! spm || ! numa_node || ! first_pfn_out || n_pages < 1 ) {
+    rc = -EINVAL;
+    goto out;
+  }
+
+  if( *numa_node < 0 || *numa_node >= spm->n_regions ) {
+    rc = -EINVAL;
+    goto out;
+  }
+
+  if( ! spm->region[*numa_node].size ) {
+    rc = -ENODATA;
+    goto out;
+  }
+
+  if( n_pages > (~0ul >> PAGE_SHIFT) ) {
+    rc = -EOVERFLOW;
+    goto out;
+  }
+
+  addr = gen_pool_alloc(spm->region[*numa_node].allocator,
+                        n_pages << PAGE_SHIFT);
+  if( addr == 0 ) {
+    rc = -ENOMEM;
+    goto out;
+  }
+
+  *first_pfn_out = addr >> PAGE_SHIFT;
+
+out:
+  mutex_unlock(&global_cxl_cache_spm_lock);
+  return rc;
+}
+EXPORT_SYMBOL(efrm_cxl_cache_spm_pages_allocate);
+
+int efrm_cxl_cache_spm_pages_free(int numa_node, unsigned long n_pages,
+                                  unsigned long first_pfn)
+{
+  struct efrm_cxl_cache_spm *spm;
+  unsigned long addr;
+  int rc = 0;
+
+  mutex_lock(&global_cxl_cache_spm_lock);
+
+  spm = global_cxl_cache_spm;
+  if( ! spm ) {
+    rc = -EINVAL;
+    goto out;
+  }
+
+  if( numa_node < 0 || numa_node >= spm->n_regions ) {
+    rc = -EINVAL;
+    goto out;
+  }
+
+  if( ! spm->region[numa_node].size ) {
+    rc = -ENODATA;
+    goto out;
+  }
+
+  if( n_pages > (~0ul >> PAGE_SHIFT) ) {
+    rc = -EOVERFLOW;
+    goto out;
+  }
+
+  addr = first_pfn << PAGE_SHIFT;
+  gen_pool_free(spm->region[numa_node].allocator, addr, n_pages << PAGE_SHIFT);
+
+out:
+  mutex_unlock(&global_cxl_cache_spm_lock);
+  return rc;
+}
+EXPORT_SYMBOL(efrm_cxl_cache_spm_pages_free);
