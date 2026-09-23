@@ -70,6 +70,7 @@
 #include <ci/driver/resource/linux_efhw_nic.h>
 #include <ci/driver/resource/driverlink.h>
 #include "debugfs.h"
+#include <cxl_cache_spm_manager_priv.h>
 
 MODULE_AUTHOR("Solarflare Communications");
 MODULE_LICENSE("GPL");
@@ -728,6 +729,7 @@ static int init_sfc_resource(void)
 	}
 
 	efrm_driver_ctor();
+	efrm_cxl_cache_spm_discover();
 
 	rc = efrm_resources_init();
 	if( rc != 0 ) {
@@ -772,6 +774,7 @@ failed_auxbus:
 	efrm_filter_shutdown();
 	efrm_resources_fini();
 failed_resources:
+	efrm_cxl_cache_spm_free();
 	efrm_driver_dtor();
 	return rc;
 }
@@ -798,6 +801,7 @@ static void cleanup_sfc_resource(void)
 
 	efrm_driver_stop();
 	efrm_resources_fini();
+	efrm_cxl_cache_spm_free();
 
 	/* Clean up char-driver specific initialisation.
 	   - driver dtor can use both work queue and buffer table entries */
