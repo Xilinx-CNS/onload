@@ -6,6 +6,7 @@
 #include <ci/compat.h>
 #include <ci/efrm/debug_linux.h>
 
+#include <linux/memremap.h>
 #include <linux/acpi.h>
 #include <linux/types.h>
 
@@ -13,6 +14,8 @@ struct efrm_cxl_cache_region {
   phys_addr_t membase;
   u64 size;
   u32 numa_node;
+  void *vaddr;
+  struct dev_pagemap pgmap;
 };
 
 struct efrm_cxl_cache_spm {
@@ -25,6 +28,7 @@ static struct efrm_cxl_cache_spm *global_cxl_cache_spm;
 
 #define SPMT_SIG "SPMT"
 #define SPMT_FLAG_2K_INTLV BIT(2)
+#define CXL_CACHE_REGION_NAME "sfc_resource_cxl_cache_region"
 
 static int efrm_find_cxl_cache_spmt_range(phys_addr_t *membase, u64 *size)
 {
@@ -154,12 +158,57 @@ static int efrm_split_cxl_cache_spmt_range(struct efrm_cxl_cache_spm *spm,
   return 0;
 }
 
+static int efrm_cxl_cache_region_register(struct efrm_cxl_cache_region *region)
+{
+  int rc = 0;
+
+  /* If this region has no size then there's nothing to register. */
+  if( ! region->size )
+    return 0;
+
+  if( ! request_mem_region(region->membase, region->size,
+                           CXL_CACHE_REGION_NAME) ) {
+    rc = -EBUSY;
+    EFRM_ERR("%s: failed to request memory region", __FUNCTION__);
+    goto fail_out;
+  }
+
+  region->pgmap.type = MEMORY_DEVICE_GENERIC;
+  region->pgmap.range.start = region->membase;
+  region->pgmap.range.end = region->membase + region->size - 1;
+  region->pgmap.nr_range = 1;
+  region->pgmap.owner = THIS_MODULE;
+
+  region->vaddr = memremap_pages(&region->pgmap, region->numa_node);
+  if( IS_ERR(region->vaddr) ) {
+    rc = PTR_ERR(region->vaddr);
+    EFRM_ERR("%s: failed to remap pages, rc=%d", __FUNCTION__, rc);
+    goto fail_memremap_pages;
+  }
+
+  return rc;
+
+fail_memremap_pages:
+  release_mem_region(region->membase, region->size);
+fail_out:
+  return rc;
+}
+
+static void efrm_cxl_cache_region_release(struct efrm_cxl_cache_region *region)
+{
+  if( region->size ) {
+    memunmap_pages(&region->pgmap);
+    release_mem_region(region->membase, region->size);
+  }
+}
+
 void efrm_cxl_cache_spm_discover(void)
 {
   phys_addr_t cxl_cache_spm_membase;
   struct efrm_cxl_cache_spm *spm;
   u64 cxl_cache_spm_size;
   int rc;
+  int i;
 
   mutex_lock(&global_cxl_cache_spm_lock);
   BUG_ON(global_cxl_cache_spm != NULL);
@@ -191,9 +240,21 @@ void efrm_cxl_cache_spm_discover(void)
     goto fail_split_range;
   }
 
+  for( i = 0; i < spm->n_regions; i++ ) {
+    rc = efrm_cxl_cache_region_register(&spm->region[i]);
+    if( rc < 0 ) {
+      EFRM_ERR("%s: failed to register CXL.cache region %d/%d, rc=%d",
+               __FUNCTION__, i + 1, spm->n_regions, rc);
+      goto fail_register_regions;
+    }
+  }
+
   global_cxl_cache_spm = spm;
   goto out;
 
+fail_register_regions:
+  for( i--; i >= 0; i-- )
+    efrm_cxl_cache_region_release(&spm->region[i]);
 fail_split_range:
   kfree(spm->region);
 fail_region_alloc:
@@ -204,10 +265,15 @@ out:
 
 void efrm_cxl_cache_spm_free(void)
 {
+  int i;
+
   mutex_lock(&global_cxl_cache_spm_lock);
 
   if( ! global_cxl_cache_spm )
     goto out;
+
+  for( i = 0; i < global_cxl_cache_spm->n_regions; i++ )
+    efrm_cxl_cache_region_release(&global_cxl_cache_spm->region[i]);
 
   kfree(global_cxl_cache_spm->region);
   kfree(global_cxl_cache_spm);
