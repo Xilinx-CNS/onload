@@ -29,6 +29,7 @@ EFRM_SRCS	:=			\
 		efrm_pd.c		\
 		efrm_pio.c		\
 		efrm_efct_rxq.c		\
+		cxl_cache_spm_resource.c\
 		resource_manager.c	\
 		resources.c		\
 		vi_resource_alloc.c	\

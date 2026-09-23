@@ -43,6 +43,7 @@
 #include "efrm_vi_set.h"
 #include "efrm_pd.h"
 #include "efrm_pio.h"
+#include <ci/efrm/cxl_cache_spm_resource.h>
 
 
 int
@@ -70,6 +71,9 @@ efrm_resources_init(void)
 			break;
 		case EFRM_RESOURCE_EFCT_RXQ:
 			rc = efrm_create_rxq_resource_manager(rmp);
+			break;
+		case EFRM_RESOURCE_CXL_CACHE_SPM:
+			rc = efrm_cxl_cache_spm_resource_manager_ctor(rmp);
 			break;
 		default:
 			rc = 0;
