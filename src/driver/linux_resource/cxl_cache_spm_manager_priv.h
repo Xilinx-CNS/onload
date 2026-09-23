@@ -5,5 +5,6 @@
 #define EFRM_CXL_CACHE_SPM_MANAGER_PRIV_H
 
 void efrm_cxl_cache_spm_discover(void);
+void efrm_cxl_cache_spm_free(void);
 
 #endif

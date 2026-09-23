@@ -9,6 +9,20 @@
 #include <linux/acpi.h>
 #include <linux/types.h>
 
+struct efrm_cxl_cache_region {
+  phys_addr_t membase;
+  u64 size;
+  u32 numa_node;
+};
+
+struct efrm_cxl_cache_spm {
+  int n_regions;
+  struct efrm_cxl_cache_region *region;
+};
+
+static DEFINE_MUTEX(global_cxl_cache_spm_lock);
+static struct efrm_cxl_cache_spm *global_cxl_cache_spm;
+
 #define SPMT_SIG "SPMT"
 #define SPMT_FLAG_2K_INTLV BIT(2)
 
@@ -72,15 +86,133 @@ out:
   return rc;
 }
 
+static int search_for_numa_size(phys_addr_t membase, u64 size, int *out_node,
+                                u64 *out_size)
+{
+  int node_base = phys_to_target_node(membase);
+  phys_addr_t high = membase + size;
+  phys_addr_t low = membase;
+
+  /* We need NUMA information to make an informed decision about the memory
+   * region to provide to users. This information should be programmed into
+   * the SRAT table and parsed by the kernel before this point. */
+  if( node_base == NUMA_NO_NODE )
+    return -EBADSLT;
+
+  /* Search for the start of the next range. This search assumes that memory
+   * for each NUMA node is contiguous in the physical region and a NUMA node
+   * only appears once in the entire region. */
+  while( low < high ) {
+    phys_addr_t mid = low + (high - low) / 2;
+    int mid_node = phys_to_target_node(mid);
+
+    if( mid_node == node_base )
+      low = mid + 1;
+    else
+      high = mid;
+  }
+
+  *out_node = node_base;
+  *out_size = high - membase;
+
+  return 0;
+}
+
+static int efrm_split_cxl_cache_spmt_range(struct efrm_cxl_cache_spm *spm,
+                                           phys_addr_t membase, u64 size)
+{
+  while( size > 0 ) {
+    u64 node_size;
+    int node;
+    int rc;
+
+    rc = search_for_numa_size(membase, size, &node, &node_size);
+    if( rc < 0 )
+      return rc;
+
+    if( node < 0 || node >= spm->n_regions )
+      return -ENODEV;
+
+    if( node_size == 0 )
+      return -ENOMEM;
+
+    /* We expect only one range per NUMA node */
+    if( spm->region[node].size )
+      return -EALREADY;
+
+    spm->region[node].membase = membase;
+    spm->region[node].size = node_size;
+    spm->region[node].numa_node = node;
+
+    EFRM_NOTICE("%s: found CXL.cache SPM region for node %d base %llx size %llx",
+                __FUNCTION__, node, membase, node_size);
+
+    membase += node_size;
+    size -= node_size;
+  }
+
+  return 0;
+}
+
 void efrm_cxl_cache_spm_discover(void)
 {
   phys_addr_t cxl_cache_spm_membase;
+  struct efrm_cxl_cache_spm *spm;
   u64 cxl_cache_spm_size;
   int rc;
+
+  mutex_lock(&global_cxl_cache_spm_lock);
+  BUG_ON(global_cxl_cache_spm != NULL);
 
   rc = efrm_find_cxl_cache_spmt_range(&cxl_cache_spm_membase,
                                       &cxl_cache_spm_size);
   if( rc < 0 ) {
     EFRM_ERR("%s: failed to find region, rc=%d", __FUNCTION__, rc);
+    goto out;
   }
+
+  spm = kzalloc(sizeof(*spm), GFP_KERNEL);
+  if( !spm ) {
+    EFRM_ERR("%s: failed to allocate memory for SPM data", __FUNCTION__);
+    goto out;
+  }
+
+  spm->n_regions = nr_node_ids;
+  spm->region = kzalloc(sizeof(*spm->region) * spm->n_regions, GFP_KERNEL);
+  if( ! spm->region ) {
+    EFRM_ERR("%s: failed to allocate memory for region data", __FUNCTION__);
+    goto fail_region_alloc;
+  }
+
+  rc = efrm_split_cxl_cache_spmt_range(spm, cxl_cache_spm_membase,
+                                       cxl_cache_spm_size);
+  if( rc < 0 ) {
+    EFRM_ERR("%s: failed to split memory into NUMA nodes", __FUNCTION__);
+    goto fail_split_range;
+  }
+
+  global_cxl_cache_spm = spm;
+  goto out;
+
+fail_split_range:
+  kfree(spm->region);
+fail_region_alloc:
+  kfree(spm);
+out:
+  mutex_unlock(&global_cxl_cache_spm_lock);
+}
+
+void efrm_cxl_cache_spm_free(void)
+{
+  mutex_lock(&global_cxl_cache_spm_lock);
+
+  if( ! global_cxl_cache_spm )
+    goto out;
+
+  kfree(global_cxl_cache_spm->region);
+  kfree(global_cxl_cache_spm);
+  global_cxl_cache_spm = NULL;
+
+out:
+  mutex_unlock(&global_cxl_cache_spm_lock);
 }
