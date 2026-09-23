@@ -196,6 +196,8 @@ EFRM_HAVE_SOCKADDR_UNSIZED	symtype	kernel_bind	include/linux/net.h	int(struct so
 EFRM_HAVE_NET_NETDEV_LOCK_H		file	include/net/netdev_lock.h
 EFRM_HAVE_NETDEV_LOCK_OPS		symbol	netdev_lock_ops		include/net/netdev_lock.h	include/linux/netdevice.h
 
+EFRM_HAVE_ZAP_SPECIAL_VMA_RANGE		symbol	zap_special_vma_range		include/linux/mm.h
+
 # TODO move onload-related stuff from net kernel_compat
 " | grep -E -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }

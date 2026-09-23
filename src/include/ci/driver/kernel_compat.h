@@ -56,6 +56,7 @@
 #include <asm/syscall.h>
 #include <net/sock.h>
 #include <linux/filter.h>
+#include <linux/mm.h>
 
 #include <driver/linux_resource/autocompat.h>
 #include <ci/tools.h>
@@ -567,5 +568,14 @@ static inline void efrm_netdev_unlock_ops(struct net_device *dev)
 	netdev_unlock_ops(dev);
 #endif
 }
+
+#ifndef EFRM_HAVE_ZAP_SPECIAL_VMA_RANGE
+static inline void zap_special_vma_range(struct vm_area_struct *vma,
+                                         unsigned long address,
+                                         unsigned long size)
+{
+  zap_vma_ptes(vma, address, size);
+}
+#endif
 
 #endif /* DRIVER_LINUX_RESOURCE_KERNEL_COMPAT_H */
