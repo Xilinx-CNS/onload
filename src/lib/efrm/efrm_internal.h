@@ -5,6 +5,7 @@
 
 #include <ci/efrm/efrm_client.h>
 #include <ci/efrm/efrm_nic.h>
+#include <ci/efrm/debug_linux.h>
 
 #include <ci/efrm/vi_allocation.h>
 
