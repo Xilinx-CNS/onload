@@ -15,6 +15,7 @@
 #include <etherfabric/capabilities.h>
 #include <etherfabric/checksum.h>
 #include <etherfabric/efct_vi.h>
+#include <etherfabric/ef_cxl_cache_spm.h>
 
 #include <stdarg.h>
 #include <stddef.h>
@@ -146,6 +147,7 @@ struct eflatency_vi {
 };
 
 static ef_driver_handle  driver_handle;
+static ef_cxl_cache_spm  cxl_cache_spm;
 static struct eflatency_vi rx_vi, tx_vi;
 
 struct pkt_buf*          pkt_bufs[N_BUFS];
@@ -967,6 +969,7 @@ int main(int argc, char* argv[])
   int iters_run = 0;
   struct eflatency_vi* tx_vi_ptr;
   void (*rx_wait)(struct eflatency_vi*, struct eflatency_vi*);
+  unsigned long cxl_cache_enabled = 0;
   unsigned long rx_min_page_size;
   unsigned long min_page_size;
   unsigned long can_rx_poll;
@@ -1157,7 +1160,26 @@ int main(int argc, char* argv[])
 
   pkt_mem_bytes = N_BUFS * BUF_SIZE;
   pkt_mem_bytes = MAX(min_page_size, pkt_mem_bytes);
-  if (min_page_size >= 2 * 1024 * 1024) {
+  if (ef_pd_capabilities_get(driver_handle, &rx_vi.pd, driver_handle,
+                             EF_VI_CAP_CXL_CACHE_ENABLED,
+                             &cxl_cache_enabled) == 0 &&
+      cxl_cache_enabled) {
+    int rc;
+
+    rc = ef_cxl_cache_spm_allocator_create(&cxl_cache_spm, driver_handle);
+    if( rc < 0 ) {
+      printf("ERROR: RX interface has CXL.cache enabled but CXL.cache SPM allocator creation failed, rc=%d\n",
+             rc);
+      TEST(0);
+    }
+
+    rc = ef_cxl_cache_spm_allocate(&cxl_cache_spm, pkt_mem_bytes, &pkt_mem);
+    if( rc < 0 ) {
+      printf("ERROR: RX interface has CXL.cache enabled but CXL.cache SPM allocation failed, rc=%d\n",
+             rc);
+      TEST(0);
+    }
+  } else if (min_page_size >= 2 * 1024 * 1024) {
     /* Assume this means huge pages are mandatory */
     pkt_mem = mmap(NULL, pkt_mem_bytes, PROT_READ | PROT_WRITE,
                    MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
@@ -1308,6 +1330,10 @@ int main(int argc, char* argv[])
   free(payload_lens);
   if( yaml_fp )
     fclose(yaml_fp);
+
+  if( cxl_cache_enabled )
+    TRY(ef_cxl_cache_spm_free(&cxl_cache_spm, pkt_mem, pkt_mem_bytes));
+
   return 0;
 }
 
