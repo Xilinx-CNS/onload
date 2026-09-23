@@ -404,6 +404,10 @@ int efch_capabilities_op(struct efch_capabilities_in* in,
     get_from_nic_flags(nic, NIC_FLAG_RX_FILTER_ID, out);
     break;
 
+  case EF_VI_CAP_CXL_CACHE_ENABLED:
+    get_from_nic_flags(nic, NIC_FLAG_CXL_CACHE_ENABLED, out);
+    break;
+
   default:
     out->support_rc = -ENOSYS;
     out->val = 0;

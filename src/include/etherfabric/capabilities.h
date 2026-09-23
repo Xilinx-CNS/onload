@@ -189,6 +189,9 @@ enum ef_vi_capability {
   /** RX events support lookup of matched filter ID */
   EF_VI_CAP_RX_FILTER_ID,
 
+  /** CXL.cache is used for RX */
+  EF_VI_CAP_CXL_CACHE_ENABLED,
+
   /** Maximum value of capabilities enumeration */
   EF_VI_CAP_MAX, /* Keep this last */
 };
