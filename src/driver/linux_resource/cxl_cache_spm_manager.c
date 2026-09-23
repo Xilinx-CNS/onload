@@ -311,6 +311,18 @@ out:
   mutex_unlock(&global_cxl_cache_spm_lock);
 }
 
+int efrm_cxl_cache_spm_exists(void)
+{
+  int exists;
+
+  mutex_lock(&global_cxl_cache_spm_lock);
+  exists = global_cxl_cache_spm != NULL;
+  mutex_unlock(&global_cxl_cache_spm_lock);
+
+  return exists;
+}
+EXPORT_SYMBOL(efrm_cxl_cache_spm_exists);
+
 int efrm_cxl_cache_spm_pages_allocate(int *numa_node, unsigned long n_pages,
                                       unsigned long *first_pfn_out)
 {

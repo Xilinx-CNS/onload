@@ -3,6 +3,7 @@
 
 #include <ci/driver/kernel_compat.h>
 #include <ci/driver/efab/hardware.h>
+#include <ci/driver/resource/cxl_cache_spm_manager.h>
 #include <ci/efhw/debug.h>
 #include <ci/efhw/iopage.h>
 #include <ci/efhw/nic.h>
@@ -179,6 +180,12 @@ static int ef10ct_check_cxl_enablement(struct efhw_nic *nic)
       EFHW_ERR("%s: unable to use ef10ct device with CXL.cache and IOMMU enabled, set iommu=off in the kernel commandline",
                __FUNCTION__);
       return -EINVAL;
+    }
+
+    if( ! efrm_cxl_cache_spm_exists() ) {
+      EFHW_ERR("%s: the CXL.cache SPM was not discovered but this device has CXL.cache enabled",
+               __FUNCTION__);
+      return -ENOMEM;
     }
   }
 
