@@ -115,7 +115,7 @@ ci_uint32 oo_netif_apps_gone(ci_netif* netif)
      * all their users have gone in the stack dtor.
      */
     if( w->state == CI_TCP_STATE_FREE || w->state == CI_TCP_STATE_AUXBUF ||
-        w->state == CI_TCP_STATE_ACTIVE_WILD )
+        (w->state & CI_TCP_STATE_MASK) == CI_TCP_STATE_ACTIVE_WILD )
       continue;
 
     if( w->state == CI_TCP_CLOSED ) {
