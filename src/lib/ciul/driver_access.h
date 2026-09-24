@@ -32,7 +32,7 @@ ci_resource_alloc(int fp, struct ci_resource_alloc_s* io)
 
 /*! \i_efab_unix */
 ci_inline int
-ci_resource_mmap(int fp, unsigned res_id, unsigned map_id, unsigned bytes,
+ci_resource_mmap(int fp, unsigned res_id, unsigned map_id, size_t bytes,
                  void** p_out)
 {
   *p_out = mmap((void*) 0, bytes, PROT_READ | PROT_WRITE,
@@ -44,7 +44,7 @@ ci_resource_mmap(int fp, unsigned res_id, unsigned map_id, unsigned bytes,
 
 /*! \i_efab_unix */
 ci_inline int
-ci_resource_munmap(int fp, void* ptr, int bytes)
+ci_resource_munmap(int fp, void* ptr, size_t bytes)
 {
   if( munmap(ptr, bytes) < 0 )  return -errno;
   return 0;
