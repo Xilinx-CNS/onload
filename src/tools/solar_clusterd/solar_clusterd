@@ -147,11 +147,16 @@ class Server(object):
 
     def do_recv(self, sock):
         try:
-            data = sock.recv(1024)
-            if not data:
+            raw = sock.recv(1024)
+            if not raw:
                 raise socket.error('EOF')
+            data = raw.decode()
         except socket.error:
             self.log_info('Client %d: disconnected\n' % sock.fileno())
+            del self.clients[sock]
+        except UnicodeDecodeError:
+            self.log_warn('Client %d: malformed request (invalid encoding); '
+                          'disconnecting\n' % sock.fileno())
             del self.clients[sock]
         else:
             self.clients[sock] += data
@@ -181,7 +186,7 @@ class Server(object):
 
     def handle_bad_req(self, sock, req_id, req):
         self.log_warn('Client %d: bad request %r\n' % (sock.fileno(), req))
-        sock.send('%d\n' % (cp.CLUSTERD_ERR_BAD_REQUEST))
+        sock.send(('%d\n' % (cp.CLUSTERD_ERR_BAD_REQUEST)).encode())
 
 
     def handle_version_req(self, sock, req_id, payload):
@@ -195,7 +200,7 @@ class Server(object):
         else:
             result = cp.CLUSTERD_ERR_FAIL
             self.log_info('(version mismatch)\n')
-        sock.send('%d %d\n' % (cp.CLUSTERD_VERSION_RESP, result))
+        sock.send(('%d %d\n' % (cp.CLUSTERD_VERSION_RESP, result)).encode())
 
 
     def handle_alloc_cluster_req(self, sock, req_id, payload):
@@ -206,18 +211,18 @@ class Server(object):
 
         if name not in self.clusters.keys():
             self.log_warn('(%s: no such cluster)\n' % name)
-            sock.send('%d %d %d %d %d\n' % (
+            sock.send(('%d %d %d %d %d\n' % (
                     cp.CLUSTERD_ALLOC_CLUSTER_RESP, cp.CLUSTERD_ERR_FAIL,
-                    errno.ENOENT, 0, 0))
+                    errno.ENOENT, 0, 0)).encode())
             return
 
         cluster = self.clusters[name]
         if requested_pd_flags != cluster.protectionmode:
             self.log_warn('(PD flags match fail req=%d cluster=%d)\n' % (
                         requested_pd_flags, cluster.protectionmode))
-            sock.send('%d %d %d %d %d\n' % (
+            sock.send(('%d %d %d %d %d\n' % (
                     cp.CLUSTERD_ALLOC_CLUSTER_RESP, cp.CLUSTERD_ERR_FAIL,
-                    errno.EINVAL, 0, 0))
+                    errno.EINVAL, 0, 0)).encode())
             return
 
         self.log_info('Pass: fd=%d, pd=%d, vi_set=%d, pd_flags=%d\n' % (
