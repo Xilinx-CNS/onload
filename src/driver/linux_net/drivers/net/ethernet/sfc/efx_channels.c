@@ -461,21 +461,17 @@ xdp_disabled:
 }
 
 static int efx_allocate_msix_channels(struct efx_nic *efx,
-				      unsigned int max_channels)
+				      unsigned int max_channels,
+				      unsigned int vec_count)
 {
 	unsigned int n_channels = efx_wanted_parallelism(efx);
 	unsigned int extra_channel_type;
 	unsigned int min_channels = 1;
-	int vec_count;
 
 	if (separate_tx_channels) {
 		n_channels *= 2;
 		min_channels = 2;
 	}
-
-	vec_count = pci_msix_vec_count(efx->pci_dev);
-	if (vec_count < 0)
-		return vec_count;
 
 	if (vec_count < max_channels)
 		max_channels = vec_count;
@@ -502,14 +498,14 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 
 	if (vec_count < n_channels) {
 		pci_err(efx->pci_dev,
-			"WARNING: Insufficient MSI-X vectors available (%d < %u).\n",
+			"WARNING: Insufficient MSI-X vectors available (%u < %u).\n",
 			vec_count, n_channels);
 		pci_err(efx->pci_dev,
 			"WARNING: Performance may be reduced.\n");
 
 		/* reduce XDP channels */
 		n_channels -= efx->n_xdp_channels;
-		efx->n_xdp_channels = max(vec_count - (int)n_channels, 0);
+		efx->n_xdp_channels = max(vec_count, n_channels) - n_channels;
 
 		n_channels = vec_count;
 	}
@@ -1309,7 +1305,7 @@ int efx_init_interrupts(struct efx_nic *efx)
 	if (efx->interrupt_mode != EFX_INT_MODE_MSIX)
 		return max_irqs;
 
-	rc = efx_allocate_msix_channels(efx, efx->max_channels);
+	rc = efx_allocate_msix_channels(efx, efx->max_channels, max_irqs);
 	if (rc < 0)
 		return rc;
 

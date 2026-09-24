@@ -223,6 +223,18 @@ static inline unsigned int efx_rx_recycle_ring_size(const struct efx_nic *efx)
 	return efx->type->rx_recycle_ring_size(efx);
 }
 
+static inline int
+efx_nic_cxl_set_datapath(struct efx_nic *efx,
+			 enum cxl_transmit_mode *got_transmit_mode,
+			 enum cxl_receive_mode *got_receive_mode)
+{
+	if (efx->type->cxl_set_datapath)
+		return efx->type->cxl_set_datapath(efx, got_transmit_mode,
+						   got_receive_mode);
+
+	return -EOPNOTSUPP;
+}
+
 /* Some statistics are computed as A - B where A and B each increase
  * linearly with some hardware counter(s) and the counters are read
  * asynchronously.  If the counters contributing to B are always read

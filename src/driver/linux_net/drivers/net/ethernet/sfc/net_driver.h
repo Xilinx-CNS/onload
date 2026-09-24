@@ -92,7 +92,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"6.4.0.1007"
+#define EFX_DRIVER_VERSION	"6.4.0.1009"
 #endif
 
 #ifdef DEBUG
@@ -167,6 +167,18 @@ struct efx_ptp_data;
 struct kernel_hwtstamp_config;
 
 struct efx_self_tests;
+
+enum cxl_transmit_mode {
+	CXL_TRANSMIT_MODE_AUTO,
+	CXL_TRANSMIT_MODE_MEM,
+	CXL_TRANSMIT_MODE_DISABLED,
+};
+
+enum cxl_receive_mode {
+	CXL_RECEIVE_MODE_AUTO,
+	CXL_RECEIVE_MODE_CACHE,
+	CXL_RECEIVE_MODE_DISABLED,
+};
 
 enum efx_rss_mode {
 	EFX_RSS_PACKAGES,
@@ -2174,6 +2186,7 @@ struct mae_mport_desc;
  * @remove_mport: process the deletion of an existing MAE port
  * @has_dynamic_sensors: check if dynamic sensor capability is set
  * @rx_recycle_ring_size: Size of the RX recycle ring
+ * @cxl_set_datapath: request a specific CXL configuration
  * @revision: Hardware architecture revision
  * @default_max_rxq: Parallelism limit for rss_cpus default setting
  * @txd_ptr_tbl_base: TX descriptor ring base address
@@ -2453,6 +2466,9 @@ struct efx_nic_type {
 	void (*remove_mport)(struct efx_nic *efx, struct mae_mport_desc *mport);
 	bool (*has_dynamic_sensors)(struct efx_nic *efx);
 	unsigned int (*rx_recycle_ring_size)(const struct efx_nic *efx);
+	int (*cxl_set_datapath)(struct efx_nic *efx,
+				enum cxl_transmit_mode *got_transmit_mode,
+				enum cxl_receive_mode *got_receive_mode);
 
 	int revision;
 	unsigned int default_max_rxq;

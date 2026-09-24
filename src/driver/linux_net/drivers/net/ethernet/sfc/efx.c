@@ -1243,12 +1243,14 @@ static int efx_pci_probe(struct pci_dev *pci_dev,
 	nic_type = (const struct efx_nic_type *)entry->driver_data;
 	rc = efx_init_probe_data(pci_dev, nic_type, &probe_data);
 	if (rc)
-		goto fail;
+		return rc;
 
 	/* Allocate and initialise a struct net_device */
 	net_dev = alloc_etherdev_mq(sizeof(probe_data), EFX_MAX_CORE_TX_QUEUES);
-	if (!net_dev)
-		return -ENOMEM;
+	if (!net_dev) {
+		rc = -ENOMEM;
+		goto fail0;
+	}
 	probe_ptr = netdev_priv(net_dev);
 	*probe_ptr = probe_data;
 	efx = &probe_data->efx;
@@ -1257,8 +1259,10 @@ static int efx_pci_probe(struct pci_dev *pci_dev,
 	efx_init_features(efx);
 	SET_NETDEV_DEV(net_dev, &pci_dev->dev);
 #ifdef CONFIG_SFC_MTD
-	if (efx_mtd_init(efx) < 0)
-		goto fail;
+	if (efx_mtd_init(efx) < 0) {
+		rc = -EIO;
+		goto fail1;
+	}
 #endif
 
 	pci_info(pci_dev,
@@ -1277,24 +1281,26 @@ static int efx_pci_probe(struct pci_dev *pci_dev,
 	rc = efx_init_io(efx, efx->type->mem_bar(efx),
 			 efx->type->mem_map_size(efx));
 	if (rc)
-		goto fail;
+		goto fail2;
 
-	efx_cxl_init(probe_data);
+	rc = efx_cxl_init(probe_data);
+	if (rc)
+		goto fail3;
 
 	efx->netdev_notifier.notifier_call = efx_netdev_event;
 	rc = register_netdevice_notifier(&efx->netdev_notifier);
 	if (rc)
-		goto fail;
+		goto fail4;
 
 #ifdef CONFIG_SFC_DUMP
 	rc = efx_dump_init(efx);
 	if (rc)
-		goto fail;
+		goto fail5;
 #endif
 
 	rc = efx->type->probe(efx);
 	if (rc)
-		goto fail;
+		goto fail6;
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 	efx->tx_queues_per_channel++;
@@ -1317,14 +1323,14 @@ static int efx_pci_probe(struct pci_dev *pci_dev,
 	if (rc) {
 		netif_err(efx, drv, efx->net_dev,
 			  "failed to init net dev attributes\n");
-		goto fail;
+		goto fail6;
 	}
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
 	rc = device_create_file(&efx->pci_dev->dev, &dev_attr_lro);
 	if (rc) {
 		netif_err(efx, drv, efx->net_dev,
 			  "failed to init net dev attributes\n");
-		goto fail;
+		goto fail6;
 	}
 #endif
 
@@ -1366,8 +1372,23 @@ static int efx_pci_probe(struct pci_dev *pci_dev,
 
 	return 0;
 
-fail:
+fail6:
 	efx_pci_remove(pci_dev);
+	return rc;
+fail5:
+	unregister_netdevice_notifier(&efx->netdev_notifier);
+fail4:
+	efx_cxl_exit(probe_data);
+fail3:
+	efx_fini_io(efx);
+fail2:
+#ifdef CONFIG_SFC_MTD
+	efx_mtd_free(efx);
+fail1:
+#endif
+	free_netdev(net_dev);
+fail0:
+	efx_fini_probe_data(probe_data);
 	return rc;
 }
 

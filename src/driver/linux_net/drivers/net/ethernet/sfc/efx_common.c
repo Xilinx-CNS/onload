@@ -1807,7 +1807,12 @@ int efx_init_probe_data(struct pci_dev *pci_dev,
 	xa_init_flags(&probe_data->irq_pool, XA_FLAGS_ALLOC);
 
 	*pd = probe_data;
-	return efx_init_struct(efx, pci_dev);
+	if(efx_init_struct(efx, pci_dev)) {
+		pci_set_drvdata(probe_data->pci_dev, NULL);
+		kfree(probe_data);
+		return -ENOMEM;
+	}
+	return 0;
 }
 
 void efx_fini_probe_data(struct efx_probe_data *probe_data)
@@ -1821,7 +1826,6 @@ void efx_fini_probe_data(struct efx_probe_data *probe_data)
 
 static void efx_set_max_channels(struct efx_nic *efx)
 {
-	unsigned int extra_channel_type;
 	int num_channels;
 	int tx_per_ev;
 #ifdef EFX_NOT_UPSTREAM
@@ -1835,13 +1839,24 @@ static void efx_set_max_channels(struct efx_nic *efx)
 	num_channels = efx_wanted_parallelism(efx);
 	if (separate_tx_channels)
 		num_channels *= 2;
-	for (extra_channel_type = 0;
-	     extra_channel_type < EFX_MAX_EXTRA_CHANNELS;
-	     extra_channel_type++)
-		if (efx->extra_channel_type[extra_channel_type])
-			num_channels++;
-	tx_per_ev = efx_max_evtq_size(efx) / EFX_TXQ_MAX_ENT(efx);
-	num_channels += DIV_ROUND_UP(num_possible_cpus(), tx_per_ev);
+	/* In efx_allocate_msix_channels() count any extra_channels which
+	 * may be needed for PTP (or TC). However we can't count PTP via
+	 * extra_channels here as it hasn't been set up yet.
+	 */
+#ifdef CONFIG_SFC_PTP
+	if (efx_ptp_adapter_has_support(efx))
+		num_channels++;
+#endif
+#if IS_ENABLED(CONFIG_SFC_EF100)
+	/* TC is only on EF100. */
+	if (efx->extra_channel_type[EFX_EXTRA_CHANNEL_TC])
+		num_channels++;
+#endif
+	/* Only add XDP channels if XDP is enabled */
+	if (efx->xdp_tx) {
+		tx_per_ev = efx_max_evtq_size(efx) / EFX_TXQ_MAX_ENT(efx);
+		num_channels += DIV_ROUND_UP(num_possible_cpus(), tx_per_ev);
+	}
 
 #ifdef EFX_NOT_UPSTREAM
 	design_params = efx_llct_get_design_parameters(efx);

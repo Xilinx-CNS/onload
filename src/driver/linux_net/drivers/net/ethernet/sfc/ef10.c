@@ -41,6 +41,7 @@
 #include "debugfs.h"
 #include "efx_auxbus_internal.h"
 #include "efx_devlink.h"
+#include "efx_cxl.h"
 
 static unsigned int tx_push_max_fill = 0xffffffff;
 module_param(tx_push_max_fill, uint, 0444);
@@ -88,6 +89,7 @@ MODULE_PARM_DESC(num_vis, "The number of extra VIs to allocate for Onload");
 /* These are the default settings for efx_target_num_vis above. */
 #define EF10_ONLOAD_PF_VIS 240
 #define EF10_ONLOAD_VF_VIS 0
+#define X4ANA_ONLOAD_PF_VIS 0
 #endif
 
 #ifdef EFX_NOT_UPSTREAM
@@ -1232,10 +1234,18 @@ static int efx_ef10_dimension_resources(struct efx_nic *efx)
 	max_vis = max(pio_vis, channel_vis);
 
 #ifdef EFX_NOT_UPSTREAM
-	max_vis += efx_target_num_vis >= 0 ?
-			efx_target_num_vis :
-			efx_ef10_is_vf(efx) ? EF10_ONLOAD_VF_VIS
-					    : EF10_ONLOAD_PF_VIS;
+	if (efx_target_num_vis >= 0) {
+		max_vis += efx_target_num_vis;
+	} else {
+		if (efx_ef10_is_vf(efx)) {
+			max_vis += EF10_ONLOAD_VF_VIS;
+		} else {
+			if (efx_nic_rev(efx) == EFX_REV_X4ANA)
+				max_vis += X4ANA_ONLOAD_PF_VIS;
+			else
+				max_vis += EF10_ONLOAD_PF_VIS;
+		}
+	}
 	if (efx->max_vis && efx->max_vis < max_vis) {
 		netif_dbg(efx, drv, efx->net_dev,
 			  "reducing max VIs requested from %u to %u\n",
@@ -5892,6 +5902,18 @@ static int efx_ef10_probe_post_io(struct efx_nic *efx)
 		tx_push_max_fill = 0;
 	}
 
+	rc = efx_cxl_configure_datapath(efx);
+	if (rc) {
+		netif_info(efx, drv, efx->net_dev,
+			   "Failed to configure CXL datapath, rc=%d\n", rc);
+#ifdef EFX_NOT_UPSTREAM
+		/* If we failed to configure CXL appropriately, we shouldn't
+		 * allow any ll clients so undo any setup already done.
+		 */
+		efx_ll_fini(efx);
+#endif
+	}
+
 	rc = efx_ef10_filter_table_probe(efx);
 	if (rc)
 		return rc;
@@ -6987,6 +7009,7 @@ const struct efx_nic_type efx_x4_nic_type = {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_NEED_GET_PHYS_PORT_ID)
 	.get_phys_port_id = efx_ef10_get_phys_port_id,
 #endif
+	.cxl_set_datapath = efx_cxl_set_datapath,
 	.revision = EFX_REV_X4,
 	.default_max_rxq = 64,
 	.max_dma_mask = DMA_BIT_MASK(ESF_DZ_TX_KER_BUF_ADDR_WIDTH),
@@ -7151,6 +7174,7 @@ const struct efx_nic_type efx_x4ana_nic_type = {
 	.mtd_write = efx_mcdi_mtd_write,
 	.mtd_sync = efx_mcdi_mtd_sync,
 #endif
+	.ptp_adapter_has_support = efx_ef10_ptp_adapter_has_support,
 #ifdef CONFIG_SFC_PTP
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
 	.ptp_set_clock_info = efx_x4_phc_set_clock_info,

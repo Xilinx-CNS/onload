@@ -44,7 +44,10 @@ EFX_NEED_KTIME_COMPARE			nsymbol	ktime_compare		include/linux/ktime.h
 EFX_NEED_RTC_TIME64_TO_TM		nsymbol	rtc_time64_to_tm	include/linux/rtc.h
 EFX_NEED_SET_NORMALIZED_TIMESPEC	custom
 EFX_NEED_PTP_CLOCK_PPSUSR		custom
-EFX_NEED_KTIME_GET_SNAPSHOT		nsymbol	ktime_get_snapshot	include/linux/timekeeping.h
+EFX_NEED_KTIME_GET_SNAPSHOT_ID		nsymbol	ktime_get_snapshot_id	include/linux/timekeeping.h
+EFX_NEED_SYSTEM_TIME_SNAPSHOT_SYSTIME	nmember	struct_system_time_snapshot	systime	include/linux/timekeeping.h
+EFX_NEED_SYSTEM_TIME_SNAPSHOT_MONORAW	nmember	struct_system_time_snapshot	monoraw	include/linux/timekeeping.h
+EFX_NEED_SYSTEM_DEVICE_CROSSTSTAMP_SYS_SYSTIME	nmember	struct_system_device_crosststamp	sys_systime	include/linux/timekeeping.h
 EFX_HAVE_PTP_CLOCK_GETTIMEX64		member	struct_ptp_clock_info gettimex64	include/linux/ptp_clock_kernel.h
 EFX_NEED_SCALED_PPM_TO_PPB		nsymbol scaled_ppm_to_ppb		include/linux/ptp_clock_kernel.h
 EFX_NEED_SKB_FRAG_OFF			nsymbol	skb_frag_off		include/linux/skbuff.h

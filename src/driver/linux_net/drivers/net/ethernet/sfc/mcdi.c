@@ -2953,10 +2953,9 @@ int efx_mcdi_nvram_metadata(struct efx_nic *efx, unsigned int type,
 				goto out_free;
 			}
 
-			strncpy(desc,
+			strscpy(desc,
 				MCDI_PTR(outbuf, NVRAM_METADATA_OUT_DESCRIPTION),
 				MC_CMD_NVRAM_METADATA_OUT_DESCRIPTION_NUM(outlen));
-			desc[MC_CMD_NVRAM_METADATA_OUT_DESCRIPTION_NUM(outlen)] = '\0';
 		} else {
 			desc[0] = '\0';
 		}

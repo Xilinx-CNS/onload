@@ -864,30 +864,25 @@ unsigned int cpumask_local_spread(unsigned int i, int node);
 
 #include <linux/pps_kernel.h>
 
-#ifdef EFX_NEED_KTIME_GET_SNAPSHOT
-/* simplified structure for systems which don't have a kernel definition
- * we only need a couple of fields and layout doesn't matter for this usage */
-struct system_time_snapshot {
-	ktime_t			real;
-	ktime_t			raw;
-};
+#include <linux/timekeeping.h>
 
-static inline void ktime_get_snapshot(struct system_time_snapshot *systime_snapshot)
-{
-	struct timespec64 ts_real;
-	struct timespec64 ts_raw = {};
-
-#ifdef CONFIG_NTP_PPS
-	getnstime_raw_and_real(&ts_raw, &ts_real);
-#else
-	getnstimeofday(&ts_real);
+#ifdef EFX_NEED_SYSTEM_TIME_SNAPSHOT_SYSTIME
+#define systime real
+#endif
+#ifdef EFX_NEED_SYSTEM_TIME_SNAPSHOT_MONORAW
+#define monoraw raw
+#endif
+#ifdef EFX_NEED_SYSTEM_DEVICE_CROSSTSTAMP_SYS_SYSTIME
+#define sys_systime sys_realtime
 #endif
 
-	systime_snapshot->real = timespec64_to_ktime(ts_real);
-	systime_snapshot->raw = timespec64_to_ktime(ts_raw);
+#ifdef EFX_NEED_KTIME_GET_SNAPSHOT_ID
+static inline void ktime_get_snapshot_id(clockid_t clock_id,
+					 struct system_time_snapshot *systime_snapshot)
+{
+	if (clock_id == CLOCK_REALTIME)
+		ktime_get_snapshot(systime_snapshot);
 }
-#else
-#include <linux/timekeeping.h>
 #endif
 
 #include <linux/ptp_clock_kernel.h>

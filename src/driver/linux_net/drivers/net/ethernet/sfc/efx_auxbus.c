@@ -16,6 +16,7 @@
 #include "rx_common.h"
 #include "efx_auxbus_internal.h"
 #include "mcdi_functions.h"
+#include "efx_cxl.h"
 
 /* Numbers for auxiliary bus devices need to be unique in the host. */
 static DEFINE_IDA(efx_auxbus_ida);
@@ -674,7 +675,7 @@ static u32 efx_get_queue_type(u32 queue_handle)
 }
 
 static
-int efx_populate_queue_io_window(struct efx_probe_data *pd, u32 offset,
+int efx_populate_queue_io_window(struct efx_probe_data *pd, resource_size_t membase,
 				 u32 stride, u32 max_queues, u32 expected_queue_type,
 				 struct efx_auxiliary_io_window *queue_io_wnd)
 {
@@ -685,7 +686,7 @@ int efx_populate_queue_io_window(struct efx_probe_data *pd, u32 offset,
 		return -EINVAL;
 
 	queue_io_wnd->size = stride;
-	queue_io_wnd->base = efx_llct_mem_phys(pd, offset) + stride * queue_num;
+	queue_io_wnd->base = membase + stride * queue_num;
 	return 0;
 }
 
@@ -695,6 +696,7 @@ static int efx_auxbus_get_param_llct(struct efx_auxdev_client *handle,
 {
 	struct efx_design_params *dp;
 	struct efx_probe_data *pd;
+	resource_size_t membase;
 	struct efx_nic *efx;
 	int rc = 0;
 
@@ -743,8 +745,8 @@ static int efx_auxbus_get_param_llct(struct efx_auxdev_client *handle,
 		if (IS_ERR(dp))
 			return PTR_ERR(dp);
 
-		rc = efx_populate_queue_io_window(pd,
-						  ER_IZ_LLCT_EVQ_UNSOL_CREDIT_GRANT,
+		membase = efx_llct_mem_phys(pd, ER_IZ_LLCT_EVQ_UNSOL_CREDIT_GRANT);
+		rc = efx_populate_queue_io_window(pd, membase,
 						  dp->evq_stride, dp->ev_queues,
 						  MC_CMD_QUEUE_HANDLE_QUEUE_TYPE_LL_EVQ,
 						  &arg->queue_io_wnd);
@@ -754,7 +756,22 @@ static int efx_auxbus_get_param_llct(struct efx_auxdev_client *handle,
 		if (IS_ERR(dp))
 			return PTR_ERR(dp);
 
-		rc = efx_populate_queue_io_window(pd, ER_IZ_LLCT_CTPIO_REGION,
+		membase = efx_llct_mem_phys(pd, ER_IZ_LLCT_CTPIO_REGION);
+		{
+			bool use_cxl_mem;
+
+			rc = efx_cxl_get_config(pd, &use_cxl_mem, NULL);
+			if (rc)
+				return rc;
+
+			if (use_cxl_mem) {
+				rc = efx_cxl_get_ctpio_membase(pd, &membase);
+				if (rc)
+					return rc;
+			}
+		}
+
+		rc = efx_populate_queue_io_window(pd, membase,
 						  dp->tx_aperture_size,
 						  dp->tx_apertures,
 						  MC_CMD_QUEUE_HANDLE_QUEUE_TYPE_LL_TXQ,
@@ -765,10 +782,17 @@ static int efx_auxbus_get_param_llct(struct efx_auxdev_client *handle,
 		if (IS_ERR(dp))
 			return PTR_ERR(dp);
 
-		rc = efx_populate_queue_io_window(pd, ER_IZ_LLCT_RX_BUFFER_POST,
+		membase = efx_llct_mem_phys(pd, ER_IZ_LLCT_RX_BUFFER_POST);
+		rc = efx_populate_queue_io_window(pd, membase,
 						  dp->rx_stride, dp->rx_queues,
 						  MC_CMD_QUEUE_HANDLE_QUEUE_TYPE_LL_RXQ,
 						  &arg->queue_io_wnd);
+		break;
+	case EFX_PARAM_CXL_MEM_ENABLED:
+		rc = efx_cxl_get_config(pd, &arg->b, NULL);
+		break;
+	case EFX_PARAM_CXL_CACHE_ENABLED:
+		rc = efx_cxl_get_config(pd, NULL, &arg->b);
 		break;
 	default:
 		rc = -EOPNOTSUPP;
@@ -848,6 +872,8 @@ static int efx_auxbus_set_param_llct(struct efx_auxdev_client *handle,
 	case EFX_AUXILIARY_EVQ_WINDOW:
 	case EFX_AUXILIARY_CTPIO_WINDOW:
 	case EFX_AUXILIARY_RXQ_WINDOW:
+	case EFX_PARAM_CXL_MEM_ENABLED:
+	case EFX_PARAM_CXL_CACHE_ENABLED:
 		/* These parameters are _get_ only! */
 		rc = -EINVAL;
 		break;

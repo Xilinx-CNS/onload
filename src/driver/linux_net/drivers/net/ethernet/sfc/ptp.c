@@ -1245,25 +1245,25 @@ static void efx_ptp_send_times(struct efx_nic *efx,
 	struct timespec64 ts_real;
 	ktime_t limit;
 
-	ktime_get_snapshot(&now);
+	ktime_get_snapshot_id(CLOCK_REALTIME, &now);
 	/* Initialise ts_real in case the MC is very fast and the while loop
 	 * below is skipped.
 	 */
-	ts_real = ktime_to_timespec64(now.real);
-	limit = ktime_add_ns(now.real, SYNCHRONISE_PERIOD_NS);
+	ts_real = ktime_to_timespec64(now.systime);
+	limit = ktime_add_ns(now.systime, SYNCHRONISE_PERIOD_NS);
 
 	/* Write host time for specified period or until MC is done */
-	while ((ktime_compare(now.real, limit) < 0) &&
+	while ((ktime_compare(now.systime, limit) < 0) &&
 	       READ_ONCE(*mc_running) && !READ_ONCE(mcdi_data->done)) {
 		ktime_t update_time;
 		unsigned int host_time;
 
 		/* Don't update continuously to avoid saturating the PCIe bus */
-		update_time = ktime_add_ns(now.real,
+		update_time = ktime_add_ns(now.systime,
 					   SYNCHRONISATION_GRANULARITY_NS);
 		do {
-			ktime_get_snapshot(&now);
-		} while ((ktime_compare(now.real, update_time) < 0) &&
+			ktime_get_snapshot_id(CLOCK_REALTIME, &now);
+		} while ((ktime_compare(now.systime, update_time) < 0) &&
 			 READ_ONCE(*mc_running));
 
 		/* Synchronize against the MCDI completion to ensure we don't
@@ -1273,10 +1273,10 @@ static void efx_ptp_send_times(struct efx_nic *efx,
 		spin_lock_bh(&mcdi_data->done_lock);
 
 		/* Read time again to make sure we're as up-to-date as possible */
-		ktime_get_snapshot(&now);
+		ktime_get_snapshot_id(CLOCK_REALTIME, &now);
 
 		/* Synchronise NIC with single word of time only */
-		ts_real = ktime_to_timespec64(now.real);
+		ts_real = ktime_to_timespec64(now.systime);
 		host_time = (ts_real.tv_sec << MC_NANOSECOND_BITS |
 			     ts_real.tv_nsec);
 
@@ -1287,7 +1287,7 @@ static void efx_ptp_send_times(struct efx_nic *efx,
 		spin_unlock_bh(&mcdi_data->done_lock);
 	}
 	*last_time_real = ts_real;
-	*last_time_raw = ktime_to_timespec64(now.raw);
+	*last_time_raw = ktime_to_timespec64(now.monoraw);
 #ifdef CONFIG_DEBUG_FS
 	ptp->last_sync_time_host = (unsigned int)ts_real.tv_nsec;
 #endif
@@ -1722,9 +1722,9 @@ int efx_x4_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings)
 		}
 	}
 
-	ktime_get_snapshot(&last_time);
-	last_time_real = ktime_to_timespec64(last_time.real);
-	last_time_raw = ktime_to_timespec64(last_time.raw);
+	ktime_get_snapshot_id(CLOCK_REALTIME, &last_time);
+	last_time_real = ktime_to_timespec64(last_time.systime);
+	last_time_raw = ktime_to_timespec64(last_time.monoraw);
 
 	if (ngood == 0) {
 		rc = -EAGAIN;
@@ -2433,10 +2433,15 @@ static int efx_ptp_set_connector_funcs(struct efx_nic *efx)
 
 	MCDI_SET_DWORD(inbuf, PTP_IN_OP, MC_CMD_PTP_OP_SET_CONNECTOR_FUNCTION);
 
-	rc = efx_mcdi_rpc(efx, MC_CMD_PTP, inbuf, inlen,
-			  outbuf, outlen, &outlen_actual);
-	if (rc)
+	rc = efx_mcdi_rpc_quiet(efx, MC_CMD_PTP, inbuf, inlen,
+				outbuf, outlen, &outlen_actual);
+	if (rc) {
+		/* EINVAL or ENOENT occur when firmware doesn't support _OP */
+		if (rc != -EINVAL && rc != -ENOENT)
+			efx_mcdi_display_error(efx, MC_CMD_PTP, inlen,
+					       outbuf, outlen_actual, rc);
 		goto free_outbuf;
+	}
 
 	pins = MC_CMD_PTP_OUT_SET_CONNECTOR_FUNCTION_FUNCTION_NUM(outlen_actual);
 	if (!clock_info->pin_config) {
@@ -2875,7 +2880,7 @@ static int efx_phc_getcrosststamp(struct ptp_clock_info *ptp,
 		return rc;
 
 	cts->device = timespec64_to_ktime(ptp_data->last_mc_time);
-	cts->sys_realtime = timespec64_to_ktime(ptp_data->last_host_time_real);
+	cts->sys_systime = timespec64_to_ktime(ptp_data->last_host_time_real);
 	cts->sys_monoraw = timespec64_to_ktime(ptp_data->last_host_time_raw);
 	return 0;
 }

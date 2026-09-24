@@ -26,7 +26,7 @@
  * this is so when fields in &struct efx_auxdev are added to the end of the
  * struct.
  */
-#define EFX_AUX_ABI_VERSION_MINOR 3
+#define EFX_AUX_ABI_VERSION_MINOR 4
 #define EFX_AUX_ABI_VERSION ((EFX_AUX_ABI_VERSION_MAJOR << 16) | \
 			     EFX_AUX_ABI_VERSION_MINOR)
 #define EFX_AUX_ABI_VERSION_MAJOR_GET(ver) (ver >> 16)
@@ -280,6 +280,16 @@ struct efx_auxiliary_io_window {
  *      The returned address should be IO mapped for access to the region.
  *	Get only.
  *	Return through @queue_io_wnd
+ * @EFX_PARAM_CXL_MEM_ENABLED: Determine whether the underlying net device is
+ *	expecting CXL.mem for writes to the CTPIO aperture.
+ *	Only valid for LLCT devices.
+ *	Get only.
+ *	Value passed via @b.
+ * @EFX_PARAM_CXL_CACHE_ENABLED: Determine whether the underlying net device is
+ *	using CXL.cache writes for NIC to host transactions.
+ *	Only valid for LLCT devices.
+ *	Get only.
+ *	Value passed via @b.
  */
 enum efx_auxiliary_param {
 	EFX_NETDEV,
@@ -300,6 +310,8 @@ enum efx_auxiliary_param {
 	EFX_AUXILIARY_EVQ_WINDOW,
 	EFX_AUXILIARY_CTPIO_WINDOW,
 	EFX_AUXILIARY_RXQ_WINDOW,
+	EFX_PARAM_CXL_MEM_ENABLED,
+	EFX_PARAM_CXL_CACHE_ENABLED,
 };
 
 /** Possible values for device parameters */
