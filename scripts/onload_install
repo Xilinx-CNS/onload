@@ -477,6 +477,24 @@ install_all_headers() {
     install_f "$oo_version_hdr" "$i_include/onload/onload_version.h"
     rm "$oo_version_hdr"
   fi
+
+  install_pkgconfig
+}
+
+
+# Render and install the pkg-config file for the Onload extensions library.
+# The version is taken from onload_version_gen, the same source used for
+# onload_version.h above, so the .pc Version tracks the packaged release.
+install_pkgconfig() {
+  local template="$TOP/scripts/onload_misc/open_onload.pc.in"
+  local version
+  version=$(onload_version_gen |
+    sed -n 's/.*#define ONLOAD_VERSION[[:space:]]*"\([^ "]*\).*/\1/p')
+  local pc
+  pc=$(mktemp)
+  try sed "s/@VERSION@/$version/" "$template" > "$pc"
+  install_f "$pc" "$i_lib64/pkgconfig/open_onload.pc"
+  rm "$pc"
 }
 
 conflict() {

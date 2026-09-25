@@ -279,6 +279,7 @@ This package comprises development headers for the components of OpenOnload.
 
 %files devel
 %defattr(-,root,root)
+%{_libdir}/pkgconfig/open_onload.pc
 %{_includedir}/ci
 %{_includedir}/cplane
 %{_includedir}/etherfabric
