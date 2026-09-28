@@ -24,6 +24,7 @@
 
 #include <linux/ethtool.h>
 #include <linux/mman.h>
+#include <linux/iommu.h>
 
 #include "etherfabric/internal/internal.h"
 
@@ -173,6 +174,14 @@ static int ef10ct_check_cxl_enablement(struct efhw_nic *nic)
   else if( val.b )
     nic->flags |= NIC_FLAG_CXL_CACHE_ENABLED;
 
+  if( nic->flags & NIC_FLAG_CXL_CACHE_ENABLED ) {
+    if( device_iommu_mapped(nic->dev->parent) ) {
+      EFHW_ERR("%s: unable to use ef10ct device with CXL.cache and IOMMU enabled, set iommu=off in the kernel commandline",
+               __FUNCTION__);
+      return -EINVAL;
+    }
+  }
+
   /* ef10ct_nic_init_hardware can be called in a loop in case there is some
    * hardware issue we hope might be resolved. We should let users know if
    * we previously gave them a scary message about needing to reload the
@@ -218,7 +227,7 @@ ef10ct_nic_init_hardware(struct efhw_nic *nic,
   rc = ef10ct_check_cxl_enablement(nic);
   if( rc < 0 ) {
     ci_atomic32_or(&nic->resetting, NIC_RESETTING_FLAG_UNKNOWN_CXL);
-    EFHW_ERR("%s: inability to determine CXL enablement is fatal, a driver reload is necessary to rectify this",
+    EFHW_ERR("%s: inability to determine CXL enablement or invalid CXL config is fatal, a driver reload may be necessary to rectify this",
              __FUNCTION__);
     return rc;
   }
