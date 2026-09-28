@@ -11,6 +11,7 @@
 
 struct tlp_state {
   unsigned relaxed;
+  unsigned relaxed_metadata;
   unsigned inorder;
   unsigned snoop;
   unsigned tph;

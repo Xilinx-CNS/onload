@@ -736,6 +736,7 @@ ef10ct_mcdi_cmd_set_vi_tlp_processing(struct efhw_nic *nic, uint instance,
   tlp.tph = set ? 1 : 0;
   tlp.tag1 = tlp.tag2 = tag;
   tlp.relaxed = 0;
+  tlp.relaxed_metadata = tlp.relaxed;
   tlp.snoop = 0;
   tlp.inorder = 0;
 

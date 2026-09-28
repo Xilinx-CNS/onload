@@ -29,6 +29,8 @@ efhw_extract_get_vi_tlp_processing_mcdi_cmd_result(ci_dword_t *buf,
   tlp->tag2 = EFHW_MCDI_BYTE(buf, GET_VI_TLP_PROCESSING_OUT_TPH_TAG2_EV);
   tlp->relaxed = tlp->data &
             (1u << MC_CMD_GET_VI_TLP_PROCESSING_OUT_RELAXED_ORDERING_LBN);
+  tlp->relaxed_metadata = tlp->data &
+            (1u << MC_CMD_GET_VI_TLP_PROCESSING_OUT_RELAXED_ORDERING_SYNC_DATA_LBN);
   tlp->inorder = tlp->data &
             (1u << MC_CMD_GET_VI_TLP_PROCESSING_OUT_ID_BASED_ORDERING_LBN);
   tlp->snoop = tlp->data &
@@ -49,6 +51,9 @@ efhw_populate_set_vi_tlp_processing_mcdi_cmd(ci_dword_t *buf,
   if (tlp->relaxed)
     tlp->data |= 1u <<
                 (MC_CMD_SET_VI_TLP_PROCESSING_IN_RELAXED_ORDERING_LBN-32);
+  if (tlp->relaxed_metadata)
+    tlp->data |= 1u <<
+                (MC_CMD_SET_VI_TLP_PROCESSING_IN_RELAXED_ORDERING_SYNC_DATA_LBN-32);
   if (tlp->inorder)
     tlp->data |= 1u <<
                 (MC_CMD_SET_VI_TLP_PROCESSING_IN_ID_BASED_ORDERING_LBN-32);
