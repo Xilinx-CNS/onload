@@ -735,7 +735,9 @@ ef10ct_mcdi_cmd_set_vi_tlp_processing(struct efhw_nic *nic, uint instance,
 
   tlp.tph = set ? 1 : 0;
   tlp.tag1 = tlp.tag2 = tag;
-  tlp.relaxed = 0;
+  /* X4 CXL.cache has flipped semantics, so to get correct ordering of writes
+   * on this path, we must claim we want relaxed ordering. */
+  tlp.relaxed = !!(nic->flags & NIC_FLAG_CXL_CACHE_ENABLED);
   tlp.relaxed_metadata = tlp.relaxed;
   tlp.snoop = 0;
   tlp.inorder = 0;
