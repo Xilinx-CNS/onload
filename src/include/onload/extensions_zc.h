@@ -473,9 +473,10 @@ extern int onload_set_recv_filter(int fd,
  * kernel stack (e.g. because it has been bound to an address that is
  * not routed over a SFC interface) it will return -ESOCKTNOSUPPORT
  *
- * PIO, and therefore templated send, is not available on SmartNIC
- * (SN1000 and later series) or X3 architectures. Normal send
- * operations provide the lowest possible latency on those devices.
+ * PIO, and therefore templated send, is not available on every NIC
+ * architecture. Attempts to allocate a PIO buffer on a NIC without PIO
+ * support will result in failure with -ENOMEM. Normal send operations
+ * provide the lowest possible latency on such devices.
  */
 
 /* Opaque pointer to the template metadata */

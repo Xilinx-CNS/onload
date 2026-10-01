@@ -456,8 +456,13 @@ static ci_ip_pkt_fmt* alloc_rx_efct_pkt(ci_netif* ni, int intf_i, int pay_len)
   ci_ip_pkt_fmt* pkt;
 
   if(CI_UNLIKELY( ni->state->n_rx_pkts >= NI_OPTS(ni).max_rx_packets )) {
-    CITP_STATS_NETIF_INC(ni, efct_rx_no_rx_pkts);
-    return NULL;
+    /* Reap mid-poll as a fallback; ci_netif_rx_post() handles the
+     * general case for RX_REF but runs only after the poll loop. */
+    ci_netif_try_to_reap(ni, 100);
+    if( ni->state->n_rx_pkts >= NI_OPTS(ni).max_rx_packets ) {
+      CITP_STATS_NETIF_INC(ni, efct_rx_no_rx_pkts);
+      return NULL;
+    }
   }
 
   pkt = ci_netif_pkt_alloc(ni, 0);
@@ -1936,8 +1941,8 @@ ci_inline int ci_netif_poll_intf(ci_netif* ni, int intf_i, int max_evs)
   /* The following steps probably aren't needed if we haven't handled any
    * events, but that is a rare case and so not worth testing for.
    */
-  if( ci_netif_rx_vi_space(ni, ci_netif_vi(ni, intf_i))
-      >= CI_CFG_RX_DESC_BATCH )
+  if( ci_netif_rx_vi_space(ni, ci_netif_vi(ni, intf_i)) >= CI_CFG_RX_DESC_BATCH ||
+      (ni->state->nic[intf_i].oo_vi_flags & OO_VI_FLAGS_RX_REF) )
     ci_netif_rx_post(ni, intf_i);
 
   if( ci_netif_dmaq_not_empty(ni, intf_i) )

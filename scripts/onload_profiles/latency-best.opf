@@ -22,8 +22,8 @@ if [ -z "$EF_CTPIO_MODE" ]; then
   have_nonx2=
   for nic in /sys/class/net/*; do
     driver=$(basename "$(readlink "$nic/device/driver")")
-    pci_deviceid=`(cat $nic/device/device) || echo 0`
     if [ "$driver" = sfc ]; then
+      pci_deviceid=`(cat $nic/device/device) || echo 0`
       if [ "$pci_deviceid" = "0" ]; then
         have_indeterminate=1
       elif [ "$pci_deviceid" = "0x0b03" ] || [ "$pci_deviceid" = "0x1b03" ]; then
