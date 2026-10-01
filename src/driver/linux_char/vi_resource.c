@@ -100,6 +100,7 @@ vi_resource_alloc(struct efrm_vi_attr *attr,
                   struct efrm_vi **virs_out)
 {
   struct efrm_vi *virs;
+  void *ep_state;
   int rc;
 
   if (vi_flags & EFHW_VI_RX_PACKED_STREAM)
@@ -179,10 +180,14 @@ vi_resource_alloc(struct efrm_vi_attr *attr,
                             tx_q_tag, vi_flags, evq_virs)) < 0)
     goto fail_q_alloc;
 
-  virs->ep_state = vmalloc_user(ef_vi_calc_state_bytes(rxq_capacity,
-                                                       txq_capacity));
-  if (!virs->ep_state)
+  ep_state = vmalloc_user(ef_vi_calc_state_bytes(rxq_capacity,
+                                                 txq_capacity));
+  if (!ep_state)
     goto fail_q_alloc;
+
+  spin_lock_bh(&virs->ep_state_lock);
+  virs->ep_state = ep_state;
+  spin_unlock_bh(&virs->ep_state_lock);
 
   *virs_out = virs;
   return 0;
@@ -215,7 +220,7 @@ void efch_vi_rm_free(efch_resource_t *rs)
   if( rs->vi.sniff_flags & EFCH_TX_SNIFF )
     efrm_tx_port_sniff(rs->rs_base, 0, -1);
   efrm_vi_tx_alt_free(virs);
-  vfree((void*)virs->ep_state);
+  efrm_vi_ep_state_put(virs);
 }
 
 

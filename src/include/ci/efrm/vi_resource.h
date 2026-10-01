@@ -434,4 +434,10 @@ efrm_vi_tx_alt_alloc(struct efrm_vi *virs, int num_alt, int num_32b_words);
 extern int
 efrm_vi_tx_alt_free(struct efrm_vi *virs);
 
+extern bool
+efrm_vi_ep_state_get(struct efrm_vi *virs);
+
+extern void
+efrm_vi_ep_state_put(struct efrm_vi *virs);
+
 #endif /* __CI_EFRM_VI_RESOURCE_H__ */

@@ -199,6 +199,12 @@ struct efrm_vi {
 	 * read-only to the kernel; be careful when accessing. */
 	const volatile ef_vi_state *ep_state;
 
+	/* These handle the lifetime of ep_state. The kref tracks references
+	 * to make sure the ep_state isn't freed while still in use, while the
+	 * lock makes sure allocation and free are atomic. */
+	struct kref ep_state_kref;
+	spinlock_t ep_state_lock;
+
 	unsigned tx_alt_cp;
 	int      tx_alt_num;
 	unsigned tx_alt_ids[EFRM_VI_TX_ALTERNATIVES_MAX];

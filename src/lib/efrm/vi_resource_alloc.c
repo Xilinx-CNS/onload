@@ -1187,7 +1187,7 @@ void efrm_nic_flush_all_queues(struct efhw_nic *nic, int flags)
 			virs = list_entry(h, struct efrm_vi, q[type].init_link);
 			INIT_LIST_HEAD(&virs->q[type].init_link);
 			if (flags & EFRM_FLUSH_QUEUES_F_INJECT_EV && type == EFHW_EVQ &&
-			    virs->ep_state) {
+			    efrm_vi_ep_state_get(virs)) {
 				rc = nic->efhw_func->inject_reset_ev(nic,
 				                             virs->q[EFHW_EVQ].host_pages.ptr,
 				                             virs->q[EFHW_EVQ].capacity,
@@ -1195,6 +1195,7 @@ void efrm_nic_flush_all_queues(struct efhw_nic *nic, int flags)
 				if( rc )
 					EFRM_ERR(" nic %d 0x%x ef_vi reset not supported (%d)",
 					         nic->index, virs->rs.rs_instance, rc);
+				efrm_vi_ep_state_put(virs);
 			}
 			if (flags & EFRM_FLUSH_QUEUES_F_NOHW)
 				continue;
@@ -1739,6 +1740,20 @@ int  efrm_vi_alloc(struct efrm_client *client,
 		virs->ps_buf_size = 1 << 20;
 	}
 #endif
+
+	/* We must initialise both the ep_state kref and lock now even though
+	 * we have no ep_state at this point. Failure to do so will result in
+	 * undefined behaviour when future code tries to use either of these.
+	 * To compensate for the lack of ep_state, the helper functions which
+	 * gate access to the ep_state handle the possibility that it has not
+	 * yet been initialised.
+	 * This breaks from a typical kref flow in which kref_init() happens
+	 * alongside resource initialisation. Ideally the ef_vi efrm_vi init
+	 * path could allocate the ep_state before this point to allow this,
+	 * but the size of the ep_state depends on properties which can only
+	 * be discovered after creating the efrm_vi. */
+	kref_init(&virs->ep_state_kref);
+	spin_lock_init(&virs->ep_state_lock);
 
 	efrm_client_add_resource(client, &virs->rs);
 	efrm_init_debugfs_vi(virs);
