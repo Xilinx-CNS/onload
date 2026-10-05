@@ -77,7 +77,8 @@ static int efrm_find_cxl_cache_spmt_range(phys_addr_t *membase, u64 *size)
   count = le32_to_cpup((const __le32*)payload);
   payload += 4;
 
-  count = CI_MIN((table->length - ((u8*)payload - (u8*)table)) / sizeof(*entry),
+  count = CI_MIN((u32)((table->length - ((u8*)payload - (u8*)table)) /
+                       sizeof(*entry)),
                  count);
   entry = (struct spmt_entry_raw*)payload;
   for( i = 0; i < count; i++ ) {
