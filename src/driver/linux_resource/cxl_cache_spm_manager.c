@@ -32,6 +32,7 @@ struct efrm_cxl_cache_spm {
 
 static DEFINE_MUTEX(global_cxl_cache_spm_lock);
 static struct efrm_cxl_cache_spm *global_cxl_cache_spm;
+static int cxl_cache_spm_find_error;
 
 #define SPMT_SIG "SPMT"
 #define SPMT_FLAG_2K_INTLV BIT(2)
@@ -244,7 +245,12 @@ void efrm_cxl_cache_spm_discover(void)
   rc = efrm_find_cxl_cache_spmt_range(&cxl_cache_spm_membase,
                                       &cxl_cache_spm_size);
   if( rc < 0 ) {
-    EFRM_ERR("%s: failed to find region, rc=%d", __FUNCTION__, rc);
+    /* We want to avoid overly verbose logging on systems that don't support
+     * this feature, so we stash this rc away to report it later only if we
+     * know we need this region. Other failure points in this function may
+     * immediately complain because presence of this region indicates the
+     * user must expect some amount of CXL functionality. */
+    cxl_cache_spm_find_error = rc;
     goto out;
   }
 
@@ -322,6 +328,18 @@ int efrm_cxl_cache_spm_exists(void)
   return exists;
 }
 EXPORT_SYMBOL(efrm_cxl_cache_spm_exists);
+
+int efrm_cxl_cache_spm_find_error(void)
+{
+  int rc;
+
+  mutex_lock(&global_cxl_cache_spm_lock);
+  rc = cxl_cache_spm_find_error;
+  mutex_unlock(&global_cxl_cache_spm_lock);
+
+  return rc;
+}
+EXPORT_SYMBOL(efrm_cxl_cache_spm_find_error);
 
 int efrm_cxl_cache_spm_pages_allocate(int *numa_node, unsigned long n_pages,
                                       unsigned long *first_pfn_out)

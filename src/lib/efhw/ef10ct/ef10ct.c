@@ -183,7 +183,12 @@ static int ef10ct_check_cxl_enablement(struct efhw_nic *nic)
     }
 
     if( ! efrm_cxl_cache_spm_exists() ) {
-      EFHW_ERR("%s: the CXL.cache SPM was not discovered but this device has CXL.cache enabled",
+      int find_rc = efrm_cxl_cache_spm_find_error();
+      if( find_rc )
+        EFHW_ERR("%s: CXL.cache SPM was not found, rc=%d", __FUNCTION__,
+                 find_rc);
+
+      EFHW_ERR("%s: the CXL.cache SPM was not discovered but this device has CXL.cache enabled (see previous kernel log messages for more information)",
                __FUNCTION__);
       return -ENOMEM;
     }

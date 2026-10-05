@@ -5,6 +5,7 @@
 #define EFRM_CXL_CACHE_SPM_MANAGER_H
 
 extern int efrm_cxl_cache_spm_exists(void);
+extern int efrm_cxl_cache_spm_find_error(void);
 
 /* Allocates `n_pages` contiguously from `spm` and returns the first page frame
  * number of the contiguous region. */
