@@ -67,7 +67,7 @@ Map generateBuildTasks(String build_profile=null) {
           ws("workspace/${env.JOB_NAME}/${env.BUILD_NUMBER}/${thread_title}") {
             if (component == 'efct_driver') {
               dir("x3-net") {
-                scmmanager.cloneGit([branch: 'dev'], 'ssh://git@github.com/Xilinx-CNS/x3-net-linux.git')
+                scmmanager.cloneGit([branch: 'dev'], 'https://github.com/AMD-NTSG-X/x3-net-linux.git')
               }
             }
             unstash('onload-full')
