@@ -562,6 +562,47 @@ static int ef_vi_select_rxq_attach_type(ef_vi *vi, const ef_filter_spec *fs,
   return 0;
 }
 
+static int
+ef_filter_add_try_queues(ef_vi *vi, ef_driver_handle dh, unsigned flags,
+                         const ef_filter_spec *fs,
+                         ef_filter_cookie *cookie_out, int *rxq_out)
+{
+  flags |= CI_FILTER_FLAG_PREF_RXQ;
+
+  if( vi->efct_rxqs.active_qs ) {
+    uint64_t qs;
+    for( qs = *vi->efct_rxqs.active_qs; qs != 0; qs &= qs - 1 ) {
+      int rc;
+      int q = __builtin_ctzll(qs);
+      int qid = efct_get_rxq_state(vi, q)->qid;
+
+      if( (fs->type & EF_FILTER_HAS_DEST) && (fs->data[0] >> 16 != qid) )
+        continue;
+
+      rc = ef_filter_add(dh, vi->vi_resource_id, qid, fs, flags,
+                         cookie_out, rxq_out);
+      if( rc >= 0 )
+        return 0;
+    }
+  }
+
+  return -ENOENT;
+}
+
+static int
+ef_filter_add_any_queue(ef_vi *vi, ef_driver_handle dh, unsigned flags,
+                        const ef_filter_spec *fs,
+                        ef_filter_cookie *cookie_out, int *rxq_out)
+{
+  /* If there is no preferred queue strategy, any should be fine so best
+   * hence let the driver choose. */
+  if ( !(fs->type & EF_FILTER_HAS_DEST) )
+    flags |= CI_FILTER_FLAG_ANY_RXQ;
+
+  return ef_filter_add(dh, vi->vi_resource_id, 0, fs, flags,
+                       cookie_out, rxq_out);
+}
+
 int ef_vi_filter_add(ef_vi *vi, ef_driver_handle dh, const ef_filter_spec *fs,
 		     ef_filter_cookie *filter_cookie_out)
 {
@@ -570,25 +611,7 @@ int ef_vi_filter_add(ef_vi *vi, ef_driver_handle dh, const ef_filter_spec *fs,
     int rxq;
     ef_filter_cookie cookie;
     unsigned flags = 0;
-    int rxq_no = 0;
     bool shared_mode;
-
-    if( vi->efct_rxqs.active_qs ) {
-
-      /* The main intention for this is to reuse an rxq already given to the application if already given.
-       * This means that if an application requests an ANY queue, subsequent calls to filter_add should steer
-       * traffic to this preferred queue. Hence we should transform the CI_FILTER_FLAG_ANY_RXQ to
-       * CI_FILTER_FLAG_PREF_RXQ.
-       */
-      if( *vi->efct_rxqs.active_qs & 1 ) {
-        flags |= CI_FILTER_FLAG_PREF_RXQ;
-        rxq_no = efct_get_rxq_state(vi, 0)->qid;
-      }
-      
-      /* If there is no preferred queue strategy, any should be fine so best hence let the driver choose. */
-      if ( flags == 0 && !(fs->type & EF_FILTER_HAS_DEST) )
-        flags |= CI_FILTER_FLAG_ANY_RXQ;
-    }
 
     rc = ef_vi_select_rxq_attach_type(vi, fs, &flags, &shared_mode);
     if( rc )
@@ -601,9 +624,15 @@ int ef_vi_filter_add(ef_vi *vi, ef_driver_handle dh, const ef_filter_spec *fs,
         return rc;
     }
 
-    rc = ef_filter_add(dh, vi->vi_resource_id, rxq_no, fs, flags, &cookie, &rxq);
-    if( rc < 0 )
-      return rc;
+    /* If the VI already has queues allocated to it, try to attach to each */
+    rc = ef_filter_add_try_queues(vi, dh, flags, fs, &cookie, &rxq);
+
+    /* If there are no suitable queues, request a new one */
+    if( rc < 0 ) {
+      rc = ef_filter_add_any_queue(vi, dh, flags, fs, &cookie, &rxq);
+      if( rc < 0 )
+        return rc;
+    }
 
     if( filter_cookie_out )
       *filter_cookie_out = cookie;
