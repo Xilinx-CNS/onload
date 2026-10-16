@@ -149,6 +149,29 @@ void ci_ip_timer_state_init(ci_netif* netif, unsigned cpu_khz)
 
 
 #if OO_DO_STACK_POLL
+/* Call this before iterating over bucket lists to avoid infinite loops or
+ * kernel memory corruption if shared state has become corrupted somehow.
+ */
+static void
+ci_ip_timer_validate_list(ci_netif* netif, struct oo_p_dllink_state list)
+{
+#if CI_CFG_NETIF_HARDEN
+  if( ! oo_p_dllink_validate_links(netif, list) ) {
+    /* There is a danger that clearing or modifying a lost timer might corrupt
+     * another list via its dodgy `prev` pointer. In principle we could avoid
+     * this; however, there is also a danger that it is not a valid node at
+     * all but arbitrary memory reached through a corrupted pointer in another
+     * node. In that case, modifying the memory would be disastrous, so it's
+     * better to leave it alone and accept that we might encounter another
+     * corrupt list later.
+     */
+    LOG_E(log(LN_FMT "corrupt timer list detected, some timers may be lost",
+              LN_PRI_ARGS(netif)));
+  }
+#endif
+}
+
+
 /* insert a non-pending timer into the scheduler */
 void __ci_ip_timer_set(ci_netif *netif, ci_ip_timer *ts, ci_iptime_t t)
 {
@@ -222,6 +245,7 @@ static int ci_ip_timer_cascadewheel(ci_netif* netif, int wheelno,
 
   /* bucket to empty */
   bucket = IPTIMER_BUCKET(netif, wheelno, stime);
+  ci_ip_timer_validate_list(netif, bucket);
 
   LOG_ITV(log(LN_FMT "cascading wheel=%u sched_ticks=0x%x bucket=%i",
 	      LN_PRI_ARGS(netif), wheelno, stime, IPTIMER_BUCKETNO(wheelno, stime)));
@@ -428,7 +452,8 @@ void ci_ip_timer_poll(ci_netif *netif) {
 
     /* run timers in the current bucket */
     bucket = oo_p_dllink_ptr(netif,
-                             &ipts->warray[IPTIMER_BUCKETNO(0, *stime)]),
+                             &ipts->warray[IPTIMER_BUCKETNO(0, *stime)]);
+    ci_ip_timer_validate_list(netif, bucket);
     oo_p_dllink_splice(netif, bucket, fire_list);
     oo_p_dllink_init(netif, bucket);
 
