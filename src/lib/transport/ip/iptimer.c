@@ -167,6 +167,7 @@ ci_ip_timer_validate_list(ci_netif* netif, struct oo_p_dllink_state list)
      */
     LOG_E(log(LN_FMT "corrupt timer list detected, some timers may be lost",
               LN_PRI_ARGS(netif)));
+    CITP_STATS_NETIF_INC(netif, ip_timer_corrupted);
   }
 #endif
 }

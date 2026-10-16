@@ -904,3 +904,6 @@ OO_STAT("Number of ICMP messages handled from lock hook",
         ci_uint32, rx_icmp_hooked, count)
 
 #endif
+
+OO_STAT("Number of times timer state corruption was detected",
+        ci_uint32, ip_timer_corrupted, count)
