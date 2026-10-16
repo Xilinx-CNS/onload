@@ -135,20 +135,6 @@ else # !KERNELRELEASE ###### The following is for the standalone Makefile case
 TOPDIR = ../../../..
 include $(TOPDIR)/scripts/Makefile.common
 
-ifneq ($(MAKECMDGOALS),export-srpm)
-
-KVERPARTS = $(subst -, ,$(subst ., ,$(KVER)))
-ifeq ($(word 1,$(KVERPARTS)),2)
-ifneq ($(word 2,$(KVERPARTS)),6)
-$(error Kernel version $(KVER) is not supported; minimum version is 2.6.16)
-endif
-ifneq ($(filter 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15,$(word 3,$(KVERPARTS))),)
-$(error Kernel version $(KVER) is not supported; minimum version is 2.6.16)
-endif
-endif
-
-endif # export-srpm
-
 endif # !KERNELRELEASE
 
 endif # !EFX_UPSTREAM
@@ -266,12 +252,6 @@ override ccflags-y += $(call cc-disable-warning, unused-but-set-variable) \
 			 $(call cc-disable-warning, format-zero-length)
 
 else # !KERNELRELEASE
-
-# Some distribution packages of 2.6.16 fail to define KERNELRELEASE
-# when compiling out-of-tree modules.
-ifneq ($(filter 2.6.16-% 2.6.16.%,$(KVER)),)
-EXTRA_MAKEFLAGS := KERNELRELEASE=$(KVER)
-endif
 
 default : top
 

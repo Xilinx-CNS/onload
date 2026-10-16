@@ -40,6 +40,7 @@
 #include <linux/aer.h>
 #include <linux/iommu.h>
 #include <linux/overflow.h>
+#include <linux/slab.h>
 #include <asm/byteorder.h>
 #include <net/ip.h>
 
@@ -431,7 +432,57 @@ static inline bool __netdev_tx_sent_queue(struct netdev_queue *dev_queue,
 	struct_size((type *)NULL, member, count)
 #endif
 
-#ifdef EFX_NEED_KMALLOC_OBJ
+#if !defined(EFX_NEED_KMALLOC_OBJ) && defined(EFX_NEED_DEFAULT_GFP)
+/* LTS kernel releases from 6.18.33 to 6.18.39 have had commit 2932ba8d9c99
+ * ("slab: Introduce kmalloc_obj() and family") back-ported, but not
+ * commit e19e1b480ac7 ("add default_gfp() helper macro and use it in the
+ * new *alloc_obj() helpers").
+ * Some distro kernel releases may mirror the issue.
+ *
+ * e19e1b480ac7 updated the allocators to allow omitting GFP flags.
+ * Driver uses the updated version of the allocators.
+ * If the allocators are present, but default_gfp is not - undefine the
+ * allocators and use the kcompat version.
+ */
+#ifdef kmalloc_obj
+#undef kmalloc_obj
+#endif
+#ifdef kmalloc_objs
+#undef kmalloc_objs
+#endif
+#ifdef kmalloc_flex
+#undef kmalloc_flex
+#endif
+#ifdef kzalloc_obj
+#undef kzalloc_obj
+#endif
+#ifdef kzalloc_objs
+#undef kzalloc_objs
+#endif
+#ifdef kzalloc_flex
+#undef kzalloc_flex
+#endif
+#ifdef kvmalloc_obj
+#undef kvmalloc_obj
+#endif
+#ifdef kvmalloc_objs
+#undef kvmalloc_objs
+#endif
+#ifdef kvmalloc_flex
+#undef kvmalloc_flex
+#endif
+#ifdef kvzalloc_obj
+#undef kvzalloc_obj
+#endif
+#ifdef kvzalloc_objs
+#undef kvzalloc_objs
+#endif
+#ifdef kvzalloc_flex
+#undef kvzalloc_flex
+#endif
+#endif /* !defined(EFX_NEED_KMALLOC_OBJ) && defined(EFX_NEED_DEFAULT_GFP) */
+
+#if defined(EFX_NEED_KMALLOC_OBJ) || defined(EFX_NEED_DEFAULT_GFP)
 #ifndef default_gfp
 #define __default_gfp(a,b,...) b
 #define default_gfp(...) __default_gfp(,##__VA_ARGS__,GFP_KERNEL)
@@ -478,7 +529,7 @@ static inline bool __netdev_tx_sent_queue(struct netdev_queue *dev_queue,
 	__alloc_objs(kvzalloc, default_gfp(__VA_ARGS__), typeof(P), COUNT)
 #define kvzalloc_flex(P, FAM, COUNT, ...) \
 	__alloc_flex(kvzalloc, default_gfp(__VA_ARGS__), typeof(P), FAM, COUNT)
-#endif /* EFX_NEED_KMALLOC_OBJ */
+#endif /* defined(EFX_NEED_KMALLOC_OBJ) || defined(EFX_NEED_DEFAULT_GFP) */
 
 #ifdef EFX_NEED_BITMAP_ZALLOC
 #define bitmap_zalloc(count, gfp)	kzalloc(BITS_TO_LONGS(count), gfp)

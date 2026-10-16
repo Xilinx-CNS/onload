@@ -253,6 +253,7 @@ EFX_HAVE_DEV_HOLD_TRACK			symbol	dev_hold_track		include/linux/netdevice.h
 EFX_NEED_SIZE_MUL			nsymbol	size_mul		include/linux/overflow.h
 EFX_NEED_KREALLOC_ARRAY			nsymbol	krealloc_array		include/linux/slab.h
 EFX_NEED_KMALLOC_OBJ			nsymbol	kmalloc_obj		include/linux/slab.h
+EFX_NEED_DEFAULT_GFP			nsymbol	default_gfp		include/linux/gfp.h
 EFX_HAVE_VDPA_MGMT_INTERFACE		symbol	vdpa_mgmtdev_register	include/linux/vdpa.h
 EFX_HAVE_IOMMU_CAPABLE			symbol	iommu_capable		include/linux/iommu.h
 EFX_NEED_DEVICE_IOMMU_CAPABLE		nsymbol	device_iommu_capable	include/linux/iommu.h

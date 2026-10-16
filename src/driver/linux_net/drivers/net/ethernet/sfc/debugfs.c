@@ -625,6 +625,7 @@ static const struct efx_debugfs_parameter efx_debugfs_tx_queue_parameters[] = {
 	EFX_UINT_PARAMETER(struct efx_tx_queue, insert_count),
 	EFX_UINT_PARAMETER(struct efx_tx_queue, write_count),
 	EFX_UINT_PARAMETER(struct efx_tx_queue, read_count),
+	EFX_U64_PARAMETER(struct efx_tx_queue, merge_events),
 	EFX_U64_PARAMETER(struct efx_tx_queue, tso_bursts),
 	EFX_U64_PARAMETER(struct efx_tx_queue, tso_long_headers),
 	EFX_U64_PARAMETER(struct efx_tx_queue, tso_packets),
