@@ -164,6 +164,26 @@ oo_p_dllink_assert_empty(ci_netif* ni, struct oo_p_dllink_state l,
 #define OO_P_DLLINK_ASSERT_EMPTY_SB(ni, sb, l) \
   OO_P_DLLINK_ASSERT_EMPTY(ni, oo_p_dllink_sb(ni, sb, l))
 
+/* Check that each reverse link in the list matches the node it comes from.
+ * Returns true on success. Truncates the list at the last good node on failure.
+ */
+static inline bool
+oo_p_dllink_validate_links(ci_netif* ni, struct oo_p_dllink_state list)
+{
+  struct oo_p_dllink_state prev, link = list;
+  do {
+    prev = link;
+    link = oo_p_dllink_statep(ni, link.l->next);
+
+    if( ! OO_P_EQ(link.l->prev, prev.p) ) {
+      prev.l->next = list.p;
+      list.l->prev = prev.p;
+      return false;
+    }
+  } while( link.l != list.l );
+
+  return true;
+}
 
 /* Iterate through the list */
 #define oo_p_dllink_for_each(ni, link, list) \
