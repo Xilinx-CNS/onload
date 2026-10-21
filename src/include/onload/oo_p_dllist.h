@@ -185,6 +185,16 @@ oo_p_dllink_validate_links(ci_netif* ni, struct oo_p_dllink_state list)
   return true;
 }
 
+/* Check that the tail links of the list are valid, i.e. list->prev->next=list
+ * If this fails, it is not safe to call add_tail on this list without first
+ * repairing it with validate_links. */
+static inline bool
+oo_p_dllink_validate_tail(ci_netif* ni, struct oo_p_dllink_state list)
+{
+  struct oo_p_dllink_state tail = oo_p_dllink_statep(ni, list.l->prev);
+  return tail.l->next == list.p;
+}
+
 /* Iterate through the list */
 #define oo_p_dllink_for_each(ni, link, list) \
   for( link = oo_p_dllink_statep(ni, list.l->next);  \

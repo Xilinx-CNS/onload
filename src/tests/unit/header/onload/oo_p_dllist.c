@@ -143,9 +143,24 @@ static void test_oo_p_dllist_validate_links(void)
   CHECK_LIST(ni, list, "12345");
 }
 
+static void test_oo_p_dllist_validate_tail(void)
+{
+  ci_netif netif = {};
+  ci_netif* ni = &netif;
+  struct oo_p_dllink_state list, link;
+
+  list = make_list(ni, "12345");
+  CHECK_TRUE(oo_p_dllink_validate_tail(ni, list));
+
+  link = oo_p_dllink_statep(ni, list.l->prev);
+  link.l->next = list.l->next;
+  CHECK_FALSE(oo_p_dllink_validate_tail(ni, list));
+}
+
 int main(void)
 {
   TEST_RUN(test_oo_p_dllist);
   TEST_RUN(test_oo_p_dllist_validate_links);
+  TEST_RUN(test_oo_p_dllist_validate_tail);
   TEST_END();
 }

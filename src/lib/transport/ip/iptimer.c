@@ -172,11 +172,38 @@ ci_ip_timer_validate_list(ci_netif* netif, struct oo_p_dllink_state list)
 #endif
 }
 
+static void
+ci_ip_timer_bucket_add(ci_netif* netif, int wheel, ci_ip_timer* ts)
+{
+  struct oo_p_dllink_state bucket = IPTIMER_BUCKET(netif, wheel, ts->time);
+
+#if CI_CFG_NETIF_HARDEN
+  /* It's possible that corruption at the end of the new list could corrupt
+   * a list we're iterating over: if `bucket->prev` references a later
+   * node in our list, then its `next` pointer will be overwritten to point
+   * to the newly appended node in `bucket`, and we will never complete our
+   * iteration.
+   *
+   * So quickly check that `bucket->prev` leads back to `bucket`, and fix
+   * the whole list if not. We don't want to waste time iterating over
+   * every list.
+   */
+  if( ! oo_p_dllink_validate_tail(netif, bucket) )
+    ci_ip_timer_validate_list(netif, bucket);
+#endif
+
+  /* append onto the correct bucket
+  **
+  ** NB this might not be stable because a later insert with a
+  ** smaller relative time will be before an earlier insert with a
+  ** larger relative time. Oh well doesn't really matter
+  */
+  oo_p_dllink_add_tail(netif, bucket, oo_p_dllink_statep(netif, ts->statep));
+}
 
 /* insert a non-pending timer into the scheduler */
 void __ci_ip_timer_set(ci_netif *netif, ci_ip_timer *ts, ci_iptime_t t)
 {
-  struct oo_p_dllink_state bucket;
   int w;
   ci_iptime_t stime = IPTIMER_STATE(netif)->sched_ticks;
 
@@ -209,20 +236,12 @@ void __ci_ip_timer_set(ci_netif *netif, ci_ip_timer *ts, ci_iptime_t t)
     w = 3;
   }
 
-  bucket = IPTIMER_BUCKET(netif, w, t);
-
   LOG_ITV(log("%s: delta=0x%x (t=0x%x-s=0x%x), w=0x%x, b=0x%x", 
          __FUNCTION__, 
          ts->time-stime, ts->time, stime, 
          w, IPTIMER_BUCKETNO(w, ts->time)));
 
-  /* append onto the correct bucket 
-  **
-  ** NB this might not be stable because a later insert with a
-  ** smaller relative time will be before an earlier insert with a
-  ** larger relative time. Oh well doesn't really matter
-  */
-  oo_p_dllink_add_tail(netif, bucket, oo_p_dllink_statep(netif, ts->statep));
+  ci_ip_timer_bucket_add(netif, w, ts);
 
   DETAILED_CHECK_TIMERS(netif);
 }
@@ -284,16 +303,8 @@ static int ci_ip_timer_cascadewheel(ci_netif* netif, int wheelno,
 #endif
 
     /* insert ts into wheel below */
-    bucket = IPTIMER_BUCKET(netif, wheelno-1, ts->time);
+    ci_ip_timer_bucket_add(netif, wheelno-1, ts);
     changed = 1;
-
-    /* append onto the correct bucket 
-    **
-    ** NB this might not be stable because a later insert with a
-    ** smaller relative time will be before an earlier insert with a
-    ** larger relative time. Oh well doesn't really matter
-    */
-    oo_p_dllink_add_tail(netif, bucket, oo_p_dllink_statep(netif, ts->statep));
 
     if( wheelno == 1 )
       __ci_timer_busy_set(netif, ts->time);
