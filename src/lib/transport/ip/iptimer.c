@@ -421,6 +421,19 @@ void ci_ip_timer_poll(ci_netif *netif) {
   ci_assert( TIME_GE(rtime, *stime) );
 
   /* check the temp list used is OK before we start */
+#if CI_CFG_NETIF_HARDEN
+  if( ! oo_p_dllink_is_empty(netif, fire_list) ) {
+    /* As in ci_ip_timer_validate_list, there is a possibility of dangling
+     * pointers in the lost timers corrupting more lists. Again, accept that
+     * risk rather than trying to fix things.
+     */
+    LOG_E(log(LN_FMT "unexpected timer fire list detected, some timers may be lost",
+              LN_PRI_ARGS(netif)));
+    CITP_STATS_NETIF_INC(netif, ip_timer_corrupted);
+    oo_p_dllink_init(netif, fire_list);
+  }
+#endif
+
   OO_P_DLLINK_ASSERT_EMPTY(netif, fire_list);
 
   while( TIME_LT(*stime, rtime) ) {
