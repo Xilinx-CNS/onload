@@ -1942,9 +1942,11 @@ static inline struct dentry *try_lookup_noperm(struct qstr *name, struct dentry 
 }
 #endif
 
-#if defined(EFX_HAVE_CXL_H) && defined(EFX_HAVE_CXL_SET_CAPACITY) && defined(CONFIG_SFC_CXL)
+#if defined(EFX_HAVE_CXL_H) && defined(EFX_HAVE_CXL_SET_CAPACITY) && defined(EFX_HAVE_CXL_PCI_H)
+#if defined(CONFIG_SFC_CXL)
 /* Support for CXL Type2 device is available */
 #define EFX_USE_CXL
+#endif
 #endif
 
 #ifndef EFX_HAVE_ETHTOOL_CREATE_RXFH_CONTEXT

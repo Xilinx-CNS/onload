@@ -1693,7 +1693,7 @@ void efx_mcdi_process_module_change(struct efx_nic *efx, efx_qword_t *ev)
 
 static void efx_handle_drain_event(struct efx_nic *efx)
 {
-	if (atomic_dec_and_test(&efx->active_queues))
+	if (atomic_dec_if_positive(&efx->active_queues) == 0)
 		wake_up(&efx->flush_wq);
 
 	WARN_ON(atomic_read(&efx->active_queues) < 0);

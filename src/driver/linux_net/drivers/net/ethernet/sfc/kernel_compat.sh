@@ -274,6 +274,7 @@ EFX_HAVE_ASSIGN_STR_NO_SRC_ARG      custom
 EFX_NEED_TRY_LOOKUP_NOPERM	nsymbol	try_lookup_noperm	include/linux/namei.h
 EFX_HAVE_CXL_H				file				include/cxl/cxl.h
 EFX_HAVE_CXL_SET_CAPACITY		symbol	cxl_set_capacity	include/cxl/cxl.h
+EFX_HAVE_CXL_PCI_H			file				include/cxl/pci.h
 " | grep -E -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
 

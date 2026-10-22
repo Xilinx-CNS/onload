@@ -419,7 +419,7 @@ int efx_fini_dmaq(struct efx_nic *efx)
 	wait_event_timeout(efx->flush_wq,
 			   atomic_read(&efx->active_queues) == 0,
 			   msecs_to_jiffies(EFX_MAX_FLUSH_TIME));
-	pending = atomic_read(&efx->active_queues);
+	pending = atomic_xchg(&efx->active_queues, 0);
 	if (pending) {
 		netif_err(efx, hw, efx->net_dev, "failed to flush %d queues\n",
 			  pending);

@@ -14,7 +14,9 @@
 #include <linux/range.h>
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_CXL_H)
 #include <cxl/cxl.h>
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_CXL_PCI_H)
 #include <cxl/pci.h>
+#endif
 #endif
 #include <linux/kref.h>
 
