@@ -954,9 +954,7 @@ af_xdp_nic_tweak_hardware(struct efhw_nic *nic)
         nic->rx_variant = 0;
         nic->tx_variant = 0;
         nic->rx_prefix_len = 0;
-	nic->flags = NIC_FLAG_RX_ZEROCOPY /* TODO AFXDP: hardcoded for now */
-	     | NIC_FLAG_USERSPACE_PRIME  /* no explicit priming needed */
-		   ;
+	nic->flags = NIC_FLAG_RX_ZEROCOPY; /* TODO AFXDP: hardcoded for now */
 	nic->filter_flags = NIC_FILTER_FLAG_RX_TYPE_IP_LOCAL; /* only wild */
 }
 
