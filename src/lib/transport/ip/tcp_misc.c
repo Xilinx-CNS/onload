@@ -151,7 +151,7 @@ const char* ci_tcp_state_num_str(int state_i)
     "UDP",
     "PIPE",
     "AUXBUF",
-    "ACTIVE_WILD",
+    "WILD",
   };
 
   if( state_i < 0 || state_i >= (sizeof(state_strs) / sizeof(state_strs[0])) )
