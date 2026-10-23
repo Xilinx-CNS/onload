@@ -151,15 +151,19 @@ efab_vi_rm_mmap_state(struct efrm_vi *virs, unsigned long *bytes, void *opaque,
   int rc;
   int len;
 
-  if( ! virs->ep_state )
+  if( ! efrm_vi_ep_state_get(virs) )
     return -EINVAL;  /* Someone used an Onload VI rather than an ef_vi one */
-  if( *offset != 0 )
-    return -EINVAL;
+  if( *offset != 0 ) {
+    rc = -EINVAL;
+    goto out;
+  }
   len = ef_vi_calc_state_bytes(virs->q[EFHW_RXQ].capacity,
                                virs->q[EFHW_TXQ].capacity);
   len = CI_ROUND_UP(len, CI_PAGE_SIZE);
-  if( *bytes != len )
-    return -EINVAL;
+  if( *bytes != len ) {
+    rc = -EINVAL;
+    goto out;
+  }
 
   /* ep_state came from vmalloc_user, which handles most of the safety issues
    * itself (i.e. all memory is zeroed and page-aligned) */
@@ -169,6 +173,9 @@ efab_vi_rm_mmap_state(struct efrm_vi *virs, unsigned long *bytes, void *opaque,
              __FUNCTION__, rc);
   else
     *bytes -= len;
+
+out:
+  efrm_vi_ep_state_put(virs);
   return rc;
 }
 

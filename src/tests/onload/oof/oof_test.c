@@ -212,5 +212,35 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "cluster_multi") )
     test_cluster_multi();
 
+  if( all || !strcmp(argv[1], "mixed_unicast") )
+    test_mixed_unicast();
+
+  if( all || !strcmp(argv[1], "mixed_multicast") )
+    test_mixed_multicast();
+
+  if( all || !strcmp(argv[1], "mixed_multicast_modes") )
+    test_mixed_multicast_modes();
+
+  if( all || !strcmp(argv[1], "mixed_interface_add") )
+    test_mixed_interface_add();
+
+  if( all || !strcmp(argv[1], "mixed_interface_remove") )
+    test_mixed_interface_remove();
+
+  if( all || !strcmp(argv[1], "mixed_filter_redirect") )
+    test_mixed_filter_redirect();
+
+  if( all || !strcmp(argv[1], "mixed_filter_redirect_ff") )
+    test_mixed_filter_redirect_ff();
+
+  if( all || !strcmp(argv[1], "mixed_filter_redirect_ll") )
+    test_mixed_filter_redirect_ll();
+
+  if( all || !strcmp(argv[1], "mixed_filter_redirect_errors") )
+    test_mixed_filter_redirect_errors();
+
+  if( all || !strcmp(argv[1], "mixed_threshold_sharing") )
+    test_mixed_threshold_sharing();
+
   return 0;
 }

@@ -340,39 +340,39 @@ struct ooft_cplane* ooft_alloc_cplane(void)
   return cp;
 }
 
-int ooft_cplane_init(struct net* net_ns, enum ooft_nic_type type)
+int ooft_cplane_add_nic(struct net* net_ns, enum ooft_nic_type type,
+                        unsigned char mac0[6], unsigned laddr0_be,
+                        unsigned char mac1[6], unsigned laddr1_be)
 {
-  enum ooft_hwport_type hw_type = ooft_nic_primary_hwport_type(type);
-  struct ooft_hwport* hw0 = ooft_alloc_hwport(cp, net_ns, hw_type);
-  struct ooft_hwport* hw1 = ooft_alloc_hwport(cp, net_ns, hw_type);
+  enum ooft_hwport_type primary = ooft_nic_primary_hwport_type(type);
+  enum ooft_hwport_type secondary = ooft_nic_secondary_hwport_type(type);
+
+  struct ooft_hwport* hw0 = ooft_alloc_hwport(cp, net_ns, primary);
+  struct ooft_hwport* hw1 = ooft_alloc_hwport(cp, net_ns, primary);
   struct ooft_hwport* hw0_ll = NULL;
   struct ooft_hwport* hw1_ll = NULL;
 
-  hw_type = ooft_nic_secondary_hwport_type(type);
-  if( hw_type != OOFT_HWPORT_NONE ) {
-    hw0_ll = ooft_alloc_hwport(cp, net_ns, hw_type);
-    hw1_ll = ooft_alloc_hwport(cp, net_ns, hw_type);
+  if( secondary != OOFT_HWPORT_NONE ) {
+    hw0_ll = ooft_alloc_hwport(cp, net_ns, secondary);
+    hw1_ll = ooft_alloc_hwport(cp, net_ns, secondary);
   }
 
-  unsigned char mac0[6] = { 0,1,0,0,0,0 };
   struct ooft_ifindex* idx0 = ooft_alloc_ifindex(cp, net_ns,
                                                  EFX_FILTER_VID_UNSPEC, mac0);
   ooft_add_hwport_to_ifindex(idx0, hw0, net_ns);
   if( hw0_ll )
     ooft_add_hwport_to_ifindex(idx0, hw0_ll, net_ns);
-  ooft_alloc_addr(net_ns, idx0, inet_addr("1.0.0.0"));
+  ooft_alloc_addr(net_ns, idx0, laddr0_be);
   idx0->up = 1;
 
-  unsigned char mac1[6] = { 0,1,0,0,0,1 };
   struct ooft_ifindex* idx1 = ooft_alloc_ifindex(cp, net_ns,
                                                  EFX_FILTER_VID_UNSPEC, mac1);
   ooft_add_hwport_to_ifindex(idx1, hw1, net_ns);
-  ooft_alloc_addr(net_ns, idx1, inet_addr("1.0.0.1"));
   if( hw1_ll )
     ooft_add_hwport_to_ifindex(idx1, hw1_ll, net_ns);
+  ooft_alloc_addr(net_ns, idx1, laddr1_be);
   idx1->up = 1;
 
-  /* Now bring up all hwports */
   ooft_hwport_up_down(hw0, 1);
   ooft_hwport_up_down(hw1, 1);
   if( hw0_ll )
@@ -381,6 +381,15 @@ int ooft_cplane_init(struct net* net_ns, enum ooft_nic_type type)
     ooft_hwport_up_down(hw1_ll, 1);
 
   return 0;
+}
+
+int ooft_cplane_init(struct net* net_ns, enum ooft_nic_type type)
+{
+  unsigned char mac0[6] = { 0,1,0,0,0,0 };
+  unsigned char mac1[6] = { 0,1,0,0,0,1 };
+
+  return ooft_cplane_add_nic(net_ns, type, mac0, inet_addr("1.0.0.0"),
+                                           mac1, inet_addr("1.0.0.1"));
 }
 
 int ooft_default_cplane_init(struct net* net_ns)

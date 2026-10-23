@@ -28,6 +28,7 @@ ALL_UNIT_TESTS := \
   lib/ciul/checksum \
   lib/ciul/efct_ubufs \
   lib/ciul/efct_vi \
+  lib/ciul/filter \
   lib/ciul/shrub_connection \
   lib/ciul/shrub_queue \
   lib/ciul/shrub_server \

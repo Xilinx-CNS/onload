@@ -134,3 +134,44 @@ int efrm_vi_get_rx_error_stats(struct efrm_vi* virs,
 					   data, data_len, do_reset);
 }
 EXPORT_SYMBOL(efrm_vi_get_rx_error_stats);
+
+bool efrm_vi_ep_state_get(struct efrm_vi *virs)
+{
+	bool taken = false;
+	spin_lock_bh(&virs->ep_state_lock);
+	/* It's possible that ep_state is not valid at this point because it
+	 * hasn't been allocated yet, or never will be in Onload's case, or
+	 * the ep_state has already been freed. A comment in efrm_vi_alloc()
+	 * alongside the kref_init() for the virs->ep_state_kref discusses
+	 * this in more detail. */
+	if (virs->ep_state) {
+		kref_get(&virs->ep_state_kref);
+		taken = true;
+	}
+	spin_unlock_bh(&virs->ep_state_lock);
+	return taken;
+}
+EXPORT_SYMBOL(efrm_vi_ep_state_get);
+
+static void efrm_vi_ep_state_release(struct kref* kref)
+{
+	struct efrm_vi *virs =
+		container_of(kref, struct efrm_vi, ep_state_kref);
+	/* We rely on vfree() to defer this free to a workqueue so the free is
+	 * always handled in a context which may sleep. */
+	vfree((void*)virs->ep_state);
+	virs->ep_state = NULL;
+}
+
+void efrm_vi_ep_state_put(struct efrm_vi *virs)
+{
+	spin_lock_bh(&virs->ep_state_lock);
+	/* efrm_vi_ep_state_put() must only ever be called after a successful
+	 * call to efrm_vi_ep_state_get() which guarantees validity ep_state
+	 * is valid. Otherwise this is called only when an ef_vi efrm_vi is
+	 * being closed which may only happen after ep_state is valid. */
+	EFRM_ASSERT(virs->ep_state);
+	kref_put(&virs->ep_state_kref, efrm_vi_ep_state_release);
+	spin_unlock_bh(&virs->ep_state_lock);
+}
+EXPORT_SYMBOL(efrm_vi_ep_state_put);

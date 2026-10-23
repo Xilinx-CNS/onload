@@ -95,5 +95,15 @@ extern int test_hw_filter_errors(void);
 extern int test_llct_hw_fallback(void);
 extern int test_mcast_filter_transfer(void);
 extern int test_cluster_multi(void);
+extern int test_mixed_unicast(void);
+extern int test_mixed_multicast(void);
+extern int test_mixed_multicast_modes(void);
+extern int test_mixed_interface_add(void);
+extern int test_mixed_interface_remove(void);
+extern int test_mixed_filter_redirect(void);
+extern int test_mixed_filter_redirect_ff(void);
+extern int test_mixed_filter_redirect_ll(void);
+extern int test_mixed_filter_redirect_errors(void);
+extern int test_mixed_threshold_sharing(void);
 
 #endif /* __OOF_TEST_H__ */
