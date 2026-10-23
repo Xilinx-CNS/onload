@@ -73,8 +73,6 @@ static int dlfilter_full_lookup(efx_dlfilter_cb_t* fcb,
                                 ci_addr_t raddr, ci_uint16 rport,
                                 ci_uint8 protocol, int* thr_id );
 
-#define EFAB_DLFILT_ENTRY_MASK (EFAB_DLFILT_ENTRY_COUNT-1)
-
 #define EFAB_DLFILT_ENTRY_STATE(e) \
   ((e)->state & EFAB_DLFILT_STATE_MASK)
 #define EFAB_DLFILT_ENTRY_ROUTE(e) \
@@ -92,18 +90,26 @@ void
 efx_dlfilter_count_stats(efx_dlfilter_cb_t* fcb,
                          int *n_empty, int *n_tomp, int *n_used)
 {
-  int ctr;
+  efx_dlfilt_table_t* table;
+  ci_uint32 ctr;
   int no_empty=0;
   int no_tomb=0;
   int no_used=0;
 
   ci_assert(fcb);
 
-  for( ctr = 0; ctr < EFAB_DLFILT_ENTRY_COUNT; ctr++ ) 
+  table = dlfilt_table_untag_if_used(fcb);
+  if( table == NULL ) {
+    *n_empty = CI_READ_ONCE(fcb->cached_table_size);
+    *n_tomp = *n_used = 0;
+    return;
+  }
+
+  for( ctr = 0; ctr <= table->size_mask; ctr++ ) 
   {
-    if ( EFAB_DLFILT_ENTRY_STATE(&fcb->table[ctr]) == EFAB_DLFILT_EMPTY )
+    if ( EFAB_DLFILT_ENTRY_STATE(&table->arr[ctr]) == EFAB_DLFILT_EMPTY )
       no_empty++;
-    else if ( EFAB_DLFILT_ENTRY_STATE(&fcb->table[ctr]) == EFAB_DLFILT_TOMBSTONE )
+    else if ( EFAB_DLFILT_ENTRY_STATE(&table->arr[ctr]) == EFAB_DLFILT_TOMBSTONE )
       no_tomb++;
     else
       no_used++;
@@ -368,7 +374,8 @@ dlfilter_handle_icmp(struct net* netns, int ifindex, efx_dlfilter_cb_t* fcb,
 /* These hash funcs mimic those in the char driver's addr table.
  * For IPv6, caller should use onload_addr_xor() for laddr and raddr. */
 ci_inline ci_uint32
-dlfilter_hash1(ci_addr_t laddr, ci_uint16 lport,
+dlfilter_hash1(ci_uint32 size_mask,
+               ci_addr_t laddr, ci_uint16 lport,
                ci_addr_t raddr, ci_uint16 rport,
                ci_uint8 prot)
 {
@@ -377,7 +384,7 @@ dlfilter_hash1(ci_addr_t laddr, ci_uint16 lport,
                 (ci_uint32)prot;
   h ^= h >> 16;
   h ^= h >> 8;
-  return h & EFAB_DLFILT_ENTRY_MASK;
+  return h & size_mask;
 
 }
 
@@ -425,6 +432,7 @@ dlfilter_lookup(efx_dlfilter_cb_t* fcb, ci_addr_t laddr, ci_uint16 lport,
                 ci_addr_t raddr, ci_uint16 rport, ci_uint8 protocol,
                 int* thr_id)
 {
+  efx_dlfilt_table_t* table;
   unsigned hash1, hash2, first;
 #ifndef NDEBUG
   int hops = 0;
@@ -434,7 +442,12 @@ dlfilter_lookup(efx_dlfilter_cb_t* fcb, ci_addr_t laddr, ci_uint16 lport,
   ci_assert( protocol == IPPROTO_UDP || protocol == IPPROTO_TCP );
   ci_assert(thr_id);
 
-  hash1 = first = dlfilter_hash1(laddr, lport, raddr, rport, protocol);
+  table = dlfilt_table_untag_if_used(fcb);
+  if( table == NULL )
+    return -ENOENT;
+
+  hash1 = first = dlfilter_hash1(table->size_mask, laddr, lport,
+                                 raddr, rport, protocol);
   hash2 = dlfilter_hash2(laddr, lport, raddr, rport, protocol);
 
   VERB(ci_log(LPF " dlfilter_lookup %s R:" IPX_PORT_FMT " L:" IPX_PORT_FMT
@@ -444,17 +457,17 @@ dlfilter_lookup(efx_dlfilter_cb_t* fcb, ci_addr_t laddr, ci_uint16 lport,
 	      hash1, hash2));
 
   while( 1 ) {
-    int id = fcb->table[hash1].state;
+    int id = table->arr[hash1].state;
     if( CI_LIKELY(id >= 0) ) {
-      if( !dlfilter_match( fcb, &fcb->table[hash1],
+      if( !dlfilter_match( fcb, &table->arr[hash1],
 			   laddr, lport, raddr, rport, protocol )){
-	*thr_id = fcb->table[hash1].thr_id;
+	*thr_id = table->arr[hash1].thr_id;
       	return hash1;
       }
     }
     if( id == EFAB_DLFILT_EMPTY )
       break;
-    hash1 = (hash1 + hash2) & EFAB_DLFILT_ENTRY_MASK;
+    hash1 = (hash1 + hash2) & table->size_mask;
 #ifndef NDEBUG
     ++hops;
     if( hash1 == first ) {
@@ -496,6 +509,8 @@ dlfilter_insert(efx_dlfilter_cb_t* fcb, ci_addr_t laddr, ci_uint16 lport,
                 ci_addr_t raddr, ci_uint16 rport, ci_uint8 protocol,
                 int thr_id, unsigned* handle_out)
 {
+  efx_dlfilt_table_t* table_old;
+  efx_dlfilt_table_t* table;
   unsigned first, hash1, hash2, h1, h2;
 #ifndef NDEBUG
   unsigned located;
@@ -504,19 +519,30 @@ dlfilter_insert(efx_dlfilter_cb_t* fcb, ci_addr_t laddr, ci_uint16 lport,
   ci_assert(protocol == IPPROTO_TCP || protocol == IPPROTO_UDP);
   ci_assert_nequal(thr_id, CI_ID_POOL_ID_NONE);
 
-  h1= hash1= first= dlfilter_hash1(laddr, lport, raddr, rport, protocol);
+  table = CI_READ_ONCE(fcb->tagged_table);
+  if(unlikely( DLFILT_TAGGED_TABLE_TAG_GET(table) )) {
+    /* don't unnecessarily pollute the cacheline with lock cmpxchg */
+    table_old = table;
+    do {
+      /* untagged = used / immutable */
+      table = DLFILT_TAGGED_TABLE_TAG_UNSET(table_old);
+    } while ( !try_cmpxchg_acquire(&fcb->tagged_table, &table_old, table) );
+  }
+
+  h1= hash1= first= dlfilter_hash1(table->size_mask, laddr, lport,
+                                   raddr, rport, protocol);
   h2= hash2= dlfilter_hash2(laddr, lport, raddr, rport, protocol);
 
   /* First find a free slot (and check for duplicates). */
   while( 1 ) {
-    if( !EFAB_DLFILT_ENTRY_IN_USE(&fcb->table[hash1]) ) {
+    if( !EFAB_DLFILT_ENTRY_IN_USE(&table->arr[hash1]) ) {
 #ifndef NDEBUG
       located = hash1;
 #endif
       break;
     }
 
-    if(!dlfilter_match( fcb, &fcb->table[hash1], laddr, lport, 
+    if(!dlfilter_match( fcb, &table->arr[hash1], laddr, lport, 
 			raddr, rport, protocol)) {
       OO_DEBUG_DLF( ci_log(LPF " DUP %s R:" IPX_PORT_FMT " L:" IPX_PORT_FMT,
 		       protocol != IPPROTO_UDP ? "TCP" : "UDP",
@@ -524,7 +550,7 @@ dlfilter_insert(efx_dlfilter_cb_t* fcb, ci_addr_t laddr, ci_uint16 lport,
 		       IPX_ARG(AF_IP(laddr)), (unsigned) CI_BSWAP_BE16(lport)));
       return -ESRCH;
     }
-    hash1 = (hash1 + hash2) & EFAB_DLFILT_ENTRY_MASK;
+    hash1 = (hash1 + hash2) & table->size_mask;
     if( hash1 == first ) {
       ci_log(LPF " INSERT LOOP %sP R:" IPX_PORT_FMT " L:" IPX_PORT_FMT,
 	     protocol != IPPROTO_UDP ? "TC" : "UD",
@@ -540,9 +566,9 @@ dlfilter_insert(efx_dlfilter_cb_t* fcb, ci_addr_t laddr, ci_uint16 lport,
   /* Not a duplicate & space available - so we can add it, up the
    * route counts along the way (may be nothing to do here) */
   hash1 = h1;  hash2 = h2;
-  while ( EFAB_DLFILT_ENTRY_IN_USE(&fcb->table[hash1]) ) {
-    fcb->table[hash1].state++;
-    hash1 = (hash1 + hash2) &  EFAB_DLFILT_ENTRY_MASK;
+  while ( EFAB_DLFILT_ENTRY_IN_USE(&table->arr[hash1]) ) {
+    table->arr[hash1].state++;
+    hash1 = (hash1 + hash2) &  table->size_mask;
   }
 
   /* insert the new entry. */
@@ -557,15 +583,15 @@ dlfilter_insert(efx_dlfilter_cb_t* fcb, ci_addr_t laddr, ci_uint16 lport,
       - needs to be an increment because if a tombstone it could
       already have a non-zero reference count */
   ci_assert( located == hash1 );
-  ci_assert( !EFAB_DLFILT_ENTRY_IN_USE(&fcb->table[hash1]) );
-  fcb->table[hash1].state = EFAB_DLFILT_INUSE + 1
-            + EFAB_DLFILT_ENTRY_ROUTE(&fcb->table[hash1]);
-  fcb->table[hash1].raddr = raddr;
-  fcb->table[hash1].rport_be16 = rport;
-  fcb->table[hash1].laddr = laddr;
-  fcb->table[hash1].lport_be16 = lport;
-  fcb->table[hash1].ip_protocol = protocol;
-  fcb->table[hash1].thr_id = thr_id;
+  ci_assert( !EFAB_DLFILT_ENTRY_IN_USE(&table->arr[hash1]) );
+  table->arr[hash1].state = EFAB_DLFILT_INUSE + 1
+            + EFAB_DLFILT_ENTRY_ROUTE(&table->arr[hash1]);
+  table->arr[hash1].raddr = raddr;
+  table->arr[hash1].rport_be16 = rport;
+  table->arr[hash1].laddr = laddr;
+  table->arr[hash1].lport_be16 = lport;
+  table->arr[hash1].ip_protocol = protocol;
+  table->arr[hash1].thr_id = thr_id;
   fcb->used_slots++;
   *handle_out = hash1;
 
@@ -575,16 +601,22 @@ dlfilter_insert(efx_dlfilter_cb_t* fcb, ci_addr_t laddr, ci_uint16 lport,
 
 void efx_dlfilter_remove(efx_dlfilter_cb_t* fcb, unsigned handle)
 {
+  efx_dlfilt_table_t* table;
   efx_dlfilt_entry_t *ent;
   unsigned hash1, hash2, first;
 
   ci_assert(handle != EFX_DLFILTER_HANDLE_BAD);
   ci_assert(fcb);
 
-  ent = &fcb->table[handle];
+  table = dlfilt_table_untag_if_used(fcb);
+  if( table == NULL )
+    return;
+
+  ent = &table->arr[handle];
   ci_assert( EFAB_DLFILT_ENTRY_IN_USE(ent) );
 
-  hash1 = first = dlfilter_hash1(ent->laddr, ent->lport_be16,
+  hash1 = first = dlfilter_hash1(table->size_mask,
+                                 ent->laddr, ent->lport_be16,
                                  ent->raddr, ent->rport_be16,
                                  ent->ip_protocol );
   hash2 = dlfilter_hash2(ent->laddr, ent->lport_be16,
@@ -592,7 +624,7 @@ void efx_dlfilter_remove(efx_dlfilter_cb_t* fcb, unsigned handle)
                          ent->ip_protocol );
   while( 1 ) {
     
-    ent = &fcb->table[hash1];
+    ent = &table->arr[hash1];
     /* st gets the state, must not be EMPTY */
     ci_assert( !EFAB_DLFILT_ENTRY_EMPTY(ent) );
     ci_assert( EFAB_DLFILT_ENTRY_ROUTE(ent) );
@@ -622,7 +654,7 @@ void efx_dlfilter_remove(efx_dlfilter_cb_t* fcb, unsigned handle)
       ent->state = EFAB_DLFILT_EMPTY;
       fcb->used_slots--;
     }
-    hash1 = (hash1 + hash2) & EFAB_DLFILT_ENTRY_MASK;
+    hash1 = (hash1 + hash2) & table->size_mask;
     /* If we do a full check of the table then we're in trouble 
      * as it means that it's probably very full and our entry's 
      * definitely escaped! */
@@ -663,46 +695,72 @@ void efx_dlfilter_add(efx_dlfilter_cb_t* fcb, unsigned protocol,
 }
 
 
-static void
-dlfilter_init(efx_dlfilter_cb_t* fcb, void* ctx,
-              efx_dlfilter_is_onloaded_t is_onloaded)
+int efx_dlfilter_resize_table(efx_dlfilter_cb_t* fcb, ci_uint32 new_size)
 {
-  int ctr;
+  efx_dlfilt_table_t* table_old;
+  efx_dlfilt_table_t* table;
+  ci_uint32 ctr;
+
+  if( new_size < 2 || new_size > EFAB_DLFILT_ENTRY_COUNT_MAX )
+    return -ERANGE;
+  if( !CI_IS_POW2( new_size ))
+    return -EINVAL;
+
+  table_old = CI_READ_ONCE(fcb->tagged_table);
+  if( table_old != NULL && !DLFILT_TAGGED_TABLE_TAG_GET(table_old) )
+    return -EBUSY;  /* untagged = used / immutable */
+
+  table = ci_vmalloc(struct_size(table, arr, new_size));
+  if( table == NULL )
+    return -ENOMEM;
+  /* It is a BUG if vmalloc returns unaligned address */
+  BUG_ON(DLFILT_TAGGED_TABLE_TAG_GET(table));
+
+  table->size_mask = new_size - 1;
+  for( ctr = 0; ctr < new_size; ctr++ )
+    table->arr[ctr].state = EFAB_DLFILT_EMPTY;
+
+  /* tagged = unused / mutable */
+  table = DLFILT_TAGGED_TABLE_TAG_SET(table);
+
+  while( !try_cmpxchg_release(&fcb->tagged_table, &table_old, table) ) {
+    if( table_old != NULL && !DLFILT_TAGGED_TABLE_TAG_GET(table_old) ) {
+       ci_vfree(DLFILT_TAGGED_TABLE_TAG_UNSET(table));
+       return -EBUSY;
+    }
+  }
+
+  CI_WRITE_ONCE(fcb->cached_table_size, new_size);
+  ci_vfree(DLFILT_TAGGED_TABLE_TAG_UNSET(table_old));
+  return 0;
+}
+
+ci_uint32 efx_dlfilt_entry_count = EFAB_DLFILT_ENTRY_COUNT_DEFAULT;
+
+/* Construct a driverlink filter object.
+ * Return     0 on success, or a negative error code
+ */
+int
+efx_dlfilter_ctor(efx_dlfilter_cb_t* fcb, void* ctx,
+                  efx_dlfilter_is_onloaded_t is_onloaded)
+{
+  int rc;
 
   ci_assert(fcb);
 
   memset(fcb, 0, sizeof(*fcb));
 
   /* set up the main control block */
-#ifndef NDEBUG
-  if( !CI_IS_POW2( EFAB_DLFILT_ENTRY_COUNT )) {
-    ci_log( LPF "init: EFAB_DLFILT_ENTRY_COUNT (%u) must be pow 2",
-	    EFAB_DLFILT_ENTRY_COUNT );
-    ci_assert(0);
-  }
-#endif
-
-  for( ctr = 0; ctr < EFAB_DLFILT_ENTRY_COUNT; ctr++ )
-    fcb->table[ctr].state = EFAB_DLFILT_EMPTY;
+  rc = efx_dlfilter_resize_table(fcb, efx_dlfilt_entry_count);
+  if( rc < 0 )
+    return rc;
 
   /* no filters yet */
   fcb->used_slots = 0;
 
   fcb->ctx = ctx;
   fcb->is_onloaded = is_onloaded;
-}
-
-
-/* Construct a driverlink filter object.
- * Return     ptr to object or NULL if failed
- */
-struct efx_dlfilt_cb_s*
-efx_dlfilter_ctor(void* ctx, efx_dlfilter_is_onloaded_t is_onloaded)
-{
-  efx_dlfilter_cb_t* cb = ci_vmalloc(sizeof(efx_dlfilter_cb_t));
-  if( cb != NULL )
-    dlfilter_init(cb, ctx, is_onloaded);
-  return cb;
+  return 0;
 }
 
 
@@ -719,15 +777,8 @@ void efx_dlfilter_dtor( efx_dlfilter_cb_t* cb )
       ci_log("ERROR ERROR driverlink filters at unload: %d", no_used);
   }
 #endif
-  ci_vfree( cb );
+  ci_vfree(DLFILT_TAGGED_TABLE_TAG_UNSET(cb->tagged_table));
 }
-
-
-#ifndef NDEBUG
-/* compile time assert: EFAB_DLFILT_ENTRY_COUNT too small for h/w! */
-CI_BUILD_ASSERT(EFAB_DLFILT_ENTRY_COUNT >= EFHW_IP_FILTER_NUM);
-#endif
-
 
 
 
@@ -825,16 +876,22 @@ static void dlfilter_dump_entry( efx_dlfilter_cb_t* fcb, const char * pfx,
 
 void efx_dlfilter_dump(efx_dlfilter_cb_t* fcb)
 {
-  int ctr;
+  efx_dlfilt_table_t* table;
+  ci_uint32 ctr;
   ci_assert(fcb);
 
   ci_log("Master CB");
   ci_log("Used slots:%d", fcb->used_slots);
   ci_log("Filter table");
   ci_log( __DLF_ENT_DUMP_HDR);
-  for( ctr = 0; ctr < EFAB_DLFILT_ENTRY_COUNT; ctr++ ) {
-    if( fcb->table[ctr].state != EFAB_DLFILT_EMPTY )
-      dlfilter_dump_entry(fcb, 0, ctr, &fcb->table[ctr]);
+
+  table = dlfilt_table_untag_if_used(fcb);
+  if( table == NULL )
+    return;
+
+  for( ctr = 0; ctr <= table->size_mask; ctr++ ) {
+    if( table->arr[ctr].state != EFAB_DLFILT_EMPTY )
+      dlfilter_dump_entry(fcb, 0, ctr, &table->arr[ctr]);
   }
 }
 #endif

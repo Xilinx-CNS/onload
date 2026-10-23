@@ -187,8 +187,6 @@ typedef union {
 /* --- DMA --- */
 #define EFHW_DMA_ADDRMASK		(0xffffffffffffffffULL)
 
-#define EFHW_IP_FILTER_NUM		8192
-
 #define EFHW_NIC_PAGE_SIZE  EFHW_4K
 #define EFHW_NIC_PAGE_SHIFT 12
 
