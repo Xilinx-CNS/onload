@@ -23,6 +23,7 @@ UNIT_TEST_WRAPPER ?=
 ALL_UNIT_TESTS := \
   header/ci/internal/ip_timestamp \
   header/transport/unix/ul_epoll \
+  header/onload/oo_p_dllist \
   lib/transport/ip/netif_init \
   lib/transport/ip/tcp_rx \
   lib/ciul/checksum \
