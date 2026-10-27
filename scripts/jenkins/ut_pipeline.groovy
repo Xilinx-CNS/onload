@@ -70,7 +70,7 @@ Map generateBuildTasks(String build_profile=null) {
                 scmmanager.cloneGit([branch: 'dev'], 'https://github.com/AMD-NTSG-X/x3-net-linux.git')
               }
               dir("aux-bus") {
-                scmmanager.cloneGit([branch: 'master'], 'ssh://git@github.com/Xilinx-CNS/cns-auxiliary-bus.git')
+                scmmanager.cloneGit([branch: 'master'], 'https://github.com/AMD-NTSG-X/cns-auxiliary-bus.git')
               }
             }
             unstash('onload-full')
