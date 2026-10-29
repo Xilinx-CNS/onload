@@ -463,7 +463,7 @@ while [ $# -gt 0 ]; do
 	doit=:; verbose=true; test=true
 	;;
     --keep-wrapper)
-	keep-wrapper=true
+	keepwrapper=true
 	;;
     --no-app-handler)
 	onload_args="$onload_args $1"
