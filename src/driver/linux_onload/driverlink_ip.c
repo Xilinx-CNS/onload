@@ -100,7 +100,7 @@ static unsigned int oo_netfilter_ip(void *priv, struct sk_buff* skb,
   if( oo_nf_dev_match(state->in) &&
       oo_nf_skb_get_payload(skb, &data, &len) &&
       efx_dlfilter_handler(dev_net(state->in), state->in->ifindex,
-                           efab_tcp_driver.dlfilter,
+                           &efab_tcp_driver.dlfilter,
                            (const ci_ether_hdr*) skb_mac_header(skb),
                            data, len) ) {
     kfree_skb(skb);

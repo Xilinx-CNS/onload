@@ -25,17 +25,36 @@ struct efx_dlfilt_cb_s;
 typedef int (*efx_dlfilter_is_onloaded_t)(void* ctx, struct net* netns,
                                           ci_ifid_t ifindex);
 
+extern ci_uint32 efx_dlfilt_entry_count;
+
+/*! The master filter table control block. */
+typedef struct efx_dlfilt_cb_s {
+  int used_slots;
+  void* ctx;
+  efx_dlfilter_is_onloaded_t is_onloaded;
+
+  /* Tagged pointer to efx_dlfilt_table_t,
+   * LSB indicating whether table is unused (may be resized) */
+  void* tagged_table;
+  ci_uint32 cached_table_size;
+} efx_dlfilter_cb_t;
+
 /*! Construct a driverlink filter object - stored in the per-nic struct.
  * \param ctx - context passed to callbacks
  * \param is_onloaded - callback used to identify SFC interfaces
  *                      must be safe in soft IRQ context
- * \Return     ptr to object or NULL if failed
+ * \Return     0 on success, or a negative error code
  */
-extern struct efx_dlfilt_cb_s*
-efx_dlfilter_ctor(void* ctx, efx_dlfilter_is_onloaded_t is_onloaded);
+extern int
+efx_dlfilter_ctor(struct efx_dlfilt_cb_s*, void* ctx,
+                  efx_dlfilter_is_onloaded_t is_onloaded);
 
 /*! Clean-up object created through efx_dlfilter_ctor() */
 extern void efx_dlfilter_dtor(struct efx_dlfilt_cb_s*);
+
+/*! Resize the filter table */
+extern int
+efx_dlfilter_resize_table(struct efx_dlfilt_cb_s*, ci_uint32 new_size);
 
 /*! Data-passing entry point. */
 extern int

@@ -233,6 +233,47 @@ MODULE_PARM_DESC(oo_accelerate_veth,
                  "accelerated, its peer must be in the default network "
                  "namespace.");
 
+#if CI_CFG_HANDLE_ICMP
+static int
+param_dlfilter_entry_count_set(const char* buffer,
+                               const struct kernel_param* kp)
+{
+  ci_uint32 new_size;
+  int err;
+
+  err = kstrtouint(buffer, 0, &new_size);
+  if( err )
+    return err;
+
+  if( efab_tcp_driver.dlfilter.tagged_table ) {
+    /* Table already initialized by module init, resize it */
+    err = efx_dlfilter_resize_table(&efab_tcp_driver.dlfilter, new_size);
+    if( err )
+      return err;
+
+    efx_dlfilt_entry_count = new_size;
+  } else {
+    /* Called in module arg parse before module init,
+     * just save the value here, and let module init handle errors */
+    efx_dlfilt_entry_count = new_size;
+  }
+
+  return 0;
+}
+
+static const struct kernel_param_ops efx_dlfilt_entry_count_ops = {
+  .set = param_dlfilter_entry_count_set,
+  .get = param_get_uint,
+};
+module_param_cb(efx_dlfilt_entry_count, &efx_dlfilt_entry_count_ops,
+                &efx_dlfilt_entry_count, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(efx_dlfilt_entry_count,
+                 "Controls the size of the table steering ICMP packets "
+                 "towards the correct onload stack. Each tuple consumes "
+                 "one entry on this table shared across all Onload "
+                 "stacks. Must be a power of two. Read-only once the "
+                 "first filter is inserted.");
+#endif
 
 /**************************************************************************** 
  * 

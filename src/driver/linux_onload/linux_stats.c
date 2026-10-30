@@ -347,7 +347,7 @@ efab_dlfilters_read_proc(struct seq_file *seq, void *s)
 {
   int no_empty, no_tomb, no_used;
 
-  efx_dlfilter_count_stats(efab_tcp_driver.dlfilter,
+  efx_dlfilter_count_stats(&efab_tcp_driver.dlfilter,
                            &no_empty, &no_tomb, &no_used);
   seq_printf(seq, "dlfilters: empty=%d, tomb=%d, used=%d\n",
              no_empty, no_tomb, no_used);

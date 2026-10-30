@@ -17,8 +17,8 @@
 #ifndef __CI_DRIVER_EFAB_DRIVERLINK__FILTER__PRIVATE_H__
 #define __CI_DRIVER_EFAB_DRIVERLINK__FILTER__PRIVATE_H__
 
-/* This file is a part of driverlink_filter.h; it is included only from
- * driverlink_filter.h. */
+/* This file is the private part of driverlink_filter.h; it is included
+ * only from driverlink_filter.c. */
 #ifndef __ci_driver__
 #error "This is a driver module."
 #endif
@@ -33,32 +33,40 @@ typedef struct efx_dlfilt_entry_s {
   ci_addr_t laddr;
   ci_uint16 rport_be16;
   ci_uint16 lport_be16;
-  ci_uint16 state;
-#define EFAB_DLFILT_INUSE      0x0000
-#define EFAB_DLFILT_TOMBSTONE  0x4000
-                            /* 0x8000 invalid */
-#define EFAB_DLFILT_EMPTY      0xC000
-#define EFAB_DLFILT_STATE_MASK 0xC000
-#define EFAB_DLFILT_STATE_SHIFT 14
+  ci_uint32 state;
+#define EFAB_DLFILT_INUSE      0x00000000U
+#define EFAB_DLFILT_TOMBSTONE  0x40000000U
+                            /* 0x80000000U invalid */
+#define EFAB_DLFILT_EMPTY      0xC0000000U
+#define EFAB_DLFILT_STATE_MASK 0xC0000000U
+#define EFAB_DLFILT_STATE_SHIFT 30
   ci_uint8  ip_protocol;
 } efx_dlfilt_entry_t;
 
 
-/* ?? FIXME: This really should not be defined here. */
-#define EFHW_IP_FILTER_NUM		8192
-
-/* MUST BE a power of 2, <= 16384  & accomodate the number 
+/* MUST BE a power of 2, <= 0x40000000  & accomodate the number 
  * of NIC hardware filters */
-#define EFAB_DLFILT_ENTRY_COUNT (2*(EFHW_IP_FILTER_NUM))
+#define EFAB_DLFILT_ENTRY_COUNT_MAX 0x40000000U
+#define EFAB_DLFILT_ENTRY_COUNT_DEFAULT 0x4000U
 
+typedef struct efx_dlfilt_table_s {
+  ci_uint32 size_mask;
+  CI_DECLARE_FLEX_ARRAY(efx_dlfilt_entry_t, arr);
+} efx_dlfilt_table_t;
 
-/*! The master filter table control block. One per NIC.  */
-typedef struct efx_dlfilt_cb_s {
-  int used_slots;
-  efx_dlfilt_entry_t table[EFAB_DLFILT_ENTRY_COUNT];
-  void* ctx;
-  efx_dlfilter_is_onloaded_t is_onloaded;
-} efx_dlfilter_cb_t;
+#define DLFILT_TAGGED_TABLE_TAG_GET(table) ((uintptr_t)(table) & 1UL)
+#define DLFILT_TAGGED_TABLE_TAG_SET(table) ((void *)((uintptr_t)(table) | 1UL))
+#define DLFILT_TAGGED_TABLE_TAG_UNSET(table) ((void *)((uintptr_t)(table) & ~1UL))
+
+static inline efx_dlfilt_table_t*
+dlfilt_table_untag_if_used(efx_dlfilter_cb_t* fcb)
+{
+  efx_dlfilt_table_t* table = CI_READ_ONCE(fcb->tagged_table);
+
+  if(unlikely( DLFILT_TAGGED_TABLE_TAG_GET(table) ))
+    return NULL;
+  return table;
+}
 #endif
 
 
