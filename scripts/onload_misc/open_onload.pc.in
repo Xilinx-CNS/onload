@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Copyright 2025 Advanced Micro Devices, Inc.
+#
+# pkg-config template for the Onload extensions library.  The version token
+# below is substituted by scripts/onload_install when the development headers
+# are installed (see install_pkgconfig).
+prefix=/usr
+exec_prefix=${prefix}
+libdir=${prefix}/lib64
+includedir=${prefix}/include/onload
+install_suffix=
+
+Name: OpenOnload
+Description: Onload is a high performance user-level network stack, which accelerates TCP and UDP network I/O for applications using the BSD sockets on Linux.
+URL: https://github.com/Xilinx-CNS/onload
+Version: @VERSION@
+Cflags: -I${includedir}
+Libs: -L${libdir} -lonload_ext${install_suffix}
