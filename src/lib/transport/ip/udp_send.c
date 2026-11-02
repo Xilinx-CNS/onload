@@ -1524,6 +1524,14 @@ void ci_udp_sendmsg_onload(ci_netif* ni, ci_udp_state* us,
         sinf->ipcache.dport_be16;
 
     if( si_trylock_and_inc(ni, sinf, us->stats.n_tx_lock_snd) ) {
+      /* EF_LOCK_DEFER_HANDOVER_CONTENDED: deferred work can be handed to
+       * the lock holder and left here.  Drain it before sending, so that
+       * our datagram cannot overtake data queued earlier. */
+      if( NI_OPTS(ni).lock_defer_handover_contended &&
+          OO_PP_NOT_NULL(us->tx_async_q) ) {
+        CITP_STATS_NETIF_INC(ni, udp_send_async_q_defer_drain);
+        ci_udp_sendmsg_send_async_q(ni, us);
+      }
       ci_udp_sendmsg_send(ni, us, pf.pkt, flags,
                           ci_netif_may_poll(ni), sinf);
       ci_netif_pkt_release(ni, pf.pkt);

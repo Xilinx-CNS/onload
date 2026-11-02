@@ -834,7 +834,9 @@ CI_CFG_OPT("EF_LOCK_DEFER_HANDOVER_CONTENDED", lock_defer_handover_contended,
 "option stops the current thread from waiting for the stack lock in order to "
 "do that work itself; the work is instead left to the thread that holds the "
 "lock.  This removes a stack-lock wait from the send()/recv() tail, but the "
-"deferred work may be delayed.",
+"deferred work may be delayed.  It relies on the send-path and recv-path "
+"drains to flush work that would otherwise be left on the TCP send "
+"prequeue or the UDP async transmit queue.",
            , , 0, 0, 1, value)
 
 CI_CFG_OPT("EF_UDP_SEND_UNLOCK_THRESH", udp_send_unlock_thresh, ci_uint16,

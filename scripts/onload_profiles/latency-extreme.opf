@@ -1,45 +1,30 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # X-SPDX-Copyright-Text: (c) Copyright 2010-2019 Xilinx, Inc.
 
-# OpenOnload extreme low-latency profile for hard-latency applications such as
-# a low-latency trading system.  This is a more aggressive sibling of
-# "latency-best": it builds on the standard "latency" profile and favours tail
-# latency on the send/recv syscall path at the expense of throughput and
-# RX/ACK batching.
+# Extreme low-latency profile for hard-latency applications, e.g. trading.
+# A more aggressive sibling of "latency-best": favours send/recv tail latency
+# at the expense of throughput and RX/ACK batching.
 #
-# NOTE: this profile relies on EF_LOCK_DEFER_HANDOVER_CONTENDED and the
-# accompanying send/recv prequeue drains, which are local patches on
-# top of stock Onload.  It also sets EF_TCP_SNDBUF, which overrides any
-# per-socket SO_SNDBUF the application sets.  Do not use it on unpatched
-# Onload and take care with the send buffer semantics.
+# NOTE: requires the local drain patches and the
+# EF_LOCK_DEFER_HANDOVER_CONTENDED option.  Do not use on stock Onload.
 
-# Enable spinning (and disable FASTSTART) as per the standard latency profile.
+# Spinning on, FASTSTART off, as per the standard latency profile.
 onload_import latency
 
-# Large per-socket send buffer.  EF_TCP_SNDBUF overrides any per-socket
-# SO_SNDBUF set by the application.  Note Onload doubles the requested value
-# (mimicking Linux), so 5 MB here yields ~10 MB of internal send buffer,
-# i.e. a large sendq + prequeue credit.  A large credit lets the sender keep
-# going while the stack lock is held by another thread without blocking on a
-# full send queue.
+# Large send buffer: Onload doubles the value, so ~10 MB here.  The credit
+# lets a sender keep going while another thread holds the stack lock.
+# Note this overrides any per-socket SO_SNDBUF set by the application.
 onload_set EF_TCP_SNDBUF 5242880
 
-# Skip the trailing poll at the end of the TCP send advance path.  This removes
-# the send-path tail latency of polling the stack after a send, at the cost of
-# deferring RX/ACK processing to a later stack access.
+# Skip the poll at the end of the TCP send path.  Removes the send tail
+# latency, at the cost of handling RX/ACK later.
 onload_set EF_TCP_SEND_ADVANCE_POLL 0
 
-# When another thread has already queued this socket for deferred work, do not
-# block on the stack lock to do that work: hand it over to the thread that holds
-# the lock instead (EF_LOCK_DEFER_HANDOVER_CONTENDED).  This removes the
-# stack-lock wait from the send()/recv() tail.
-# Requires the send-path / recv-path prequeue drains so that deferred data
-# cannot be overtaken.
+# If another thread already deferred work on this socket, hand our work over
+# instead of blocking on the stack lock.  Needs the prequeue / async-queue
+# drains so that deferred data cannot be overtaken.  Applies to TCP and UDP.
 onload_set EF_LOCK_DEFER_HANDOVER_CONTENDED 1
 
-# Raise the deferred-work limit.  Once this many sockets are queued for
-# deferred work, ci_netif_lock_or_defer_work() stops deferring: it blocks on
-# the stack lock and does the work itself, which reintroduces the send()/recv()
-# tail latency this profile is trying to remove.  A high limit keeps the
-# non-blocking path available.
-onload_set EF_DEFER_WORK_LIMIT 1000
+# Effectively unlimited, so the blocking branch of
+# ci_netif_lock_or_defer_work() is never taken.
+onload_set EF_DEFER_WORK_LIMIT 65535

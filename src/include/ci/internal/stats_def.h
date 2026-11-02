@@ -581,6 +581,10 @@ OO_STAT("Number of send-side attempts to drain a TCP send prequeue.",
         ci_uint32, send_prequeue_defer_drain, count)
 OO_STAT("Number of receive-side attempts to drain a TCP send prequeue.",
         ci_uint32, recv_prequeue_defer_drain, count)
+OO_STAT("Number of send-side attempts to drain a UDP async transmit "
+        "queue.", ci_uint32, udp_send_async_q_defer_drain, count)
+OO_STAT("Number of receive-side attempts to drain a UDP async transmit "
+        "queue.", ci_uint32, udp_recv_async_q_defer_drain, count)
 OO_STAT("Indicates that you're sending faster than we can push packets on to "
         "the wire; and the TX ring (default size 512, controlled via "
         "EF_TXQ_SIZE) has filled.  So we've has to hold packets in a queue.  "
