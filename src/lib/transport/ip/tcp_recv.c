@@ -632,7 +632,7 @@ static inline int ci_tcp_recvmsg_impl(const ci_tcp_recvmsg_args* a,
    * available, and only when there is actually something to drain so that
    * the common (empty prequeue) case costs a single load.
    */
-  if( NI_OPTS(ni).lock_defer_handover_contended &&
+  if( NI_OPTS(ni).tcp_lock_defer_handover_contended &&
       OO_PP_NOT_NULL(ts->send_prequeue) &&
       ci_netif_trylock(ni) ) {
     CITP_STATS_NETIF_INC(ni, tcp_recv_prequeue_defer_drain);
