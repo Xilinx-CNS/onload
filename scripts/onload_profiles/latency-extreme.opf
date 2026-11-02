@@ -1,11 +1,14 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # X-SPDX-Copyright-Text: (c) Copyright 2010-2019 Xilinx, Inc.
 
-# Extreme low-latency profile for hard-latency applications, e.g. trading.
-# A more aggressive sibling of "latency-best": favours send/recv tail latency
-# at the expense of throughput and RX/ACK batching.
+# Experimental profile for a dedicated single-socket TCP architecture:
+# one spinning reader and one dedicated writer, as used in some trading systems.
+# It favours outbound send latency over receive responsiveness.
 #
-# NOTE: requires the local prequeue-drain patches and the
+# Workload-specific: receive data and ACKs may be processed later, and deferred
+# work may stall if the lock-holding thread is descheduled.  Do not use with
+# multiple sockets or concurrent writers without validating the trade-off.
+# Requires the local prequeue-drain patches and the
 # EF_TCP_LOCK_DEFER_HANDOVER_CONTENDED option.  Do not use on stock Onload.
 
 # Spinning on, FASTSTART off, as per the standard latency profile.
