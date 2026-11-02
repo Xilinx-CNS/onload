@@ -903,11 +903,7 @@ int ci_netif_lock_or_defer_work(ci_netif* ni, citp_waitable* w)
    */
   ci_assert(!(w->sb_aflags & CI_SB_AFLAG_ORPHAN));
 
-  int __skip_limit = NI_OPTS(ni).lock_defer_skip_limit;
-  int __skip_push = NI_OPTS(ni).lock_defer_skip_push;
-
-  if( ! __skip_limit &&
-      ni->state->defer_work_count >= NI_OPTS(ni).defer_work_limit ) {
+  if( ni->state->defer_work_count >= NI_OPTS(ni).defer_work_limit ) {
     int rc = ci_netif_lock(ni);
     if( rc == 0 ) {
       CITP_STATS_NETIF_INC(ni, defer_work_limited);
@@ -921,7 +917,7 @@ int ci_netif_lock_or_defer_work(ci_netif* ni, citp_waitable* w)
   }
 
   if( ci_bit_test_and_set(&w->sb_aflags, CI_SB_AFLAG_DEFERRED_BIT) ) {
-    if( ! __skip_push ) {
+    if( ! NI_OPTS(ni).lock_defer_handover_contended ) {
       /* Already set.  Another thread is trying to defer some work for this
        * socket.  However, we must do **our** work in time, so let's push it
        * forward.
@@ -945,20 +941,11 @@ int ci_netif_lock_or_defer_work(ci_netif* ni, citp_waitable* w)
       /* We are interrupted by a signal.  We are in kernel.  Let's return and
        * trust the other contending thread to do the work or to defer this
        * work.
-       *
-       * FIXME
-       * It is possible that this work will be done too late, see bug 78628
-       * comment 9 for details.  Let's live with it for now.
        */
       CITP_STATS_NETIF_INC(ni, defer_work_contended_unsafe);
       ++ni->state->defer_work_count;
       return 0;
     }
-    /* EF_LOCK_DEFER_SKIP_PUSH=1: branch 2 disabled.  Do not block on the
-     * lock to push our own work forward; hand it over to the lock holder
-     * instead (same as the interrupted-by-signal fallback above).  The
-     * bit stays set, so the work runs when the deferred list is purged.
-     * Queued data may be delayed; measurement use only. */
     CITP_STATS_NETIF_INC(ni, defer_work_accumulated);
     ++ni->state->defer_work_count;
     return 0;
@@ -983,6 +970,8 @@ int ci_netif_lock_or_defer_work(ci_netif* ni, citp_waitable* w)
     }
   }
 }
+
+
 static void ci_netif_perform_deferred_socket_work(ci_netif* ni,
                                                   unsigned sock_id)
 {

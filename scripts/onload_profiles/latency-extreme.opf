@@ -7,8 +7,8 @@
 # latency on the send/recv syscall path at the expense of throughput and
 # RX/ACK batching.
 #
-# NOTE: this profile relies on the EF_LOCK_DEFER_SKIP_PUSH / SKIP_LIMIT options
-# and the accompanying send/recv prequeue drains, which are local patches on
+# NOTE: this profile relies on EF_LOCK_DEFER_HANDOVER_CONTENDED and the
+# accompanying send/recv prequeue drains, which are local patches on
 # top of stock Onload.  It also sets EF_TCP_SNDBUF, which overrides any
 # per-socket SO_SNDBUF the application sets.  Do not use it on unpatched
 # Onload and take care with the send buffer semantics.
@@ -24,21 +24,22 @@ onload_import latency
 # full send queue.
 onload_set EF_TCP_SNDBUF 5242880
 
-# Skip the trailing poll in the poll_and_out (tx-advance) path.  This removes
+# Skip the trailing poll at the end of the TCP send advance path.  This removes
 # the send-path tail latency of polling the stack after a send, at the cost of
 # deferring RX/ACK processing to a later stack access.
-onload_set EF_TX_ADVANCE_NAGLE_POLL 0
+onload_set EF_TCP_SEND_ADVANCE_POLL 0
 
-# Disable branch 2 (push-forward) of ci_netif_lock_or_defer_work().  A thread
-# that finds its socket already queued for deferred work does not block on the
-# stack lock to push its own work forward; it hands the work to the lock holder
-# instead.  This removes the stack-lock wait from the send()/recv() tail.
+# When another thread has already queued this socket for deferred work, do not
+# block on the stack lock to do that work: hand it over to the thread that holds
+# the lock instead (EF_LOCK_DEFER_HANDOVER_CONTENDED).  This removes the
+# stack-lock wait from the send()/recv() tail.
 # Requires the send-path / recv-path prequeue drains so that deferred data
 # cannot be overtaken.
-onload_set EF_LOCK_DEFER_SKIP_PUSH 1
+onload_set EF_LOCK_DEFER_HANDOVER_CONTENDED 1
 
-# With such a large send buffer the per-window defer-work counter can exceed
-# the default limit (EF_DEFER_WORK_LIMIT=32) within a single lock hold, which
-# would re-introduce blocking via branch 1 of ci_netif_lock_or_defer_work().
-# Disable that abort path too so a sender never blocks on the stack lock.
-onload_set EF_LOCK_DEFER_SKIP_LIMIT 1
+# Raise the deferred-work limit.  Once this many sockets are queued for
+# deferred work, ci_netif_lock_or_defer_work() stops deferring: it blocks on
+# the stack lock and does the work itself, which reintroduces the send()/recv()
+# tail latency this profile is trying to remove.  A high limit keeps the
+# non-blocking path available.
+onload_set EF_DEFER_WORK_LIMIT 1000

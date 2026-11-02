@@ -820,27 +820,21 @@ CI_CFG_OPT("EF_SEND_POLL_MAX_EVS", send_poll_max_events, ci_uint16,
 "number of events handled.",
            , , 96, 1, 65535, count)
 
-CI_CFG_OPT("EF_TX_ADVANCE_NAGLE_POLL", tx_advance_nagle_poll, ci_uint32,
-"Poll for network events when TCP transmit is stopped (e.g. by Nagle) "
-"at the end of ci_tcp_tx_advance(). "
-"Set to 0 to skip the trailing poll in the poll_and_out path "
-"to reduce send-path tail latency at the cost of deferred RX/ACK processing.",
+CI_CFG_OPT("EF_TCP_SEND_ADVANCE_POLL ", tcp_send_advance_poll, ci_uint32,
+"Poll for network events at the end of the TCP transmit advance path "
+"(ci_tcp_tx_advance_nagle()), so that RX/ACK events are processed promptly "
+"after a send. "
+"Set to 0 to skip this trailing poll and reduce send-path tail latency, at "
+"the cost of deferring RX/ACK processing to a later stack access.",
            , , 1, 0, 1, value)
 
-CI_CFG_OPT("EF_LOCK_DEFER_SKIP_LIMIT", lock_defer_skip_limit, ci_uint32,
-"Disable the defer_work_limit abort path (branch 1) in "
-"ci_netif_lock_or_defer_work().  When set, a thread never blocks on the "
-"stack lock just because too much work has been deferred; it always queues "
-"its work for the lock holder instead.  Intended for latency ablation "
-"experiments.",
-           , , 0, 0, 1, value)
-
-CI_CFG_OPT("EF_LOCK_DEFER_SKIP_PUSH", lock_defer_skip_push, ci_uint32,
-"Disable the push-forward path (branch 2) in ci_netif_lock_or_defer_work().  "
-"When set, a thread that finds its socket already queued for deferred work "
-"(by another thread) does not block on the stack lock to push its own work "
-"forward; it hands the work over to the lock holder instead.  This can delay "
-"queued data and is intended for latency ablation experiments only.",
+CI_CFG_OPT("EF_LOCK_DEFER_HANDOVER_CONTENDED", lock_defer_handover_contended,
+           ci_uint32,
+"When another thread has already queued this socket for deferred work, this "
+"option stops the current thread from waiting for the stack lock in order to "
+"do that work itself; the work is instead left to the thread that holds the "
+"lock.  This removes a stack-lock wait from the send()/recv() tail, but the "
+"deferred work may be delayed.",
            , , 0, 0, 1, value)
 
 CI_CFG_OPT("EF_UDP_SEND_UNLOCK_THRESH", udp_send_unlock_thresh, ci_uint16,
