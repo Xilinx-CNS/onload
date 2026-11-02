@@ -621,21 +621,21 @@ static inline int ci_tcp_recvmsg_impl(const ci_tcp_recvmsg_args* a,
   a->msg->msg_controllen = 0;
 #endif
 
-  /* EF_TCP_LOCK_DEFER_HANDOVER_CONTENDED: when the handover path is
-   * enabled, a sender can leave packets on the send prequeue without an
-   * entry on the deferred socket list (the TAS/CAS window).  In that case
-   * the lock holder will not find the socket on the list at unlock and the
-   * data stays stranded until some other path drains it.  Drain it here so
-   * that a spinning receiver promptly flushes the sender's deferred data.
+  /* EF_LOCK_DEFER_HANDOVER_CONTENDED: when the handover path is enabled, a
+   * sender can leave packets on the send prequeue without an entry on the
+   * deferred socket list (the TAS/CAS window).  In that case the lock holder
+   * will not find the socket on the list at unlock and the data stays stranded
+   * until some other path drains it.  Drain it here so that a spinning
+   * receiver promptly flushes the sender's deferred data.
    *
    * This is best effort: only taken if the stack lock is immediately
    * available, and only when there is actually something to drain so that
    * the common (empty prequeue) case costs a single load.
    */
-  if( NI_OPTS(ni).tcp_lock_defer_handover_contended &&
+  if( NI_OPTS(ni).lock_defer_handover_contended &&
       OO_PP_NOT_NULL(ts->send_prequeue) &&
       ci_netif_trylock(ni) ) {
-    CITP_STATS_NETIF_INC(ni, recv_prequeue_defer_drain);
+    CITP_STATS_NETIF_INC(ni, tcp_recv_prequeue_defer_drain);
     ci_tcp_sendmsg_enqueue_prequeue_deferred(ni, ts);
     ci_netif_unlock(ni);
   }

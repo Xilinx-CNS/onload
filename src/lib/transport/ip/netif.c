@@ -904,9 +904,7 @@ int ci_netif_lock_or_defer_work(ci_netif* ni, citp_waitable* w)
   ci_assert(!(w->sb_aflags & CI_SB_AFLAG_ORPHAN));
 
   /* EF_TCP_LOCK_DEFER_HANDOVER_CONTENDED is TCP-only: the mitigation for
-   * stranded deferred work is the TCP prequeue drain, and UDP has no
-   * equivalent (a datagram left on [us->tx_async_q] can be overtaken by a
-   * later send on the same socket).  So UDP keeps the stock push-forward.
+   * deferred work is the TCP prequeue drain.
    */
   int __handover_contended =
       NI_OPTS(ni).tcp_lock_defer_handover_contended &&

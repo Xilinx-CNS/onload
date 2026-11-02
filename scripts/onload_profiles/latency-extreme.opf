@@ -8,8 +8,6 @@
 # Workload-specific: receive data and ACKs may be processed later, and deferred
 # work may stall if the lock-holding thread is descheduled.  Do not use with
 # multiple sockets or concurrent writers without validating the trade-off.
-# Requires the local prequeue-drain patches and the
-# EF_TCP_LOCK_DEFER_HANDOVER_CONTENDED option.  Do not use on stock Onload.
 
 # Spinning on, FASTSTART off, as per the standard latency profile.
 onload_import latency
