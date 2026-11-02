@@ -853,19 +853,6 @@ int ci_udp_recvmsg(ci_udp_iomsg_args *a, ci_msghdr* msg, int flags
   rinf.sock_locked = 0;
   rinf.flags = flags;
 
-  /* EF_LOCK_DEFER_HANDOVER_CONTENDED: work handed over to the lock holder
-   * can be left on [us->tx_async_q] until some other path drains it.
-   * Flush it here, so that a spinning receiver does not leave the
-   * sender's deferred data stranded.  Best effort: only if the stack lock
-   * is immediately available and there is something to drain. */
-  if( NI_OPTS(ni).lock_defer_handover_contended &&
-      OO_PP_NOT_NULL(us->tx_async_q) &&
-      ci_netif_trylock(ni) ) {
-    CITP_STATS_NETIF_INC(ni, udp_recv_async_q_defer_drain);
-    ci_udp_sendmsg_send_async_q(ni, us);
-    ci_netif_unlock(ni);
-  }
-
   rc = ci_udp_recvmsg_common(&rinf CI_KERNEL_ARG(addr_spc));
   if( rinf.sock_locked )
     ci_sock_unlock(ni, &us->s.b);

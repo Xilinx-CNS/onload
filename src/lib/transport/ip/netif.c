@@ -903,6 +903,15 @@ int ci_netif_lock_or_defer_work(ci_netif* ni, citp_waitable* w)
    */
   ci_assert(!(w->sb_aflags & CI_SB_AFLAG_ORPHAN));
 
+  /* EF_TCP_LOCK_DEFER_HANDOVER_CONTENDED is TCP-only: the mitigation for
+   * stranded deferred work is the TCP prequeue drain, and UDP has no
+   * equivalent (a datagram left on [us->tx_async_q] can be overtaken by a
+   * later send on the same socket).  So UDP keeps the stock push-forward.
+   */
+  int __handover_contended =
+      NI_OPTS(ni).tcp_lock_defer_handover_contended &&
+      ( w->state & CI_TCP_STATE_TCP );
+
   if( ni->state->defer_work_count >= NI_OPTS(ni).defer_work_limit ) {
     int rc = ci_netif_lock(ni);
     if( rc == 0 ) {
@@ -917,7 +926,7 @@ int ci_netif_lock_or_defer_work(ci_netif* ni, citp_waitable* w)
   }
 
   if( ci_bit_test_and_set(&w->sb_aflags, CI_SB_AFLAG_DEFERRED_BIT) ) {
-    if( ! NI_OPTS(ni).lock_defer_handover_contended ) {
+    if( ! __handover_contended ) {
       /* Already set.  Another thread is trying to defer some work for this
        * socket.  However, we must do **our** work in time, so let's push it
        * forward.
@@ -946,6 +955,11 @@ int ci_netif_lock_or_defer_work(ci_netif* ni, citp_waitable* w)
       ++ni->state->defer_work_count;
       return 0;
     }
+    /* EF_TCP_LOCK_DEFER_HANDOVER_CONTENDED=1: do not block on the lock to
+     * do our own work; hand it over to the lock holder instead (same as
+     * the interrupted-by-signal fallback above).  The bit stays set, so
+     * the work runs when the deferred list is purged.  Queued data may be
+     * delayed; measurement use only. */
     CITP_STATS_NETIF_INC(ni, defer_work_accumulated);
     ++ni->state->defer_work_count;
     return 0;

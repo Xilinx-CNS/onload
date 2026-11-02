@@ -5,8 +5,8 @@
 # A more aggressive sibling of "latency-best": favours send/recv tail latency
 # at the expense of throughput and RX/ACK batching.
 #
-# NOTE: requires the local drain patches and the
-# EF_LOCK_DEFER_HANDOVER_CONTENDED option.  Do not use on stock Onload.
+# NOTE: requires the local prequeue-drain patches and the
+# EF_TCP_LOCK_DEFER_HANDOVER_CONTENDED option.  Do not use on stock Onload.
 
 # Spinning on, FASTSTART off, as per the standard latency profile.
 onload_import latency
@@ -20,10 +20,10 @@ onload_set EF_TCP_SNDBUF 5242880
 # latency, at the cost of handling RX/ACK later.
 onload_set EF_TCP_SEND_ADVANCE_POLL 0
 
-# If another thread already deferred work on this socket, hand our work over
-# instead of blocking on the stack lock.  Needs the prequeue / async-queue
-# drains so that deferred data cannot be overtaken.  Applies to TCP and UDP.
-onload_set EF_LOCK_DEFER_HANDOVER_CONTENDED 1
+# If another thread already deferred work on this TCP socket, hand our work
+# over instead of blocking on the stack lock.  Needs the prequeue drains so
+# that deferred data cannot be overtaken.  UDP sockets are not affected.
+onload_set EF_TCP_LOCK_DEFER_HANDOVER_CONTENDED 1
 
 # Effectively unlimited, so the blocking branch of
 # ci_netif_lock_or_defer_work() is never taken.
