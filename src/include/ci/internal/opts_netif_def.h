@@ -833,7 +833,7 @@ CI_CFG_OPT("EF_LOCK_DEFER_HANDOVER_CONTENDED", tcp_lock_defer_handover_contended
 "When another thread has already queued this socket for deferred work, this "
 "option stops the current thread from waiting for the stack lock in order to "
 "do that work itself; the work is instead left to the thread that holds the "
-"lock.  This removes a stack-lock wait from the send()/recv() tail, but the "
+"lock.  This removes a stack-lock wait from the send() tail, but the "
 "deferred work may be delayed.",
            , , 0, 0, 1, value)
 
