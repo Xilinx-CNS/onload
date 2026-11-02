@@ -26,11 +26,6 @@
 #include <onload/sleep.h>
 #include <onload/tmpl.h>
 #include <ci/internal/pio_buddy.h>
-#include "tcp_send_lat.h"
-
-#ifndef __KERNEL__
-__thread oo_adv_lat_t oo_adv_tls;
-#endif
 
 
 #if OO_DO_STACK_POLL
@@ -92,9 +87,7 @@ static void ci_tcp_tx_advance_nagle(ci_netif* ni, ci_tcp_state* ts)
       OO_SP_NOT_NULL(ts->local_peer)) {
   advance_now:
     /* NB. We call advance() before poll() to get best latency. */
-    { ci_uint64 __r0 = oo_lat_enabled() ? oo_rdtsc() : 0;
     ci_ip_time_resync(IPTIMER_STATE(ni));
-    if( __r0 ) OO_ADV_ACC(resync, oo_rdtsc() - __r0); }
     ci_tcp_tx_advance(ts, ni);
     if(CI_UNLIKELY( ts->tcpflags & CI_TCPT_FLAG_MSG_WARM ))
       return;
@@ -136,11 +129,8 @@ static void ci_tcp_tx_advance_nagle(ci_netif* ni, ci_tcp_state* ts)
 
  poll_and_out:
   if( NI_OPTS(ni).tx_advance_nagle_poll &&
-      ci_netif_may_poll(ni) && ci_netif_has_event(ni) ) {
-    ci_uint64 __q0 = oo_lat_enabled() ? oo_rdtsc() : 0;
+      ci_netif_may_poll(ni) && ci_netif_has_event(ni) )
     ci_netif_poll(ni);
-    if( __q0 ) OO_ADV_ACC(trailing_poll, oo_rdtsc() - __q0);
-  }
 }
 
 
@@ -318,11 +308,8 @@ void ci_tcp_tx_fill_sendq_tail(ci_netif* ni, ci_tcp_state* ts,
    * prequeue, as that would assign them a lower sequence number. */
   if( NI_OPTS(ni).lock_defer_skip_push && ts->s.tx_errno == 0 &&
       OO_PP_NOT_NULL(ts->send_prequeue) ) {
-    ci_uint64 __drain_start = oo_lat_enabled() ? oo_rdtsc() : 0;
     CITP_STATS_NETIF_INC(ni, send_prequeue_defer_drain);
     ci_tcp_sendmsg_enqueue_prequeue(ni, ts, 0);
-    if( __drain_start )
-      OO_ADV_ACC(send_prequeue_tail_drain, oo_rdtsc() - __drain_start);
   }
 
   pkt = PKT_CHK(ni, sendq->tail);
@@ -1074,11 +1061,8 @@ static int ci_tcp_sendmsg_enqueue(ci_netif* ni, ci_tcp_state* ts,
    * data that was queued earlier. */
   if( NI_OPTS(ni).lock_defer_skip_push && sendq == &ts->send &&
       OO_PP_NOT_NULL(ts->send_prequeue) ) {
-    ci_uint64 __drain_start = oo_lat_enabled() ? oo_rdtsc() : 0;
     CITP_STATS_NETIF_INC(ni, send_prequeue_defer_drain);
     ci_tcp_sendmsg_enqueue_prequeue(ni, ts, 0);
-    if( __drain_start )
-      OO_ADV_ACC(send_prequeue_drain, oo_rdtsc() - __drain_start);
   }
 
   seq = tcp_enq_nxt(ts) + total_bytes;
@@ -1889,10 +1873,7 @@ ci_tcp_send_fill_pkts(ci_netif* ni, ci_tcp_state* ts,
 static int ci_tcp_send_via_prequeue(ci_netif* ni, ci_tcp_state* ts,
                                     struct tcp_send_info* sinf)
 {
-  int queued = 0, prq_ld = 0;
-  { ci_uint64 __tx_prequeue = oo_lat_enabled() ? oo_rdtsc() : 0;
-    queued = ci_tcp_tx_prequeue(ni, ts, sinf->fill_list);
-    if( __tx_prequeue ) OO_ADV_ACC(tx_prequeue, oo_rdtsc() - __tx_prequeue); }
+  int queued = ci_tcp_tx_prequeue(ni, ts, sinf->fill_list);
 
   if( ! queued ) {
     /* ! queued means that the connection was shut down, or closed, or
@@ -1905,10 +1886,7 @@ static int ci_tcp_send_via_prequeue(ci_netif* ni, ci_tcp_state* ts,
   }
 
   ci_assert_equal(sinf->stack_locked, 0);
-  { ci_uint64 __lock_defer = oo_lat_enabled() ? oo_rdtsc_begin() : 0;
-    prq_ld = ci_netif_lock_or_defer_work(ni, &ts->s.b);
-    if( __lock_defer ) OO_ADV_ACC(lock_defer, oo_rdtsc_end() - __lock_defer); }
-  if( prq_ld )
+  if( ci_netif_lock_or_defer_work(ni, &ts->s.b) )
     sinf->stack_locked = 1;
   return 1;
 }
@@ -1942,7 +1920,6 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
 
   sinf.rc = 0;
   sinf.stack_locked = 0;
-  OO_LAT_START(sinf);
   sinf.total_unsent = 0;
   sinf.total_sent = 0;
   sinf.pf.alloc_pkt = NULL;
@@ -1977,7 +1954,6 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
       sinf.rc = -EFAULT;
       ci_tcp_sendmsg_handle_rc_or_tx_errno(ni, ts, flags, &sinf);
       if( sinf.set_errno ) CI_SET_ERROR(sinf.rc, sinf.rc);
-      OO_LAT_OUTLIER(ni, ts, sinf.rc, "efault");
       return sinf.rc;
     }
     if( CI_IOVEC_LEN(&iov[m]) > MAX_SEND_CHUNK ||
@@ -1992,29 +1968,19 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
                   (flags & (MSG_OOB | ONLOAD_MSG_WARM)) ))
     goto slow_path;
 
-  if( __lat_on ) __lat.prologue = oo_rdtsc() - __lat.t0;
  fast_path:
   ci_iovec_ptr_init_nz(&piov, iov, iovlen);
 
   ci_assert_le(tcp_eff_mss(ts),
                CI_MAX_ETH_DATA_LEN - sizeof(ci_tcp_hdr) - sizeof(ci_ip4_hdr));
 
-  { int __fast_locked = 0;
-  if( __lat_on ) { ci_uint64 __t0 = oo_rdtsc();
-    __fast_locked = si_trylock(ni, &sinf);
-    __lat.trylock += oo_rdtsc() - __t0;
-  } else {
-    __fast_locked = si_trylock(ni, &sinf);
-  }
-  if( __fast_locked && ci_ip_queue_not_empty(sendq) ) {
+  if( si_trylock(ni, &sinf) && ci_ip_queue_not_empty(sendq) ) {
     ci_assert(! (flags & ONLOAD_MSG_WARM));
-    if( __lat_on ) { __lat.lock_ok = 1; }
     /* Usually, non-empty sendq means we do not have any window to
      * send more data.  However, there is another case:
      * MSG_MORE/TCP_CORK.  In this case, we should really send some
      * data. */
-    OO_SEG(fill_tail,
-      ci_tcp_tx_fill_sendq_tail(ni, ts, &piov, &sinf CI_KERNEL_ARG(addr_spc)));
+    ci_tcp_tx_fill_sendq_tail(ni, ts, &piov, &sinf CI_KERNEL_ARG(addr_spc));
     /* If we have more data to send, do it. */
     if( sinf.total_unsent > 0 )
       goto non_fast;
@@ -2022,7 +1988,6 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
     /* This is last packet.  Set PUSH flag and MORE flag.
      * Send it if possible. */
     pkt = PKT_CHK(ni, sendq->tail);
-    OO_SEG(flags, do {
     if( (flags & MSG_MORE) || (ts->s.s_aflags & CI_SOCK_AFLAG_CORK) ) {
       pkt->flags |= CI_PKT_FLAG_TX_MORE;
       pkt->flags &=~ CI_PKT_FLAG_TX_PSH_ON_ACK;
@@ -2031,7 +1996,6 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
       pkt->flags &= ~CI_PKT_FLAG_TX_MORE;
       TX_PKT_IPX_TCP(af, pkt)->tcp_flags |= CI_TCP_FLAG_PSH;
     }
-    } while(0));
     
     /* We should somehow push the packet.  However, it was not pushed
      * before.  It means:
@@ -2046,12 +2010,10 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
     if( ~flags & MSG_SENDPAGE_NOTLAST ||
         ci_tcp_tx_send_space(ni, ts) <= 0 )
 #endif
-    OO_SEG(adv_nagle, ci_tcp_tx_advance_nagle(ni, ts));
+    ci_tcp_tx_advance_nagle(ni, ts);
 
-    OO_SEG(unlock, if( sinf.stack_locked ) ci_netif_unlock(ni));
-    OO_LAT_OUTLIER(ni, ts, sinf.total_sent, "fast_path");
+    if( sinf.stack_locked ) ci_netif_unlock(ni);
     return sinf.total_sent;
-  }
   }
 
  non_fast:
@@ -2059,7 +2021,7 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
   ci_assert(! ci_iovec_ptr_is_empty_proper(&piov));
 
   /* How much space is there in the send queue? */
-  OO_SEG(space, sinf.sendq_credit = ci_tcp_tx_send_space(ni, ts));
+  sinf.sendq_credit = ci_tcp_tx_send_space(ni, ts);
 
   /* Application is not interested in sending a first small piece of data.
    * If the connection is going on well (CONG_OPEN or CONG_FAST_RECOV),
@@ -2077,14 +2039,12 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
  try_again:
   while( 1 ) {
     /* Grab packet buffers and fill them with data. */
-    OO_SEG(alloc, m = ci_tcp_send_alloc_pkts(ni, ts, &sinf, 0));
-    if( __lat_on ) __lat.alloc_cnt++;
+    m = ci_tcp_send_alloc_pkts(ni, ts, &sinf, 0);
     if( sinf.n_needed > 0 )
       goto no_pkt_buf;
 
   got_pkt_buf:
-    OO_SEG(fill,
-      ci_tcp_send_fill_pkts(ni, ts, &sinf, &piov, m CI_KERNEL_ARG(addr_spc)));
+    ci_tcp_send_fill_pkts(ni, ts, &sinf, &piov, m CI_KERNEL_ARG(addr_spc));
     m = 0;
     /* Look on MSG_MORE: do not send the last packet if it is not full */
     if( (flags & MSG_MORE) || (ts->s.s_aflags & CI_SOCK_AFLAG_CORK) ) {
@@ -2096,28 +2056,19 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
     /* If we can grab the lock now, setup the meta-data and get sending.
      * Otherwise queue the packets for sending by the netif lock holder.
      */
-    { int __main_locked = 0;
-    if( __lat_on ) { ci_uint64 __t0 = oo_rdtsc();
-      __main_locked = si_trylock(ni, &sinf);
-      __lat.trylock += oo_rdtsc() - __t0;
-    } else {
-      __main_locked = si_trylock(ni, &sinf);
-    }
-    if( __main_locked ) {
-      if( __lat_on ) __lat.lock_ok = 1;
+    if( si_trylock(ni, &sinf) ) {
       if( ts->s.tx_errno ) {
         ci_assert(! (flags & ONLOAD_MSG_WARM));
         ci_tcp_sendmsg_handle_tx_errno(ni, ts, flags, &sinf);
         if( sinf.set_errno ) CI_SET_ERROR(sinf.rc, sinf.rc);
-        OO_LAT_OUTLIER(ni, ts, sinf.rc, "main_tx_errno");
         return sinf.rc;
       }
 
       /* eff_mss may now be != ts->eff_mss */
-      OO_SEG(enqueue, ts->send_in += ci_tcp_sendmsg_enqueue(ni, ts,
+      ts->send_in += ci_tcp_sendmsg_enqueue(ni, ts,
                                             sinf.fill_list,
                                             sinf.fill_list_bytes,
-                                            &ts->send));
+                                            &ts->send);
       sinf.total_sent += sinf.fill_list_bytes;
       sinf.total_unsent -= sinf.fill_list_bytes;
 
@@ -2126,26 +2077,23 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
        * segment gets the PSH flag.
        */
       if( sinf.total_unsent == 0 ) {
-        OO_SEG(done_flags, do {
         if( (sinf.fill_list->flags & CI_PKT_FLAG_TX_MORE) )
           TX_PKT_IPX_TCP(af, sinf.fill_list)->tcp_flags = CI_TCP_FLAG_ACK;
         else
           TX_PKT_IPX_TCP(af, sinf.fill_list)->tcp_flags =
               CI_TCP_FLAG_PSH | CI_TCP_FLAG_ACK;
-        } while(0));
 #ifdef MSG_SENDPAGE_NOTLAST
         if( ~flags & MSG_SENDPAGE_NOTLAST ||
             ci_tcp_tx_send_space(ni, ts) <= 0 )
 #endif
         {
-        OO_SEG(adv_nagle, ci_tcp_tx_advance_nagle(ni, ts));
+        ci_tcp_tx_advance_nagle(ni, ts);
         if(CI_UNLIKELY( flags & ONLOAD_MSG_WARM ))
           unroll_msg_warm(ni, ts, &sinf, 0);
         }
         /* Assert that there's no need to free unused packets */
         ci_assert_equal(sinf.pf.alloc_pkt, NULL);
-        OO_SEG(unlock, if( sinf.stack_locked ) ci_netif_unlock(ni));
-        OO_LAT_OUTLIER(ni, ts, sinf.total_sent, "main_loop_done");
+        if( sinf.stack_locked ) ci_netif_unlock(ni);
         return sinf.total_sent;
       }
 
@@ -2156,19 +2104,16 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
       {
       /* Stuff left to do -- push out what we've got first. */
       ci_assert(! (flags & ONLOAD_MSG_WARM));
-      if( ci_netif_may_poll(ni) && ci_netif_need_poll(ni) ) {
-        OO_SEG_POLL(ci_netif_poll(ni));
-      }
+      if( ci_netif_may_poll(ni) && ci_netif_need_poll(ni) )
+        ci_netif_poll(ni);
       sinf.fill_list = 0;
       if( ts->s.tx_errno ) {
         ci_tcp_sendmsg_handle_tx_errno(ni, ts, flags, &sinf);
         if( sinf.set_errno ) CI_SET_ERROR(sinf.rc, sinf.rc);
-        OO_LAT_OUTLIER(ni, ts, sinf.rc, "mid_tx_errno");
         return sinf.rc;
       }
-      if(CI_LIKELY( ! ci_ip_queue_is_empty(sendq) )) {
-        OO_SEG(adv_direct, ci_tcp_tx_advance(ts, ni));
-      }
+      if(CI_LIKELY( ! ci_ip_queue_is_empty(sendq) ))
+        ci_tcp_tx_advance(ts, ni);
       }
     }
     else {
@@ -2178,13 +2123,9 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
           sinf.fill_list->flags |= CI_PKT_FLAG_TX_PSH;
 
       /* Couldn't get the netif lock, so enqueue packets on the prequeue. */
-      { int __prequeue_ok; OO_SEG(prequeue,
-        __prequeue_ok = ci_tcp_send_via_prequeue(ni, ts, &sinf));
-      if( __lat_on && __prequeue_ok ) __lat.via_prequeue = 1;
-      if( ! __prequeue_ok ) {
+      if( ! ci_tcp_send_via_prequeue(ni, ts, &sinf) ) {
         ci_tcp_sendmsg_handle_tx_errno(ni, ts, flags, &sinf);
         if( sinf.set_errno ) CI_SET_ERROR(sinf.rc, sinf.rc);
-        OO_LAT_OUTLIER(ni, ts, sinf.rc, "tx_prequeue_errno");
         return sinf.rc;
       }
       sinf.total_sent += sinf.fill_list_bytes;
@@ -2192,13 +2133,10 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
       if( sinf.total_unsent == 0 ) {
         /* Assert that there's no need to free unused packets */
         ci_assert_equal(sinf.pf.alloc_pkt, NULL);
-        OO_SEG(unlock, if( sinf.stack_locked ) ci_netif_unlock(ni));
-        OO_LAT_OUTLIER(ni, ts, sinf.total_sent, "main_loop_prequeue_done");
+        if( sinf.stack_locked ) ci_netif_unlock(ni);
         return sinf.total_sent;
       }
       /* We've more to send, so keep filling buffers. */
-      }
-    }
     }
 
     sinf.sendq_credit -= sinf.n_filled;
@@ -2218,11 +2156,10 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
 
   if( ci_netif_may_poll(ni) && ci_netif_need_poll(ni) &&
       si_trylock(ni, &sinf) ) {
-    OO_SEG_POLL(ci_netif_poll(ni));
+    ci_netif_poll(ni);
     if( ts->s.tx_errno ) {
       ci_tcp_sendmsg_handle_tx_errno(ni, ts, flags, &sinf);
       if( sinf.set_errno ) CI_SET_ERROR(sinf.rc, sinf.rc);
-      OO_LAT_OUTLIER(ni, ts, sinf.rc, "sendq_full_tx_errno");
       return sinf.rc;
     }
     sinf.sendq_credit = ci_tcp_tx_send_space(ni, ts);
@@ -2242,7 +2179,6 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
     sinf.rc = -EAGAIN;
     ci_tcp_sendmsg_handle_sent_or_rc(ni, ts, flags, &sinf);
     if( sinf.set_errno ) CI_SET_ERROR(sinf.rc, sinf.rc);
-    OO_LAT_OUTLIER(ni, ts, sinf.rc, "sendq_full_eagain");
     return sinf.rc;
   }
 
@@ -2253,7 +2189,6 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
       goto try_again;
     else if( rc == -1 ) {
       if( sinf.set_errno ) CI_SET_ERROR(sinf.rc, sinf.rc);
-      OO_LAT_OUTLIER(ni, ts, sinf.rc, "spin_err");
       return sinf.rc;
     }
     sinf.tcp_send_spin = 0;
@@ -2263,7 +2198,6 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
     goto try_again;
   else {
     if( sinf.set_errno ) CI_SET_ERROR(sinf.rc, sinf.rc);
-    OO_LAT_OUTLIER(ni, ts, sinf.rc, "block_err");
     return sinf.rc;
   }
 
@@ -2289,7 +2223,6 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
     else {
       ci_assert(rc == -1);
       if( sinf.set_errno ) CI_SET_ERROR(sinf.rc, sinf.rc);
-      OO_LAT_OUTLIER(ni, ts, sinf.rc, "no_pkt_buf_err");
       return sinf.rc;
     }
   }
@@ -2305,7 +2238,6 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
   if( ci_tcp_sendmsg_notsynchronised(ni, ts, flags, &sinf) == -1 ) {
     ci_tcp_sendmsg_handle_rc_or_tx_errno(ni, ts, flags, &sinf);
     if( sinf.set_errno ) CI_SET_ERROR(sinf.rc, sinf.rc);
-    OO_LAT_OUTLIER(ni, ts, sinf.rc, "not_sync_err");
     return sinf.rc;
   }
   goto is_sync;
@@ -2325,17 +2257,14 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
       ci_netif_unlock(ni);
     if( sinf.total_unsent >= tcp_eff_mss(ts) )
       RET_WITH_ERRNO(EINVAL);
-    OO_LAT_OUTLIER(ni, ts, 0, "slow_warm_zero");
     return 0;
   }
   if( ci_tcp_sendmsg_slowpath(ni, ts, iov, iovlen, flags, &sinf 
                               CI_KERNEL_ARG(addr_spc)) == -1 ) {
     ci_tcp_sendmsg_handle_rc_or_tx_errno(ni, ts, flags, &sinf);
     if( sinf.set_errno ) CI_SET_ERROR(sinf.rc, sinf.rc);
-    OO_LAT_OUTLIER(ni, ts, sinf.rc, "slowpath_err");
     return sinf.rc;
   }
-  OO_LAT_OUTLIER(ni, ts, sinf.rc, "slowpath_done");
   return sinf.rc;
 }
 

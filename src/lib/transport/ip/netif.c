@@ -11,7 +11,6 @@
 
 
 #include "ip_internal.h"
-#include "tcp_send_lat.h"
 #include <ci/tools/utils.h>
 #include <ci/efhw/device.h>
 #include <onload/cplane_ops.h>
@@ -892,7 +891,6 @@ static void citp_waitable_deferred_work(ci_netif* ni, citp_waitable* w)
 
 int ci_netif_lock_or_defer_work(ci_netif* ni, citp_waitable* w)
 {
-  volatile ci_uint64 __enter = oo_lat_enabled() ? oo_rdtsc_begin() : 0;
 #if CI_CFG_FD_CACHING && !defined(NDEBUG)
   /* Cached sockets should not be deferring work - there are no user references
    */
@@ -905,23 +903,15 @@ int ci_netif_lock_or_defer_work(ci_netif* ni, citp_waitable* w)
    */
   ci_assert(!(w->sb_aflags & CI_SB_AFLAG_ORPHAN));
 
-  volatile ci_uint64 __total = oo_lat_enabled() ? oo_rdtsc_begin() : 0;
-  volatile ci_uint64 __entry_start = __total;
   int __skip_limit = NI_OPTS(ni).lock_defer_skip_limit;
   int __skip_push = NI_OPTS(ni).lock_defer_skip_push;
-  if( __enter ) OO_ADV_ACC(enter_gap, oo_rdtsc_end() - __enter);
+
   if( ! __skip_limit &&
       ni->state->defer_work_count >= NI_OPTS(ni).defer_work_limit ) {
-    if( __entry_start ) OO_ADV_ACC(entry, oo_rdtsc() - __entry_start);
-    ci_uint64 __br1 = oo_lat_enabled() ? oo_rdtsc() : 0;
     int rc = ci_netif_lock(ni);
-    if( __br1 ) OO_ADV_ACC(br1, oo_rdtsc() - __br1);
     if( rc == 0 ) {
       CITP_STATS_NETIF_INC(ni, defer_work_limited);
-      ci_uint64 __br1_work = oo_lat_enabled() ? oo_rdtsc() : 0;
       citp_waitable_deferred_work(ni, w);
-      if( __br1_work ) OO_ADV_ACC(br1_work, oo_rdtsc() - __br1_work);
-      if( __total ) OO_ADV_ACC(total, oo_rdtsc() - __total);
       return 1;
     }
     /* We got a signal while waiting for the stack lock.  Best thing to do
@@ -930,49 +920,40 @@ int ci_netif_lock_or_defer_work(ci_netif* ni, citp_waitable* w)
      */
   }
 
-  ci_uint64 __entry_tas = oo_lat_enabled() ? oo_rdtsc() : 0;
-  int __was_set = ci_bit_test_and_set(&w->sb_aflags, CI_SB_AFLAG_DEFERRED_BIT);
-  if( __entry_start ) OO_ADV_ACC(entry, oo_rdtsc() - __entry_tas);
-  if( __was_set && ! __skip_push ) {
-    ci_uint64 __br2 = oo_lat_enabled() ? oo_rdtsc() : 0;
-    /* Already set.  Another thread is trying to defer some work for this
-     * socket.  However, we must do **our** work in time, so let's push it
-     * forward.
-     *
-     * We can't trust this other thread to do the job, because that thread
-     * can be descheduled for some time, and we'll return to user with
-     * non-empty prequeue.  Then user asks us to perform another send(),
-     * and the new data go our before already-prequeued data.
-     *
-     * We can implement something more clever here, but this contention is
-     * really rare, and it is simpler just to push on.
-     */
-    int rc = ci_netif_lock(ni);
-    if( __br2 ) OO_ADV_ACC(br2, oo_rdtsc() - __br2);
-    if( rc == 0 ) {
-      /* We should not remove CI_SB_AFLAG_DEFERRED_BIT, because it was set
-       * by someone else, and that someone else is responsible for
-       * removing. */
-      ci_uint64 __br2_work = oo_lat_enabled() ? oo_rdtsc() : 0;
-      citp_waitable_deferred_work(ni, w);
-      if( __br2_work ) OO_ADV_ACC(br2_work, oo_rdtsc() - __br2_work);
-      if( __total ) OO_ADV_ACC(total, oo_rdtsc() - __total);
-      return 1;
+  if( ci_bit_test_and_set(&w->sb_aflags, CI_SB_AFLAG_DEFERRED_BIT) ) {
+    if( ! __skip_push ) {
+      /* Already set.  Another thread is trying to defer some work for this
+       * socket.  However, we must do **our** work in time, so let's push it
+       * forward.
+       *
+       * We can't trust this other thread to do the job, because that thread
+       * can be descheduled for some time, and we'll return to user with
+       * non-empty prequeue.  Then user asks us to perform another send(),
+       * and the new data go our before already-prequeued data.
+       *
+       * We can implement something more clever here, but this contention is
+       * really rare, and it is simpler just to push on.
+       */
+      int rc = ci_netif_lock(ni);
+      if( rc == 0 ) {
+        /* We should not remove CI_SB_AFLAG_DEFERRED_BIT, because it was set
+         * by someone else, and that someone else is responsible for
+         * removing. */
+        citp_waitable_deferred_work(ni, w);
+        return 1;
+      }
+      /* We are interrupted by a signal.  We are in kernel.  Let's return and
+       * trust the other contending thread to do the work or to defer this
+       * work.
+       *
+       * FIXME
+       * It is possible that this work will be done too late, see bug 78628
+       * comment 9 for details.  Let's live with it for now.
+       */
+      CITP_STATS_NETIF_INC(ni, defer_work_contended_unsafe);
+      ++ni->state->defer_work_count;
+      return 0;
     }
-    /* We are interrupted by a signal.  We are in kernel.  Let's return and
-     * trust the other contending thread to do the work or to defer this
-     * work.
-     *
-     * FIXME
-     * It is possible that this work will be done too late, see bug 78628
-     * comment 9 for details.  Let's live with it for now.
-     */
-    CITP_STATS_NETIF_INC(ni, defer_work_contended_unsafe);
-    ++ni->state->defer_work_count;
-    if( __total ) OO_ADV_ACC(total, oo_rdtsc() - __total);
-    return 0;
-  }
-  if( __was_set ) {
     /* EF_LOCK_DEFER_SKIP_PUSH=1: branch 2 disabled.  Do not block on the
      * lock to push our own work forward; hand it over to the lock holder
      * instead (same as the interrupted-by-signal fallback above).  The
@@ -980,49 +961,28 @@ int ci_netif_lock_or_defer_work(ci_netif* ni, citp_waitable* w)
      * Queued data may be delayed; measurement use only. */
     CITP_STATS_NETIF_INC(ni, defer_work_accumulated);
     ++ni->state->defer_work_count;
-    if( __total ) OO_ADV_ACC(total, oo_rdtsc() - __total);
     return 0;
   }
 
-  { volatile ci_uint64 __br3 = oo_lat_enabled() ? oo_rdtsc_begin() : 0;
-  unsigned __br3_spins = 0;
   while( 1 ) {
-    __br3_spins++;
     ci_uint64 new_v, v = ni->state->lock.lock;
     if( ! (v & CI_EPLOCK_LOCKED) ) {
       if( ci_netif_trylock(ni) ) {
         ci_bit_clear(&w->sb_aflags, CI_SB_AFLAG_DEFERRED_BIT);
-        if( __br3 ) OO_ADV_ACC(br3, oo_rdtsc_end() - __br3);
-        if( __br3 ) OO_ADV_ACC(br3_spins, __br3_spins);
-        if( __br3 ) OO_ADV_ACC(br3_lock, 1);
-        ci_uint64 __br3_work = oo_lat_enabled() ? oo_rdtsc() : 0;
         citp_waitable_deferred_work(ni, w);
-        if( __br3_work ) OO_ADV_ACC(br3_work, oo_rdtsc() - __br3_work);
-        if( __total ) OO_ADV_ACC(total, oo_rdtsc_end() - __enter);
         return 1;
       }
     }
     else {
-      /* With EF_LOCK_DEFER_SKIP_TAKE=1 this path is also taken when the
-       * lock is free: we queue for a holder who does not exist yet, so the
-       * work waits for the next lock/unlock cycle.  Latency ablation use
-       * only; it delays (but does not lose) the queued data. */
       w->next_id = v & CI_EPLOCK_NETIF_SOCKET_LIST;
       new_v = (v & ~CI_EPLOCK_NETIF_SOCKET_LIST) | (W_ID(w) + 1);
       if( ci_cas64u_succeed(&ni->state->lock.lock, v, new_v) ) {
         ++ni->state->defer_work_count;
-        if( __br3 ) OO_ADV_ACC(br3, oo_rdtsc_end() - __br3);
-        if( __br3 ) OO_ADV_ACC(br3_spins, __br3_spins);
-        if( __br3 ) OO_ADV_ACC(br3_defer, 1);
-        if( __total ) OO_ADV_ACC(total, oo_rdtsc_end() - __enter);
         return 0;
       }
     }
   }
-  }
 }
-
-
 static void ci_netif_perform_deferred_socket_work(ci_netif* ni,
                                                   unsigned sock_id)
 {

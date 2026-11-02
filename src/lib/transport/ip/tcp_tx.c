@@ -18,7 +18,6 @@
 #include "ip_tx.h"
 #include <ci/internal/pio_buddy.h>
 #include "tcp_tx.h"
-#include "tcp_send_lat.h"
 
 
 #if OO_DO_STACK_POLL
@@ -1345,7 +1344,6 @@ void ci_tcp_tx_advance_to(ci_netif* ni, ci_tcp_state* ts,
   while( 1 ) {
     ci_ip_pkt_fmt* pkt = PKT_CHK(ni, id);
     ci_tcp_hdr* tcp = TX_PKT_IPX_TCP(af, pkt);
-    ci_uint64 __h0 = oo_lat_enabled() ? oo_rdtsc() : 0;
 
     if(CI_UNLIKELY( PKT_TCP_TX_SEQ_SPACE(pkt) > tcp_eff_mss(ts) ))
       /* Likely MSS has changed (or FIN added to MSS segment).  If we're
@@ -1437,10 +1435,8 @@ void ci_tcp_tx_advance_to(ci_netif* ni, ci_tcp_state* ts,
 
     if( OO_PP_IS_NULL(pkt->next) ) {
       ++ts->stats.tx_stop_app;
-      if( __h0 ) OO_ADV_ACC(hdr, oo_rdtsc() - __h0);
       break;
     }
-    if( __h0 ) OO_ADV_ACC(hdr, oo_rdtsc() - __h0);
     id = pkt->next;
   }
 
@@ -1485,9 +1481,7 @@ void ci_tcp_tx_advance_to(ci_netif* ni, ci_tcp_state* ts,
       return;
     }
     else {
-      ci_uint64 __u0 = oo_lat_enabled() ? oo_rdtsc() : 0;
       ci_ip_send_tcp_list(ni, ts, sendq->head, last_pkt);
-      if( __u0 ) OO_ADV_ACC(push, oo_rdtsc() - __u0);
       if(CI_UNLIKELY( ts->tcpflags & CI_TCPT_FLAG_MSG_WARM ))
         /* This function updated tcp_snd_nxt, burst_window,
          * ts->stats.tx_stop_app.  We made copies of tcp_snd_nxt and

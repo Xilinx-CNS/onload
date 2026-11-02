@@ -17,7 +17,6 @@
 #include "netif_tx.h"
 #include "tcp_rx.h"
 #include "udp_internal.h"
-#include "tcp_send_lat.h"
 #include <ci/tools/ipcsum_base.h>
 #include <ci/tools/pktdump.h>
 #include <etherfabric/timer.h>
@@ -2215,7 +2214,6 @@ int ci_netif_poll_n(ci_netif* netif, int max_evs)
    * ... */
   offset = netif->state->poll_start_intf;
   intf_max = oo_stack_intf_max(netif);
-  { ci_uint64 __e0 = oo_lat_enabled() ? oo_rdtsc() : 0;
   for( intf_i = offset; intf_i < intf_max; intf_i++ ) {
     int n = ci_netif_poll_intf(netif, intf_i, max_evs);
     ci_assert(n >= 0);
@@ -2226,7 +2224,6 @@ int ci_netif_poll_n(ci_netif* netif, int max_evs)
     ci_assert(n >= 0);
     n_evs_handled += n;
   }
-  if( __e0 ) OO_ADV_ACC(poll_evq, oo_rdtsc() - __e0); }
   netif->state->poll_start_intf = (offset + 1 >= intf_max) ? 0 : offset + 1;
 
   while( OO_PP_NOT_NULL(netif->state->looppkts) ) {
@@ -2257,9 +2254,7 @@ int ci_netif_poll_n(ci_netif* netif, int max_evs)
 
   /* Timer code can't use in-poll wakeup, since endpoints are out of
    * post-poll list.  So, poll timers after --in_poll. */
-  { ci_uint64 __t0 = oo_lat_enabled() ? oo_rdtsc() : 0;
   ci_ip_timer_poll(netif);
-  if( __t0 ) OO_ADV_ACC(poll_tmr, oo_rdtsc() - __t0); }
 
   /* Timers MUST NOT send via loopback. */
   ci_assert(OO_PP_IS_NULL(netif->state->looppkts));
