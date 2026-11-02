@@ -828,15 +828,13 @@ CI_CFG_OPT("EF_TCP_SEND_ADVANCE_POLL", tcp_send_advance_poll, ci_uint32,
 "the cost of deferring RX/ACK processing to a later stack access.",
            , , 1, 0, 1, value)
 
-CI_CFG_OPT("EF_TCP_LOCK_DEFER_HANDOVER_CONTENDED",
-           tcp_lock_defer_handover_contended, ci_uint32,
-"When another thread has already queued this TCP socket for deferred work, "
-"this option stops the current thread from waiting for the stack lock in "
-"order to do that work itself; the work is instead left to the thread that "
-"holds the lock.  This removes a stack-lock wait from the send()/recv() "
-"tail, but the deferred work may be delayed, and without the send-path and "
-"recv-path prequeue drains, deferred data can be overtaken.  UDP sockets "
-"are not affected.",
+CI_CFG_OPT("EF_LOCK_DEFER_HANDOVER_CONTENDED", lock_defer_handover_contended,
+           ci_uint32,
+"When another thread has already queued this socket for deferred work, this "
+"option stops the current thread from waiting for the stack lock in order to "
+"do that work itself; the work is instead left to the thread that holds the "
+"lock.  This removes a stack-lock wait from the send()/recv() tail, but the "
+"deferred work may be delayed.",
            , , 0, 0, 1, value)
 
 CI_CFG_OPT("EF_UDP_SEND_UNLOCK_THRESH", udp_send_unlock_thresh, ci_uint16,
