@@ -126,8 +126,9 @@ static bool ci_ipx_is_mf_set(int af, ci_ipx_hdr_t* ipx)
 ci_noinline void ci_udp_sendmsg_chksum(ci_netif* ni, ci_ip_pkt_fmt* pkt,
                                        int af, ci_ipx_hdr_t* first_hdr)
 {
-  /* 1400*50 = 70000, i.e. in normal situation there are <50 fragments */
-#define MAX_IP_FRAGMENTS 50
+  /* 1428*46 = 65688 > 65536, i.e. in normal situation there are <=46
+   * fragments */
+#define MAX_IP_FRAGMENTS 46
   struct iovec iov[MAX_IP_FRAGMENTS];
   int n = -1;
   ci_udp_hdr* udp = TX_PKT_IPX_UDP(af, pkt, true);
