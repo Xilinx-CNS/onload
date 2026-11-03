@@ -828,7 +828,7 @@ CI_CFG_OPT("EF_TCP_SEND_ADVANCE_POLL", tcp_send_advance_poll, ci_uint32,
 "the cost of deferring RX/ACK processing to a later stack access.",
            , , 1, 0, 1, value)
 
-CI_CFG_OPT("EF_LOCK_DEFER_HANDOVER_CONTENDED", tcp_lock_defer_handover_contended,
+CI_CFG_OPT("EF_TCP_LOCK_DEFER_HANDOVER_CONTENDED", tcp_lock_defer_handover_contended,
            ci_uint32,
 "When another thread has already queued this socket for deferred work, this "
 "option stops the current thread from waiting for the stack lock in order to "

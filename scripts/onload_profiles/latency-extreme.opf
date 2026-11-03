@@ -24,7 +24,7 @@ onload_set EF_TCP_SEND_ADVANCE_POLL 0
 # If another thread already deferred work on this TCP socket, hand our work
 # over instead of blocking on the stack lock.  Needs the prequeue drains so
 # that deferred data cannot be overtaken.  UDP sockets are not affected.
-onload_set EF_TCP_LOCK_DEFER_HANDOVER_CONTENDED 1
+onload_set EF_LOCK_DEFER_HANDOVER_CONTENDED 1
 
 # Effectively unlimited, so the blocking branch of
 # ci_netif_lock_or_defer_work() is never taken.
