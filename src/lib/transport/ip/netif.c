@@ -976,6 +976,7 @@ int ci_netif_lock_or_defer_work(ci_netif* ni, citp_waitable* w)
       w->next_id = v & CI_EPLOCK_NETIF_SOCKET_LIST;
       new_v = (v & ~CI_EPLOCK_NETIF_SOCKET_LIST) | (W_ID(w) + 1);
       if( ci_cas64u_succeed(&ni->state->lock.lock, v, new_v) ) {
+        CITP_STATS_NETIF_INC(ni, defer_work_accumulated);
         ++ni->state->defer_work_count;
         return 0;
       }
