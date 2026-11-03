@@ -897,6 +897,10 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
     opts->defer_work_limit = atoi(s);
   if ( (s = getenv("EF_TCP_LOCK_DEFER_HANDOVER_CONTENDED")) )
     opts->tcp_lock_defer_handover_contended = atoi(s);
+  if( (s = getenv("EF_TCP_LOCK_DEFER_DRAIN_ON_SEND")) )
+    opts->tcp_lock_defer_drain_on_send = atoi(s);
+  if( (s = getenv("EF_TCP_LOCK_DEFER_DRAIN_ON_RECV")) )
+    opts->tcp_lock_defer_drain_on_recv = atoi(s);
   if( (s = getenv("EF_UDP_SEND_UNLOCK_THRESH")) )
     opts->udp_send_unlock_thresh = atoi(s);
   if( (s = getenv("EF_UDP_PORT_HANDOVER_MIN")) )

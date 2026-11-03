@@ -837,6 +837,20 @@ CI_CFG_OPT("EF_LOCK_DEFER_HANDOVER_CONTENDED", tcp_lock_defer_handover_contended
 "deferred work may be delayed.",
            , , 0, 0, 1, value)
 
+CI_CFG_OPT("EF_TCP_LOCK_DEFER_DRAIN_ON_SEND", tcp_lock_defer_drain_on_send,
+           ci_uint32,
+"Drain a TCP send prequeue before appending to the send queue.  This prevents "
+"newly sent data from overtaking data prequeued by deferred work.  This "
+"option is needed only when EF_TCP_LOCK_DEFER_HANDOVER_CONTENDED is set.",
+           , , 0, 0, 1, value)
+
+CI_CFG_OPT("EF_TCP_LOCK_DEFER_DRAIN_ON_RECV", tcp_lock_defer_drain_on_recv,
+           ci_uint32,
+"Allow receive() to drain a TCP send prequeue left by deferred work.  This is "
+"a best-effort recovery path for stranded prequeued data.  This option is "
+"needed only when EF_TCP_LOCK_DEFER_HANDOVER_CONTENDED is set.",
+           , , 0, 0, 1, value)
+
 CI_CFG_OPT("EF_UDP_SEND_UNLOCK_THRESH", udp_send_unlock_thresh, ci_uint16,
 "UDP message size below which we attempt to take the stack lock early.  "
 "Taking the lock early reduces overhead and latency slightly, but may "

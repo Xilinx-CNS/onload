@@ -621,7 +621,7 @@ static inline int ci_tcp_recvmsg_impl(const ci_tcp_recvmsg_args* a,
   a->msg->msg_controllen = 0;
 #endif
 
-  /* EF_LOCK_DEFER_HANDOVER_CONTENDED: when the handover path is enabled, a
+  /* EF_TCP_LOCK_DEFER_DRAIN_ON_RECV: when deferred work is handed over, a
    * sender can leave packets on the send prequeue without an entry on the
    * deferred socket list (the TAS/CAS window).  In that case the lock holder
    * will not find the socket on the list at unlock and the data stays stranded
@@ -632,7 +632,7 @@ static inline int ci_tcp_recvmsg_impl(const ci_tcp_recvmsg_args* a,
    * available, and only when there is actually something to drain so that
    * the common (empty prequeue) case costs a single load.
    */
-  if( NI_OPTS(ni).tcp_lock_defer_handover_contended &&
+  if( NI_OPTS(ni).tcp_lock_defer_drain_on_recv &&
       OO_PP_NOT_NULL(ts->send_prequeue) &&
       ci_netif_trylock(ni) ) {
     CITP_STATS_NETIF_INC(ni, tcp_recv_prequeue_defer_drain);
