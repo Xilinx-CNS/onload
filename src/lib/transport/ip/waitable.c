@@ -321,6 +321,7 @@ const char* citp_waitable_type_str(citp_waitable* w)
   else if( w->state == CI_TCP_STATE_PIPE )  return "PIPE";
   else if( w->state == CI_TCP_STATE_AUXBUF )  return "AUXBUFS";
   else if( w->state == CI_TCP_STATE_ACTIVE_WILD )  return "ACTIVE_WILD";
+  else if( w->state == CI_TCP_STATE_EXPLICIT_WILD )  return "EXPLICIT_WILD";
   else return "<unknown-citp_waitable-type>";
 }
 
@@ -332,7 +333,7 @@ static void citp_waitable_dump2(ci_netif* ni, citp_waitable* w, const char* pf,
   ci_sock_cmn* s = NULL;
 
   if( CI_TCP_STATE_IS_SOCKET(w->state) ||
-      w->state == CI_TCP_STATE_ACTIVE_WILD) {
+      (w->state & CI_TCP_STATE_MASK) == CI_TCP_STATE_ACTIVE_WILD ) {
     s = CI_CONTAINER(ci_sock_cmn, b, w);
     logger(log_arg, "%s%s "NT_FMT"lcl="OOF_IPXPORT" rmt="OOF_IPXPORT" %s",
            pf, citp_waitable_type_str(w), NI_ID(ni), W_FMT(w),
@@ -345,7 +346,7 @@ static void citp_waitable_dump2(ci_netif* ni, citp_waitable* w, const char* pf,
            citp_waitable_type_str(w), NI_ID(ni), W_FMT(w));
 
   if( w->state == CI_TCP_STATE_FREE || w->state == CI_TCP_STATE_AUXBUF ||
-      w->state == CI_TCP_STATE_ACTIVE_WILD )
+      (w->state & CI_TCP_STATE_MASK) == CI_TCP_STATE_ACTIVE_WILD )
     return;
 
   tmp = w->lock.wl_val;
@@ -382,7 +383,7 @@ void citp_waitable_dump_to_logger(ci_netif* ni, citp_waitable* w,
 
   citp_waitable_dump2(ni, w, pf, logger, log_arg);
   if( CI_TCP_STATE_IS_SOCKET(w->state) ) {
-    if( w->state == CI_TCP_STATE_ACTIVE_WILD )
+    if( (w->state & CI_TCP_STATE_MASK) == CI_TCP_STATE_ACTIVE_WILD )
       return;
 
     ci_sock_cmn_dump(ni, &wo->sock, pf, logger, log_arg);

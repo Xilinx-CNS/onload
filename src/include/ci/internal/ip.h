@@ -1180,9 +1180,13 @@ extern int ci_pipe_list_to_iovec(ci_netif* ni, struct oo_pipe* p,
 /* Set in a socket that is used as the owner for an active wild filter */
 #define CI_TCP_STATE_ACTIVE_WILD (0xe000)
 
+/* Set in a socket that is used as the owner for an explicit wild filter */
+#define CI_TCP_STATE_EXPLICIT_WILD (0xe000 | CI_TCP_STATE_NOT_CONNECTED)
+
 
 /* Convert state to number in range 0->0xe */
-#define CI_TCP_STATE_NUM(s)    (((s) & 0xf000) >> 12u)
+#define CI_TCP_STATE_MASK      0xf000
+#define CI_TCP_STATE_NUM(s)    (((s) & CI_TCP_STATE_MASK) >> 12u)
 
 
 /* Flags we don't expect to see in normal data packets. */

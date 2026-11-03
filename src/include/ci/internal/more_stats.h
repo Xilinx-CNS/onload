@@ -35,7 +35,7 @@ static inline void get_more_stats(ci_netif* ni, more_stats_t* s)
     }
     ++s->states[CI_TCP_STATE_NUM(state)];
     if( state == CI_TCP_STATE_FREE || state == CI_TCP_STATE_AUXBUF ||
-        state == CI_TCP_STATE_ACTIVE_WILD )
+        (state & CI_TCP_STATE_MASK) == CI_TCP_STATE_ACTIVE_WILD )
       continue;
     if( w->sb_aflags & CI_SB_AFLAG_ORPHAN       )  ++s->sock_orphans;
     if( w->wake_request & CI_SB_FLAG_WAKE_RX )  ++s->sock_wake_needed_rx;
