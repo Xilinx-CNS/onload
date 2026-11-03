@@ -123,7 +123,7 @@ efhw_iopages_alloc_kernel_cont(struct efhw_nic *nic, struct device *dev,
 	int i = 0;
 	int rc;
 
-	p->ptr = vmalloc_node(p->n_pages << PAGE_SHIFT, -1);
+	p->ptr = vzalloc_node(p->n_pages << PAGE_SHIFT, -1);
 	if (p->ptr == NULL)
 		goto fail1;
 	for (i = 0; i < p->n_pages; ++i) {

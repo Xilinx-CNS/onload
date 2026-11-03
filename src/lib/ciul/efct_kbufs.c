@@ -301,7 +301,7 @@ int efct_kbufs_init_internal(ef_vi* vi,
                              void* space)
 {
   struct efct_kbufs* rxqs;
-  int i, rc;
+  int i, sbid, rc;
 
   rc = efct_superbufs_reserve(vi, space);
   if( rc < 0 )
@@ -340,6 +340,13 @@ int efct_kbufs_init_internal(ef_vi* vi,
     rxq->live.superbuf_pkts = &shm->q[i].superbuf_pkts;
     rxq->live.config_generation = &shm->q[i].config_generation;
     rxq->live.time_sync = &shm->q[i].time_sync;
+
+    /* The kernel owns and poisons these superbufs, so a stale flag must not
+     * make efct_vi_rxpkt_release() write to them: the descriptors are not
+     * guaranteed to be zeroed. Only the flag is cleared, as a shared stack
+     * may already be using the other fields. */
+    for( sbid = 0; sbid < CI_EFCT_MAX_SUPERBUFS; ++sbid )
+      efct_rx_desc_for_sb(vi, i, sbid)->poison = false;
   }
 
   rxqs->shm = shm;
