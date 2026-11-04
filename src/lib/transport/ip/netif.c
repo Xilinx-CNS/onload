@@ -948,6 +948,10 @@ int ci_netif_lock_or_defer_work(ci_netif* ni, citp_waitable* w)
       /* We are interrupted by a signal.  We are in kernel.  Let's return and
        * trust the other contending thread to do the work or to defer this
        * work.
+       *
+       * FIXME
+       * It is possible that this work will be done too late, see bug 78628
+       * comment 9 for details.  Let's live with it for now.
        */
       CITP_STATS_NETIF_INC(ni, defer_work_contended_unsafe);
       ++ni->state->defer_work_count;
