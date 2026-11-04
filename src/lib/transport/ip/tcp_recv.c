@@ -621,7 +621,7 @@ static inline int ci_tcp_recvmsg_impl(const ci_tcp_recvmsg_args* a,
   a->msg->msg_controllen = 0;
 #endif
 
-  /* EF_LOCK_DEFER_HANDOVER_CONTENDED: when the handover path is enabled, a
+  /* EF_TCP_LOCK_DEFER_HANDOVER_CONTENDED: when the handover path is enabled, a
    * sender can leave packets on the send prequeue without an entry on the
    * deferred socket list (the TAS/CAS window).  In that case the lock holder
    * will not find the socket on the list at unlock and the data stays stranded

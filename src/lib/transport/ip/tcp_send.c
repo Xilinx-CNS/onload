@@ -303,7 +303,7 @@ void ci_tcp_tx_fill_sendq_tail(ci_netif* ni, ci_tcp_state* ts,
   /* Caller checked this, so we don't have to */
   ci_assert(ci_ip_queue_not_empty(sendq));
 
-  /* EF_LOCK_DEFER_HANDOVER_CONTENDED: see ci_tcp_sendmsg_enqueue().  We must
+  /* EF_TCP_LOCK_DEFER_HANDOVER_CONTENDED: see ci_tcp_sendmsg_enqueue().  We must
    * not steal space in the last packet ahead of packets sitting on the
    * prequeue, as that would assign them a lower sequence number. */
   if( NI_OPTS(ni).tcp_lock_defer_handover_contended && ts->s.tx_errno == 0 &&
@@ -1054,7 +1054,7 @@ static int ci_tcp_sendmsg_enqueue(ci_netif* ni, ci_tcp_state* ts,
   ci_assert(ci_netif_is_locked(ni));
   ci_assert_equal(ts->s.tx_errno, 0);
 
-  /* EF_LOCK_DEFER_HANDOVER_CONTENDED: when ci_netif_lock_or_defer_work()
+  /* EF_TCP_LOCK_DEFER_HANDOVER_CONTENDED: when ci_netif_lock_or_defer_work()
    * hands work over instead of pushing it forward, a socket can be left with
    * packets on the prequeue that nobody has drained.  Drain them first, so
    * that the packets we are about to enqueue cannot overtake data that was
