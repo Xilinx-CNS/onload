@@ -575,6 +575,12 @@ OO_STAT("Deferred work is used to mitigate jitter due to contention.  But "
         "if 2 threads try to defer work on the same socket, we sometimes "
         "fail to do the right thing.",
         ci_uint32, defer_work_contended_unsafe, count)
+OO_STAT("Number of deferred socket work items accumulated for processing.",
+        ci_uint32, defer_work_accumulated, count)
+OO_STAT("Number of send-side attempts to drain a TCP send prequeue.",
+        ci_uint32, tcp_send_prequeue_defer_drain, count)
+OO_STAT("Number of receive-side attempts to drain a TCP send prequeue.",
+        ci_uint32, tcp_recv_prequeue_defer_drain, count)
 OO_STAT("Indicates that you're sending faster than we can push packets on to "
         "the wire; and the TX ring (default size 512, controlled via "
         "EF_TXQ_SIZE) has filled.  So we've has to hold packets in a queue.  "

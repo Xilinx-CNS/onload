@@ -909,6 +909,13 @@ int ci_netif_lock_or_defer_work(ci_netif* ni, citp_waitable* w)
    */
   ci_assert(!(w->sb_aflags & CI_SB_AFLAG_ORPHAN));
 
+  /* EF_TCP_LOCK_DEFER_HANDOVER_CONTENDED is TCP-only: the mitigation for
+   * deferred work is the TCP prequeue drain.
+   */
+  int __handover_contended =
+      NI_OPTS(ni).tcp_lock_defer_handover_contended &&
+      ( w->state & CI_TCP_STATE_TCP );
+
   if( ni->state->defer_work_count >= NI_OPTS(ni).defer_work_limit ) {
     int rc = ci_netif_lock(ni);
     if( rc == 0 ) {
@@ -923,35 +930,45 @@ int ci_netif_lock_or_defer_work(ci_netif* ni, citp_waitable* w)
   }
 
   if( ci_bit_test_and_set(&w->sb_aflags, CI_SB_AFLAG_DEFERRED_BIT) ) {
-    /* Already set.  Another thread is trying to defer some work for this
-     * socket.  However, we must do **our** work in time, so let's push it
-     * forward.
-     *
-     * We can't trust this other thread to do the job, because that thread
-     * can be descheduled for some time, and we'll return to user with
-     * non-empty prequeue.  Then user asks us to perform another send(),
-     * and the new data go our before already-prequeued data.
-     *
-     * We can implement something more clever here, but this contention is
-     * really rare, and it is simpler just to push on.
-     */
-    int rc = ci_netif_lock(ni);
-    if( rc == 0 ) {
-      /* We should not remove CI_SB_AFLAG_DEFERRED_BIT, because it was set
-       * by someone else, and that someone else is responsible for
-       * removing. */
-      citp_waitable_deferred_work(ni, w);
-      return 1;
+    if( ! __handover_contended ) {
+      /* Already set.  Another thread is trying to defer some work for this
+       * socket.  However, we must do **our** work in time, so let's push it
+       * forward.
+       *
+       * We can't trust this other thread to do the job, because that thread
+       * can be descheduled for some time, and we'll return to user with
+       * non-empty prequeue.  Then user asks us to perform another send(),
+       * and the new data go our before already-prequeued data.
+       *
+       * We can implement something more clever here, but this contention is
+       * really rare, and it is simpler just to push on.
+       */
+      int rc = ci_netif_lock(ni);
+      if( rc == 0 ) {
+        /* We should not remove CI_SB_AFLAG_DEFERRED_BIT, because it was set
+         * by someone else, and that someone else is responsible for
+         * removing. */
+        citp_waitable_deferred_work(ni, w);
+        return 1;
+      }
+      /* We are interrupted by a signal.  We are in kernel.  Let's return and
+       * trust the other contending thread to do the work or to defer this
+       * work.
+       *
+       * FIXME
+       * It is possible that this work will be done too late, see bug 78628
+       * comment 9 for details.  Let's live with it for now.
+       */
+      CITP_STATS_NETIF_INC(ni, defer_work_contended_unsafe);
+      ++ni->state->defer_work_count;
+      return 0;
     }
-    /* We are interrupted by a signal.  We are in kernel.  Let's return and
-     * trust the other contending thread to do the work or to defer this
-     * work.
-     *
-     * FIXME
-     * It is possible that this work will be done too late, see bug 78628
-     * comment 9 for details.  Let's live with it for now.
-     */
-    CITP_STATS_NETIF_INC(ni, defer_work_contended_unsafe);
+    /* EF_TCP_LOCK_DEFER_HANDOVER_CONTENDED=1: do not block on the lock to
+     * do our own work; hand it over to the lock holder instead (same as
+     * the interrupted-by-signal fallback above).  The bit stays set, so
+     * the work runs when the deferred list is purged.  Queued data may be
+     * delayed; measurement use only. */
+    CITP_STATS_NETIF_INC(ni, defer_work_accumulated);
     ++ni->state->defer_work_count;
     return 0;
   }
@@ -969,6 +986,7 @@ int ci_netif_lock_or_defer_work(ci_netif* ni, citp_waitable* w)
       w->next_id = v & CI_EPLOCK_NETIF_SOCKET_LIST;
       new_v = (v & ~CI_EPLOCK_NETIF_SOCKET_LIST) | (W_ID(w) + 1);
       if( ci_cas64u_succeed(&ni->state->lock.lock, v, new_v) ) {
+        CITP_STATS_NETIF_INC(ni, defer_work_accumulated);
         ++ni->state->defer_work_count;
         return 0;
       }

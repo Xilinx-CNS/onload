@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Copyright 2010-2019 Xilinx, Inc.
+
+# Experimental profile for a dedicated single-socket TCP architecture:
+# one spinning reader and one dedicated writer, as used in some trading systems.
+# It favours outbound send latency over receive responsiveness.
+#
+# Workload-specific: receive data and ACKs may be processed later, and deferred
+# work may stall if the lock-holding thread is descheduled.  Do not use with
+# multiple sockets or concurrent writers without validating the trade-off.
+
+# Spinning on, FASTSTART off, as per the standard latency profile.
+onload_import latency
+
+# Large send buffer: Onload doubles the value, so ~10 MB here.  The credit
+# lets a sender keep going while another thread holds the stack lock.
+# Note this overrides any per-socket SO_SNDBUF set by the application.
+onload_set EF_TCP_SNDBUF 5242880
+
+# Skip the poll at the end of the TCP send path.  Removes the send tail
+# latency, at the cost of handling RX/ACK later.
+onload_set EF_TCP_SEND_ADVANCE_POLL 0
+
+# If another thread already deferred work on this TCP socket, hand our work
+# over instead of blocking on the stack lock.  Needs the prequeue drains so
+# that deferred data cannot be overtaken.  UDP sockets are not affected.
+onload_set EF_TCP_LOCK_DEFER_HANDOVER_CONTENDED 1
+
+# Effectively unlimited, so the blocking branch of
+# ci_netif_lock_or_defer_work() is never taken.
+onload_set EF_DEFER_WORK_LIMIT 65535

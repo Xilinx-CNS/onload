@@ -891,8 +891,12 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
     opts->send_poll_thresh = atoi(s);
   if ( (s = getenv("EF_SEND_POLL_MAX_EVS")) )
     opts->send_poll_max_events = atoi(s);
+  if ( (s = getenv("EF_TCP_SEND_ADVANCE_POLL")) )
+    opts->tcp_send_advance_poll = atoi(s);
   if ( (s = getenv("EF_DEFER_WORK_LIMIT")) )
     opts->defer_work_limit = atoi(s);
+  if ( (s = getenv("EF_TCP_LOCK_DEFER_HANDOVER_CONTENDED")) )
+    opts->tcp_lock_defer_handover_contended = atoi(s);
   if( (s = getenv("EF_UDP_SEND_UNLOCK_THRESH")) )
     opts->udp_send_unlock_thresh = atoi(s);
   if( (s = getenv("EF_UDP_PORT_HANDOVER_MIN")) )

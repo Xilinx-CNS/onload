@@ -820,6 +820,23 @@ CI_CFG_OPT("EF_SEND_POLL_MAX_EVS", send_poll_max_events, ci_uint16,
 "number of events handled.",
            , , 96, 1, 65535, count)
 
+CI_CFG_OPT("EF_TCP_SEND_ADVANCE_POLL", tcp_send_advance_poll, ci_uint32,
+"Poll for network events at the end of the TCP transmit advance path "
+"(ci_tcp_tx_advance_nagle()), so that RX/ACK events are processed promptly "
+"after a send. "
+"Set to 0 to skip this trailing poll and reduce send-path tail latency, at "
+"the cost of deferring RX/ACK processing to a later stack access.",
+           , , 1, 0, 1, value)
+
+CI_CFG_OPT("EF_TCP_LOCK_DEFER_HANDOVER_CONTENDED", tcp_lock_defer_handover_contended,
+           ci_uint32,
+"When another thread has already queued this socket for deferred work, this "
+"option stops the current thread from waiting for the stack lock in order to "
+"do that work itself; the work is instead left to the thread that holds the "
+"lock.  This removes a stack-lock wait from the send() tail, but the "
+"deferred work may be delayed.",
+           , , 0, 0, 1, value)
+
 CI_CFG_OPT("EF_UDP_SEND_UNLOCK_THRESH", udp_send_unlock_thresh, ci_uint16,
 "UDP message size below which we attempt to take the stack lock early.  "
 "Taking the lock early reduces overhead and latency slightly, but may "
