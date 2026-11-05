@@ -403,6 +403,11 @@ CI_CFG_OPT("EF_FDTABLE_SIZE", fdtable_size, ci_uint32,
 "(help ulimit, man 2 setrlimit) are bound by this value.",
            , , 0, MIN, MAX, count)
 
+CI_CFG_OPT("EF_FDS_MAX", fds_max, ci_uint32,
+"The value which is set as RLIMIT_NOFILE hard limit if the system value "
+"exceeds it. EF_FDTABLE_SIZE overrides it.",
+           , , 1048576, MIN, MAX, count)
+
 #define CI_UL_LOG_E     0x1            /* errors */
 #define CI_UL_LOG_U     0x2            /* unexpected */
 #define CI_UL_LOG_S     0x4            /* setup */
