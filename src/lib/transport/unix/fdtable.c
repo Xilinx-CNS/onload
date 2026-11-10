@@ -137,7 +137,7 @@ void oo_exit_hook(int status)
     return;
 
   citp_enter_lib(&lib_context);
-  CITP_FDTABLE_LOCK_RD();
+  CITP_FDTABLE_LOCK();
 
 #if CI_CFG_FD_CACHING
   uncache_active_netifs();
@@ -145,7 +145,7 @@ void oo_exit_hook(int status)
 
   exit_lock_all_stacks();
 
-  CITP_FDTABLE_UNLOCK_RD();
+  CITP_FDTABLE_UNLOCK();
   citp_exit_lib(&lib_context, 1);
 }
 
